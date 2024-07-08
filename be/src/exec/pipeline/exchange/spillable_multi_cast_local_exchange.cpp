@@ -36,39 +36,24 @@
 
 namespace starrocks::pipeline {
 
-SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit)
-    : _runtime_state(runtime_state), _consumer_number(consumer_number), _progress(consumer_number), _opened_source_opcount(consumer_number), _has_load_io_task(consumer_number) {
-    Cell* dummy = new Cell();
-    _head = dummy;
-    _tail = dummy;
-    for (size_t i = 0; i < consumer_number; i++) {
-        // _progress[i] = _cells.begin();
-        _progress[i] = _tail;
-        _opened_source_opcount[i] = 0;
-        _has_load_io_task[i] = false;
-    }
-
+SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id)
+    : _runtime_state(runtime_state) {
+    DCHECK(runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill());
     MemLimitedChunkQueue::Options opts;
-    // @TODO init opts
+    if (runtime_state->spill_mode() == TSpillMode::FORCE) {
+        opts.memory_limit = 16L * 1024 * 1024;
+    } else {
+        opts.memory_limit = std::numeric_limits<size_t>::max();
+    }
+    opts.plan_node_id = plan_node_id; 
     opts.block_manager = runtime_state->query_ctx()->spill_manager()->block_manager();
+    opts.encode_level = runtime_state->spill_encode_level();
 
-    // @TODO link rf
-    _runtime_profile = std::make_unique<RuntimeProfile>("SpillableMultiCastLocalExchanger");
-    _queue = std::make_shared<MemLimitedChunkQueue>(runtime_state, _runtime_profile.get(), consumer_number, opts);
-    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-
+    _queue = std::make_shared<MemLimitedChunkQueue>(runtime_state, consumer_number, opts);
 }
-SpillableMultiCastLocalExchanger::~SpillableMultiCastLocalExchanger() {
 
-    // while(_head) {
-    //     auto* t = _head->next;
-    //     _current_memory_usage -= _head->memory_usage;
-    //     delete _head;
-    //     _head = t;
-    // }
+Status SpillableMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
+    return _queue->init_metrics(profile);
 }
 
 bool SpillableMultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
@@ -103,47 +88,7 @@ void SpillableMultiCastLocalExchanger::close_sink_operator() {
     _queue->close_producer();
 }
 
-void SpillableMultiCastLocalExchanger::_close_consumer(int32_t mcast_consumer_index) {
-    LOG(INFO) << "_close consumer: " << mcast_consumer_index;
-    Cell* now = _progress[mcast_consumer_index];
-    now = now->next;
-    while (now) {
-        now->used_count += 1;
-        // LOG(INFO) << "used_count: " << now->used_count;
-        now = now->next;
-    }
-    _progress[mcast_consumer_index] = nullptr;
-    _update_progress();
-}
-
-void SpillableMultiCastLocalExchanger::_update_progress(Cell* fast) {
-    if (fast != nullptr) {
-        _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, fast->accumulated_row_size);
-    } else {
-        // update the fastest consumer.
-        _fast_accumulated_row_size = 0;
-        for (size_t i = 0; i < _consumer_number; i++) {
-            Cell* c = _progress[i];
-            if (c == nullptr) continue;
-            _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, c->accumulated_row_size);
-        }
-    }
-    // release chunk if no one needs it.
-    while (_head) {
-
-    }
-    while (_head && _head->used_count == _consumer_number) {
-        Cell* t = _head->next;
-        _current_memory_usage -= _head->memory_usage;
-        LOG(INFO) << "release chunk, mem: " << _head->memory_usage << ", new mem: " << _current_memory_usage - _head->memory_usage;
-        // @TODO free here
-        delete _head;
-        if (t == nullptr) break;
-        _head = t;
-    }
-    if (_head != nullptr) {
-        _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
-    }
-
+void SpillableMultiCastLocalExchanger::enter_release_memory_mode() {
+    _queue->enter_release_memory_mode();
 }
 }

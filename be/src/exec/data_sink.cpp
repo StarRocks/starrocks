@@ -312,21 +312,18 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
+        auto* upstream = prev_operators.back().get();
+        auto* upstream_source = context->source_operator(prev_operators);
+        size_t upstream_plan_node_id = upstream->plan_node_id();
         // === create exchange ===
-        // @TODO
         std::shared_ptr<MultiCastLocalExchanger> mcast_local_exchanger;
         if (runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill()) {
-            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
+            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size(), upstream_plan_node_id);
         } else {
             mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
         }
 
-        // auto mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
-
         // === create sink op ====
-        auto* upstream = prev_operators.back().get();
-        auto* upstream_source = context->source_operator(prev_operators);
-        size_t upstream_plan_node_id = upstream->plan_node_id();
         OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), upstream_plan_node_id, mcast_local_exchanger);
         prev_operators.emplace_back(sink_op);

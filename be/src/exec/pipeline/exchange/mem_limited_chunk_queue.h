@@ -15,6 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "serde/encode_context.h"
 
 #include <queue>
 
@@ -28,36 +29,29 @@ private:
         size_t accumulated_bytes = 0;
         int32_t used_count = 0;
     };
-    // won't be very large
+
     struct Block {
-        // still need a link
         std::vector<Cell> cells;
         bool in_mem = true;
         bool has_load_task = false;
-        bool has_flush_task = false;
-        // @TODO no need, use last - first
         size_t memory_usage = 0;
-        // memory
         Block* next = nullptr;
         // spillable block, only used when spill happens
         spill::BlockPtr block;
         size_t flush_rows = 0;
         size_t flush_bytes = 0;
-        // @TODO should record read ref??
     };
 
     struct Iterator {
         Iterator() = default;
         Iterator(Block* blk, size_t idx): block(blk), index(idx) {}
         Block* block = nullptr;
-        // @TODO canot use index as internal iterator
         size_t index = 0;
 
         bool valid() const {
             return block != nullptr && index < block->cells.size();
         }
 
-        //@TODO how to diff empty and end
         bool has_next() const {
             if (block == nullptr) {
                 return false;
@@ -100,28 +94,26 @@ private:
             return block;
         }
     };
+    static const size_t kDefaultBlockSize = 8L * 1024 * 1024;
+    static const size_t kDefaultMaxUnconsumedBytes = 16L * 1024 * 1024;
+    static const size_t kDefaultMemoryLimit = 16L * 1024 * 1024;
 public:
     struct Options {
-        // use this to query
-        std::string name = "multi_cast_local_exchange";
         int32_t plan_node_id = 0;
-
         // memory block size
-        size_t block_size = 1024 * 1024 * 8;
-        size_t memory_limit = 1024 * 1024 * 16;
-        size_t max_unconsumed_bytes = 1024 * 1024 * 16;
+        size_t block_size = kDefaultBlockSize;
+        size_t memory_limit = kDefaultMemoryLimit;
+        size_t max_unconsumed_bytes = kDefaultMaxUnconsumedBytes;
+        int encode_level = 0;
         CompressionTypePB compress_type = CompressionTypePB::LZ4;
         spill::BlockManager* block_manager = nullptr;
         workgroup::WorkGroupPtr wg;
     };
-    // @TODO mem control strategy
-    // 1. for each consumer, only keep one Block in memory
-    // 2. for producer, keep on block in memory
 
-    // max memory (consumers + producers) * block memory
-
-    MemLimitedChunkQueue(RuntimeState* state, RuntimeProfile* profile, int32_t consumer_number, Options opts);
+    MemLimitedChunkQueue(RuntimeState* state, int32_t consumer_number, Options opts);
     ~MemLimitedChunkQueue();
+
+    Status init_metrics(RuntimeProfile* parent);
 
     Status push(const ChunkPtr& chunk, MultiCastLocalExchangeSinkOperator* sink_operator);
     bool can_push();
@@ -137,6 +129,7 @@ public:
     
     void close_producer();
 
+    void enter_release_memory_mode();
 
 private:
     void _update_progress(Iterator* iter = nullptr);
@@ -157,6 +150,7 @@ public:
 #endif
 
     RuntimeState* _state = nullptr;
+    // std::shared_mutex _mutex;
     std::mutex _mutex;
     // an empty chunk, only keep meta
     ChunkPtr _chunk_builder;
@@ -194,16 +188,20 @@ public:
     size_t _current_load_rows = 0;
     size_t _current_load_bytes = 0;
 
-    // spill related
     Options _opts;
     Status _io_task_status;
 
-    std::atomic_bool _has_flush_io_task = false;
+    bool _has_flush_io_task = false;
     std::queue<Block*> _loaded_blocks;
+
+    std::shared_ptr<serde::EncodeContext> _encode_context;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_rows_counter = nullptr;
 
+    RuntimeProfile::Counter* _flush_io_timer = nullptr;
+    RuntimeProfile::Counter* _flush_io_count = nullptr;
+    RuntimeProfile::Counter* _flush_io_bytes = nullptr;
     // io stats of load task
     RuntimeProfile::Counter* _read_io_timer = nullptr;
     RuntimeProfile::Counter* _read_io_count = nullptr;

@@ -18,11 +18,10 @@ namespace starrocks::pipeline {
 
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    if (_driver_sequence == 0) {
+        RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get()));
+    }
     _exchanger->open_sink_operator();
-    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
     return Status::OK();
 }
 
@@ -45,11 +44,5 @@ StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* 
 Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _exchanger->push_chunk(chunk, _driver_sequence, this);
 }
-
-void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, size_t buffer_row_size) {
-    _peak_memory_usage_counter->set(memory_usage);
-    _peak_buffer_row_size_counter->set(buffer_row_size);
-}
-
 
 }

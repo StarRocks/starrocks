@@ -85,14 +85,21 @@ Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_
         _tail->next = cell;
         _tail = cell;
         _current_accumulated_row_size += chunk->num_rows();
-        LOG(INFO) << "add chunk, mem: " << cell->memory_usage << ", new mem: " << _current_memory_usage << ", rows: " << cell->accumulated_row_size;
         _current_memory_usage += cell->memory_usage;
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
         _peak_memory_usage_counter->set(_current_memory_usage);
         _peak_buffer_row_size_counter->set(_current_row_size);
-        sink_operator->update_counter(_current_memory_usage, _current_row_size);
     }
 
+    return Status::OK();
+}
+
+Status InMemoryMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
+    _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
+            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+    _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
+            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+   
     return Status::OK();
 }
 
@@ -129,16 +136,7 @@ StatusOr<ChunkPtr> InMemoryMultiCastLocalExchanger::pull_chunk(RuntimeState* sta
               << ", row = " << cell->chunk->debug_row(0) << ", size = " << cell->chunk->num_rows();
     _progress[mcast_consumer_index] = cell;
     cell->used_count += 1;
-    // LOG(INFO) << "pull_chunk, rows: " << cell->accumulated_row_size << ", used_count: " << cell->used_count << ", index:" << mcast_consumer_index;
-    // {
-    //     std::ostringstream oss;
-    //     oss << "process, ";
-    //     for (int32_t i = 0;i < _consumer_number; i++) {
-    //         auto c = _progress[i];
-    //         oss << " index " << i << ", rows: " << c->accumulated_row_size << ", used_count: " << c->used_count << std::endl;;
-    //     }
-    //     LOG(INFO) << oss.str();
-    // }
+
     _update_progress(cell);
     return cell->chunk;
 }
@@ -194,36 +192,13 @@ void InMemoryMultiCastLocalExchanger::_update_progress(Cell* fast) {
             _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, c->accumulated_row_size);
         }
     }
-    // if (_head) {
-    //     LOG(INFO) << "current head: " << _head->accumulated_row_size << ", use count: " << _head->used_count << ", next null:" << (_head->next == nullptr ? "yes": "no");
-    // }
-    // while (_head && _head->next) {
-    //     Cell* t = _head->next;
-    //     if (t->used_count != _consumer_number) {
-    //         // LOG(INFO) << "used_count: " <<  t->used_count << ", consumer_number: " << _consumer_number << ", rows:" << t->accumulated_row_size;
-    //         break;
-    //     }
-    //     if (_head->used_count == _consumer_number) {
-    //         // LOG(INFO) << "release chunk, mem: " << _head->memory_usage << ", new mem: " << _current_memory_usage - _head->memory_usage << ", rows: " << _head->accumulated_row_size;
-    //         _current_memory_usage -= _head->memory_usage;
-    //         delete _head;
-    //         _head = t;
-    //     } else {
-    //         // LOG(INFO) << "head used count: " << _head->used_count << ", consumer_number: " << _consumer_number <<", rows: " << _head->accumulated_row_size;
-    //         break;
-    //     }
-    //     // dummy, real
-    // }
-    // @TODO release head
 
     // release chunk if no one needs it.
     while (_head && _head->used_count == _consumer_number) {
         Cell* t = _head->next;
-        _current_memory_usage -= _head->memory_usage;
-        // LOG(INFO) << "release chunk, mem: " << _head->memory_usage << ", new mem: " << _current_memory_usage - _head->memory_usage;
-        // @TODO free here
-        delete _head;
         if (t == nullptr) break;
+        _current_memory_usage -= _head->memory_usage;
+        delete _head;
         _head = t;
     }
     if (_head != nullptr) {

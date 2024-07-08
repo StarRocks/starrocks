@@ -16,10 +16,11 @@
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/operator.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
-class MultiCastLocalExchangeSinkOperator final : public Operator {
+class MultiCastLocalExchangeSinkOperator : public Operator {
 public:
     MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                        const int32_t driver_sequence,
@@ -43,16 +44,20 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void update_counter(size_t memory_usage, size_t buffer_row_size);
+    bool releaseable() const override {
+        return _exchanger->releaseable();
+    }
 
-private:
+    void set_execute_mode(int performance_level) override {
+        return _exchanger->enter_release_memory_mode();
+    }
+
+protected:
     bool _is_finished = false;
     const std::shared_ptr<MultiCastLocalExchanger> _exchanger;
-    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
-    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };
 
-class MultiCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
+class MultiCastLocalExchangeSinkOperatorFactory : public OperatorFactory {
 public:
     MultiCastLocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                               std::shared_ptr<MultiCastLocalExchanger> exchanger)

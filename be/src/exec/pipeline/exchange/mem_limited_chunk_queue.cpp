@@ -15,6 +15,10 @@
 
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 
+#include <algorithm>
+
+#include "common/logging.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/dir_manager.h"
@@ -33,11 +37,9 @@
 
 namespace starrocks::pipeline {
 
-MemLimitedChunkQueue::MemLimitedChunkQueue(RuntimeState* state, RuntimeProfile* profile, int32_t consumer_number, Options opts):
+MemLimitedChunkQueue::MemLimitedChunkQueue(RuntimeState* state, int32_t consumer_number, Options opts):
         _state(state), _consumer_number(consumer_number), _opened_source_opcount(consumer_number), _consumer_progress(consumer_number), _opts(std::move(opts)) {
-    // what if no dummy block
     Block* block = new Block();
-    block->next = nullptr;
     _head = block;
     _tail = block;
     _next_flush_block = block;
@@ -55,17 +57,6 @@ MemLimitedChunkQueue::MemLimitedChunkQueue(RuntimeState* state, RuntimeProfile* 
     _iterator.block = _head;
     _iterator.index = 0;
 
-    _peak_memory_bytes_counter = profile->AddHighWaterMarkCounter(
-        "PeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_memory_rows_counter = profile->AddHighWaterMarkCounter(
-        "PeakMemoryRows", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-
-    // @TODO link to operator
-    std::string parent = "SpillStatistics";
-    ADD_COUNTER(profile, parent, TUnit::NONE);
-    _read_io_timer = ADD_CHILD_TIMER(profile, "ReadIOTime", parent);
-    _read_io_count = ADD_CHILD_COUNTER(profile, "ReadIOCount", TUnit::UNIT, parent);
-    _read_io_bytes = ADD_CHILD_COUNTER(profile, "ReadIOBytes", TUnit::BYTES, parent);
 }
 
 MemLimitedChunkQueue::~MemLimitedChunkQueue() {
@@ -75,6 +66,22 @@ MemLimitedChunkQueue::~MemLimitedChunkQueue() {
         _head = next;
     }
 }
+
+Status MemLimitedChunkQueue::init_metrics(RuntimeProfile* parent) {
+    _peak_memory_bytes_counter = parent->AddHighWaterMarkCounter(
+            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+    _peak_memory_rows_counter = parent->AddHighWaterMarkCounter(
+            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+    
+    _flush_io_timer = ADD_TIMER(parent, "FlushIOTime");
+    _flush_io_count = ADD_COUNTER(parent, "FlushIOCount", TUnit::UNIT);
+    _flush_io_bytes = ADD_COUNTER(parent, "FlushIOBytes", TUnit::BYTES);
+    _read_io_timer = ADD_TIMER(parent, "ReadIOTime");
+    _read_io_count = ADD_COUNTER(parent, "ReadIOCount", TUnit::UNIT);
+    _read_io_bytes = ADD_COUNTER(parent, "ReadIOBytes", TUnit::BYTES);
+    return Status::OK();
+}
+
 
 Status MemLimitedChunkQueue::push(const ChunkPtr& chunk, MultiCastLocalExchangeSinkOperator* sink_operator) {
     std::unique_lock l(_mutex);
@@ -91,7 +98,6 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk, MultiCastLocalExchangeS
     if (_tail->memory_usage >= _opts.block_size) {
         Block* block = new Block();
         block->next = nullptr;
-        LOG(INFO) << fmt::format("create a new block {}, prev block {}, mem {}, cells {}", (void*)(block), (void*)(_tail), _tail->memory_usage, _tail->cells.size());
         _tail->next = block;
         _tail = block;
     }
@@ -107,43 +113,27 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk, MultiCastLocalExchangeS
     _tail->cells.emplace_back(cell);
     _tail->memory_usage += chunk->memory_usage();
 
-    // @TODO should consider load
     size_t in_memory_rows = _total_accumulated_rows - _flushed_accumulated_rows + _current_load_rows;
     size_t in_memory_bytes = _total_accumulated_bytes - _flushed_accumulated_bytes + _current_load_bytes;
+
+#ifndef BE_TEST
     _peak_memory_rows_counter->set(in_memory_rows);
     _peak_memory_bytes_counter->set(in_memory_bytes);
-    // @TODO consider load mem bytes
-#ifndef BE_TEST
-    sink_operator->update_counter(in_memory_bytes, in_memory_rows); 
 #endif
-    LOG(INFO) << fmt::format("push chunk to block {}, rows {}, bytes {}, cells {}, mem {}, in_mem_rows {}, in_mem_bytes {}, load bytes {}, load rows {}",
-        (void*)(_tail), _total_accumulated_rows, _total_accumulated_rows, _tail->cells.size(), _tail->memory_usage,
-        in_memory_rows, in_memory_bytes, _current_load_bytes, _current_load_rows);
-
     return Status::OK();
 }
 
 bool MemLimitedChunkQueue::can_push() {
-    // @TODO add some limit
-    // 1. _total_accumulated_bytes - _fatest_accmulated_bytes >= limit, can't push
-    // 2. if _total_accumulated_bytes - _flushed_accumulated_bytes >= limit, should trigger a flush io task
     std::unique_lock l(_mutex);
     size_t unconsumed_bytes = _total_accumulated_bytes - _fastest_accumulated_bytes;
+    // if the fastest consumer still has a lot of data to consume, it will no longer accept new input.
     if (unconsumed_bytes >= _opts.max_unconsumed_bytes) {
-        LOG(INFO) << fmt::format("too many pending data, should wait {}", unconsumed_bytes);
         return false;
     }
 
-    // size_t in_memory_bytes = _total_accumulated_bytes - _head_accumulated_bytes;
     size_t in_memory_bytes = _total_accumulated_bytes - _flushed_accumulated_bytes;
-    // LOG(INFO) << "in_memory_bytes: " << in_memory_bytes;
-    // @TODO shoule update non_flushed_block??
     if (in_memory_bytes >= _opts.memory_limit && _next_flush_block->next != nullptr) {
-        // LOG(INFO) << fmt::format("too many in memory data, should flush {}", in_memory_bytes);
-        // @TODO can change to atomic var, use CAS
         if (!_has_flush_io_task) {
-            // @TODO choose block
-            // pick block that need flush
             TEST_SYNC_POINT("MemLimitedChunkQueue::can_push::before_submit_flush_task");
             _has_flush_io_task = true;
             auto status = submit_flush_task();
@@ -151,8 +141,6 @@ bool MemLimitedChunkQueue::can_push() {
                 _io_task_status = status;
                 return true;
             }
-        } else {
-            LOG(INFO) << fmt::format("already has flush io task, skip trigger...");
         }
         return false;
     }
@@ -169,7 +157,6 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
     auto iter = _consumer_progress[consumer_index].get();
     if (!iter->has_next()) {
         if (_opened_sink_number == 0) {
-            LOG(INFO) << fmt::format("no data for consumer {}", consumer_index);
             return Status::EndOfFile("no more data");
         }
         return Status::InternalError("unreachable path");
@@ -179,26 +166,21 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
     DCHECK(cell->chunk != nullptr);
 
     cell->used_count += 1;
-    // @TODO update progress
-
-    LOG(INFO) << fmt::format("pop chunk, {}, cell {}, used_count {}", (void*)(cell->chunk.get()), (void*)cell, cell->used_count);
+    // LOG(INFO) << fmt::format("pop chunk, {}, cell {}, used_count {}", (void*)(cell->chunk.get()), (void*)cell, cell->used_count);
     auto result = cell->chunk;
 
     _update_progress(iter);
-    LOG(INFO) << fmt::format("pop chunk, rows {}, used_count {}, index {}, consumer numer {}, {}, load bytes {}, load rows {}",
-        cell->accumulated_rows, cell->used_count, consumer_index, _consumer_number, (void*)(result.get()), _current_load_bytes, _current_load_rows);
-    result->check_or_die();
+    // LOG(INFO) << fmt::format("pop chunk, rows {}, used_count {}, index {}, consumer numer {}, {}, load bytes {}, load rows {}",
+    //     cell->accumulated_rows, cell->used_count, consumer_index, _consumer_number, (void*)(result.get()), _current_load_bytes, _current_load_rows);
     return result;
 }
 
 void MemLimitedChunkQueue::evict_loaded_block() {
-    // evict by used count?
     if (_loaded_blocks.size() < _consumer_number) {
         return;
     }
     Block* block = _loaded_blocks.front();
     _loaded_blocks.pop();
-    LOG(INFO) << fmt::format("evict block {}, rows {}", (void*)block, block->flush_rows);
     _current_load_rows -= block->flush_rows;
     _current_load_bytes -= block->flush_bytes;
     for (auto& cell : block->cells) {
@@ -216,18 +198,16 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
     if (_opened_sink_number == 0) {
         return true;
     }
-    // @TODO can_push -> can_pop -> flush -> pull_chunk
-    // @TODO in_mem = true -> true -> false - > false
+
     auto iter = _consumer_progress[consumer_index].get();
     if (iter->has_next()) {
         auto next_iter = iter->next();
-        // @TODO what if flushed when read
         if (next_iter.block->in_mem) {
             return true;
         }
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::can_pop::before_submit_load_task", next_iter.block);
+        // if the target block is not in memory, should submit a load task
         if (!next_iter.block->has_load_task) {
-            LOG(INFO) << "block is not in memory, should trigger load io task for index "<< consumer_index << ", block " << (void*)(next_iter.block);
             next_iter.block->has_load_task = true;
             auto status = submit_load_task(next_iter.block);
             if (!status.ok()) {
@@ -235,7 +215,6 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
                 return true;
             }
         }
-        // @TODO should trigger a load io task
         return false;
     }
 
@@ -253,10 +232,8 @@ void MemLimitedChunkQueue::open_consumer(int32_t consumer_index) {
 void MemLimitedChunkQueue::close_consumer(int32_t consumer_index) {
     std::unique_lock l(_mutex);
     _opened_source_opcount[consumer_index] -= 1;
-    LOG(INFO) << "close consumer: " << consumer_index << ", opcount " << _opened_source_opcount[consumer_index];
     if (_opened_source_opcount[consumer_index] == 0) {
         _opened_source_number--;
-        // @TODO
         _close_consumer(consumer_index);
     }
 }
@@ -264,13 +241,11 @@ void MemLimitedChunkQueue::close_consumer(int32_t consumer_index) {
 void MemLimitedChunkQueue::open_producer() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;
-    LOG(INFO) << "open producer: " << _opened_sink_number;
 }
 
 void MemLimitedChunkQueue::close_producer() {
     std::unique_lock l(_mutex);
     _opened_sink_number--;
-    LOG(INFO) << "close producer: " << _opened_sink_number;
 }
 
 void MemLimitedChunkQueue::_update_progress(Iterator* iter) {
@@ -299,27 +274,20 @@ void MemLimitedChunkQueue::_update_progress(Iterator* iter) {
         }
     }
 
-    // @TODO mark all used cell and release memory
     while (_iterator.valid()) {
         Cell* cell = _iterator.get_cell();
-        if(cell->used_count == _consumer_number) {
-            _head_accumulated_rows = cell->accumulated_rows;
-            _head_accumulated_bytes = cell->accumulated_bytes;
-
-            // advance flushed position
-            _flushed_accumulated_rows = std::max(_flushed_accumulated_rows, _head_accumulated_rows);
-            _flushed_accumulated_bytes = std::max(_flushed_accumulated_bytes, _head_accumulated_bytes);
-            // @TODO may be reset twice
-            LOG(INFO) << fmt::format("release chunk, rows {}, mem {}, head acc rows {}, bytes {} ref {}",
-                cell->accumulated_rows,(cell->chunk != nullptr ? cell->chunk->memory_usage(): 0),
-                _head_accumulated_rows, _head_accumulated_bytes, cell->chunk.use_count());
-            cell->chunk.reset();
-            if(_iterator.has_next()) {
-                LOG(INFO) << fmt::format("no next, skip clean");
-                _iterator.move_to_next();
-            } else {
-                break;
-            }
+        if(cell->used_count != _consumer_number) {
+            break;
+        }
+        _head_accumulated_rows = cell->accumulated_rows;
+        _head_accumulated_bytes = cell->accumulated_bytes;
+        // advance flushed position
+        _flushed_accumulated_rows = std::max(_flushed_accumulated_rows, _head_accumulated_rows);
+        _flushed_accumulated_bytes = std::max(_flushed_accumulated_bytes, _head_accumulated_bytes);
+        VLOG_ROW << fmt::format("release chunk, current head_accumulated_rows[{}], head_accumulated_bytes[{}]", _head_accumulated_rows, _head_accumulated_bytes);
+        cell->chunk.reset();
+        if(_iterator.has_next()) {
+            _iterator.move_to_next();
         } else {
             break;
         }
@@ -352,7 +320,6 @@ void MemLimitedChunkQueue::_update_progress(Iterator* iter) {
 }
 
 void MemLimitedChunkQueue::_close_consumer(int32_t consumer_index) {
-    LOG(INFO) << fmt::format("close consumer, index: {}", consumer_index);
     DCHECK(_consumer_progress[consumer_index] != nullptr);
     auto iter = _consumer_progress[consumer_index].get();
     if (iter->has_next()) {
@@ -360,7 +327,6 @@ void MemLimitedChunkQueue::_close_consumer(int32_t consumer_index) {
             iter->move_to_next();
             Cell* cell = iter->get_cell();
             cell->used_count += 1;
-            LOG(INFO) << fmt::format("update cell, rows {}, used count{}", cell->accumulated_rows, cell->used_count);
         } while (iter->has_next());
     }
     _consumer_progress[consumer_index].reset();
@@ -368,15 +334,9 @@ void MemLimitedChunkQueue::_close_consumer(int32_t consumer_index) {
 }
 
 Status MemLimitedChunkQueue::flush() {
-    // @TODO opt lock
-    LOG(INFO) << "invoke flush";
     std::unique_lock l(_mutex);
 
-    // @block maybe in mem becasue of load
-    // DCHECK(block->block == nullptr) << "block should not be flushed, " << (void*)(block);
-
     // 1. find block to flush
-    LOG(INFO) << "find block to flush";
     while (_next_flush_block) {
         // don't flush the last block
         if (_next_flush_block->next == nullptr) {
@@ -387,63 +347,60 @@ Status MemLimitedChunkQueue::flush() {
             _next_flush_block = _next_flush_block->next;
         } else {
             // check if need flush
-            bool need_flush = false;
-            for (auto& cell : _next_flush_block->cells) {
+            bool need_flush = std::any_of(_next_flush_block->cells.begin(), _next_flush_block->cells.end(), [this](const Cell& cell) {
                 if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
-                    continue;
+                    return false;
                 }
-                need_flush = true;
-            }
+                return true;
+            });
+            // for (auto& cell : _next_flush_block->cells) {
+            //     if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
+            //         continue;
+            //     }
+            //     need_flush = true;
+            // }
             if (need_flush) {
                 break;
             }
             _next_flush_block = _next_flush_block->next;
         }
     }
-    LOG(INFO) << "find block done";
+    // LOG(INFO) << "find block done";
     Block* block = _next_flush_block;
     DCHECK(block != nullptr) << "block can't be null";
+    // the last block may still be written, skip flush it
     if (block->next == nullptr) {
-        LOG(INFO) << "last block, skip flush..." << (void*)(block);
         return Status::OK();
     }
 
-    LOG(INFO) << "begin flush block, " << (void*)(block);
     if (block->has_load_task) {
-        LOG(INFO) << "block has load task, we should skip this flush, " << (void*)(block);
-        block->has_flush_task = false;
         return Status::OK();
     }
+
+    // if this block is already flushed, skip
     if (block->block != nullptr) {
-        LOG(INFO) << "block is already flushed, skip it..." << (void*)(block);
         return Status::OK();
     }
 
     size_t max_serialize_size = 0;
-    // @TODO advance non_flushed_block
-    // current block that pending consumed
-    // @TODO find target block
-    // block = _next_flush_block;
-    // @TODO should advance non-flushed block
-    if (!block->in_mem) {
-        LOG(INFO) << "block already flushed, skip..." << (void*)(block);
-        return Status::OK();
-    }
+    // if (!block->in_mem) {
+    //     // LOG(INFO) << "block already flushed, skip..." << (void*)(block);
+    //     return Status::OK();
+    // }
+
     // @TODO offset maybe missed because chunk will be release after consumed???
-    LOG(INFO) << "flush block " << (void*)(block) << ", cell num: " << block->cells.size()
-        << ", rows " << block->cells.front().accumulated_rows << "," << block->cells.back().accumulated_rows;
+    // LOG(INFO) << "flush block " << (void*)(block) << ", cell num: " << block->cells.size()
+    //     << ", rows " << block->cells.front().accumulated_rows << "," << block->cells.back().accumulated_rows;
     // 1. calculate max_serialize_size
     for(auto& cell : block->cells) {
         if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
-            // only dummy cell has empty chunk
-            // DCHECK(cell.accumulated_rows == 0);
             continue;
         }
-        // @TODO if used count == 3
+
         auto& chunk = cell.chunk;
         for (const auto& column: chunk->columns()) {
-            max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
-        } 
+            max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column, 7);
+        }
         block->flush_rows += chunk->num_rows();
         block->flush_bytes += chunk->memory_usage();
     }
@@ -455,12 +412,13 @@ Status MemLimitedChunkQueue::flush() {
         uint8_t* begin = buf;
         // 2. serialize data
         for (auto& cell : block->cells) {
-            if (cell.chunk == nullptr) {
+            if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
                 continue;
             }
             auto chunk = cell.chunk;
             for (const auto& column: chunk->columns()) {
-                buf = serde::ColumnArraySerde::serialize(*column, buf, false);
+                // @TODO set context
+                buf = serde::ColumnArraySerde::serialize(*column, buf, false, 7);
                 if (UNLIKELY(buf == nullptr)) {
                     return Status::InternalError("serialize data error");
                 }
@@ -474,30 +432,28 @@ Status MemLimitedChunkQueue::flush() {
         options.query_id = _state->query_id();
         options.fragment_instance_id = _state->fragment_instance_id();
         options.name = "mcast_local_exchange";
-        // @TODO set plan node id
-        options.plan_node_id = 9999;
-        LOG(INFO) << "block size: " << content_length;
+        options.plan_node_id = _opts.plan_node_id;
+        // LOG(INFO) << "block size: " << content_length;
         ASSIGN_OR_RETURN(block->block, _opts.block_manager->acquire_block(options));
-        LOG(INFO) << "spill block: " << block->block->debug_string();
+        // LOG(INFO) << "spill block: " << block->block->debug_string();
 
         // 4. flush serialized data
         std::vector<Slice> data;
         data.emplace_back(serialize_buffer.data(), content_length);
-        RETURN_IF_ERROR(block->block->append(data));
-        RETURN_IF_ERROR(block->block->flush());
-
+        {
+            SCOPED_TIMER(_flush_io_timer);
+            RETURN_IF_ERROR(block->block->append(data));
+            RETURN_IF_ERROR(block->block->flush());
+            COUNTER_UPDATE(_flush_io_count, 1);
+            COUNTER_UPDATE(_flush_io_bytes, content_length);
+        }
         // 5. clear data in memory
         for (auto& cell : block->cells) {
-            // @TODO skip all used data
             if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
                 continue;
             }
-            // reset chunk data
-            LOG(INFO) << fmt::format("flush chunk, rows {}, used_count {}, num_rows {} {} ref {}",
-                cell.accumulated_rows, cell.used_count, cell.chunk->num_rows(), (void*)(cell.chunk.get()), cell.chunk.use_count());
-            // @TODO clear in memory data
-
-            // cell.chunk->reset();
+            VLOG_ROW << fmt::format("flush cell, accumulated_rows[{}], accumulated_bytes[{}], used_count[{}]",
+                cell.accumulated_rows, cell.accumulated_bytes, cell.used_count);
             cell.chunk.reset();
         }
     }
@@ -506,14 +462,10 @@ Status MemLimitedChunkQueue::flush() {
     _flushed_accumulated_rows = block->cells.back().accumulated_rows;
     _flushed_accumulated_bytes = block->cells.back().accumulated_bytes;
     _next_flush_block = block->next;
-    LOG(INFO) << fmt::format("flush block done, block[{}], flushed_acc_rows[{}], flushed_acc_bytes[{}]",
-        (void*)block, _flushed_accumulated_rows, _flushed_accumulated_bytes);
-    //@TODO should update in memory bytes???
     return Status::OK();
 }
 
 Status MemLimitedChunkQueue::submit_flush_task() {
-    // @TODO should consider be ut mode
     auto flush_task = [this, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)] (auto& yield_ctx) {
         TEST_SYNC_POINT("MemLimitedChunkQueue::before_execute_flush_task");
         RETURN_IF(!guard.scoped_begin(), (void)0);
@@ -523,11 +475,6 @@ Status MemLimitedChunkQueue::submit_flush_task() {
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
         });
 
-        // find next flushed block
-        // Block* block = _iterator.get_block();
-
-        // DCHECK(_next_flush_block->next != nullptr) << "last block should not flushed";
-        // @TODO should find next flushed block
         auto status = flush();
         WARN_IF_ERROR(status, "flush block error");
         if (!status.ok()) {
@@ -535,8 +482,6 @@ Status MemLimitedChunkQueue::submit_flush_task() {
             _io_task_status = status;
             return;
         }
-        // @TODO what if next is null
-        // _next_flush_block = _next_flush_block->next;
     };
 
     auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(flush_task));
@@ -546,10 +491,7 @@ Status MemLimitedChunkQueue::submit_flush_task() {
 
 // reload block from disk
 Status MemLimitedChunkQueue::load(Block* block) {
-    // @TODO before load, should evict already loaded block, not maintain LRU
-    // @TODO optimize lock
     std::unique_lock l(_mutex);
-    LOG(INFO) << "load block begin " << (void*)(block);
     DCHECK(block->has_load_task) << "block should not have load task " << (void*)(block);
     DCHECK(!block->in_mem) << "block should not be in memory, " << (void*)(block) ;
     DCHECK(block->block != nullptr) << "block must have spill block";
@@ -560,7 +502,6 @@ Status MemLimitedChunkQueue::load(Block* block) {
     options.read_io_timer = _read_io_timer;
     options.read_io_count = _read_io_count;
     options.read_io_bytes = _read_io_bytes;
-    // @TODO update spill profile
     auto block_reader = block->block->get_reader(options);
     size_t block_len = block->block->size();
     raw::RawString buffer;
@@ -571,31 +512,30 @@ Status MemLimitedChunkQueue::load(Block* block) {
     uint8_t* buf = reinterpret_cast<uint8_t*>(buffer.data());
     const uint8_t* read_cursor = buf;
 
-    // @TODO should mark which cell is flushed??
     for (auto& cell : block->cells) {
         if (cell.used_count == _consumer_number || cell.accumulated_rows == 0) {
             continue;
         }
-        // auto chunk = cell.chunk;
         cell.chunk = _chunk_builder->clone_empty();
         auto& chunk = cell.chunk;
-        LOG(INFO) << fmt::format("load chunk begin, rows {}, used_count {}", cell.accumulated_rows, cell.used_count);
-        LOG(INFO) << "load chunk begin, rows " << cell.accumulated_rows << ", used_count " << cell.used_count << ", " << (void*)(cell.chunk.get());
+        // LOG(INFO) << fmt::format("load chunk begin, rows {}, used_count {}", cell.accumulated_rows, cell.used_count);
+        // LOG(INFO) << "load chunk begin, rows " << cell.accumulated_rows << ", used_count " << cell.used_count << ", " << (void*)(cell.chunk.get());
         for (auto& column: chunk->columns()) {
-            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false);
+            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false, 7);
+            // @TODO update io task status
             DCHECK(read_cursor != nullptr) << "deserialize error";
         }
         chunk->check_or_die();
-        LOG(INFO) << "load chunk done, rows " << cell.accumulated_rows << ", used_count " << cell.used_count << ", " << (void*)(cell.chunk.get()) << ", " << chunk->num_rows();
+        // LOG(INFO) << "load chunk done, rows " << cell.accumulated_rows << ", used_count " << cell.used_count << ", " << (void*)(cell.chunk.get()) << ", " << chunk->num_rows();
     }
-    // @TODO verify??
+
     block->in_mem = true;
     block->has_load_task = false;
     evict_loaded_block();
     _loaded_blocks.push(block);
     _current_load_rows += block->flush_rows;
     _current_load_bytes += block->flush_bytes;
-    LOG(INFO) << fmt::format("load block done, block[{}], load rows[{}], load bytes[{}]", (void*)block, _current_load_rows, _current_load_bytes);
+    VLOG_ROW << fmt::format("load block done, block[{}], load rows[{}], load bytes[{}]", (void*)block, _current_load_rows, _current_load_bytes);
 
     return Status::OK();
 }
@@ -605,7 +545,6 @@ Status MemLimitedChunkQueue::submit_load_task(Block* block) {
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::before_execute_load_task", block);
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
-        // @TODO
         auto status = load(block);
         if (!status.ok()) {
             std::unique_lock l(_mutex);
@@ -615,6 +554,16 @@ Status MemLimitedChunkQueue::submit_load_task(Block* block) {
     auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(load_task));
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
+}
+
+const size_t memory_limit_per_producer = 1L * 1024 * 1024;
+
+void MemLimitedChunkQueue::enter_release_memory_mode() {
+    std::unique_lock l(_mutex);
+    // @TODO use dop?
+    size_t new_memory_limit = memory_limit_per_producer * _opened_sink_number;
+    LOG(INFO) << fmt::format("change memory limit from [{}] to [{}]", _opts.memory_limit, new_memory_limit);
+    _opts.memory_limit = new_memory_limit;
 }
 
 }
