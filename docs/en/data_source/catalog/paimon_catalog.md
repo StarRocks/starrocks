@@ -122,7 +122,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
@@ -130,7 +130,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
@@ -139,7 +139,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -148,7 +148,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
 | aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
-| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.endpoint             | Yes      | The endpoint that is used to connect to your AWS S3 bucket. For example, `https://s3.us-west-2.amazonaws.com`. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
@@ -376,7 +376,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -391,7 +391,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -407,7 +407,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 

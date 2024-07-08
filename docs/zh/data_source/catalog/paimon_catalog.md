@@ -122,7 +122,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - 基于 Assumed Role 进行认证和鉴权
@@ -130,7 +130,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - 基于 IAM User 进行认证和鉴权
@@ -139,7 +139,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 `StorageCredentialParams` 包含如下参数。
@@ -148,7 +148,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
+| aws.s3.endpoint             | 是       | 用于访问 AWS S3 Bucket 的 Endpoint。示例：`https://s3.us-west-2.amazonaws.com`。                |
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
@@ -392,7 +392,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -407,7 +407,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -423,7 +423,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
