@@ -488,7 +488,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN | NGRAMBF)
+    : USING (BITMAP | GIN | NGRAMBF | VECTOR)
     ;
 
 showTableStatement
@@ -2748,7 +2748,7 @@ nonReserved
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-    | DOTDOTDOT | NGRAMBF
+    | DOTDOTDOT | NGRAMBF | VECTOR
     | FIELD
     | ARRAY_ELEMENT
     ;

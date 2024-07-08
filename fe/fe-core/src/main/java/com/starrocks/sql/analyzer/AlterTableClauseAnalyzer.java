@@ -271,14 +271,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
-                boolean hasGIN = false;
+                boolean hasNewIndex = false;
                 for (Index index : olapTable.getIndexes()) {
-                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
-                        hasGIN = true;
+                    if (IndexType.isCompatibleIndex(index.getIndexType())) {
+                        hasNewIndex = true;
                         break;
                     }
                 }
-                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
+                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasNewIndex) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED);
                 }
             }
