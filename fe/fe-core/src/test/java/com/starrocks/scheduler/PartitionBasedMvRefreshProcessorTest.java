@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -43,6 +44,7 @@ import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
@@ -2791,5 +2793,38 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assert.assertTrue(partitionsToRefresh1.isEmpty());
                 });
+    }
+
+    /**
+     * When refresh some partitions of MV, each refresh task should only refresh the corresponding partitions of base
+     * table instead of all of them
+     */
+    @Test
+    public void testRefreshExternalTablePrecise() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_mv_external\n" +
+                "PARTITION BY date_trunc('day', l_shipdate) \n" +
+                "distributed by hash(l_orderkey) buckets 3\n" +
+                "refresh deferred manual\n" +
+                " properties ('partition_refresh_number'='1') \n" +
+                "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        List<List<String>> calls = Lists.newArrayList();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public void refreshTable(String catalogName, String srDbName, Table table,
+                                     List<String> partitionNames, boolean onlyCachedPartitions) {
+                calls.add(partitionNames);
+            }
+        };
+
+        starRocksAssert.refreshMvPartition("refresh materialized view test_mv_external partition " +
+                " start('1998-01-01') end('1998-01-04')");
+        Assert.assertEquals(
+                Lists.newArrayList(
+                        Lists.newArrayList("l_shipdate=1998-01-01"),
+                        Lists.newArrayList("l_shipdate=1998-01-02"),
+                        Lists.newArrayList("l_shipdate=1998-01-03")
+                ),
+                calls);
     }
 }
