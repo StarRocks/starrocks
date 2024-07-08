@@ -574,6 +574,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
             mvSessionVariable.setEnableProfile(true);
         }
+        // set the default new_planner_optimize_timeout for mv refresh
+        if (!isMVPropertyContains(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
+            mvSessionVariable.setOptimizerExecuteTimeout(Config.mv_refresh_default_planner_optimize_timeout);
+        }
     }
 
     private boolean isMVPropertyContains(String key) {
