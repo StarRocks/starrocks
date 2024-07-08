@@ -10,6 +10,7 @@
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/filter_block.h"
@@ -39,9 +40,12 @@ struct Table::Rep {
 
     BlockHandle metaindex_handle; // Handle to metaindex_block: saved from footer
     Block* index_block;
+    std::string first_key;
+    std::string last_key;
 };
 
-Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, const std::string& first_key,
+                   const std::string& last_key, Table** table) {
     *table = nullptr;
     if (size < Footer::kEncodedLength) {
         return Status::Corruption("file is too short to be an sstable");
@@ -79,6 +83,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
         rep->filter_data = nullptr;
         rep->filter = nullptr;
+        rep->first_key = first_key;
+        rep->last_key = last_key;
         *table = new Table(rep);
         (*table)->ReadMeta(footer);
     }
@@ -229,9 +235,24 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
                                const_cast<Table*>(this), options);
 }
 
+// Return true when [first_key, last_key] doesn't match sstable's key range
+bool Table::FilterByZonemap(const Slice& first_key, const Slice& last_key) {
+    if ((!rep_->first_key.empty() && rep_->options.comparator->Compare(last_key, rep_->first_key) < 0) ||
+        (!rep_->last_key.empty() && rep_->options.comparator->Compare(first_key, rep_->last_key) > 0)) {
+        // filter work
+        return true;
+    } else {
+        return false;
+    }
+}
+
 template <class ForwardIt>
 Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
                        std::vector<std::string>* values) {
+    if (FilterByZonemap(keys[0], keys[values->size() - 1])) {
+        TRACE_COUNTER_INCREMENT("sst_zonemap_filter_rows", values->size());
+        return Status::OK();
+    }
     Status s;
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
     std::unique_ptr<Iterator> current_block_itr_ptr;
@@ -252,12 +273,17 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     size_t i = 0;
     int64_t continue_block_read = 0;
     int64_t sst_bloom_filter_rows = 0;
+    int64_t sst_zonemap_filter_rows = 0;
     int64_t multiget_t1_us = 0;
     int64_t multiget_t2_us = 0;
     int64_t multiget_t3_us = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
         auto& k = keys[*it];
+        if (FilterByZonemap(k, k)) {
+            sst_zonemap_filter_rows++;
+            continue;
+        }
         int64_t t0 = butil::gettimeofday_us();
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
@@ -279,7 +305,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
-                sst_bloom_filter_rows++
+                sst_bloom_filter_rows++;
             } else {
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
@@ -296,6 +322,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     delete iiter;
     TRACE_COUNTER_INCREMENT("continue_block_read", continue_block_read);
     TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
+    TRACE_COUNTER_INCREMENT("sst_zonemap_filter_rows", sst_zonemap_filter_rows);
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
     TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
@@ -303,9 +330,9 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.
-template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& options, const Slice* keys,
-                                                            std::set<size_t>::iterator begin,
-                                                            std::set<size_t>::iterator end,
-                                                            std::vector<std::string>* values);
+template Status Table::MultiGet<std::vector<size_t>::const_iterator>(const ReadOptions& options, const Slice* keys,
+                                                                     std::vector<size_t>::const_iterator begin,
+                                                                     std::vector<size_t>::const_iterator end,
+                                                                     std::vector<std::string>* values);
 
 } // namespace starrocks::sstable

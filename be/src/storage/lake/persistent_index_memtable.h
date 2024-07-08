@@ -14,13 +14,12 @@
 
 #pragma once
 
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
 
 namespace starrocks::lake {
 
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
@@ -65,19 +64,18 @@ public:
 
     size_t memory_usage() const;
 
-    Status flush(WritableFile* wf, uint64_t* filesize);
+    Status flush(WritableFile* wf, uint64_t* filesize, FirstLastKeys* keys);
 
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
 
 private:
-    static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
-                                   const IndexValue& value);
+    static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
-    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
     int64_t _keys_size{0};
     uint64_t _max_rss_rowid{0};
 };

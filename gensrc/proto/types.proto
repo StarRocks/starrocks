@@ -190,6 +190,9 @@ message PersistentIndexSstablePB {
     // used for rebuild point of persistent index
     optional uint64 max_rss_rowid = 4;
     optional bytes encryption_meta = 5;
+    // Key range of this sst.
+    optional string first_key = 6;
+    optional string last_key = 7;
 }
 
 message PersistentIndexSstableMetaPB {

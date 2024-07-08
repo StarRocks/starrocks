@@ -14,6 +14,7 @@
 
 #pragma once
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace starrocks {
@@ -47,6 +48,10 @@ using ColumnUniquePtr = std::unique_ptr<Column>;
 using segment_rowid_t = uint32_t;
 using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
 using DelVectorPtr = std::shared_ptr<DelVector>;
+
+using KeyIndex = size_t;
+using KeyIndexSet = std::vector<KeyIndex>;
+using FirstLastKeys = std::pair<std::string, std::string>;
 
 } // namespace lake
 

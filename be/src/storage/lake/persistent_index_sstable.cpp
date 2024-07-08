@@ -32,33 +32,32 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     }
     options.block_cache = cache;
     sstable::Table* table;
-    RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
+    RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), sstable_pb.first_key(),
+                                         sstable_pb.last_key(), &table));
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(
-        const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map, WritableFile* wf,
-        uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                             WritableFile* wf, uint64_t* filesz, FirstLastKeys* keys) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
-    for (const auto& [k, v] : map) {
+    for (const auto& [k, index_value_with_ver] : map) {
         IndexValuesWithVerPB index_value_pb;
-        for (const auto& index_value_with_ver : v) {
-            auto* value = index_value_pb.add_values();
-            value->set_version(index_value_with_ver.first);
-            value->set_rssid(index_value_with_ver.second.get_rssid());
-            value->set_rowid(index_value_with_ver.second.get_rowid());
-        }
+        auto* value = index_value_pb.add_values();
+        value->set_version(index_value_with_ver.first);
+        value->set_rssid(index_value_with_ver.second.get_rssid());
+        value->set_rowid(index_value_with_ver.second.get_rowid());
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
+    *keys = std::move(builder.FirstLastKeys());
     return Status::OK();
 }
 
@@ -89,12 +88,12 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
-                found_key_indexes->insert(key_index);
+                found_key_indexes->push_back(key_index);
             } else {
                 for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                     if (index_value_with_ver_pb.values(j).version() == version) {
                         values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
-                        found_key_indexes->insert(key_index);
+                        found_key_indexes->push_back(key_index);
                         break;
                     }
                 }

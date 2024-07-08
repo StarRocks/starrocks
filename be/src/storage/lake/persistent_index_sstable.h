@@ -17,6 +17,7 @@
 #include <string>
 
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -29,8 +30,6 @@ class WritableFile;
 class PersistentIndexSstablePB;
 
 namespace lake {
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
@@ -42,8 +41,8 @@ public:
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
                 bool need_filter = true);
 
-    static Status build_sstable(const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map,
-                                WritableFile* wf, uint64_t* filesz);
+    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                WritableFile* wf, uint64_t* filesz, FirstLastKeys* keys);
 
     // multi_get can get multi keys at onces
     // |keys| : Address point to first element of key array.

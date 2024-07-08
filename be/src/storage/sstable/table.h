@@ -33,7 +33,8 @@ public:
     // for the duration of the returned table's lifetime.
     //
     // *file must remain live while this Table is in use.
-    static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size, Table** table);
+    static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size, const std::string& first_key,
+                       const std::string& last_key, Table** table);
 
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;
@@ -60,6 +61,7 @@ private:
 
     void ReadMeta(const Footer& footer);
     void ReadFilter(const Slice& filter_handle_value);
+    bool FilterByZonemap(const Slice& first_key, const Slice& last_key);
 
     Rep* const rep_;
 };
