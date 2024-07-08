@@ -372,7 +372,7 @@ public class CreateLakeTableTest {
             Assert.assertEquals(2, lakeTable.getShardGroupIds().size());
 
             Assert.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
-                    get().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL));
+                    get().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
 
         }
     }

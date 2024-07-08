@@ -153,13 +153,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         this.distributionInfo = distributionInfo;
     }
 
-    public Partition(long id, String name,
-                     MaterializedIndex baseIndex,
-                     DistributionInfo distributionInfo, long shardGroupId) {
-        this(id, name, baseIndex, distributionInfo);
-        this.shardGroupId = shardGroupId;
-    }
-
     public Partition shallowCopy() {
         Partition partition = new Partition();
         partition.id = this.id;
