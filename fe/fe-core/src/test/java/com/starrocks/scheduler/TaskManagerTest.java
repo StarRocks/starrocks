@@ -491,6 +491,7 @@ public class TaskManagerTest {
 
     @Test
     public void testForceGC() {
+        Config.enable_task_history_archive = false;
         TaskRunManager taskRunManager = new TaskRunManager();
         for (int i = 0; i < 100; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
@@ -502,6 +503,7 @@ public class TaskManagerTest {
         taskRunManager.getTaskRunHistory().forceGC();
         Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
+        Config.enable_task_history_archive = true;
     }
 
     @Test

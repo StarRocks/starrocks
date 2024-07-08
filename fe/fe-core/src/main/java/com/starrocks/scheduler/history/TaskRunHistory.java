@@ -189,7 +189,7 @@ public class TaskRunHistory {
      * Keep only limited task runs to save memory usage
      */
     public void forceGC() {
-        if (!isEnableArchiveHistory()) {
+        if (isEnableArchiveHistory()) {
             return;
         }
 
