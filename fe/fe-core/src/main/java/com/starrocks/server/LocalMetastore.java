@@ -1572,7 +1572,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        long shardGroupId = 0;
+        long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), olapTable.getId(), id);

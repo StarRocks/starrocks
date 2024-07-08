@@ -47,6 +47,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -1073,7 +1074,7 @@ public class AlterTest {
             Assert.assertEquals(physicalPartition.getParentId(), partition.get().getId());
             Assert.assertNotNull(physicalPartition.getBaseIndex());
             Assert.assertFalse(physicalPartition.isImmutable());
-            Assert.assertEquals(physicalPartition.getShardGroupId(), 0);
+            Assert.assertEquals(physicalPartition.getShardGroupId(), PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID);
             Assert.assertTrue(physicalPartition.hasStorageData());
             Assert.assertFalse(physicalPartition.isFirstLoad());
         }

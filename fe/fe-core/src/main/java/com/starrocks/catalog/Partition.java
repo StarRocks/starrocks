@@ -46,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +85,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private DistributionInfo distributionInfo;
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
 
     @SerializedName(value = "shardGroupIdList")
     private List<Long> shardGroupIdList;
@@ -177,14 +178,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return partition;
     }
 
-    public List<Long> getShardGroupIdList() {
-        return shardGroupIdList;
-    }
-
-    public void setShardGroupIdList(List<Long> shardGroupIdList) {
-        this.shardGroupIdList = shardGroupIdList;
-    }
-
     @Override
     public void setIdForRestore(long id) {
         this.beforeRestoreId = this.id;
@@ -238,8 +231,17 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return;
     }
 
+    @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    @Override
+    public List<Long> getShardGroupIds() {
+        List<Long> result = new ArrayList<>();
+        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        return result;
     }
 
     public void setName(String newName) {

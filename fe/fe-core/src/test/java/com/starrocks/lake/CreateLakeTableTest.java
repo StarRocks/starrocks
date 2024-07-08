@@ -17,6 +17,7 @@ package com.starrocks.lake;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -368,10 +369,10 @@ public class CreateLakeTableTest {
                         "ROLLUP (mv1 (c0, c1));"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
-            Assert.assertEquals(2, lakeTable.getShardGroupIdList().size());
+            Assert.assertEquals(2, lakeTable.getShardGroupIds().size());
 
             Assert.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
-                    get().getVisibleMaterializedIndicesCount());
+                    get().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL));
 
         }
     }
