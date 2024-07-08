@@ -2063,6 +2063,12 @@ public class Config extends ConfigBase {
     public static long max_automatic_partition_number = 4096;
 
     /**
+     * Used to limit num of partition for load open partition number
+     */
+    @ConfField(mutable = true)
+    public static long max_load_initial_open_partition_number = 32;
+
+    /**
      * enable automatic bucket for random distribution table
      */
     @ConfField(mutable = true)
