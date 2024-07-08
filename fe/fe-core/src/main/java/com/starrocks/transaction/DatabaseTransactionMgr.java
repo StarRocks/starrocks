@@ -71,10 +71,8 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.InsertTxnCommitAttachment;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -154,7 +152,6 @@ public class DatabaseTransactionMgr {
      */
     private final Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
     private long maxCommitTs = 0;
-
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
@@ -1209,7 +1206,8 @@ public class DatabaseTransactionMgr {
         }
 
         transactionState.notifyVisible();
-        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
+        // do after transaction finish
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1875,10 +1873,9 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
-        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
-
+        // do after transaction finish
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
-
     }
 
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
@@ -1941,33 +1938,12 @@ public class DatabaseTransactionMgr {
             locker.unLockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
         }
 
-        collectStatisticsForStreamLoadOnFirstLoadBatch(stateBatch, db);
+        // do after transaction finish in batch
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        }
 
         LOG.info("finish transaction {} batch successfully", stateBatch);
-    }
-
-    private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
-        TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
-        if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
-                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)) {
-            return;
-        }
-        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
-                .map(TableCommitInfo::getTableId)
-                .distinct()
-                .map(db::getTable)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
-        }
-    }
-
-    private void collectStatisticsForStreamLoadOnFirstLoadBatch(TransactionStateBatch txnStateBatch, Database db) {
-        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            collectStatisticsForStreamLoadOnFirstLoad(txnState, db);
-        }
     }
 
     public String getTxnPublishTimeoutDebugInfo(long txnId) {

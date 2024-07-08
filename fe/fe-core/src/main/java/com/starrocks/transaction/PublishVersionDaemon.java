@@ -39,15 +39,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -61,7 +56,6 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -77,10 +71,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -355,9 +347,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             }
         } // end for readyTransactionStates
@@ -383,8 +372,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             } catch (UserException e) {
                 LOG.error("errors while publish version to all backends", e);
@@ -470,7 +457,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
-                    refreshMvIfNecessary(txnState);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -713,10 +699,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                        refreshMvIfNecessary(state);
-                    }
-
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
                 } catch (UserException e) {
@@ -840,64 +822,5 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     txnId, e.getMessage());
             return false;
         }
-    }
-
-    /**
-     * Refresh the materialized view if it should be triggered after base table was loaded.
-     *
-     * @param transactionState
-     * @throws DdlException
-     * @throws MetaNotFoundException
-     */
-    private void refreshMvIfNecessary(TransactionState transactionState)
-            throws DdlException, MetaNotFoundException {
-        // Refresh materialized view when base table update transaction has been visible
-        long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
-            if (table == null) {
-                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
-                return;
-            }
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            Iterator<MvId> mvIdIterator = relatedMvs.iterator();
-            while (mvIdIterator.hasNext()) {
-                MvId mvId = mvIdIterator.next();
-                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                if (materializedView == null) {
-                    LOG.warn("materialized view {} does not exists.", mvId.getId());
-                    mvIdIterator.remove();
-                    continue;
-                }
-                Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
-                try {
-                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
-                        List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
-                        LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                "db:{}, mv:{}, transaction state:{}", table.getName(), mvDb.getFullName(),
-                                materializedView.getName(), txnPartitionCommitInfos);
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                } finally {
-                    locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
-                }
-            }
-        }
-    }
-
-    private List<PartitionCommitInfo> getPartitionCommitInfos(TransactionState txnState, long tableId) {
-        TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(tableId);
-        if (tableCommitInfo == null) {
-            return Collections.emptyList();
-        }
-        if (tableCommitInfo.getIdToPartitionCommitInfo() == null) {
-            return Collections.emptyList();
-        }
-        return new ArrayList<>(tableCommitInfo.getIdToPartitionCommitInfo().values());
     }
 }
