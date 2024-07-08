@@ -148,7 +148,8 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
-        if (partition_num > 512 && total_num_rows < 10000 * partition_num) {
+        LOG(ERROR) << "CHECK_PASS: " << (int)is_passthrough << ", " << partition_num << ", " << total_num_rows;
+        if (partition_num > config::lxh_pass_size && total_num_rows < config::lxh_pass_mul * partition_num) {
             is_passthrough = true;
         }
     }
