@@ -1638,3 +1638,54 @@ DROP VIEW test_view;
 DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;
 -- result:
 -- !result
+-- name: test_vertical_compaction
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_vertical_compaction` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  `col1` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col2` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col3` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col4` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col5` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col6` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col7` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col8` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col9` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col10` varchar(255) DEFAULT "ABC" COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (1, "abc");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (2, "ABC");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (3, "bcd");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (4, "BCD");
+-- result:
+-- !result
+ALTER TABLE t_vertical_compaction BASE COMPACT;
+-- result:
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+DROP TABLE t_vertical_compaction;
+-- result:
+-- !result
