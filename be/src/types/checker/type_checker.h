@@ -27,96 +27,34 @@ public:
     virtual StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const = 0;
 };
 
-class ByteTypeChecker : public TypeChecker {
-public:
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
+#define DEFINE_TYPE_CHECKER(class_name) \
+class class_name : public TypeChecker { \
+public: \
+    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override; \
 };
 
-class ClickHouseUnsignedByteTypeChecker : public TypeChecker {
-public:
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
+DEFINE_TYPE_CHECKER(ByteTypeChecker)
+DEFINE_TYPE_CHECKER(ClickHouseUnsignedByteTypeChecker)
+DEFINE_TYPE_CHECKER(ShortTypeChecker)
+DEFINE_TYPE_CHECKER(ClickHouseUnsignedShortTypeChecker)
+DEFINE_TYPE_CHECKER(IntegerTypeChecker)
+DEFINE_TYPE_CHECKER(StringTypeChecker)
+DEFINE_TYPE_CHECKER(ClickHouseUnsignedIntegerTypeChecker)
+DEFINE_TYPE_CHECKER(LongTypeChecker)
+DEFINE_TYPE_CHECKER(BigIntegerTypeChecker)
+DEFINE_TYPE_CHECKER(ClickHouseUnsignedLongTypeChecker)
+DEFINE_TYPE_CHECKER(BooleanTypeChecker)
+DEFINE_TYPE_CHECKER(FloatTypeChecker)
+DEFINE_TYPE_CHECKER(DoubleTypeChecker)
+DEFINE_TYPE_CHECKER(TimestampTypeChecker)
+DEFINE_TYPE_CHECKER(DateTypeChecker)
+DEFINE_TYPE_CHECKER(TimeTypeChecker)
+DEFINE_TYPE_CHECKER(LocalDateTimeTypeChecker)
+DEFINE_TYPE_CHECKER(BigDecimalTypeChecker)
+DEFINE_TYPE_CHECKER(OracleTimestampClassTypeChecker)
+DEFINE_TYPE_CHECKER(SqlServerDateTimeOffsetTypeChecker)
+DEFINE_TYPE_CHECKER(ByteArrayTypeChecker)
+DEFINE_TYPE_CHECKER(DefaultTypeChecker)
 
-class ShortTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class ClickHouseUnsignedShortTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class IntegerTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-// java.lang.String
-class StringTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class ClickHouseUnsignedIntegerTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class LongTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class BigIntegerTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class ClickHouseUnsignedLongTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class BooleanTypeChecker : public TypeChecker {
-public:
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class FloatTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class DoubleTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class TimestampTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class DateTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class TimeTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class LocalDateTimeTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class BigDecimalTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class OracleTimestampClassTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class SqlServerDateTimeOffsetTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class ByteArrayTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
-
-class DefaultTypeChecker : public TypeChecker {
-    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
-};
 
 } // namespace starrocks

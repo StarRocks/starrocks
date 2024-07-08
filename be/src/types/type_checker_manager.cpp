@@ -52,7 +52,7 @@ TypeCheckerManager& TypeCheckerManager::getInstance() {
 }
 
 void TypeCheckerManager::registerChecker(const std::string& java_class, std::unique_ptr<TypeChecker> checker) {
-    _checkers[java_class] = std::move(checker);
+    _checkers.emplace(java_class, std::move(checker));
 }
 
 StatusOr<LogicalType> TypeCheckerManager::checkType(const std::string& java_class, const SlotDescriptor* slot_desc) {
