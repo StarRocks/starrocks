@@ -759,7 +759,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);
-    if (_largest_rowset == nullptr || _largest_rowset->num_rows() == 0 || _tablets[_tablet_idx]->num_rows()) {
+    if (_largest_rowset == nullptr || _largest_rowset->num_rows() == 0 || _tablets[_tablet_idx]->num_rows() == 0) {
         return Status::OK();
     }
 
