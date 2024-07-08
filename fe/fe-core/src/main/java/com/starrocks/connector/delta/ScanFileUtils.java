@@ -44,13 +44,19 @@ public class ScanFileUtils {
         return fileStatus.getSize() / estimateRowSize;
     }
 
-    public static DeltaLakeAddFileStatsSerDe getColumnStatistics(Row file) {
+    public static DeltaLakeAddFileStatsSerDe getColumnStatistics(Row file, FileStatus fileStatus,
+                                                                 long estimateRowSize) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
-        if (stats == null) {
-            return new DeltaLakeAddFileStatsSerDe(1, null, null, null);
+        if (stats != null) {
+            DeltaLakeAddFileStatsSerDe fileStatsSerDe = GsonUtils.GSON.fromJson(
+                    stats, DeltaLakeAddFileStatsSerDe.class);
+            if (fileStatsSerDe != null) {
+                return fileStatsSerDe;
+            }
         }
 
-        return GsonUtils.GSON.fromJson(stats, DeltaLakeAddFileStatsSerDe.class);
+        long estimateRowCount = fileStatus.getSize() / estimateRowSize;
+        return new DeltaLakeAddFileStatsSerDe(estimateRowCount, null, null, null);
     }
 
     private static Row getAddFileEntry(Row scanFileInfo) {
@@ -68,7 +74,8 @@ public class ScanFileUtils {
 
         FileScanTask fileScanTask;
         if (needStats) {
-            DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(addFileRow);
+            DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
+                    addFileRow, fileStatus, estimizateRowSize);
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
             return new Pair<>(fileScanTask, stats);
         } else {
