@@ -1083,7 +1083,7 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
                         if (index.index_type() == GIN) {
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
-                            auto index_st = _fs->delete_file(index_path);
+                            auto index_st = _fs->delete_dir_recursive(index_path);
                             LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
                                     << "Fail to delete file=" << index_path << ", " << index_st.to_string();
                         }
