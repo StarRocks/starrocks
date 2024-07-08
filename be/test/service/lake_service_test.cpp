@@ -1313,7 +1313,7 @@ TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
-    ASSERT_EQ(3, metadata->version());
+    ASSERT_EQ(2, metadata->version());
     ASSERT_EQ(_tablet_id, metadata->id());
 }
 
