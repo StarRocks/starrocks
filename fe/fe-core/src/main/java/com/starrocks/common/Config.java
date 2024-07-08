@@ -1173,6 +1173,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Control whether to cache the ast tree of materialized view for text based rewrite")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
+    @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
+            "only refresh affected partitions of external table, instead of all of them ")
+    public static boolean enable_materialized_view_external_table_precise_refresh = true;
+
     /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */
