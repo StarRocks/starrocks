@@ -284,10 +284,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
 
-> **CAUTION**
->
-> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
-
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
