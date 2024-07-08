@@ -110,6 +110,7 @@ PROPERTIES (
   - 主键必须满足唯一性约束，且列的值不会修改。本示例中主键为 `dt`、`order_id`。
   - 主键支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIME、VARCHAR/STRING。并且不允许为 NULL。
   - 分区列和分桶列必须在主键中。
+  - 默认设置下，单条主键值编码后的最大长度为 128 字节。
 
 - `enable_persistent_index`：是否持久化主键索引，同时使用磁盘和内存存储主键索引，避免主键索引占用过大内存空间。通常情况下，持久化主键索引后，主键索引所占内存为之前的 1/10。您可以在建表时，在`PROPERTIES`中配置该参数，取值范围为 `true` 或者 `false`（默认值）。
 
