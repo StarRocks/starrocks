@@ -2869,6 +2869,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     Set<String> mvRefreshProfileKeys = ImmutableSet.of(
                             "MVRefreshPrepare",
                             "MVRefreshDoWholeRefresh",
+                            "MVRefreshComputeCandidatePartitions",
                             "MVRefreshSyncAndCheckPartitions",
                             "MVRefreshExternalTable",
                             "MVRefreshSyncPartitions",
@@ -2902,7 +2903,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
                         System.out.println(e.getKey() + ": " + e.getValue());
-                        Assert.assertTrue(mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
+                        Assert.assertTrue("not expected: " + e.getKey(),
+                                mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
                     }
                 });
     }

@@ -300,8 +300,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return materializedView.getValidRangePartitionMap(lastPartitionNum).keySet();
     }
 
+    @Override
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames) {
+                                               Set<String> mvPotentialPartitionNames,
+                                               boolean tentative) {
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
         if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
@@ -360,12 +362,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (!Config.materialized_view_refresh_ascending) {
             partitionNameIter = sortedPartition.iterator();
         }
-        setNextPartitionStartAndEnd(mvPartitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter);
+        setNextPartitionStartAndEnd(mvPartitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter, tentative);
     }
 
     private void setNextPartitionStartAndEnd(Set<String> partitionsToRefresh,
                                              Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
-                                             Iterator<String> partitionNameIter) {
+                                             Iterator<String> partitionNameIter,
+                                             boolean tentative) {
         String nextPartitionStart = null;
         String endPartitionName = null;
         if (partitionNameIter.hasNext()) {
@@ -380,15 +383,17 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionsToRefresh.remove(endPartitionName);
         }
 
-        mvContext.setNextPartitionStart(nextPartitionStart);
+        if (!tentative) {
+            mvContext.setNextPartitionStart(nextPartitionStart);
 
-        if (endPartitionName != null) {
-            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
-            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
-        } else {
-            // partitionNameIter has just been traversed, and endPartitionName is not updated
-            // will cause endPartitionName == null
-            mvContext.setNextPartitionEnd(null);
+            if (endPartitionName != null) {
+                PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
+                mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
+            } else {
+                // partitionNameIter has just been traversed, and endPartitionName is not updated
+                // will cause endPartitionName == null
+                mvContext.setNextPartitionEnd(null);
+            }
         }
     }
 

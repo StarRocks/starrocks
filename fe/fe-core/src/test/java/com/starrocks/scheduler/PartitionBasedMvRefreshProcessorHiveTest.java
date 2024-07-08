@@ -15,19 +15,24 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -42,6 +47,7 @@ import org.junit.runners.MethodSorters;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -1191,4 +1197,36 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
     }
 
+    /**
+     * When refresh some partitions of MV, each refresh task should only refresh the corresponding partitions of base
+     * table instead of all of them
+     */
+    @Test
+    public void testRefreshExternalTablePrecise() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_mv_external\n" +
+                "PARTITION BY date_trunc('day', l_shipdate) \n" +
+                "distributed by hash(l_orderkey) buckets 3\n" +
+                "refresh deferred manual\n" +
+                " properties ('partition_refresh_number'='1') \n" +
+                "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        List<List<String>> calls = Lists.newArrayList();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public void refreshTable(String catalogName, String srDbName, Table table,
+                                     List<String> partitionNames, boolean onlyCachedPartitions) {
+                calls.add(partitionNames);
+            }
+        };
+
+        starRocksAssert.refreshMvPartition("refresh materialized view test_mv_external partition " +
+                " start('1998-01-01') end('1998-01-04')");
+        Assert.assertEquals(
+                Lists.newArrayList(
+                        Lists.newArrayList("l_shipdate=1998-01-01"),
+                        Lists.newArrayList("l_shipdate=1998-01-02"),
+                        Lists.newArrayList("l_shipdate=1998-01-03")
+                ),
+                calls);
+    }
 }

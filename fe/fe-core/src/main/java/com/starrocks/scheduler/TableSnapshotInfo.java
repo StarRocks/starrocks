@@ -72,4 +72,22 @@ public class TableSnapshotInfo {
                 ", refreshedPartitionInfos=" + refreshedPartitionInfos +
                 '}';
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TableSnapshotInfo that = (TableSnapshotInfo) o;
+        return Objects.equals(baseTableInfo, that.baseTableInfo) &&
+                Objects.equals(baseTable, that.baseTable);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(baseTableInfo, baseTable);
+    }
 }
