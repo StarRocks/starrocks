@@ -1,5 +1,8 @@
 -- name: test_mv_refresh_list_partitions_basic
 
+create database db_${uuid0};
+use db_${uuid0};
+
 CREATE TABLE t3 (
       id BIGINT,
       province VARCHAR(64) not null,
