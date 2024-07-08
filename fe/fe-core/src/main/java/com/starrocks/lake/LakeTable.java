@@ -207,7 +207,6 @@ public class LakeTable extends OlapTable {
             for (MaterializedIndex index : p.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 shardGroupIds.add(index.getShardGroupId());
             }
-
         }
         return shardGroupIds;
     }
