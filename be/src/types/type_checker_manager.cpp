@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "types/type_checker_manager.h"
 
 namespace starrocks {
@@ -25,7 +24,8 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("com.clickhouse.data.value.UnsignedShort", std::make_unique<ClickHouseUnsignedShortTypeChecker>());
     registerChecker("java.lang.Integer", std::make_unique<IntegerTypeChecker>());
     registerChecker("java.lang.String", std::make_unique<StringTypeChecker>());
-    registerChecker("com.clickhouse.data.value.UnsignedInteger", std::make_unique<ClickHouseUnsignedIntegerTypeChecker>());
+    registerChecker("com.clickhouse.data.value.UnsignedInteger",
+                    std::make_unique<ClickHouseUnsignedIntegerTypeChecker>());
     registerChecker("java.lang.Long", std::make_unique<LongTypeChecker>());
     registerChecker("java.math.BigInteger", std::make_unique<BigIntegerTypeChecker>());
     registerChecker("com.clickhouse.data.value.UnsignedLong", std::make_unique<ClickHouseUnsignedLongTypeChecker>());

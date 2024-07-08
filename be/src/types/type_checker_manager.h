@@ -13,10 +13,11 @@
 // limitations under the License.
 
 #pragma once
-#include "types/checker/type_checker.h"
 #include <memory>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+
+#include "types/checker/type_checker.h"
 
 namespace starrocks {
 

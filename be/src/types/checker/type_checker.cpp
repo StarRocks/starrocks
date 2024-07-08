@@ -17,8 +17,7 @@
 #include <fmt/format.h>
 
 namespace starrocks {
-StatusOr<LogicalType> ByteTypeChecker::check(const std::string& java_class,
-                                             const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> ByteTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     switch (type) {
     case TYPE_BOOLEAN:
@@ -52,9 +51,7 @@ StatusOr<LogicalType> ClickHouseUnsignedByteTypeChecker::check(const std::string
     }
 }
 
-
-StatusOr<LogicalType> ShortTypeChecker::check(const std::string& java_class,
-                                              const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> ShortTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     switch (type) {
     case TYPE_TINYINT:
@@ -70,8 +67,6 @@ StatusOr<LogicalType> ShortTypeChecker::check(const std::string& java_class,
     }
 }
 
-
-// com.clickhouse.data.value.UnsignedShort
 StatusOr<LogicalType> ClickHouseUnsignedShortTypeChecker::check(const std::string& java_class,
                                                                 const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -87,25 +82,23 @@ StatusOr<LogicalType> ClickHouseUnsignedShortTypeChecker::check(const std::strin
     }
 }
 
-
-// java.lang.Integer
-
-StatusOr<LogicalType> IntegerTypeChecker::check(const std::string& java_class,
-                                                const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> IntegerTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
-    if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
+    switch (type) {
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+        return TYPE_INT;
+    default:
         return Status::NotSupported(
                 fmt::format("Type mismatches on column[{}], JDBC result type is Integer, please set the type to "
                             "one of tinyint,smallint,int,bigint",
                             slot_desc->col_name()));
     }
-    return TYPE_INT;
 }
 
-// java.lang.String
-
-StatusOr<LogicalType> StringTypeChecker::check(const std::string& java_class,
-                                               const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> StringTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
 
     switch (type) {
@@ -119,9 +112,6 @@ StatusOr<LogicalType> StringTypeChecker::check(const std::string& java_class,
     }
 }
 
-
-// com.clickhouse.data.value.UnsignedInteger
-
 StatusOr<LogicalType> ClickHouseUnsignedIntegerTypeChecker::check(const std::string& java_class,
                                                                   const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -133,10 +123,7 @@ StatusOr<LogicalType> ClickHouseUnsignedIntegerTypeChecker::check(const std::str
     return TYPE_BIGINT;
 }
 
-// java.lang.Long
-
-StatusOr<LogicalType> LongTypeChecker::check(const std::string& java_class,
-                                             const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> LongTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_BIGINT) {
         return Status::NotSupported(
@@ -145,8 +132,6 @@ StatusOr<LogicalType> LongTypeChecker::check(const std::string& java_class,
     }
     return TYPE_BIGINT;
 }
-
-// java.math.BigInteger
 
 StatusOr<LogicalType> BigIntegerTypeChecker::check(const std::string& java_class,
                                                    const SlotDescriptor* slot_desc) const {
@@ -162,12 +147,8 @@ StatusOr<LogicalType> BigIntegerTypeChecker::check(const std::string& java_class
     }
 }
 
-
-// com.clickhouse.data.value.UnsignedLong
-
-StatusOr<LogicalType>
-ClickHouseUnsignedLongTypeChecker::check(const std::string& java_class,
-                                         const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> ClickHouseUnsignedLongTypeChecker::check(const std::string& java_class,
+                                                               const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_LARGEINT) {
         return Status::NotSupported(fmt::format(
@@ -177,9 +158,7 @@ ClickHouseUnsignedLongTypeChecker::check(const std::string& java_class,
     return TYPE_VARCHAR;
 }
 
-// java.lang.Boolean
-StatusOr<LogicalType> BooleanTypeChecker::check(const std::string& java_class,
-                                                const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> BooleanTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
 
     switch (type) {
@@ -189,18 +168,14 @@ StatusOr<LogicalType> BooleanTypeChecker::check(const std::string& java_class,
     case TYPE_BIGINT:
         return TYPE_BOOLEAN;
     default:
-        return Status::NotSupported(fmt::format(
-                "Type mismatches on column[{}], JDBC result type is Boolean, please set the type to "
-                "one of boolean, smallint, int, bigint",
-                slot_desc->col_name()));
+        return Status::NotSupported(
+                fmt::format("Type mismatches on column[{}], JDBC result type is Boolean, please set the type to "
+                            "one of boolean, smallint, int, bigint",
+                            slot_desc->col_name()));
     }
 }
 
-
-// java.lang.Float
-
-StatusOr<LogicalType> FloatTypeChecker::check(const std::string& java_class,
-                                              const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> FloatTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_FLOAT) {
         return Status::NotSupported(
@@ -210,9 +185,7 @@ StatusOr<LogicalType> FloatTypeChecker::check(const std::string& java_class,
     return TYPE_FLOAT;
 }
 
-// java.lang.Double
-StatusOr<LogicalType> DoubleTypeChecker::check(const std::string& java_class,
-                                               const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> DoubleTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
 
     switch (type) {
@@ -226,8 +199,6 @@ StatusOr<LogicalType> DoubleTypeChecker::check(const std::string& java_class,
     }
 }
 
-
-//  java.sql.Timestamp
 StatusOr<LogicalType> TimestampTypeChecker::check(const std::string& java_class,
                                                   const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -243,11 +214,7 @@ StatusOr<LogicalType> TimestampTypeChecker::check(const std::string& java_class,
     }
 }
 
-
-// java.sql.Date
-
-StatusOr<LogicalType> DateTypeChecker::check(const std::string& java_class,
-                                             const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> DateTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_DATE) {
         return Status::NotSupported(
@@ -257,10 +224,7 @@ StatusOr<LogicalType> DateTypeChecker::check(const std::string& java_class,
     return TYPE_VARCHAR;
 }
 
-// java.sql.Time
-
-StatusOr<LogicalType> TimeTypeChecker::check(const std::string& java_class,
-                                             const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> TimeTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_TIME) {
         return Status::NotSupported(
@@ -269,8 +233,6 @@ StatusOr<LogicalType> TimeTypeChecker::check(const std::string& java_class,
     }
     return TYPE_TIME;
 }
-
-// java.time.LocalDateTime
 
 StatusOr<LogicalType> LocalDateTimeTypeChecker::check(const std::string& java_class,
                                                       const SlotDescriptor* slot_desc) const {
@@ -283,7 +245,6 @@ StatusOr<LogicalType> LocalDateTimeTypeChecker::check(const std::string& java_cl
     return TYPE_VARCHAR;
 }
 
-// java.math.BigDecimal
 StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class,
                                                    const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -303,9 +264,6 @@ StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class
     }
 }
 
-
-// oracle.sql.TIMESTAMP  oracle.sql.TIMESTAMPLTZ oracle.sql.TIMESTAMPTZ
-
 StatusOr<LogicalType> OracleTimestampClassTypeChecker::check(const std::string& java_class,
                                                              const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -317,8 +275,6 @@ StatusOr<LogicalType> OracleTimestampClassTypeChecker::check(const std::string& 
     }
     return TYPE_VARCHAR;
 }
-
-// microsoft.sql.DateTimeOffset
 
 StatusOr<LogicalType> SqlServerDateTimeOffsetTypeChecker::check(const std::string& java_class,
                                                                 const SlotDescriptor* slot_desc) const {
@@ -332,7 +288,6 @@ StatusOr<LogicalType> SqlServerDateTimeOffsetTypeChecker::check(const std::strin
     return TYPE_VARCHAR;
 }
 
-// byte[] oracle.jdbc.OracleBlob [B
 StatusOr<LogicalType> ByteArrayTypeChecker::check(const std::string& java_class,
                                                   const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
@@ -349,9 +304,7 @@ StatusOr<LogicalType> ByteArrayTypeChecker::check(const std::string& java_class,
     }
 }
 
-
-StatusOr<LogicalType> DefaultTypeChecker::check(const std::string& java_class,
-                                                const SlotDescriptor* slot_desc) const {
+StatusOr<LogicalType> DefaultTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_VARCHAR) {
         return Status::NotSupported(
