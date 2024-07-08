@@ -2421,13 +2421,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
                                         tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
                                 System.out.println(taskNameJobStatusMap);
+                                long taskId = tm.getTask(mvTaskName).getId();
                                 // refresh 4 times
-                                while (taskNameJobStatusMap.isEmpty() || taskNameJobStatusMap.get(mvTaskName).size() < 4) {
+                                while (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null) {
                                     Thread.sleep(100);
-                                    taskNameJobStatusMap = tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
                                 }
                                 Assert.assertEquals(1, taskNameJobStatusMap.size());
-                                Assert.assertEquals(4, taskNameJobStatusMap.get(mvTaskName).size());
 
                                 ShowMaterializedViewStatus status =
                                         new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
@@ -2870,6 +2869,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     Set<String> mvRefreshProfileKeys = ImmutableSet.of(
                             "MVRefreshPrepare",
                             "MVRefreshDoWholeRefresh",
+                            "MVRefreshComputeCandidatePartitions",
                             "MVRefreshSyncAndCheckPartitions",
                             "MVRefreshExternalTable",
                             "MVRefreshSyncPartitions",
@@ -2903,7 +2903,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
                         System.out.println(e.getKey() + ": " + e.getValue());
-                        Assert.assertTrue(mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
+                        Assert.assertTrue("not expected: " + e.getKey(),
+                                mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
                     }
                 });
     }

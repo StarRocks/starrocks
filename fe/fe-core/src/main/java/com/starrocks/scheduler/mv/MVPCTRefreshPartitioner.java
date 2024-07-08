@@ -118,17 +118,20 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Filter to refresh partitions by refresh number.
-     * @param mvPartitionsToRefresh: mv partitions to refresh.
-     * @param mvPotentialPartitionNames: mv potential partition names to check.
+     *
+     * @param mvPartitionsToRefresh     : mv partitions to refresh.
+     * @param mvPotentialPartitionNames : mv potential partition names to check.
+     * @param tentative see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor#checkMvToRefreshedPartitions}
      */
     public abstract void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                                        Set<String> mvPotentialPartitionNames);
+                                                        Set<String> mvPotentialPartitionNames,
+                                                        boolean tentative);
 
     /**
      * Check whether the base table is supported partition refresh or not.
      */
     public static boolean isPartitionRefreshSupported(Table baseTable) {
-        return ConnectorPartitionTraits.isSupported(baseTable.getType());
+        return ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType());
     }
 
     /**
