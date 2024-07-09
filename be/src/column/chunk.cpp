@@ -285,7 +285,8 @@ void Chunk::append_selective_bad_alloc(const Chunk& src, const uint32_t* indexes
         if (i != 0) {
             LOG(ERROR) << "LXH: NUM_COLUMNS: " << num_columns();
             for (size_t j = 0; j < _columns.size(); j++) {
-                LOG(ERROR) << "lxh: NUM_C: " << j << ":" << _columns[j]->size();
+                LOG(ERROR) << "lxh: NUM_C: " << j << ":" << (int)(_columns[j] == nullptr);
+                //LOG(ERROR) << "lxh: NUM_C: " << j << ":" << _columns[j]->size();
             }
             throw std::bad_alloc();
         }
