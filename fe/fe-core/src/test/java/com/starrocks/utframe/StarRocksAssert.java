@@ -199,6 +199,10 @@ public class StarRocksAssert {
         return this;
     }
 
+    public String showCreateTable(String sql) throws Exception {
+        return show(sql).get(0).get(1);
+    }
+
     public boolean databaseExist(String dbName) {
         Database db = GlobalStateMgr.getCurrentState().getDb("" + dbName);
         return db != null;
