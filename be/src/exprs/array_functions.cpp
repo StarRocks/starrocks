@@ -1632,10 +1632,10 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     DCHECK(columns.size() == 2);
 
-    auto src_column = columns[0];
+    const ColumnPtr& src_column = columns[0];
     size_t num_rows = src_column->size();
 
-    auto repeat_count_column = columns[1];
+    const ColumnPtr& repeat_count_column = columns[1];
     ColumnViewer<TYPE_INT> repeat_count_viewer(repeat_count_column);
 
     ColumnPtr dest_column_elements = nullptr;
