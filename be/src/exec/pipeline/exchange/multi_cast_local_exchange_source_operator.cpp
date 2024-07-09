@@ -19,8 +19,6 @@ namespace starrocks::pipeline {
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _exchanger->open_source_operator(_mcast_consumer_index);
-    // attach exchange profile to this operator.(not work, can not be added multiple times)
-    // _runtime_profile->add_child(_exchanger->runtime_profile(), true, nullptr);
     return Status::OK();
 }
 

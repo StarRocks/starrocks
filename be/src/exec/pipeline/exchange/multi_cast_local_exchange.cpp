@@ -30,7 +30,6 @@ InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* r
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
-    // dummy->used_count = consumer_number;
     _head = dummy;
     _tail = dummy;
     for (size_t i = 0; i < consumer_number; i++) {
@@ -116,8 +115,6 @@ bool InMemoryMultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_inde
     if (cell->next != nullptr) {
         return true;
     }
-    // LOG(INFO) << "can't pull_chunk, index:" << mcast_consumer_index << ", rows:" << cell->accumulated_row_size;
-    // LOG_EVERY_N(INFO, 10000000) << "can't pull_chunk, index:" << mcast_consumer_index << ", rows:" << cell->accumulated_row_size;
     return false;
 }
 
@@ -171,12 +168,10 @@ void InMemoryMultiCastLocalExchanger::close_sink_operator() {
 }
 
 void InMemoryMultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
-    // LOG(INFO) << "_close consumer: " << mcast_consumer_index;
     Cell* now = _progress[mcast_consumer_index];
     now = now->next;
     while (now) {
         now->used_count += 1;
-        // LOG(INFO) << "used_count: " << now->used_count;
         now = now->next;
     }
     _progress[mcast_consumer_index] = nullptr;
