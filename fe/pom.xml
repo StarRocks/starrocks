@@ -43,12 +43,12 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <jprotobuf.version>2.4.12</jprotobuf.version>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.4.1</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.10.1</parquet.version>
+        <parquet.version>1.12.3</parquet.version>
         <hadoop.version>3.3.6</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
