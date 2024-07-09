@@ -18,6 +18,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -42,17 +43,17 @@ public class QueryDumper {
             .create();
 
     public static Pair<HttpResponseStatus, String> dump(String catalogName, String dbName, String query, boolean enableMock) {
-        ConnectContext context = ConnectContext.get();
+        ConnectContext context = Util.getOrCreateConnectContext();
 
-        if (StringUtils.isBlank(query)) {
+        if (StringUtils.isEmpty(query)) {
             return Pair.create(HttpResponseStatus.BAD_REQUEST, "query is empty");
         }
 
-        if (!StringUtils.isBlank(catalogName)) {
+        if (!StringUtils.isEmpty(catalogName)) {
             context.setCurrentCatalog(catalogName);
         }
 
-        if (!StringUtils.isBlank(dbName)) {
+        if (!StringUtils.isEmpty(dbName)) {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             if (db == null) {
                 return Pair.create(HttpResponseStatus.NOT_FOUND, "Database [" + dbName + "] does not exists");
