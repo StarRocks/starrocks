@@ -1058,7 +1058,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
         boolean isOverwrite = false;
         if (!commitInfos.isEmpty()) {
             TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
@@ -1074,6 +1074,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
         Transaction transaction = nativeTbl.newTransaction();
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+
+        if (branch != null) {
+            batchWrite.toBranch(branch);
+        }
 
         PartitionSpec partitionSpec = nativeTbl.spec();
         for (TIcebergDataFile dataFile : dataFiles) {
@@ -1237,10 +1241,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         void addFile(DataFile file);
 
         void commit();
+
+        void toBranch(String targetBranch);
     }
 
     static class Append implements BatchWrite {
-        private final AppendFiles append;
+        private AppendFiles append;
 
         public Append(Transaction txn) {
             append = txn.newAppend();
@@ -1255,10 +1261,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         public void commit() {
             append.commit();
         }
+
+        @Override
+        public void toBranch(String targetBranch) {
+            append = append.toBranch(targetBranch);
+        }
     }
 
     static class DynamicOverwrite implements BatchWrite {
-        private final ReplacePartitions replace;
+        private ReplacePartitions replace;
 
         public DynamicOverwrite(Transaction txn) {
             replace = txn.newReplacePartitions();
@@ -1272,6 +1283,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void commit() {
             replace.commit();
+        }
+
+        @Override
+        public void toBranch(String targetBranch) {
+            replace = replace.toBranch(targetBranch);
         }
     }
 

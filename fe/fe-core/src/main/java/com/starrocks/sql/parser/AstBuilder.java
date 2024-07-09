@@ -2047,11 +2047,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionNames = (PartitionNames) visit(context.partitionNames());
             }
 
+            String targetBranch = null;
+            if (context.writeBranch() != null) {
+                targetBranch = ((Identifier) visit(context.writeBranch())).getValue();
+            }
+
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                     createPos(context));
             stmt.setHintNodes(hintMap.get(context));
+            stmt.setTargetBranch(targetBranch);
             return stmt;
         }
 
