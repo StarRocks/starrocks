@@ -22,6 +22,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
+#include "exprs/clone_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/types.h"
@@ -369,7 +370,8 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
             cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool,
                                                              true);
         } else {
-            cast_expr = column_ref;
+            // clone to reuse result_chunk
+            cast_expr = CloneExpr::from_child(column_ref, &_pool);
         }
 
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
