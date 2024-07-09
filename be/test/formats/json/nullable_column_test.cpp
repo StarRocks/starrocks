@@ -149,6 +149,8 @@ TEST_F(AddNullableColumnTest, test_invalid_json_convert) {
     auto json = R"(  { "key" : "abc \ssn\"" }  )"_padded;
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.find_field("key");
-    (void)convert_from_simdjson(val);
+    auto st = convert_from_simdjson(val);
+    ASSERT_TRUE(!st.ok());
+    ASSERT_TRUE(!st.message().);
 }
 } // namespace starrocks
