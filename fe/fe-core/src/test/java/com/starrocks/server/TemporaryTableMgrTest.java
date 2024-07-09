@@ -37,6 +37,7 @@ public class TemporaryTableMgrTest {
         temporaryTableMgr.addTemporaryTable(sessionId1, 1L, "table1", 1L);
         temporaryTableMgr.addTemporaryTable(sessionId1, 2L, "table2", 2L);
         temporaryTableMgr.addTemporaryTable(sessionId2, 1L, "table1", 3L);
+        temporaryTableMgr.addTemporaryTable(sessionId2, 1L, "table2", 4L);
 
         Assert.assertTrue(temporaryTableMgr.tableExists(sessionId1, 1L, "table1"));
         long tableId = temporaryTableMgr.getTable(sessionId1, 1L, "table1");
@@ -61,13 +62,14 @@ public class TemporaryTableMgrTest {
 
         {
             Set<Long> dbIds = new HashSet<>(Arrays.asList(1L));
-            Table<Long, UUID, Long> actual = temporaryTableMgr.getAllTemporaryTables(dbIds);
+            Table<Long, Long, UUID> actual = temporaryTableMgr.getAllTemporaryTables(dbIds);
 
-            Assert.assertEquals(actual.size(), 2);
+            Assert.assertEquals(actual.size(), 3);
             Assert.assertTrue(actual.containsRow(1L));
-            Assert.assertTrue(actual.row(1L).size() == 2);
-            Assert.assertTrue(actual.row(1L).get(sessionId1) == 1L);
-            Assert.assertTrue(actual.row(1L).get(sessionId2) == 3L);
+            Assert.assertTrue(actual.row(1L).size() == 3);
+            Assert.assertTrue(actual.row(1L).get(1L) == sessionId1);
+            Assert.assertTrue(actual.row(1L).get(3L) == sessionId2);
+            Assert.assertTrue(actual.row(1L).get(4L) == sessionId2);
         }
 
         Assert.assertEquals(temporaryTableMgr.listSessions().size(), 2);
