@@ -2370,7 +2370,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new KillStmt(id, pos);
         } else {
-            if (context.connId == null) {
+            if (queryId != null) {
                 throw new ParsingException(String.format("connection id %s should be a positive integer", queryId));
             }
             return new KillStmt(true, id, pos);

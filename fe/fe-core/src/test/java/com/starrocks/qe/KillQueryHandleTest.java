@@ -82,7 +82,20 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWhenQueryIdNotFound(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+    public void testKillStmtWhenQueryIdNotFound(@Mocked SocketChannel socketChannel)
+            throws Exception {
+        // test killing query but query not found
+        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+
+        ConnectContext ctx = kill("xxx", false);
+        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assert.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
+
+        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+    }
+
+    @Test
+    public void testKillStmtWhenQueryIdNotFound2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query not found
         new MockUp<TMasterOpResult>() {
@@ -139,7 +152,8 @@ public class KillQueryHandleTest {
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Unknown error x", ctx.getState().getErrorMessage());
+        Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
+                ctx.getState().getErrorMessage());
 
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }

@@ -1047,7 +1047,8 @@ public class StmtExecutor {
                     errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
                     LOG.warn(errorMsg, e);
                 } catch (Exception e) {
-                    errorMsg = e.getMessage();
+                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
+                            e.getMessage();
                     LOG.warn(e.getMessage(), e);
                 }
             }
