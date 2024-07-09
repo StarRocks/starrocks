@@ -122,7 +122,7 @@ public class FileTable extends Table {
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive);
         boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {
