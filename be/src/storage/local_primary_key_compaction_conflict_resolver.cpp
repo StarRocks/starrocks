@@ -58,7 +58,7 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     params.index = _index;
     return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         *_total_deletes += num_dels;
-        _delvecs->emplace_back(rssid, dv);
+        TRY_CATCH_BAD_ALLOC(_delvecs->emplace_back(rssid, dv));
     });
 }
 
