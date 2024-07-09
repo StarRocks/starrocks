@@ -82,7 +82,6 @@ public class RepoExecutor {
         try {
             ConnectContext context = createConnectContext();
 
-            // TODO: use json sink protocol, instead of statistic protocol
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
