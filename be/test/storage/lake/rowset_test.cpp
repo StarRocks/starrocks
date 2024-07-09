@@ -200,4 +200,22 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     }
 }
 
+TEST_F(LakeRowsetTest, test_add_uncompacted_segments) {
+    create_rowsets_for_testing();
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+
+    ASSIGN_OR_ABORT(auto segments, rs->segments(false));
+
+    TxnLogPB_OpCompaction op_compaction;
+    uint64_t num_rows = 0;
+    uint64_t data_size = 0;
+    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 0);
+    rs->add_uncompacted_segments(&op_compaction, num_rows, data_size);
+    EXPECT_TRUE(op_compaction.output_rowset().segments_size() > 0);
+    EXPECT_TRUE(num_rows > 0);
+    EXPECT_TRUE(data_size > 0);
+}
+
 } // namespace starrocks::lake

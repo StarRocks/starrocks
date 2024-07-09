@@ -1411,4 +1411,11 @@ CONF_mInt32(config_vector_index_build_concurrency, "8");
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "0");
 
+// if turned on, each compaction will use at most N segments,
+// such as `max_cumulative_compaction_num_singleton_deltas` segments
+// for now, only support non-pk LAKE compaction.
+CONF_mBool(enable_compaction_strict_segment_count_check, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
+
 } // namespace starrocks::config
