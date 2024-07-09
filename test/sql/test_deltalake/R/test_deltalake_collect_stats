@@ -126,7 +126,7 @@ function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delt
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stats', 'cardinality=156')
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
 -- result:
 None
 -- !result
@@ -245,7 +245,7 @@ function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delt
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stats', 'cardinality=156')
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
 -- result:
 None
 -- !result
