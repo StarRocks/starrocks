@@ -460,6 +460,7 @@ public class Util {
         }
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setQueryId(UUIDUtil.genUUID());
         return ctx;
     }
 }
