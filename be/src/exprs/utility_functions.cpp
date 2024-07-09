@@ -317,9 +317,9 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_dump(FunctionContext* context, c
     std::vector<TGetQueryDumpRequestItem> req_items;
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         TGetQueryDumpRequestItem item;
-        item.__set_catalog_name(catalogs.value(i));
-        item.__set_db_name(dbs.value(i));
-        item.__set_query_id(queries.value(i));
+        item.__set_catalog_name(catalogs.value(i).to_string());
+        item.__set_db_name(dbs.value(i).to_string());
+        item.__set_query_id(queries.value(i).to_string());
         item.__set_enable_mock(enable_mocks.value(i));
 
         req_items.emplace_back(std::move(item));
