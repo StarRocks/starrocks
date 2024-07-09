@@ -299,4 +299,46 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     return builder.build(false);
 }
 
+StatusOr<ColumnPtr> UtilityFunctions::get_query_dump(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_VARCHAR> catalogs(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> dbs(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> queries(columns[2]);
+    ColumnViewer<TYPE_BOOLEAN> enable_mocks(columns[3]);
+
+    auto* state = context->state();
+    if (state->fragment_ctx() == nullptr) {
+        return Status::NotSupported("unsupport get_query_dump for no-pipeline");
+    }
+
+    const auto& fe_addr = state->fragment_ctx()->fe_addr();
+
+    std::vector<TGetQueryDumpRequestItem> req_items;
+    for (size_t i = 0; i < columns[0]->size(); ++i) {
+        TGetQueryDumpRequestItem item;
+        item.__set_catalog_name(catalogs.value(i));
+        item.__set_db_name(dbs.value(i));
+        item.__set_query_id(queries.value(i));
+        item.__set_enable_mock(enable_mocks.value(i));
+
+        req_items.emplace_back(std::move(item));
+    }
+
+    TGetQueryDumpRequest req;
+    req.__set_items(std::move(req_items));
+
+    TGetQueryDumpResponse res;
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr.hostname, fe_addr.port,
+            [&](FrontendServiceConnection& client) { client->getQueryDump(res, req); }));
+
+    ColumnBuilder<TYPE_VARCHAR> builder(state->chunk_size());
+    for (const auto& dump : res.dumps) {
+        builder.append(result);
+    }
+
+    return builder.build(false);
+}
+
 } // namespace starrocks

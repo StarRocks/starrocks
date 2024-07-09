@@ -1708,6 +1708,22 @@ struct TGetProfileResponse {
     2: optional list<string> query_result
 }
 
+struct TGetQueryDumpRequestItem {
+    1: optional string catalog_name
+    2: optional string database_name
+    3: optional string query
+    4: optional bool enable_mock
+}
+
+struct TGetQueryDumpRequest {
+    1: optional list<TGetQueryDumpRequestItem> items
+}
+
+struct TGetQueryDumpResponse {
+    1: optional Status.TStatus status
+    2: optional list<string> dumps
+}
+
 struct TGetDictQueryParamRequest {
     1: optional string db_name
     2: optional string table_name
@@ -1810,6 +1826,7 @@ service FrontendService {
     TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
 
     TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
+    TGetQueryDumpResponse getQueryDump(1:TGetQueryDumpRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)

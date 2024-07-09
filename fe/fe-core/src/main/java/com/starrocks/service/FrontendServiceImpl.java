@@ -156,6 +156,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -209,6 +210,9 @@ import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
+import com.starrocks.thrift.TGetQueryDumpRequest;
+import com.starrocks.thrift.TGetQueryDumpRequestItem;
+import com.starrocks.thrift.TGetQueryDumpResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
@@ -319,6 +323,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -945,6 +950,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
         }
+        return result;
+    }
+
+    @Override
+    public TGetQueryDumpResponse getQueryDump(TGetQueryDumpRequest params) throws TException {
+        LOG.debug("get_query_dump request: {}", params);
+
+        List<String> dumps = Lists.newArrayList();
+        for (TGetQueryDumpRequestItem item : params.getItems()) {
+            Pair<HttpResponseStatus, String> statusAndRes =
+                    QueryDumper.dump(item.getCatalog_name(), item.getDatabase_name(), item.getQuery(), item.isEnable_mock());
+            if (statusAndRes.first == HttpResponseStatus.OK) {
+                dumps.add(statusAndRes.second);
+            } else {
+                dumps.add(String.format("{\"err_msg\": \"%s\"}", statusAndRes.second));
+            }
+        }
+
+        TGetQueryDumpResponse result = new TGetQueryDumpResponse();
+        result.setDumps(dumps);
+        result.setStatus(new TStatus(TStatusCode.OK));
+
         return result;
     }
 

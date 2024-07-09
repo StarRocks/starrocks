@@ -61,6 +61,8 @@ public:
     DEFINE_VECTORIZED_FN(host_name);
 
     DEFINE_VECTORIZED_FN(get_query_profile);
+
+    DEFINE_VECTORIZED_FN(get_query_dump);
 };
 
 } // namespace starrocks
