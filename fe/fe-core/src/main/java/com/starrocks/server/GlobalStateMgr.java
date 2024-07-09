@@ -189,6 +189,7 @@ import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -301,6 +302,7 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -1078,6 +1080,7 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+            createTableKeeper();
 
             // 7. init starosAgent
             if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
@@ -1663,8 +1666,13 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
+                setInterval(Config.task_check_interval_second * 1000L);
             }
         };
+    }
+
+    public void createTableKeeper() {
+        tableKeeper = TableKeeper.startDaemon();
     }
 
     public void createTxnTimeoutChecker() {

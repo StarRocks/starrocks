@@ -435,8 +435,6 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(materializedView.isActive());
             // test sync
             testFullCreateSync(materializedView, baseTable);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
