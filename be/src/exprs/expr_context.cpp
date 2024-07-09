@@ -160,15 +160,6 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Chunk* chunk, uint8_t* filter) {
 }
 
 StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter) {
-    DCHECK(_prepared);
-    DCHECK(_opened);
-    DCHECK(!_closed);
-#ifndef NDEBUG
-    if (chunk != nullptr) {
-        chunk->check_or_die();
-        CHECK(!chunk->is_empty());
-    }
-#endif
     try {
         ColumnPtr ptr = nullptr;
         if (filter == nullptr) {

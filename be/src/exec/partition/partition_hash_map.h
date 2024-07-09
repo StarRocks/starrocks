@@ -111,7 +111,13 @@ protected:
 
     void flush(PartitionChunks& value, const ChunkPtr& chunk) {
         if (!value.chunks.empty() && !value.select_indexes.empty()) {
-            value.chunks.back()->append_selective(*chunk, value.select_indexes.data(), 0, value.select_indexes.size());
+            if (is_passthrough) {
+                value.chunks.back()->append_selective_bad_alloc(*chunk, value.select_indexes.data(),
+                                                                0, value.select_indexes.size());
+            } else {
+                value.chunks.back()->append_selective(*chunk, value.select_indexes.data(),
+                                                      0, value.select_indexes.size());
+            }
             value.select_indexes.clear();
             value.remain_size = chunk_size - value.chunks.back()->num_rows();
         }
