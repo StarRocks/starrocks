@@ -102,4 +102,9 @@ void ShortKeyIndexDecoderGroup::_find_position(ssize_t ordinal, ssize_t* decoder
 SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr>&& segments)
         : _segments(std::move(segments)), _decoder_group(_segments) {}
 
+uint32_t SegmentGroup::num_rows() const {
+    return std::accumulate(_segments.cbegin(), _segments.cend(), 0,
+                           [](uint32_t acc, const auto& segment) { return acc + segment->num_rows(); });
+}
+
 } // namespace starrocks
