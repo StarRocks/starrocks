@@ -2589,8 +2589,8 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
                 }
             }
             if (values[key_idx].get_value() == NullIndexValue) {
-                LOG(INFO) << "can not find key:" << keys[key_idx] << ", pageid:" << pageid
-                          << ", real pageid:" << bucket_info.pageid;
+                VLOG(2) << "can not find key:" << keys[key_idx] << ", pageid:" << pageid
+                        << ", real pageid:" << bucket_info.pageid;
             }
         }
     }
