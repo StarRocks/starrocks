@@ -58,7 +58,8 @@ public class QueryDumper {
             if (!StringUtils.isEmpty(dbName)) {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
                 if (db == null) {
-                    return Pair.create(HttpResponseStatus.NOT_FOUND, "Database [" + dbName + "] does not exists");
+                    return Pair.create(HttpResponseStatus.NOT_FOUND,
+                            String.format("Database [%s.%s] does not exists", catalogName, dbName));
                 }
                 context.setDatabase(db.getFullName());
             }
@@ -85,7 +86,7 @@ public class QueryDumper {
             }
         } finally {
             if (needSetThreadLocalContext) {
-                context.cleanup();
+                ConnectContext.remove();
             }
         }
 
