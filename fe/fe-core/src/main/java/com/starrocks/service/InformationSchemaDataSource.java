@@ -512,19 +512,19 @@ public class InformationSchemaDataSource {
             }
         }
 
-        com.google.common.collect.Table<Long, UUID, Long> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+        com.google.common.collect.Table<Long, Long, UUID> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
 
         List<TTableInfo> tableInfos = new ArrayList<>();
         for (Long databaseId : allTables.rowKeySet()) {
             Database db = metadataMgr.getDb(databaseId);
             if (db != null) {
-                Map<UUID, Long> tableMap = allTables.row(databaseId);
+                Map<Long, UUID> tableMap = allTables.row(databaseId);
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    for (Map.Entry<UUID, Long> entry : tableMap.entrySet()) {
-                        UUID sessionId = entry.getKey();
-                        Long tableId = entry.getValue();
+                    for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getValue();
+                        Long tableId = entry.getKey();
                         Table table = db.getTable(tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
