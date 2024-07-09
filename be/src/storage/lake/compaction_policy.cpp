@@ -125,8 +125,8 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulat
                 continue;
             }
         }
-
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
 
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
         if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
@@ -145,7 +145,8 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_base_ro
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
     for (uint32_t i = 0; i < cumulative_point; ++i) {
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         if (++segment_num_score >= config::max_base_compaction_num_singleton_deltas) {
             break;
         }
@@ -393,13 +394,27 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
     // But in the old version of compaction, the user may set a large min_cumulative_compaction_num_singleton_deltas
     // to avoid TOO_MANY_VERSION errors, it is unnecessary in size tiered compaction
     if (selected_level->segment_num >= min_compaction_segment_num) {
+        uint32_t segment_num_score = 0;
+        bool partial_compaction = config::enable_lake_compaction_use_partial_segments;
         int64_t max_segments = config::max_cumulative_compaction_num_singleton_deltas;
         for (auto i : selected_level->rowsets) {
             DCHECK_LT(i, _tablet_metadata->rowsets_size());
-            auto rowset = std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i);
-            max_segments -= rowset->metadata().overlapped() ? rowset->metadata().segments_size() : 1;
-            input_rowsets.emplace_back(std::move(rowset));
-            if (max_segments <= 0) {
+            const auto& rowset = _tablet_metadata->rowsets(i);
+            size_t cur_segment_score = rowset.overlapped() ? rowset.segments_size() : 1;
+            size_t uncompacted_segments = cur_segment_score - rowset.next_compaction_offset();
+            if (partial_compaction && uncompacted_segments > max_segments) {
+                size_t compaction_segment_limit = max_segments;
+                // this optimization can not be applied to multiple rowsets,
+                // otherwise it will have efficiency issue or correctness issue
+                input_rowsets.clear();
+                input_rowsets.emplace_back(
+                        std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, compaction_segment_limit));
+                break;
+            }
+            segment_num_score += cur_segment_score;
+            input_rowsets.emplace_back(
+                    std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* copmaction_segment_limit */));
+            if (segment_num_score >= max_segments) {
                 break;
             }
         }
