@@ -2049,6 +2049,7 @@ public class StmtExecutor {
                         label,
                         database.getFullName(),
                         targetTable.getId(),
+                        stmt.getTxnId(),
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
