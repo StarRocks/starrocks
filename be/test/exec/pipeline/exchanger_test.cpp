@@ -14,27 +14,25 @@
 
 // @TODO test exchanger
 
-#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-
 #include <gtest/gtest.h>
+
 #include <memory>
 
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group.h"
-#include "types/logical_type.h"
-#include "util/runtime_profile.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "types/logical_type.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
-
-class MemLimitedChunkQueueTest: public ::testing::Test {
-
+class MemLimitedChunkQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
         ASSERT_OK(GlobalEnv::GetInstance()->init());
@@ -44,8 +42,9 @@ public:
         ASSERT_OK(fs->create_dir_recursive(path));
         LOG(INFO) << "path: " << path;
 
-        dummy_wg = std::make_shared<workgroup::WorkGroup>("default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4,
-                                        100.0, 0, 1.0, workgroup::WorkGroupType::WG_DEFAULT);
+        dummy_wg = std::make_shared<workgroup::WorkGroup>("default_wg", workgroup::WorkGroup::DEFAULT_WG_ID,
+                                                          workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0, 1.0,
+                                                          workgroup::WorkGroupType::WG_DEFAULT);
         dummy_wg->init();
 
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
@@ -74,12 +73,12 @@ protected:
 
 class AutoIncChunkBuilder {
 public:
-    AutoIncChunkBuilder(size_t chunk_size = 4096): _chunk_size(chunk_size) {}
+    AutoIncChunkBuilder(size_t chunk_size = 4096) : _chunk_size(chunk_size) {}
 
     ChunkPtr get_next() {
         ChunkPtr chunk = std::make_shared<Chunk>();
         auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
-        for (size_t i = 0;i < _chunk_size;i++) {
+        for (size_t i = 0; i < _chunk_size; i++) {
             col->append_datum(Datum(_next_value++));
         }
         chunk->append_column(std::move(col), 0);
@@ -101,19 +100,20 @@ TEST_F(MemLimitedChunkQueueTest, test_iterator) {
     options.memory_limit = INT64_MAX; // disable spill
     options.block_manager = dummy_block_mgr.get();
     // @TODO test different block size
-    MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, 1, options);
+    MemLimitedChunkQueue queue(&dummy_runtime_state, 1, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
 
-    // 32k per chunk, 
+    // 32k per chunk,
     AutoIncChunkBuilder builder;
 
-    for (size_t i = 0;i < 100;i++) {
+    for (size_t i = 0; i < 100; i++) {
         auto chunk = builder.get_next();
         ASSERT_OK(queue.push(chunk, nullptr));
     }
     MemLimitedChunkQueue::Iterator iter = MemLimitedChunkQueue::Iterator(queue._head, 0);
 
     size_t acc_rows = 0, acc_bytes = 0;
-    for (size_t i = 0;i < 100;i++) {
+    for (size_t i = 0; i < 100; i++) {
         ASSERT_TRUE(iter.valid());
         MemLimitedChunkQueue::Cell* cell = iter.get_cell();
         if (i == 0) {
@@ -121,7 +121,7 @@ TEST_F(MemLimitedChunkQueueTest, test_iterator) {
             ASSERT_TRUE(cell->chunk == nullptr);
             ASSERT_EQ(cell->accumulated_rows, 0);
             ASSERT_EQ(cell->accumulated_bytes, 0);
-        }  else {
+        } else {
             ASSERT_EQ(cell->chunk->num_rows(), 4096);
             acc_rows += cell->chunk->num_rows();
             acc_bytes += cell->chunk->memory_usage();
@@ -138,28 +138,27 @@ TEST_F(MemLimitedChunkQueueTest, test_push_pop_without_spill) {
     options.block_size = 1024 * 128;
     options.memory_limit = INT64_MAX; // disable spill
     options.block_manager = dummy_block_mgr.get();
-    // @TODO test different block size
     int32_t consumer_number = 3;
-    MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+    MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
     // set opened consumer number
-    for (int32_t i = 0;i < consumer_number;i++) {
+    for (int32_t i = 0; i < consumer_number; i++) {
         queue.open_consumer(i);
     }
-    // 32k per chunk, 
+    // 32k per chunk,
     AutoIncChunkBuilder builder;
 
-    for (size_t i = 0;i < 100;i++) {
+    for (size_t i = 0; i < 100; i++) {
         auto chunk = builder.get_next();
         ASSERT_OK(queue.push(chunk, nullptr));
     }
 
     size_t expected_head_acc_rows = 0;
     size_t expected_head_acc_bytes = 0;
-    for (size_t i = 0;i < 100;i++) {
-        for (int32_t consumer_idx = 0;consumer_idx < consumer_number; consumer_idx++) {
+    for (size_t i = 0; i < 100; i++) {
+        for (int32_t consumer_idx = 0; consumer_idx < consumer_number; consumer_idx++) {
             ASSIGN_OR_ABORT(auto chunk, queue.pop(consumer_idx));
             ASSERT_EQ(chunk->num_rows(), 4096);
-            // @TODO check data
             if (consumer_idx < consumer_number - 1) {
                 ASSERT_EQ(queue._head_accumulated_rows, expected_head_acc_rows);
                 ASSERT_EQ(queue._head_accumulated_bytes, expected_head_acc_bytes);
@@ -182,12 +181,13 @@ TEST_F(MemLimitedChunkQueueTest, test_back_pressure) {
     options.block_manager = dummy_block_mgr.get();
     // @TODO test different block size
     int32_t consumer_number = 1;
-    MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+    MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
     // set opened consumer number
-    for (int32_t i = 0;i < consumer_number;i++) {
+    for (int32_t i = 0; i < consumer_number; i++) {
         queue.open_consumer(i);
     }
-    // 32k per chunk, 
+    // 32k per chunk,
     AutoIncChunkBuilder builder;
     ASSERT_TRUE(queue.can_push());
     ASSERT_OK(queue.push(builder.get_next(), nullptr));
@@ -196,11 +196,10 @@ TEST_F(MemLimitedChunkQueueTest, test_back_pressure) {
     // unconsumed bytes is 16k, can't push before consume
     ASSERT_FALSE(queue.can_push());
 
-    // consume 
+    // consume
     ASSERT_TRUE(queue.can_pop(0));
     ASSERT_OK(queue.pop(0));
     ASSERT_TRUE(queue.can_push());
-
 }
 
 TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
@@ -211,12 +210,13 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
     options.block_manager = dummy_block_mgr.get();
     // @TODO test different block size
     int32_t consumer_number = 3;
-    MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+    MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
     // set opened consumer number
-    for (int32_t i = 0;i < consumer_number;i++) {
+    for (int32_t i = 0; i < consumer_number; i++) {
         queue.open_consumer(i);
     }
-    // 32k per chunk, 
+    // 32k per chunk,
     AutoIncChunkBuilder builder;
 
     // push some chunks, trigger spill, submit spill
@@ -240,7 +240,6 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
         ASSERT_EQ(queue._has_flush_io_task, false);
         finished_flush_task++;
     });
-    // @TODO add defer
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
@@ -260,24 +259,23 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
     wait_flush_task_done(queue);
     ASSERT_EQ(submitted_flush_tasks, 2);
     ASSERT_EQ(finished_flush_task, 2);
-
 }
 
 TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
-    // test timeline
-    // push -> submit flush task-> (consume some data) -> execute flush task but no data to flush 
+    // push -> submit flush task-> (consume some data) -> execute flush task but no data to flush
     MemLimitedChunkQueue::Options options;
     options.block_size = 1024 * 64;
     options.memory_limit = 1024 * 64;
     options.max_unconsumed_bytes = INT64_MAX;
     options.block_manager = dummy_block_mgr.get();
     int32_t consumer_number = 1;
-    MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+    MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
     // set opened consumer number
-    for (int32_t i = 0;i < consumer_number;i++) {
+    for (int32_t i = 0; i < consumer_number; i++) {
         queue.open_consumer(i);
     }
-    // 32k per chunk, 
+    // 32k per chunk,
     AutoIncChunkBuilder builder;
 
     ASSERT_OK(queue.push(builder.get_next(), nullptr));
@@ -317,7 +315,7 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     });
     ASSERT_FALSE(queue.can_push());
     wait_flush_task_done(queue);
-    
+
     ASSERT_EQ(submitted_flush_tasks, 1);
     ASSERT_EQ(finished_flush_task, 1);
 
@@ -336,7 +334,7 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_calculate_max_serialize_size", [&](void* arg) {
         size_t max_serialize_size = *((size_t*)arg);
         // only one chunk should be flushed
-        ASSERT_EQ(max_serialize_size, 32772);
+        ASSERT_EQ(max_serialize_size, 34844);
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_flush_block", [&](void* arg) {
         MemLimitedChunkQueue::Block* block = (MemLimitedChunkQueue::Block*)arg;
@@ -365,13 +363,14 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         options.max_unconsumed_bytes = INT64_MAX;
         options.block_manager = dummy_block_mgr.get();
         int32_t consumer_number = 1;
-        MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+        MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+        ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
         // set opened consumer number
-        for (int32_t i = 0;i < consumer_number;i++) {
+        for (int32_t i = 0; i < consumer_number; i++) {
             queue.open_consumer(i);
         }
         queue.open_producer();
-        // 32k per chunk, 
+        // 32k per chunk,
         AutoIncChunkBuilder builder;
 
         ASSERT_TRUE(queue.can_push());
@@ -411,7 +410,7 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
     }
 
     // case 2
-    // multi consumers, some block not in memory, trigger load task, some consumer read the same block, 
+    // multi consumers, some block not in memory, trigger load task, some consumer read the same block,
     {
         MemLimitedChunkQueue::Options options;
         options.block_size = 1024 * 64;
@@ -419,13 +418,14 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         options.max_unconsumed_bytes = INT64_MAX;
         options.block_manager = dummy_block_mgr.get();
         int32_t consumer_number = 2;
-        MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+        MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+        ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
         // set opened consumer number
-        for (int32_t i = 0;i < consumer_number;i++) {
+        for (int32_t i = 0; i < consumer_number; i++) {
             queue.open_consumer(i);
         }
         queue.open_producer();
-        // 32k per chunk, 
+        // 32k per chunk,
         AutoIncChunkBuilder builder;
 
         // push 3 chunks, consumer 0 consume 1 chunk, consumer 2 do nothing
@@ -445,9 +445,8 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         wait_flush_task_done(queue);
         int32_t submitted_load_tasks = 0;
         SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task", [&](void* arg) {
-            submitted_load_tasks++;
-        });
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task",
+                                              [&](void* arg) { submitted_load_tasks++; });
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearAllCallBacks();
             SyncPoint::GetInstance()->DisableProcessing();
@@ -475,40 +474,38 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         options.max_unconsumed_bytes = INT64_MAX;
         options.block_manager = dummy_block_mgr.get();
         int32_t consumer_number = 2;
-        MemLimitedChunkQueue queue(&dummy_runtime_state, &dummy_runtime_profile, consumer_number, options);
+        MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+        ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
         // set opened consumer number
-        for (int32_t i = 0;i < consumer_number;i++) {
+        for (int32_t i = 0; i < consumer_number; i++) {
             queue.open_consumer(i);
         }
         queue.open_producer();
-        // 32k per chunk, 
+        // 32k per chunk,
         AutoIncChunkBuilder builder;
 
         // force push and wait spill
         ASSERT_OK(queue.push(builder.get_next(), nullptr));
         ASSERT_TRUE(queue.can_push());
         ASSERT_OK(queue.push(builder.get_next(), nullptr));
-        for (int i = 0;i < 10;i++) {
+        for (int i = 0; i < 10; i++) {
             ASSERT_FALSE(queue.can_push());
             wait_flush_task_done(queue);
             ASSERT_OK(queue.push(builder.get_next(), nullptr));
         }
-        for (int i = 0;i < 10;i++) {
+        for (int i = 0; i < 10; i++) {
             while (!queue.can_pop(0)) {
                 bthread_usleep(1000);
             }
             ASSERT_OK(queue.pop(0));
         }
-        for (int i = 0;i < 10;i++) {
+        for (int i = 0; i < 10; i++) {
             while (!queue.can_pop(1)) {
                 bthread_usleep(1000);
             }
             ASSERT_OK(queue.pop(1));
         }
-        // 2 consumer, add many chunks
-
     }
 }
 
-
-}
+} // namespace starrocks::pipeline

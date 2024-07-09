@@ -44,13 +44,9 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    bool releaseable() const override {
-        return _exchanger->releaseable();
-    }
+    bool releaseable() const override { return _exchanger->releaseable(); }
 
-    void set_execute_mode(int performance_level) override {
-        return _exchanger->enter_release_memory_mode();
-    }
+    void set_execute_mode(int performance_level) override { return _exchanger->enter_release_memory_mode(); }
 
 protected:
     bool _is_finished = false;
@@ -75,5 +71,4 @@ private:
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
-
-}
+} // namespace starrocks::pipeline

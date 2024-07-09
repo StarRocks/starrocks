@@ -161,7 +161,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
                 << "Missing mcast stream sink.";
 
-        // @TODO set mem limit
         auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(state);
         const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
 
@@ -318,7 +317,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         // === create exchange ===
         std::shared_ptr<MultiCastLocalExchanger> mcast_local_exchanger;
         if (runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill()) {
-            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size(), upstream_plan_node_id);
+            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size(),
+                                                                                       upstream_plan_node_id);
         } else {
             mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
         }

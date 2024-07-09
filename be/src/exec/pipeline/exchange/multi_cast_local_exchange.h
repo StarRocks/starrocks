@@ -56,24 +56,22 @@ public:
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
     virtual bool can_push_chunk() const = 0;
     virtual Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequenc,
-                      MultiCastLocalExchangeSinkOperator* sink_operator) = 0;
+                              MultiCastLocalExchangeSinkOperator* sink_operator) = 0;
     virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index) = 0;
-    virtual void open_source_operator(int32_t mcast_consumer_index) = 0; 
+    virtual void open_source_operator(int32_t mcast_consumer_index) = 0;
     virtual void close_source_operator(int32_t mcast_consumer_index) = 0;
     virtual void open_sink_operator() = 0;
     virtual void close_sink_operator() = 0;
 
-    virtual bool releaseable() const {
-        return false;
-    }
+    virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+
 protected:
     std::unique_ptr<RuntimeProfile> _runtime_profile;
 };
 
-
-class InMemoryMultiCastLocalExchanger final: public MultiCastLocalExchanger {
+class InMemoryMultiCastLocalExchanger final : public MultiCastLocalExchanger {
 public:
     InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
     ~InMemoryMultiCastLocalExchanger() override;
@@ -122,7 +120,7 @@ private:
 
 class MemLimitedChunkQueue;
 
-class SpillableMultiCastLocalExchanger: public MultiCastLocalExchanger {
+class SpillableMultiCastLocalExchanger : public MultiCastLocalExchanger {
 public:
     SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id);
     ~SpillableMultiCastLocalExchanger() override = default;
@@ -130,16 +128,16 @@ public:
     Status init_metrics(RuntimeProfile* profile) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
     bool can_push_chunk() const override;
-    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence, MultiCastLocalExchangeSinkOperator* sink_operator) override;
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
+                      MultiCastLocalExchangeSinkOperator* sink_operator) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) override;
     void open_source_operator(int32_t mcast_consumer_index) override;
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
-    bool releaseable() const override {
-        return true;
-    }
+    bool releaseable() const override { return true; }
     void enter_release_memory_mode() override;
+
 private:
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<MemLimitedChunkQueue> _queue;

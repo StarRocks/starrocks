@@ -13,10 +13,11 @@
 // limitations under the License.
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+
 #include <glog/logging.h>
 
-#include "util/logging.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "util/logging.h"
 
 namespace starrocks::pipeline {
 
@@ -56,7 +57,7 @@ bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
-    
+
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;
@@ -66,7 +67,7 @@ bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
 }
 
 Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
-                                           MultiCastLocalExchangeSinkOperator* sink_operator) {
+                                                   MultiCastLocalExchangeSinkOperator* sink_operator) {
     if (chunk->num_rows() == 0) return Status::OK();
 
     auto* cell = new Cell();
@@ -96,10 +97,12 @@ Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_
 
 Status InMemoryMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
     _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+            "ExchangerPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
     _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
-   
+            "ExchangerPeakBufferRowSize", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+
     return Status::OK();
 }
 

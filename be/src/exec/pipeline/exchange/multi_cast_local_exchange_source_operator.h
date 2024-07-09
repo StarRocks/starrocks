@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -61,4 +61,4 @@ private:
     int32_t _mcast_consumer_index;
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
-}
+} // namespace starrocks::pipeline

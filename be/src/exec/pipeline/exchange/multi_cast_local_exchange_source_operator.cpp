@@ -44,5 +44,4 @@ bool MultiCastLocalExchangeSourceOperator::has_output() const {
     return _exchanger->can_pull_chunk(_mcast_consumer_index);
 }
 
-
-}
+} // namespace starrocks::pipeline

@@ -45,4 +45,4 @@ Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const
     return _exchanger->push_chunk(chunk, _driver_sequence, this);
 }
 
-}
+} // namespace starrocks::pipeline

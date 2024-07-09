@@ -274,9 +274,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
                 DescriptorTbl::create(runtime_state, obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     }
     runtime_state->set_desc_tbl(desc_tbl);
-    // if (query_options.__isset.enable_spill && query_options.enable_spill) {
+    if (query_options.__isset.enable_spill && query_options.enable_spill) {
         RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
-    // }
+    }
     _fragment_ctx->init_jit_profile();
     return Status::OK();
 }

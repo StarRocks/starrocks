@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include <queue>
+
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "serde/encode_context.h"
-
-#include <queue>
 
 namespace starrocks::pipeline {
 
@@ -28,29 +28,29 @@ private:
         size_t accumulated_rows = 0;
         size_t accumulated_bytes = 0;
         int32_t used_count = 0;
+        bool flushed = false;
     };
 
     struct Block {
         std::vector<Cell> cells;
         bool in_mem = true;
-        bool has_load_task = false;
+        std::atomic_bool has_load_task = false;
         size_t memory_usage = 0;
         Block* next = nullptr;
         // spillable block, only used when spill happens
         spill::BlockPtr block;
+        size_t flush_chunks = 0;
         size_t flush_rows = 0;
         size_t flush_bytes = 0;
     };
 
     struct Iterator {
         Iterator() = default;
-        Iterator(Block* blk, size_t idx): block(blk), index(idx) {}
+        Iterator(Block* blk, size_t idx) : block(blk), index(idx) {}
         Block* block = nullptr;
         size_t index = 0;
 
-        bool valid() const {
-            return block != nullptr && index < block->cells.size();
-        }
+        bool valid() const { return block != nullptr && index < block->cells.size(); }
 
         bool has_next() const {
             if (block == nullptr) {
@@ -90,13 +90,12 @@ private:
             return &(block->cells[index]);
         }
 
-        Block* get_block() {
-            return block;
-        }
+        Block* get_block() { return block; }
     };
     static const size_t kDefaultBlockSize = 8L * 1024 * 1024;
     static const size_t kDefaultMaxUnconsumedBytes = 16L * 1024 * 1024;
     static const size_t kDefaultMemoryLimit = 16L * 1024 * 1024;
+
 public:
     struct Options {
         int32_t plan_node_id = 0;
@@ -104,7 +103,7 @@ public:
         size_t block_size = kDefaultBlockSize;
         size_t memory_limit = kDefaultMemoryLimit;
         size_t max_unconsumed_bytes = kDefaultMaxUnconsumedBytes;
-        int encode_level = 0;
+        int encode_level = 7;
         CompressionTypePB compress_type = CompressionTypePB::LZ4;
         spill::BlockManager* block_manager = nullptr;
         workgroup::WorkGroupPtr wg;
@@ -122,18 +121,18 @@ public:
     bool can_pop(int32_t consumer_index);
 
     void open_consumer(int32_t consumer_index);
-    
+
     void close_consumer(int32_t consumer_index);
-    
+
     void open_producer();
-    
+
     void close_producer();
 
     void enter_release_memory_mode();
 
 private:
     void _update_progress(Iterator* iter = nullptr);
-    
+
     void _close_consumer(int32_t consumer_index);
 
     Status flush();
@@ -145,20 +144,30 @@ private:
 
     void evict_loaded_block();
 
+    inline void update_io_task_status(const Status& status) {
+        if (status.ok() || _io_task_status.load() != nullptr) {
+            return;
+        }
+        std::shared_ptr<Status> old_status;
+        auto new_status = std::make_shared<Status>(status);
+        _io_task_status.compare_exchange_strong(old_status, new_status);
+    }
+    Status get_io_task_status() const {
+        auto status = _io_task_status.load();
+        return status == nullptr ? Status::OK() : *status;
+    }
+
 #ifdef BE_TEST
 public:
 #endif
 
     RuntimeState* _state = nullptr;
-    // std::shared_mutex _mutex;
-    std::mutex _mutex;
+    std::shared_mutex _mutex;
     // an empty chunk, only keep meta
     ChunkPtr _chunk_builder;
     Block* _head = nullptr;
     Block* _tail = nullptr;
     Block* _next_flush_block = nullptr;
-
-
     // an iterator point to head;
     Iterator _iterator;
 
@@ -167,10 +176,9 @@ public:
     int32_t _opened_sink_number = 0;
     std::vector<int32_t> _opened_source_opcount;
     // record consume progress
-
     std::vector<std::unique_ptr<Iterator>> _consumer_progress;
 
-    // all 
+    // all
     size_t _total_accumulated_rows = 0;
     size_t _total_accumulated_bytes = 0;
     // head
@@ -189,12 +197,11 @@ public:
     size_t _current_load_bytes = 0;
 
     Options _opts;
-    Status _io_task_status;
 
-    bool _has_flush_io_task = false;
+    std::atomic<std::shared_ptr<Status>> _io_task_status;
+
+    std::atomic_bool _has_flush_io_task = false;
     std::queue<Block*> _loaded_blocks;
-
-    std::shared_ptr<serde::EncodeContext> _encode_context;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_rows_counter = nullptr;
@@ -208,4 +215,4 @@ public:
     RuntimeProfile::Counter* _read_io_bytes = nullptr;
 };
 
-}
+} // namespace starrocks::pipeline
