@@ -70,10 +70,19 @@ message DelfileWithRowsetId {
     optional string name = 1;
     // origin rowset that generate this del file.
     optional uint32 origin_rowset_id = 2;
-    // If there is a upsert and delete mix transaction, we use
-    // `op_offset` to identify the order of deletes.
-    // E.g. there are <upsert, upsert, upsert, delete> in a transaction,
-    //      so the `op_offset` of this delete is 2.
+    // Because of historical reason, DELETE don't have its own segment id, we only use
+    // `rowset_id + segment_id` for UPSERT.
+    // So if there is a UPSERT and DELETE mix transaction, we use
+    // `op_offset` to identify the order of deletes, and rssid of DELETE will be
+    // just same as previous UPSERT. And if the Rowset don't have UPSERT, DELETE's rssid
+    // will be same as rowset_id.
+    //
+    // E.g. there are <UPSERT, UPSERT, UPSERT, DELETE, DELETE> in a transaction,
+    //      so the `op_offset` of this DELETE is 2.
+    //      And rssid of them will be rowset_id + [0, 1, 2, 2, 2].
+    //
+    //      there are <DELETE, DELETE> in a transaction, so the `op_offset` of this DELETE is 0.
+    //      And rssid of them will be rowset_id + [0, 0].
     optional uint32 op_offset = 3;
 }
 
