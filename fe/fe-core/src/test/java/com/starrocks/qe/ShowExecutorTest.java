@@ -68,6 +68,7 @@ import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -132,6 +133,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -162,6 +164,11 @@ public class ShowExecutorTest {
 
     @Mocked
     MetadataMgr metadataMgr;
+
+    @BeforeClass
+    public static void beforeClass() {
+        FeConstants.runningUnitTest = true;
+    }
 
     @Before
     public void setUp() throws Exception {

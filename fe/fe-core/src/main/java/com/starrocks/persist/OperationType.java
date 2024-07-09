@@ -573,6 +573,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_TASK = 10085;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ARCHIVE_TASK_RUNS = 10086;
+
     // materialized view 10091 ~ 10100
     @IgnorableOnReplayFailed
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
