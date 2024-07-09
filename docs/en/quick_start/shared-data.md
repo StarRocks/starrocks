@@ -50,6 +50,14 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
+### `/etc/hosts`
+
+The ingest method used in this guide is Stream Load. Stream Load connects to the FE service to start the ingest job. The FE then assigns the job to a backend node, the CN in this guide. In order for the ingest job to connect to the CN the name of the CN must be available to your operating system. Add this line to `/etc/hosts`:
+
+```bash
+127.0.0.1 starrocks-cn
+```
+
 ---
 
 ## Terminology
@@ -72,48 +80,90 @@ This guide does not use BEs, this information is included here so that you under
 
 ---
 
-## Launch StarRocks
+## Download the lab files
 
-To run StarRocks with shared-data using Object Storage we need:
+There are three files to download:
 
-- A frontend engine (FE)
-- A compute node (CN)
-- Object Storage
+- The Docker Compose file that deploys the StarRocks and MinIO environment
+- New York City crash data
+- Weather data
 
 This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
 
+<<<<<<< HEAD
 In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file. 
+=======
+### Create a directory to store the lab files:
+>>>>>>> 1c27c097b7 ([Doc] Add FQDN to shared-data quick start (#48070))
 
 ```bash
 mkdir quickstart
 cd quickstart
+```
+
+### Download the Docker Compose file
+
+```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
-```bash
-docker compose up -d
-```
+### Download the data
 
-Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
+Download these two datasets:
 
+<<<<<<< HEAD
 Run `docker compose ps` until the FE and CN show a status of `healthy`:
+=======
+#### New York City crash data
+>>>>>>> 1c27c097b7 ([Doc] Add FQDN to shared-data quick start (#48070))
 
 ```bash
-docker compose ps
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
+<<<<<<< HEAD
 ```plaintext
 SERVICE        CREATED          STATUS                    PORTS
 starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
 starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
 minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
+=======
+#### Weather data
+
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
+```
+
+---
+
+## Deploy StarRocks and MinIO
+
+```bash
+docker compose up --detach --wait --wait-timeout 120
+```
+
+It should take around 30 seconds for the FE, CN, and MinIO services to become healthy. The `quickstart-minio_mc-1` container will show a status of `Waiting` and also an exit code. An exit code of `0` indicates success.
+
+```bash
+[+] Running 4/5
+ ✔ Network quickstart_default       Created    0.0s
+ ✔ Container minio                  Healthy    6.8s
+ ✔ Container starrocks-fe           Healthy    29.3s
+ ⠼ Container quickstart-minio_mc-1  Waiting    29.3s
+ ✔ Container starrocks-cn           Healthy    29.2s
+container quickstart-minio_mc-1 exited (0)
+>>>>>>> 1c27c097b7 ([Doc] Add FQDN to shared-data quick start (#48070))
 ```
 
 ---
 
 ## Generate MinIO credentials
 
+<<<<<<< HEAD
 In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
+=======
+To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
+>>>>>>> 1c27c097b7 ([Doc] Add FQDN to shared-data quick start (#48070))
 
 ### Open the MinIO web UI
 
@@ -127,6 +177,20 @@ MinIO will generate a key, click **Create** and download the key.
 The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
 :::
 
+:::tip
+If there are no access keys showing in the MinIO web UI, check the logs of the `minio_mc` service:
+
+```bash
+docker compose logs minio_mc
+```
+
+Try rerunning the `minio_mc` pod:
+
+```bash
+docker compose run minio_mc
+```
+:::
+
 ---
 
 ## SQL Clients
@@ -135,36 +199,6 @@ The access key is not saved until you click on **Create**, do not just copy the 
 
 ---
 
-## Download the data
-
-Download these two datasets to your FE container.
-
-### Open a shell on the FE container
-
-Open a shell and create a directory for the downloaded files:
-
-```bash
-docker compose exec starrocks-fe bash
-```
-
-```bash
-mkdir quickstart
-cd quickstart
-```
-
-### New York City crash data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
-```
-
-### Weather data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
-```
-
----
 
 ## Configure StarRocks for shared-data
 
@@ -265,7 +299,7 @@ There are many ways to load data into StarRocks. For this tutorial the simplest 
 
 :::tip
 
-Run these curl commands from the FE shell in the directory where you downloaded the dataset.
+Run these curl commands from the directory where you downloaded the dataset.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 
@@ -310,16 +344,12 @@ Enter host password for user 'root':
     "WriteDataTimeMs": 870,
     "CommitAndPublishTimeMs": 57,
     # highlight-start
-    "ErrorURL": "http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
+    "ErrorURL": "http://starrocks-cn:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
     # highlight-end
 }%
 ```
 
-If there was an error the output provides a URL to see the error messages. Because the container has a private IP address you will have to view it by running curl from the container.
-
-```bash
-curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
-```
+If there was an error the output provides a URL to see the error messages. The error message also contains the backend node that the Stream Load job was assigned to (`starrocks-cn`). Because you added an entry for `starrocks-cn` to the `/etc/hosts` file, you should be able to nvigate to it and read the error message.
 
 Expand the summary for the content seen while developing this tutorial:
 
@@ -469,6 +499,23 @@ This specifies whether S3 compatible storage or Azure Blob Storage is used. For 
 
 When using MinIO this parameter is always set to false.
 
+<<<<<<< HEAD
+=======
+#### `enable_load_volume_from_conf=true`
+
+When this is true, a StarRocks storage volume named `builtin_storage_volume` is created using MinIO object storage, and it is set to be the default storage volume for the tables that you create.
+
+### Configuring FQDN mode
+
+The command to start the FE is also changed. The FE service command in the Docker Compose file has the option `--host_type FQDN` added. By setting `host_type` to `FQDN` the Stream Load job is forwarded to the fully qualified domain name of the CN pod, rather than the IP address. This is done because the IP address is in a range assigned to the Docker environment, and is not typically available from the host machine.
+
+These three changes allow the CN to be forwarded to from the host network:
+
+- setting `--host_type` to `FQDN`
+- exposing the CN port 8040 to the host network
+- adding an entry to the hosts file for `starrocks-cn` pointing to `127.0.0.1`
+
+>>>>>>> 1c27c097b7 ([Doc] Add FQDN to shared-data quick start (#48070))
 ---
 
 ## Summary
