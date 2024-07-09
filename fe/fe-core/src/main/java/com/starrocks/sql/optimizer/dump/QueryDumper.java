@@ -44,42 +44,50 @@ public class QueryDumper {
 
     public static Pair<HttpResponseStatus, String> dump(String catalogName, String dbName, String query, boolean enableMock) {
         ConnectContext context = Util.getOrCreateConnectContext();
+        final boolean needSetThreadLocalContext = context.setThreadLocalInfoIfNotExists();
 
-        if (StringUtils.isEmpty(query)) {
-            return Pair.create(HttpResponseStatus.BAD_REQUEST, "query is empty");
-        }
-
-        if (!StringUtils.isEmpty(catalogName)) {
-            context.setCurrentCatalog(catalogName);
-        }
-
-        if (!StringUtils.isEmpty(dbName)) {
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-            if (db == null) {
-                return Pair.create(HttpResponseStatus.NOT_FOUND, "Database [" + dbName + "] does not exists");
-            }
-            context.setDatabase(db.getFullName());
-        }
-
-        context.setIsHTTPQueryDump(true);
-
-        StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parse(query, context.getSessionVariable()).get(0);
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("execute query failed. ", e);
-            return Pair.create(HttpResponseStatus.BAD_REQUEST, "execute query failed. " + e.getMessage());
+            if (StringUtils.isEmpty(query)) {
+                return Pair.create(HttpResponseStatus.BAD_REQUEST, "query is empty");
+            }
+
+            if (!StringUtils.isEmpty(catalogName)) {
+                context.setCurrentCatalog(catalogName);
+            }
+
+            if (!StringUtils.isEmpty(dbName)) {
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+                if (db == null) {
+                    return Pair.create(HttpResponseStatus.NOT_FOUND, "Database [" + dbName + "] does not exists");
+                }
+                context.setDatabase(db.getFullName());
+            }
+
+            context.setIsHTTPQueryDump(true);
+
+            StatementBase parsedStmt;
+            try {
+                parsedStmt = SqlParser.parse(query, context.getSessionVariable()).get(0);
+                StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+                executor.execute();
+            } catch (Exception e) {
+                LOG.warn("execute query failed. ", e);
+                return Pair.create(HttpResponseStatus.BAD_REQUEST, "execute query failed. " + e.getMessage());
+            }
+
+            DumpInfo dumpInfo = context.getDumpInfo();
+            if (dumpInfo != null) {
+                dumpInfo.setDesensitizedInfo(enableMock);
+                String dumpStr = GSON.toJson(dumpInfo, QueryDumpInfo.class);
+                return Pair.create(HttpResponseStatus.OK, dumpStr);
+            } else {
+                return Pair.create(HttpResponseStatus.BAD_REQUEST, "not use cbo planner, try again.");
+            }
+        } finally {
+            if (needSetThreadLocalContext) {
+                context.cleanup();
+            }
         }
 
-        DumpInfo dumpInfo = context.getDumpInfo();
-        if (dumpInfo != null) {
-            dumpInfo.setDesensitizedInfo(enableMock);
-            String dumpStr = GSON.toJson(dumpInfo, QueryDumpInfo.class);
-            return Pair.create(HttpResponseStatus.OK, dumpStr);
-        } else {
-            return Pair.create(HttpResponseStatus.BAD_REQUEST, "not use cbo planner, try again.");
-        }
     }
 }
