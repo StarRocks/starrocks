@@ -39,13 +39,17 @@ Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const Chu
 
 Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
-    RETURN_IF_ERROR(_partition_topn_ctx->transfer_all_chunks_from_partitioner_to_sorters(state));
-    _partition_topn_ctx->sink_complete();
-    _unique_metrics->add_info_string("IsPassThrough", _partition_topn_ctx->is_passthrough() ? "Yes" : "No");
-    auto* partition_num_counter = ADD_COUNTER(_unique_metrics, "PartitionNum", TUnit::UNIT);
-    COUNTER_SET(partition_num_counter, static_cast<int64_t>(_partition_topn_ctx->num_partitions()));
-    _is_finished = true;
-    return Status::OK();
+    DeferOp defer([&]() {
+        _partition_topn_ctx->sink_complete();
+        _unique_metrics->add_info_string("IsPassThrough", _partition_topn_ctx->is_passthrough() ? "Yes" : "No");
+        auto* partition_num_counter = ADD_COUNTER(_unique_metrics, "PartitionNum", TUnit::UNIT);
+        COUNTER_SET(partition_num_counter, static_cast<int64_t>(_partition_topn_ctx->num_partitions()));
+        _is_finished = true;
+    });
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+    return _partition_topn_ctx->transfer_all_chunks_from_partitioner_to_sorters(state);
 }
 
 OperatorPtr LocalPartitionTopnSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

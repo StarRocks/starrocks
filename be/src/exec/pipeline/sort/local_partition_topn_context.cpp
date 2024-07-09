@@ -60,7 +60,7 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    auto st = _chunks_partitioner->offer<true>(
+    RETURN_IF_ERROR(_chunks_partitioner->offer<true>(
             chunk,
             [this, state](size_t partition_idx) {
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
@@ -69,11 +69,11 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-            });
+            }));
     if (_chunks_partitioner->is_passthrough()) {
         RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
     }
-    return st;
+    return Status::OK();
 }
 
 void LocalPartitionTopnContext::sink_complete() {
