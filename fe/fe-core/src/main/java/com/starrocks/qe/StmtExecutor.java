@@ -779,6 +779,7 @@ public class StmtExecutor {
         SessionVariable clonedSessionVariable = null;
         Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
         UUID queryId = context.getQueryId();
+        final TUniqueId executionId = context.getExecutionId();
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
             if (hint instanceof SetVarHint) {
                 if (clonedSessionVariable == null) {
@@ -800,9 +801,12 @@ public class StmtExecutor {
                     SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
                     if (entry.getValue().getEvaluatedExpression() == null) {
                         try {
-                            context.setQueryId(UUIDUtil.genUUID());
+                            final UUID uuid = UUIDUtil.genUUID();
+                            context.setQueryId(uuid);
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                             entry.getValue().deriveUserVariableExpressionResult(context);
                         } finally {
+                            context.setExecutionId(executionId);
                             context.setQueryId(queryId);
                             context.resetReturnRows();
                             context.getState().reset();
