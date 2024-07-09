@@ -359,13 +359,13 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
 
     // Sort the first
     if (first_size > 0) {
-        RETURN_IF_CANCELLED(state);
+        //RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(do_sort(permutations.first, first_size));
     }
 
     // Sort the second
     if (rows_to_sort > first_size) {
-        RETURN_IF_CANCELLED(state);
+        //RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(do_sort(permutations.second, rows_to_sort - first_size));
     }
 
