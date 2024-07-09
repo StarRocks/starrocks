@@ -176,6 +176,10 @@ public class StarRocksAssert {
         return this;
     }
 
+    public String showCreateTable(String sql) throws Exception {
+        return show(sql).get(0).get(1);
+    }
+
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);

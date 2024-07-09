@@ -55,6 +55,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
+import org.apache.commons.lang.StringEscapeUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -509,7 +510,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         } else if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
@@ -618,7 +619,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         }
         if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
