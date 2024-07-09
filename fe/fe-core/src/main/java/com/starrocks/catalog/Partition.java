@@ -100,14 +100,14 @@ public class Partition extends MetaObject implements Writable {
 
     // not have committedVersion because committedVersion = nextVersion - 1
     @SerializedName(value = "visibleVersion")
-    private long visibleVersion;
+    private volatile long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
-    private long visibleVersionTime;
+    private volatile long visibleVersionTime;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
-    private long visibleTxnId = -1;
+    private volatile long visibleTxnId = -1;
     @SerializedName(value = "nextVersion")
     private long nextVersion;
     @SerializedName(value = "distributionInfo")
