@@ -127,7 +127,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -166,8 +165,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     public static final String FILE_FORMAT = "file_format";
     public static final String COMPRESSION_CODEC = "compression_codec";
     public static final String COMMENT = "comment";
-    private static final DateTimeFormatter TIMESTAMP_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
@@ -387,7 +384,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
+    public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
         switch (version.getPointerType()) {
             case TEMPORAL :
                 return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
@@ -421,17 +418,19 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
-        LocalDateTime time;
         try {
-            if (version.getType() == com.starrocks.catalog.Type.DATETIME) {
-                time = version.getDatetime();
-            } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
-                time = LocalDateTime.parse(version.getVarchar(), TIMESTAMP_FORMAT);
-            } else {
+            if (version.getType() != com.starrocks.catalog.Type.DATETIME &&
+                    version.getType() != com.starrocks.catalog.Type.DATE &&
+                    version.getType() != com.starrocks.catalog.Type.VARCHAR) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
             }
-
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.catalog.Type.DATETIME);
+            if (timestampVersion.isEmpty()) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            LocalDateTime time = timestampVersion.get().getDatetime();
             long epochMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
             return getSnapshotIdAsOfTime(table, epochMillis);
         } catch (Exception e) {

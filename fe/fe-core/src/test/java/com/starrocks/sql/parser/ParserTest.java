@@ -109,7 +109,7 @@ class ParserTest {
 
                 // MariaDB temporal query syntax
                 // https://mariadb.com/kb/en/system-versioned-tables/
-                "SELECT * FROM t FOR SYSTEM_TIME AS OF TIMESTAMP '2016-10-09 08:07:06';",
+                "SELECT * FROM t FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06';",
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",

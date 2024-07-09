@@ -1255,15 +1255,17 @@ public class QueryAnalyzer {
                     table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
                 }
                 if (table == null) {
-                    if (tableRelation.getQueryPeriod() == null) {
-                        table = metadataMgr.getTable(catalogName, dbName, tbName);
-                    } else {
-                        // for time travel
-                        QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
-                        QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
-                        Optional<ConnectorTableVersion> startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
-                        Optional<ConnectorTableVersion> endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
-                        table = metadataMgr.getTable(catalogName, dbName, tbName, startVersion, endVersion);
+                    try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                        if (tableRelation.getQueryPeriod() == null) {
+                            table = metadataMgr.getTable(catalogName, dbName, tbName);
+                        } else {
+                            // for time travel
+                            QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
+                            QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+                            Optional<ConnectorTableVersion> startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
+                            Optional<ConnectorTableVersion> endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+                            table = metadataMgr.getTable(catalogName, dbName, tbName, startVersion, endVersion);
+                        }
                     }
                 }
             }

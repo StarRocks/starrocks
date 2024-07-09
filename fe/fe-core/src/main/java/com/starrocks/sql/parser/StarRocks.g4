@@ -1953,10 +1953,10 @@ queryNoWith
 
 queryPeriod
     : AS OF expression
-    | FOR SYSTEM_TIME BETWEEN expression AND expression
-    | FOR SYSTEM_TIME FROM expression TO expression
-    | FOR SYSTEM_TIME ALL
-    | (FOR)? periodType AS OF (TIMESTAMP)? end=expression
+    | FOR? periodType BETWEEN expression AND expression
+    | FOR? periodType FROM expression TO expression
+    | FOR? periodType ALL
+    | FOR? periodType AS OF end=expression
     ;
 
 periodType
