@@ -301,7 +301,14 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
                     compare_time = metadata->commit_time();
                 } else {
-                    // This is no longer needed
+                    /*
+                    * The path is not available since we get tablet metadata by tablet_id and version.
+                    * We remove the code which is to get file modified time by path.
+                    * This change will break some compatibility when upgraded from a old version which have no commit time.
+                    * In that case, the compare_time is 0, making a result that the vacuum will keep the latest version.
+                    * The incompatibility will be vanished after a few versions ingestion/compaction/GC.
+                    */
+
                     // ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
                     TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
                 }
