@@ -768,8 +768,8 @@ Status LogicalSplitMorselQueue::_init_tablet() {
 
     _short_key_schema =
             std::make_shared<Schema>(ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
-    const int64_t tablet_num_rows = std::max<int64_t>(
-            {1, _tablets[_tablet_idx]->num_rows(), _largest_rowset->num_rows(), _segment_group->num_rows()});
+    const auto tablet_num_rows = std::max<int64_t>({1, static_cast<int64_t>(_tablets[_tablet_idx]->num_rows()),
+                                                    _largest_rowset->num_rows(), _segment_group->num_rows()});
     _sample_splitted_scan_blocks = _splitted_scan_rows * _segment_group->num_blocks() / tablet_num_rows;
     _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);
 
