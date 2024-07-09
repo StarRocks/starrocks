@@ -221,7 +221,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
-    open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec));
+    open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
     SET_IGNORE_OVERCROWDED(open_closure->cntl, load);
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
