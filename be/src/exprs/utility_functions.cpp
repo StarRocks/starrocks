@@ -335,7 +335,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_dump(FunctionContext* context, c
 
     ColumnBuilder<TYPE_VARCHAR> builder(state->chunk_size());
     for (const auto& dump : res.dumps) {
-        builder.append(result);
+        builder.append(dump);
     }
 
     return builder.build(false);
