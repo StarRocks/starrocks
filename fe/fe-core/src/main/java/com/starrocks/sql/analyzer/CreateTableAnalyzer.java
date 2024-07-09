@@ -89,7 +89,32 @@ public class CreateTableAnalyzer {
         GBK,
     }
 
+<<<<<<< HEAD
     private static String analyzeEngineName(String engineName, String catalogName) {
+=======
+    private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
+                                              String catalogName, Database db, String tableName) {
+        ((CreateTemporaryTableStmt) stmt).setSessionId(context.getSessionId());
+        if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException("temporary table must be created under internal catalog");
+        }
+        Map<String, String> properties = stmt.getProperties();
+        if (properties != null) {
+            // temporary table doesn't support colocate_with property, so ignore it
+            properties.remove(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        }
+
+        UUID sessionId = context.getSessionId();
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName) && !stmt.isSetIfNotExists()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+        }
+    }
+
+    protected static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
+        String engineName = stmt.getEngineName();
+
+>>>>>>> 9a937e3c5a ([BugFix] Disallow auto conversion for the cols of Non-OLAP table that's being created from double/float to decimal type in CTAS (#47310))
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             if (Strings.isNullOrEmpty(engineName)) {
                 return EngineType.defaultEngine().name();
