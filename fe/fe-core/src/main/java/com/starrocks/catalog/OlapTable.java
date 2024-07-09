@@ -3173,11 +3173,11 @@ public class OlapTable extends Table {
         if (this.indexes != null && !this.indexes.getIndexes().isEmpty()) {
             this.maxIndexId = Math.max(
                     this.indexes.getIndexes().stream()
-                            .filter(index -> index.getIndexType() == IndexType.GIN)
+                            .filter(index -> IndexType.isCompatibleIndex(index.getIndexType()))
                             .mapToLong(Index::getIndexId).max().orElse(-1),
                     this.maxIndexId);
             this.indexes.getIndexes().stream()
-                    .filter(index -> index.getIndexType() == IndexType.GIN && index.getIndexId() < 0)
+                    .filter(index -> IndexType.isCompatibleIndex(index.getIndexType()) && index.getIndexId() < 0)
                     .forEach(index -> index.setIndexId(this.incAndGetMaxIndexId()));
 
         }

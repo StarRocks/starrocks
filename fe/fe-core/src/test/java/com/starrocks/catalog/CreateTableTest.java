@@ -168,6 +168,12 @@ public class CreateTableTest {
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
         ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.list_lp_tbl1\n" + "(k1 bigint, k2 varchar(16)," +
+                        " dt varchar(10))\n duplicate key(k1)\n"
+                        + "partition by list(k2, dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
+                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.lp_tbl2\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" +
                         "duplicate key(k1)\n"
                         + "partition by range(k1)\n" + "(partition p1 values [(\"1\"), (MAXVALUE)) )\n"

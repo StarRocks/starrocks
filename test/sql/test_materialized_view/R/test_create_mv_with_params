@@ -172,15 +172,12 @@ select * from test_tbl_with_params_mv order by 1;
 4	aa	1	1
 8	aa	1	1
 -- !result
-drop materialized view test_iceberg_mv2_${uuid0};
+drop database default_catalog.db_${uuid0} force;
 -- result:
 -- !result
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
 -- result:
 -- !result
 drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
--- result:
--- !result
-drop database db_${uuid0};
 -- result:
 -- !result

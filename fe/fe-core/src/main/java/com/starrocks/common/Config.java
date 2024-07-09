@@ -665,6 +665,35 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Configs for query queue v2.
+     * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
+     * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
+     */
+    @ConfField
+    public static boolean enable_query_queue_v2 = false;
+    /**
+     * Used to calculate the total number of slots the system has,
+     * which is equal to the configuration value * BE number * BE cores.
+     * It will be set to `4` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static int query_queue_v2_concurrency_level = 4;
+    /**
+     * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
+     * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
+     * It will be set to `1` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static int query_queue_v2_num_rows_per_slot = 4096;
+    /**
+     * Used to estimate the number of slots of a query based on the plan cpu costs.
+     * It is equal to the plan cpu costs divided by the configuration value and is limited to between [1, totalSlots].
+     * It will be set to `1` if it is non-positive.
+     */
+    @ConfField(mutable = true)
+    public static long query_queue_v2_cpu_costs_per_slot = 1_000_000_000;
+
+    /**
      * Number of worker threads for http server to deal with http requests which may do
      * some I/O operations. If set with a non-positive value, it will use netty's default
      * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
@@ -2440,6 +2469,9 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_gin = false;
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_vector = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -2868,6 +2900,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
     public static boolean enable_mv_refresh_insert_strict = false;
+
+    @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
+            "default")
+    public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
 
     /**
      * Whether analyze the mv after refresh in async mode.

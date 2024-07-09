@@ -25,7 +25,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
 import java.util.Locale;
@@ -79,9 +78,10 @@ public class BloomFilterIndexUtil {
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
-        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.defaultValue());
-        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.defaultValue());
-        properties.computeIfAbsent(CASE_SENSITIVE_KEY, k -> NgramBfIndexParamsKey.CASE_SENSITIVE.defaultValue());
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(CASE_SENSITIVE_KEY,
+                k -> NgramBfIndexParamsKey.CASE_SENSITIVE.getIndexParamItem().getDefaultValue());
     }
 
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)

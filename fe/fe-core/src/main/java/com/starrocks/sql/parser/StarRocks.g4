@@ -488,7 +488,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN | NGRAMBF)
+    : USING (BITMAP | GIN | NGRAMBF | VECTOR)
     ;
 
 showTableStatement
@@ -2429,11 +2429,19 @@ listPartitionDesc
     ;
 
 singleItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN listPartitionValueList propertyList?
     ;
 
 multiItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' listPartitionValueList (',' listPartitionValueList)* ')' propertyList?
+    ;
+
+listPartitionValueList
+    : '(' listPartitionValue (',' listPartitionValue)* ')'
+    ;
+
+listPartitionValue
+    : NULL | string
     ;
 
 stringList
@@ -2740,7 +2748,7 @@ nonReserved
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-    | DOTDOTDOT | NGRAMBF
+    | DOTDOTDOT | NGRAMBF | VECTOR
     | FIELD
     | ARRAY_ELEMENT
     ;
