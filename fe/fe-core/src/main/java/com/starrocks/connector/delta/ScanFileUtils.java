@@ -67,7 +67,7 @@ public class ScanFileUtils {
     }
 
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
-            boolean needStats, Row file, long estimizateRowSize) {
+            boolean needStats, Row file, long estimateRowSize) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
@@ -75,11 +75,11 @@ public class ScanFileUtils {
         FileScanTask fileScanTask;
         if (needStats) {
             DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
-                    addFileRow, fileStatus, estimizateRowSize);
+                    addFileRow, fileStatus, estimateRowSize);
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
             return new Pair<>(fileScanTask, stats);
         } else {
-            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimizateRowSize);
+            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
             return new Pair<>(fileScanTask, null);
         }
