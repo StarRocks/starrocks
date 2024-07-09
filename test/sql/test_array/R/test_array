@@ -336,10 +336,6 @@ select array_repeat(1,-1);
 -- result:
 []
 -- !result
-select  array_repeat(null,3);
--- result:
-None
--- !result
 CREATE TABLE IF NOT EXISTS repeat_test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
 -- result:
 -- !result

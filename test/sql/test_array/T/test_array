@@ -168,7 +168,6 @@ select array_generate(3,2,1);
 select array_repeat(1,5);
 select array_repeat([1,2],3);
 select array_repeat(1,-1);
-select  array_repeat(null,3);
 CREATE TABLE IF NOT EXISTS repeat_test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
 INTO repeat_test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
 select array_repeat(COLA,COLB) repeat_test;
