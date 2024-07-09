@@ -21,7 +21,11 @@
 
 namespace starrocks::pipeline {
 
+#ifndef BE_TEST
 static const size_t kBufferedRowSizeScaleFactor = 16;
+#else
+static const size_t kBufferedRowSizeScaleFactor = 2;
+#endif
 
 InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
         : _runtime_state(runtime_state),
@@ -30,6 +34,7 @@ InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* r
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
+    dummy->used_count = consumer_number;
     _head = dummy;
     _tail = dummy;
     for (size_t i = 0; i < consumer_number; i++) {
@@ -51,7 +56,6 @@ bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
-
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;
@@ -60,8 +64,7 @@ bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     return true;
 }
 
-Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
-                                                   MultiCastLocalExchangeSinkOperator* sink_operator) {
+Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) {
     if (chunk->num_rows() == 0) return Status::OK();
 
     auto* cell = new Cell();
@@ -74,16 +77,18 @@ Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_
         int32_t closed_source_number = (_consumer_number - _opened_source_number);
 
         cell->used_count = closed_source_number;
-        cell->accumulated_row_size = _current_accumulated_row_size;
         cell->next = nullptr;
 
         _tail->next = cell;
         _tail = cell;
         _current_accumulated_row_size += chunk->num_rows();
+        cell->accumulated_row_size = _current_accumulated_row_size;
         _current_memory_usage += cell->memory_usage;
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
+#ifndef BE_TEST
         _peak_memory_usage_counter->set(_current_memory_usage);
         _peak_buffer_row_size_counter->set(_current_row_size);
+#endif
     }
 
     return Status::OK();
@@ -187,6 +192,8 @@ void InMemoryMultiCastLocalExchanger::_update_progress(Cell* fast) {
     while (_head && _head->used_count == _consumer_number) {
         Cell* t = _head->next;
         if (t == nullptr) break;
+        // in this case, _head may still be referenced by _progress and it is not safe to delete it.
+        if (t->used_count < _consumer_number) break;
         _current_memory_usage -= _head->memory_usage;
         delete _head;
         _head = t;

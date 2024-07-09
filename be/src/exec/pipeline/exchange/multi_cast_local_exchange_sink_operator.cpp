@@ -42,7 +42,7 @@ StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* 
 }
 
 Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    return _exchanger->push_chunk(chunk, _driver_sequence, this);
+    return _exchanger->push_chunk(chunk, _driver_sequence);
 }
 
 } // namespace starrocks::pipeline
