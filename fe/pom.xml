@@ -48,7 +48,7 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.4.1</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.10.1</parquet.version>
+        <parquet.version>1.12.3</parquet.version>
         <hadoop.version>3.3.6</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
