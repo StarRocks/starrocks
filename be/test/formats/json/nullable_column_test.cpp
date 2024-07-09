@@ -153,7 +153,7 @@ TEST_F(AddNullableColumnTest, test_invalid_json_convert) {
         auto st = convert_from_simdjson(val).status();
         ASSERT_TRUE(!st.ok());
         ASSERT_TRUE(st.message().find("Failed to convert simdjson value") != std::string_view::npos &&
-                        st.message().find("<truncated>") == std::string_view::npos);
+                    st.message().find("<truncated>") == std::string_view::npos);
     }
 
     {
@@ -169,7 +169,7 @@ TEST_F(AddNullableColumnTest, test_invalid_json_convert) {
         auto st = convert_from_simdjson(val).status();
         ASSERT_TRUE(!st.ok());
         ASSERT_TRUE(st.message().find("Failed to convert simdjson value") != std::string_view::npos &&
-                        st.message().find("<truncated>") != std::string_view::npos);
+                    st.message().find("<truncated>") != std::string_view::npos);
     }
 }
 } // namespace starrocks
