@@ -89,6 +89,7 @@ public:
     //      The return value of the consumer denote whether to continue or not
     template <typename Consumer>
     [[nodiscard]] Status consume_from_hash_map(Consumer&& consumer) {
+        LOG(ERROR) << "LXH: CONSUME FROM HASH MAP: " << (int)is_hash_map_eos();
         if (is_hash_map_eos()) {
             return Status::OK();
         }

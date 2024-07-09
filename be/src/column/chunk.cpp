@@ -278,18 +278,23 @@ void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t
     }
 }
 
+static int lxh_temp_v = 0;
+
 void Chunk::append_selective_bad_alloc(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_columns.size(), src.columns().size());
     for (size_t i = 0; i < _columns.size(); ++i) {
-        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
         if (i != 0) {
             LOG(ERROR) << "LXH: NUM_COLUMNS: " << num_columns();
             for (size_t j = 0; j < _columns.size(); j++) {
                 LOG(ERROR) << "lxh: NUM_C: " << j << ":" << (int)(_columns[j] == nullptr);
                 //LOG(ERROR) << "lxh: NUM_C: " << j << ":" << _columns[j]->size();
             }
-            throw std::bad_alloc();
+            lxh_temp_v ++;
+            if (lxh_temp_v % 7 == 0) {
+                throw std::bad_alloc();
+            }
         }
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
     }
 }
 

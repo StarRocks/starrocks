@@ -57,6 +57,7 @@ void ChunksSorterTopn::setup_runtime(RuntimeState* state, RuntimeProfile* profil
 Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     auto& raw_chunks = _raw_chunks.chunks;
     size_t chunk_number = raw_chunks.size();
+    LOG(ERROR) << "SSS: " << chunk->num_rows();
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
@@ -77,9 +78,10 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     // TopN caches _limit or _size_of_chunk_batch primitive chunks,
     // performs sorting once, and discards extra rows
 
-    if (_limit > 0 && (chunk_number >= _limit || chunk_number >= _max_buffered_chunks)) {
+    LOG(ERROR) << "SORTER: " << _limit << ", " << chunk_number << ", " << _max_buffered_chunks;
+    //if (_limit > 0 && (chunk_number >= _limit || chunk_number >= _max_buffered_chunks)) {
         RETURN_IF_ERROR(_sort_chunks(state));
-    }
+    //}
 
     return Status::OK();
 }
@@ -175,18 +177,22 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
     //
     std::pair<Permutation, Permutation> permutations;
 
+    LOG(ERROR) << "STEP 1";
     // Step 1: extract datas from _raw_chunks into segments,
     // and initialize permutations.second when _init_merged_segment == false.
     RETURN_IF_ERROR(_build_sorting_data(state, permutations.second, segments));
 
+    LOG(ERROR) << "STEP 2";
     // Step 2: filter batch-chunks as permutations.first and permutations.second when _init_merged_segment == true.
     // sort part chunks in permutations.first and permutations.second, if _init_merged_segment == false means permutations.first is empty.
     RETURN_IF_ERROR(_filter_and_sort_data(state, permutations, segments));
 
+    LOG(ERROR) << "STEP 3";
     // Step 3: merge sort of two ordered groups
     // the first ordered group only contains permutations.first
     // the second ordered group contains both permutations.second and _merged_segment
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment(state, permutations, segments));
+    LOG(ERROR) << "STEP 4";
 
     return Status::OK();
 }
