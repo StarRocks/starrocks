@@ -65,10 +65,6 @@ public:
 
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
-    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
-
-protected:
-    std::unique_ptr<RuntimeProfile> _runtime_profile;
 };
 
 class InMemoryMultiCastLocalExchanger final : public MultiCastLocalExchanger {
@@ -86,7 +82,6 @@ public:
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
-    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
 private:
     struct Cell {
@@ -113,7 +108,6 @@ private:
     Cell* _tail = nullptr;
     size_t _current_memory_usage = 0;
     size_t _current_row_size = 0;
-    std::unique_ptr<RuntimeProfile> _runtime_profile;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };

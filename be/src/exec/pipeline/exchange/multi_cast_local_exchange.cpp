@@ -36,11 +36,6 @@ InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* r
         _progress[i] = _tail;
         _opened_source_opcount[i] = 0;
     }
-    _runtime_profile = std::make_unique<RuntimeProfile>("MultiCastLocalExchanger");
-    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
 }
 
 InMemoryMultiCastLocalExchanger::~InMemoryMultiCastLocalExchanger() {
@@ -125,10 +120,7 @@ StatusOr<ChunkPtr> InMemoryMultiCastLocalExchanger::pull_chunk(RuntimeState* sta
     DCHECK(_progress[mcast_consumer_index] != nullptr);
     Cell* cell = _progress[mcast_consumer_index];
     if (cell->next == nullptr) {
-        if (_opened_sink_number == 0) {
-            LOG(INFO) << "eof, index:" << mcast_consumer_index;
-            return Status::EndOfFile("mcast_local_exchanger eof");
-        }
+        if (_opened_sink_number == 0) return Status::EndOfFile("mcast_local_exchanger eof");
         return Status::InternalError("unreachable in multicast local exchanger");
     }
     cell = cell->next;
