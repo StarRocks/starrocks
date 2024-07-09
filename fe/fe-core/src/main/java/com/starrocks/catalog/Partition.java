@@ -234,6 +234,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         List<Long> result = new ArrayList<>();
         idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
         idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        result.add(baseIndex.getShardGroupId());
         return result;
     }
 
