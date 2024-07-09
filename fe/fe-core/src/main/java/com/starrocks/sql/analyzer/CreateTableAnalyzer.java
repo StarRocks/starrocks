@@ -162,6 +162,7 @@ public class CreateTableAnalyzer {
         statement.setEngineName(engineName);
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
+<<<<<<< HEAD
         KeysDesc keysDesc = statement.getKeysDesc();
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
@@ -171,6 +172,47 @@ public class CreateTableAnalyzer {
                     keysPos = keysDesc.getPos();
                 }
                 throw new SemanticException("only primary key support sort key", keysPos);
+=======
+        preCheckColumnRef(statement);
+        analyzeKeysDesc(statement);
+        analyzeSortKeys(statement);
+        analyzePartitionDesc(statement);
+        analyzeDistributionDesc(statement);
+        analyzeColumnRef(statement, catalogName);
+
+        if (statement.isHasGeneratedColumn()) {
+            analyzeGeneratedColumn(statement, context);
+        }
+
+        analyzeIndexDefs(statement);
+    }
+
+    private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
+                                              String catalogName, Database db, String tableName) {
+        ((CreateTemporaryTableStmt) stmt).setSessionId(context.getSessionId());
+        if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException("temporary table must be created under internal catalog");
+        }
+        Map<String, String> properties = stmt.getProperties();
+        if (properties != null) {
+            // temporary table doesn't support colocate_with property, so ignore it
+            properties.remove(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        }
+
+        UUID sessionId = context.getSessionId();
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName) && !stmt.isSetIfNotExists()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+        }
+    }
+
+    protected static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
+        String engineName = stmt.getEngineName();
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            if (Strings.isNullOrEmpty(engineName)) {
+                engineName = EngineType.defaultEngine().name();
+>>>>>>> 9a937e3c5a ([BugFix] Disallow auto conversion for the cols of Non-OLAP table that's being created from double/float to decimal type in CTAS (#47310))
             } else {
                 List<String> columnNames =
                         statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
