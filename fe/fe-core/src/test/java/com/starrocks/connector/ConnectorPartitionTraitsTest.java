@@ -104,7 +104,7 @@ public class ConnectorPartitionTraitsTest {
         HudiTable hudiTable = new HudiTable(0, "name", "hdui_catalog", "hudiDb",
                 "hudiTable",  "resource_name", "",
                 Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList(), 0,
-                Maps.newHashMap(), HudiTable.HudiTableType.COW);
+                Maps.newHashMap());
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
         Assert.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }
