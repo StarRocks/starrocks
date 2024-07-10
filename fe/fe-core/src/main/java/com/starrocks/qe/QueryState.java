@@ -172,6 +172,10 @@ public class QueryState {
         return errorCode;
     }
 
+    public void setErrorCode(ErrorCode errorCode) {
+        this.errorCode = errorCode;
+    }
+
     public long getAffectedRows() {
         return affectedRows;
     }

@@ -659,6 +659,7 @@ struct TMasterOpResult {
 
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
+    8: optional string errorMsg;
 }
 
 struct TIsMethodSupportedRequest {
