@@ -1,5 +1,8 @@
 -- name: test_mv_refresh_list_partitions_with_nullable
 
+create database db_${uuid0};
+use db_${uuid0};
+
 CREATE TABLE t3 (
       id BIGINT,
       province VARCHAR(64),
@@ -54,10 +57,10 @@ as select id, dt, province, age from t3 where id > 1;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 function: check_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
-select id, dt, province, age from t3 where id > 1 order by 1, 2;
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
 function: check_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
-select id, dt, province, age from t3 where id > 1 order by 1, 2;
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 
 drop materialized view test_mv1;
 

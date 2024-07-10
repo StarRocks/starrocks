@@ -88,4 +88,16 @@ public class GlobalLoadJobListenerBus {
         }
         listeners.stream().forEach(listener -> listener.onStreamLoadTransactionFinish(transactionState));
     }
+
+    /**
+     * Do all callbacks after `delete` transaction is finished.
+     * @param db database of the target table
+     * @param table table of the target table
+     */
+    public void onDeleteJobTransactionFinish(Database db, Table table) {
+        if (db == null || table == null) {
+            return;
+        }
+        listeners.stream().forEach(listener -> listener.onDeleteJobTransactionFinish(db, table));
+    }
 }
