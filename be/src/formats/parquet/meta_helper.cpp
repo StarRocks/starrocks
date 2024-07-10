@@ -55,7 +55,7 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
             continue;
         }
 
-        auto parquet_type = _file_metadata->schema().get_stored_column_by_field_idx(field_idx)->physical_type;
+        auto parquet_type = parquet_field->physical_type;
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
                                                         materialized_column.decode_needed);
         read_cols.emplace_back(column);
