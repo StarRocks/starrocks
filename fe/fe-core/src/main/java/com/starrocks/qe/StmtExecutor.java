@@ -753,14 +753,15 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
-                clearQueryScopeHintContext(sessionVariableBackup);
+                clearQueryScopeHintContext();
             }
 
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
         }
     }
 
-    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
-        context.setSessionVariable(sessionVariableBackup);
+    private void clearQueryScopeHintContext() {
         Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, UserVariable> entry = iterator.next();
