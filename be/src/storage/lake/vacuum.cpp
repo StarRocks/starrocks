@@ -173,7 +173,11 @@ private:
     // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
         if (_prev_task_status.valid()) {
-            return _prev_task_status.get();
+            try {
+                return _prev_task_status.get();
+            } catch (const std::exception& e) {
+                return Status::InternalError(e.what());
+            }
         } else {
             return Status::OK();
         }
