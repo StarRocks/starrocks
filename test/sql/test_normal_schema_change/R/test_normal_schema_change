@@ -12,20 +12,18 @@ PROPERTIES (
 "replicated_storage" = "false"
 );
 -- result:
-[]
 -- !result
 INSERT INTO t_parallel_create_replica_limit VALUES (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10);
 -- result:
-[]
 -- !result
 SELECT * FROM t_parallel_create_replica_limit;
 -- result:
+7	7
+9	9
 2	2
 3	3
 6	6
 8	8
-7	7
-9	9
 1	1
 4	4
 5	5
@@ -33,109 +31,234 @@ SELECT * FROM t_parallel_create_replica_limit;
 -- !result
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
 None
+-- !result
+SHOW CREATE TABLE t_parallel_create_replica_limit;
+-- result:
+t_parallel_create_replica_limit	CREATE TABLE `t_parallel_create_replica_limit` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
 -- !result
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
 -- result:
-[]
 -- !result
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v INT;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
 None
+-- !result
+SHOW CREATE TABLE t_parallel_create_replica_limit;
+-- result:
+t_parallel_create_replica_limit	CREATE TABLE `t_parallel_create_replica_limit` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
 -- !result
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
 -- result:
-[]
 -- !result
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+SHOW CREATE TABLE t_parallel_create_replica_limit;
+-- result:
+t_parallel_create_replica_limit	CREATE TABLE `t_parallel_create_replica_limit` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
 -- result:
-[]
 -- !result
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v INT;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+SHOW CREATE TABLE t_parallel_create_replica_limit;
+-- result:
+t_parallel_create_replica_limit	CREATE TABLE `t_parallel_create_replica_limit` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
 -- result:
-[]
 -- !result
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 -- result:
-[]
--- !result
-alter table t_parallel_create_replica_limit add rollup r1 (k);
--- result:
-[]
--- !result
-function: wait_alter_table_finish("rollup", 8)
--- result:
-None
--- !result
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
--- result:
-[]
--- !result
-alter table t_parallel_create_replica_limit add rollup r2 (k);
--- result:
-[]
--- !result
-function: wait_alter_table_finish("rollup", 8)
--- result:
-None
--- !result
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
--- result:
-[]
--- !result
-alter table t_parallel_create_replica_limit add rollup r3 (k);
--- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "t_parallel_create_replica_limit". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
--- !result
-function: wait_alter_table_finish("rollup", 8)
--- result:
-None
--- !result
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
--- result:
-[]
--- !result
-alter table t_parallel_create_replica_limit add rollup r4 (k);
--- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "t_parallel_create_replica_limit". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
--- !result
-function: wait_alter_table_finish("rollup", 8)
--- result:
-None
+t_parallel_create_replica_limit	CREATE TABLE `t_parallel_create_replica_limit` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
 -- !result
 DROP TABLE t_parallel_create_replica_limit;
 -- result:
-[]
+-- !result
+CREATE TABLE `t_parallel_create_replica_limit_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
+-- result:
+-- !result
+alter table t_parallel_create_replica_limit_1 add rollup r1 (k);
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+DROP TABLE t_parallel_create_replica_limit_1;
+-- result:
+-- !result
+CREATE TABLE `t_parallel_create_replica_limit_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
+-- result:
+-- !result
+alter table t_parallel_create_replica_limit_2 add rollup r2 (k);
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+DROP TABLE t_parallel_create_replica_limit_2;
+-- result:
+-- !result
+CREATE TABLE `t_parallel_create_replica_limit_3` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
+-- result:
+-- !result
+alter table t_parallel_create_replica_limit_3 add rollup r3 (k);
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+DROP TABLE t_parallel_create_replica_limit_3;
+-- result:
+-- !result
+CREATE TABLE `t_parallel_create_replica_limit_4` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
+-- result:
+-- !result
+alter table t_parallel_create_replica_limit_4 add rollup r4 (k);
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+DROP TABLE t_parallel_create_replica_limit_4;
+-- result:
 -- !result

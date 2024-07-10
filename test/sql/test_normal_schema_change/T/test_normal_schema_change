@@ -17,37 +17,94 @@ SELECT * FROM t_parallel_create_replica_limit;
 
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 function: wait_alter_table_finish()
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v INT;
 function: wait_alter_table_finish()
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 function: wait_alter_table_finish()
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v INT;
 function: wait_alter_table_finish()
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 
 ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
 ALTER TABLE t_parallel_create_replica_limit MODIFY COLUMN v STRING;
 function: wait_alter_table_finish()
-
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
-alter table t_parallel_create_replica_limit add rollup r1 (k);
-function: wait_alter_table_finish("rollup", 8)
-
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
-alter table t_parallel_create_replica_limit add rollup r2 (k);
-function: wait_alter_table_finish("rollup", 8)
-
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
-alter table t_parallel_create_replica_limit add rollup r3 (k);
-function: wait_alter_table_finish("rollup", 8)
-
-ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
-alter table t_parallel_create_replica_limit add rollup r4 (k);
-function: wait_alter_table_finish("rollup", 8)
+SHOW CREATE TABLE t_parallel_create_replica_limit;
 
 DROP TABLE t_parallel_create_replica_limit;
+
+CREATE TABLE `t_parallel_create_replica_limit_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "1");
+alter table t_parallel_create_replica_limit_1 add rollup r1 (k);
+function: wait_alter_table_finish("rollup", 8)
+DROP TABLE t_parallel_create_replica_limit_1;
+
+CREATE TABLE `t_parallel_create_replica_limit_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "2");
+alter table t_parallel_create_replica_limit_2 add rollup r2 (k);
+function: wait_alter_table_finish("rollup", 8)
+DROP TABLE t_parallel_create_replica_limit_2;
+
+CREATE TABLE `t_parallel_create_replica_limit_3` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "3");
+alter table t_parallel_create_replica_limit_3 add rollup r3 (k);
+function: wait_alter_table_finish("rollup", 8)
+DROP TABLE t_parallel_create_replica_limit_3;
+
+CREATE TABLE `t_parallel_create_replica_limit_4` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+ADMIN SET FRONTEND CONFIG ("max_parallel_create_replica_job_for_ddl" = "10");
+alter table t_parallel_create_replica_limit_4 add rollup r4 (k);
+function: wait_alter_table_finish("rollup", 8)
+DROP TABLE t_parallel_create_replica_limit_4;
