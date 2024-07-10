@@ -26,6 +26,7 @@ namespace so = simdjson::ondemand;
 using SimdJsonArray = so::array;
 using SimdJsonNumber = so::number;
 using SimdJsonNumberType = so::number_type;
+static size_t MAX_VALUE_LENGTH_FOR_ERRMSG = 1024;
 
 // Convert SIMD-JSON object to a JsonValue
 class SimdJsonConverter {
@@ -37,8 +38,16 @@ public:
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
             std::string_view view(value.get_raw_json_string().raw());
-            auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view.data(),
-                                               simdjson::error_message(e.error()));
+            // truncate the raw json string if it is too large
+            bool too_large = view.size() > MAX_VALUE_LENGTH_FOR_ERRMSG;
+            size_t size = too_large ? MAX_VALUE_LENGTH_FOR_ERRMSG : view.size();
+            std::stringstream msg;
+            if (too_large) {
+                msg << "Failed to convert simdjson value, json=$0 <truncated>, error=$1";
+            } else {
+                msg << "Failed to convert simdjson value, json=$0, error=$1";
+            }
+            auto err_msg = strings::Substitute(msg.str(), view.substr(0, size), simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
     }
