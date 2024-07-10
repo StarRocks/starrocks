@@ -43,106 +43,9 @@
 namespace starrocks {
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
-<<<<<<< HEAD
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
-=======
-struct RewritePredicateTreeVisitor {
-    using RewriteStatus = ColumnPredicateRewriter::RewriteStatus;
-
-    template <CompoundNodeType ParentType>
-    StatusOr<RewriteStatus> operator()(PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
-        const auto* col_pred = node.col_pred();
-        const auto cid = col_pred->column_id();
-        // index only filter only used for storage engine index filter
-        // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
-        if (col_pred->is_index_filter_only() && col_pred->is_expr_predicate()) {
-            return RewriteStatus::UNCHANGED;
-        }
-
-        if (!_rewriter._need_rewrite[cid]) {
-            return RewriteStatus::UNCHANGED;
-        }
-
-        const auto& field = _cid_to_field.find(cid)->second;
-        DCHECK(_rewriter._column_iterators[cid]->all_page_dict_encoded());
-
-        ColumnPredicate* rewrited_pred;
-        ASSIGN_OR_RETURN(auto rewrite_status, _rewriter._rewrite_predicate(_pool, field, col_pred, &rewrited_pred));
-
-        if (rewrite_status == RewriteStatus::CHANGED) {
-            _pool->add(rewrited_pred);
-            parent.add_child(PredicateColumnNode{rewrited_pred});
-        }
-
-        return rewrite_status;
-    }
-
-    template <CompoundNodeType Type, CompoundNodeType ParentType>
-    StatusOr<RewriteStatus> operator()(PredicateCompoundNode<Type>& node,
-                                       PredicateCompoundNode<ParentType>& parent) const {
-        std::vector<PredicateNodePtr> unchanged_children;
-        unchanged_children.reserve(node.num_children());
-        auto new_node = PredicateCompoundNode<Type>{};
-
-        bool changed = false;
-        for (auto child : node.children()) {
-            ASSIGN_OR_RETURN(auto rewrite_status, child.visit(*this, new_node));
-
-            changed |= rewrite_status != RewriteStatus::UNCHANGED;
-
-            switch (rewrite_status) {
-            case RewriteStatus::ALWAYS_TRUE:
-                if constexpr (Type == CompoundNodeType::AND) {
-                    break; // Do nothing.
-                } else {
-                    return RewriteStatus::ALWAYS_TRUE;
-                }
-            case RewriteStatus::ALWAYS_FALSE:
-                if constexpr (Type == CompoundNodeType::AND) {
-                    return RewriteStatus::ALWAYS_FALSE;
-                } else {
-                    break; // Do nothing.
-                }
-            case RewriteStatus::CHANGED:
-                // The changed new node has been added to new_node when visiting the child.
-                break;
-            case RewriteStatus::UNCHANGED:
-                [[fallthrough]];
-            default:
-                unchanged_children.emplace_back(std::move(child));
-                break;
-            }
-        }
-
-        if (!changed) {
-            return RewriteStatus::UNCHANGED;
-        }
-
-        if (unchanged_children.empty() && new_node.empty()) {
-            if constexpr (Type == CompoundNodeType::AND) {
-                return RewriteStatus::ALWAYS_TRUE;
-            } else {
-                return RewriteStatus::ALWAYS_FALSE;
-            }
-        }
-
-        for (auto& child_var : unchanged_children) {
-            child_var.visit([&new_node](auto& child) { new_node.add_child(std::move(child)); });
-        }
-        parent.add_child(std::move(new_node));
-        return RewriteStatus::CHANGED;
-    }
-
-    ColumnPredicateRewriter& _rewriter;
-    std::unordered_map<ColumnId, const FieldPtr&>& _cid_to_field;
-    ObjectPool* _pool;
-};
-
-Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
-    std::unordered_map<ColumnId, const FieldPtr&> cid_to_field;
->>>>>>> 4d5f209e25 ([BugFix] fix ngram_search crash (#47865))
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
@@ -171,6 +74,12 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
 
     for (auto& i : preds) {
         const ColumnPredicate* pred = i;
+        // index only filter only used for storage engine index filter
+        // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
+        if (pred->is_index_filter_only() && pred->is_expr_predicate()) {
+            continue;
+        }
+
         if (PredicateType::kEQ == pred->type()) {
             Datum value = pred->value();
             int code = _column_iterators[cid]->dict_lookup(value.get_slice());
