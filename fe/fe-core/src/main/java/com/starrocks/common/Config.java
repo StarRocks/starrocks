@@ -2855,4 +2855,20 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
+<<<<<<< HEAD
+=======
+
+    // The longest supported VARCHAR length.
+    @ConfField(mutable = true)
+    public static int max_varchar_length = 1048576;
+
+    @ConfField(mutable = true)
+    public static int adaptive_choose_instances_threshold = 32;
+
+    @ConfField(mutable = true)
+    public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
+>>>>>>> c39c5018c8 ([Refactor] Add max_bucket_number_per_partition limit to partition table (#47852))
 }
