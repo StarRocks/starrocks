@@ -708,16 +708,15 @@ public class Repository implements Writable, GsonPostProcessable {
         location = Text.readString(in);
         storage = BlobStorage.read(in);
         createTime = in.readLong();
-
         if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
+            prefixRepo = "__starrocks_repository_";
         }
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
         if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
+            prefixRepo = "__starrocks_repository_";
         }
     }
 
