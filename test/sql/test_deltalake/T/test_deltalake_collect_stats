@@ -48,6 +48,8 @@ function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delt
 
 function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_bool', 'c1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
 
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
+
 set enable_delta_lake_column_statistics=true;
 
 function: assert_explain_costs_contains('select col_tinyint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'cardinality=8')
@@ -85,5 +87,7 @@ function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delt
 function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c3-->[1.704168306E9, 1.704686706E9, 0.0, 8.0, 1.0] UNKNOWN')
 
 function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_bool', 'c1-->[0.0, 1.0, 0.25, 1.0, 1.0] UNKNOWN')
+
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
 
 drop catalog delta_test_${uuid0}

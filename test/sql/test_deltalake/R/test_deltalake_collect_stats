@@ -126,6 +126,10 @@ function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delt
 -- result:
 None
 -- !result
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
+-- result:
+None
+-- !result
 set enable_delta_lake_column_statistics=true;
 -- result:
 -- !result
@@ -238,6 +242,10 @@ function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delt
 None
 -- !result
 function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_bool', 'c1-->[0.0, 1.0, 0.25, 1.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select * from delta_test_${uuid0}.delta_oss_db.t_without_stat', 'cardinality=156')
 -- result:
 None
 -- !result

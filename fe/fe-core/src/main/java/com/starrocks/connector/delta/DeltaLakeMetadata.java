@@ -228,6 +228,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         List<FileScanTask> files = Lists.newArrayList();
 
+        long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+
         try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(engine, true)) {
             while (scanFilesAsBatches.hasNext()) {
                 FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
@@ -242,7 +244,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                         if (enableCollectColumnStatistics(connectContext)) {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow);
+                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
@@ -251,7 +253,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
+                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
