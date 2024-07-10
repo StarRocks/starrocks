@@ -63,12 +63,6 @@ public class DeltaUtils {
             ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
                     "Delta table feature [column mapping] is not supported");
         }
-        // check timestampNtz type
-        if (protocol.getReaderFeatures().contains("timestampNtz")) {
-            LOG.error("Delta table feature timestampNtz is not supported");
-            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
-                    "Delta table feature [timestampNtz] is not supported");
-        }
     }
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
