@@ -241,54 +241,6 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-<<<<<<< HEAD
-=======
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
-        partitions.addAll(existingPartitions.values());
-        boolean useRemoteFileCache = true;
-        if (table instanceof HiveTable) {
-            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
-        }
-        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
-    }
-
-    @Override
-    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
-        ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
-        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
-        partitionBuilder.addAll(existingPartitions.values());
-
-        List<Partition> partitions = partitionBuilder.build();
-        List<Path> paths = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            Path partitionPath = new Path(partition.getFullPath());
-            paths.add(partitionPath);
-        }
-        FileStatus[] fileStatuses = fileOps.getFileStatus(paths.toArray(new Path[0]));
-        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
-        for (int i = 0; i < partitions.size(); i++) {
-            Partition partition = partitions.get(i);
-            FileStatus fileStatus = fileStatuses[i];
-            String locateName = fileStatus.getPath().toUri().getPath();
-            String fileName = PartitionUtil.getSuffixName(paths.get(i).toUri().getPath(), locateName);
-            RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", fileStatus.getLen(),
-                    fileStatus.getModificationTime(), ImmutableList.of());
-            RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
-                    .setFormat(partition.getInputFormat())
-                    .setFullPath(partition.getFullPath())
-                    .setFiles(List.of(fileDesc).stream()
-                            .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
-                            .map(desc -> desc.setSplittable(partition.isSplittable()))
-                            .collect(Collectors.toList()));
-            remoteFileInfos.add(builder.build());
-        }
-        return remoteFileInfos;
-    }
-
-    @Override
->>>>>>> dcba75805d ([Enhancement] Add class DeltaLakeRemoteFileDesc prepared for later delta lake scan refactor. (#47214))
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         if (hmsTbl.isUnPartitioned()) {
