@@ -252,7 +252,6 @@ public:
         TEST_SYNC_POINT_CALLBACK("BinaryOutputArchive::dump::1", &ret);
         if (!ret) return ret;
         ofs_.write(p, sz);
-        ofs_.flush(); // do flush, so we can check if it success at next line.
         return !ofs_.fail();
     }
 
@@ -262,11 +261,12 @@ public:
         TEST_SYNC_POINT_CALLBACK("BinaryOutputArchive::dump::2", &ret);
         if (!ret) return ret;
         ofs_.write(reinterpret_cast<const char*>(&v), sizeof(V));
-        ofs_.flush(); // do flush, so we can check if it success at next line.
         return !ofs_.fail();
     }
 
     bool close() {
+        ofs_.flush(); // do flush, so we can check if it success at next line.
+        if (ofs_.fail()) return false;
         ofs_.close();
         return !ofs_.fail();
     }
