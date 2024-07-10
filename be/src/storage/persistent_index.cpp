@@ -1798,6 +1798,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
                 LOG(WARNING) << err_msg;
                 return Status::InternalError(err_msg);
             }
+            if (!ar_out.close()) {
+                std::string err_msg =
+                        strings::Substitute("failed to dump snapshot to file $0, because of close", file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
         }
         // dump snapshot success, set _index_file to new snapshot file
         WritableFileOptions wblock_opts;
@@ -4589,10 +4595,15 @@ void PersistentIndex::_calc_memory_usage() {
     _memory_usage.store(memory_usage);
 }
 
+<<<<<<< HEAD
 void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
     }
+=======
+void PersistentIndex::test_force_dump() {
+    _dump_snapshot = true;
+>>>>>>> d96e6b052e ([BugFix] do flush before error check in BinaryOutputArchive (#48074))
 }
 
 } // namespace starrocks
