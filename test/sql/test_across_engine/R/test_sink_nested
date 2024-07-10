@@ -42,21 +42,21 @@ select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- !result
 spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- result:
-{"a":{1:true,2:false}}	1	1.000000000
-{"b":{1:true}}	1	1.000000000
-{"c":null}	1	1.000000000
-{"d":{}}	1	1.000000000
-{"e":{1:true}}	1	1.000000000
-{"f":{3:true,4:false,5:true}}	1	1.000000000
+{"a":{1:true,2:false}}	1	1.0
+{"b":{1:true}}	1	1.0
+{"c":null}	1	1.0
+{"d":{}}	1	1.0
+{"e":{1:true}}	1	1.0
+{"f":{3:true,4:false,5:true}}	1	1.0
 -- !result
 hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- result:
-{"a":{1:true,2:false}}	1	1.000000000
-{"b":{1:true}}	1	1.000000000
-{"c":null}	1	1.000000000
-{"d":{}}	1	1.000000000
-{"e":{1:true}}	1	1.000000000
-{"f":{3:true,4:false,5:true}}	1	1.000000000
+{"a":{1:true,2:false}}	1	1.0
+{"b":{1:true}}	1	1.0
+{"c":null}	1	1.0
+{"d":{}}	1	1.0
+{"e":{1:true}}	1	1.0
+{"f":{3:true,4:false,5:true}}	1	1.0
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
