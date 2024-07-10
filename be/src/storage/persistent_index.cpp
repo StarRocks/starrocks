@@ -1798,6 +1798,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
                 LOG(WARNING) << err_msg;
                 return Status::InternalError(err_msg);
             }
+            if (!ar_out.close()) {
+                std::string err_msg =
+                        strings::Substitute("failed to dump snapshot to file $0, because of close", file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
         }
         // dump snapshot success, set _index_file to new snapshot file
         WritableFileOptions wblock_opts;

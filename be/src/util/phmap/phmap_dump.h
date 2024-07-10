@@ -235,13 +235,20 @@ public:
 
     bool dump(const char* p, size_t sz) {
         ofs_.write(p, sz);
-        return ofs_.good();
+        return !ofs_.fail();
     }
 
     template <typename V>
     typename std::enable_if<type_traits_internal::IsTriviallyCopyable<V>::value, bool>::type dump(const V& v) {
         ofs_.write(reinterpret_cast<const char*>(&v), sizeof(V));
-        return ofs_.good();
+        return !ofs_.fail();
+    }
+
+    bool close() {
+        ofs_.flush(); // do flush, so we can check if it success at next line.
+        if (ofs_.fail()) return false;
+        ofs_.close();
+        return !ofs_.fail();
     }
 
 private:
