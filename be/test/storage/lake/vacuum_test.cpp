@@ -268,6 +268,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
     create_data_file("00000000000059e4_7c6505a3-f2b0-441d-9ea9-9781b87c0eda.dat");
     create_data_file("00000000000059e4_e231b341-dfc9-4fe6-9a0e-8b03868539dc.dat");
 
+    const int64_t grace_timestamp = 1687331159;
+
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 100,
@@ -290,7 +292,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "name": "00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
                 "size": 128
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -315,7 +318,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 4096
             }
         ],
-        "prev_garbage_version": 2
+        "prev_garbage_version": 2,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -337,7 +341,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 1024
             }
         ],
-        "prev_garbage_version": 3
+        "prev_garbage_version": 3,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -365,7 +370,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 1024
             }
         ],
-        "prev_garbage_version": 3
+        "prev_garbage_version": 3,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -380,7 +386,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 ],
                 "data_size": 2048 
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -388,7 +395,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         {
         "id": 101,
         "version": 5,
-        "prev_garbage_version": 4
+        "prev_garbage_version": 4,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -403,7 +411,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 ],
                 "data_size": 2048 
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -411,7 +420,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         {
         "id": 102,
         "version": 5,
-        "prev_garbage_version": 4
+        "prev_garbage_version": 4,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -569,7 +579,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         request.add_tablet_ids(101);
         request.add_tablet_ids(100);
         request.set_min_retain_version(5);
-        request.set_grace_timestamp(::time(nullptr) - 60);
+        request.set_grace_timestamp(grace_timestamp - 60);
         request.set_min_active_txn_id(12344);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
@@ -587,7 +597,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         request.add_tablet_ids(101);
         request.add_tablet_ids(100);
         request.set_min_retain_version(5);
-        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_grace_timestamp(grace_timestamp + 10);
         request.set_min_active_txn_id(12345);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
