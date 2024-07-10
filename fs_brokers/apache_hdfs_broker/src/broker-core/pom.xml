@@ -235,6 +235,18 @@ under the License.
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aliyun</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
+        <dependency>
+            <groupId>com.ksyun.kmr</groupId>
+            <artifactId>hadoop-ks3</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
