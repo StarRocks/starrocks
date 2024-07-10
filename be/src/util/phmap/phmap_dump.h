@@ -266,6 +266,11 @@ public:
         return !ofs_.fail();
     }
 
+    bool close() {
+        ofs_.close();
+        return !ofs_.fail();
+    }
+
 private:
     std::ofstream ofs_;
 };
