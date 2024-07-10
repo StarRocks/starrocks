@@ -244,6 +244,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::vector<int32_t> subfield_pos(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
+        // maybe struct column doesn't have any subfield column because of schema change
+        bool has_valid_child_reader = false;
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (subfield_pos[i] == -1) {
@@ -255,12 +257,16 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             RETURN_IF_ERROR(
                     ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
+            has_valid_child_reader = true;
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
-        RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
-        *output = std::move(reader);
-        return Status::OK();
+        if (has_valid_child_reader) {
+            std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
+            RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
+            *output = std::move(reader);
+        } else {
+            *output = nullptr;
+        }
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, col_type, &opts.row_group_meta->columns[field->physical_column_index]));
@@ -310,6 +316,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
                                           iceberg_schema_subfield);
 
+        // maybe struct column doesn't have any subfield column because of schema change
+        bool has_valid_child_reader = false;
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (subfield_pos[i] == -1) {
@@ -322,12 +330,16 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
                                                  iceberg_schema_subfield[i], &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
+            has_valid_child_reader = true;
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
-        RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
-        *output = std::move(reader);
-        return Status::OK();
+        if (has_valid_child_reader) {
+            std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
+            RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
+            *output = std::move(reader);
+        } else {
+            *output = nullptr;
+        }
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, col_type, &opts.row_group_meta->columns[field->physical_column_index]));
