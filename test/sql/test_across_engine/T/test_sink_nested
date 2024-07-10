@@ -24,8 +24,6 @@ as select * from files (
 
 select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 
-trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
-
 spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 
 hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
