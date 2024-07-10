@@ -4426,10 +4426,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- 默认值：60
+- 默认值：300
 - 类型：Int
 - 单位：Seconds
-- 是否动态：否
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->

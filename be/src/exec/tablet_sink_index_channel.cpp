@@ -191,7 +191,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // when load coordinator BE have upgrade to 2.1 but other BE still in 2.0 or previous
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
+<<<<<<< HEAD
     request.set_timeout_ms(_rpc_timeout_ms);
+=======
+    request.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
+    request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
+>>>>>>> 3fadc53ad8 ([BugFix] Fix automatic partition hang when open timeout is too long exhausted automatic partition rpc thread pool (#47838))
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -213,8 +218,13 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
+<<<<<<< HEAD
     open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
     open_closure->cntl.ignore_eovercrowded();
+=======
+    open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
+    SET_IGNORE_OVERCROWDED(open_closure->cntl, load);
+>>>>>>> 3fadc53ad8 ([BugFix] Fix automatic partition hang when open timeout is too long exhausted automatic partition rpc thread pool (#47838))
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
