@@ -53,7 +53,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         if (notAllConstant(call.getChildren())) {
-            if (call.getFunction().isMetaFunction()) {
+            if (call.getFunction() != null && call.getFunction().isMetaFunction()) {
                 String errMsg = String.format("Meta function %s does not support non-constant arguments",
                         call.getFunction().getFunctionName());
                 throw new SemanticException(errMsg);
