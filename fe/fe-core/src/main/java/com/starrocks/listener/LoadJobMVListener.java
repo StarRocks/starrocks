@@ -156,4 +156,9 @@ public class LoadJobMVListener implements LoadJobListener {
         }
         return new ArrayList<>(tableCommitInfo.getIdToPartitionCommitInfo().values());
     }
+
+    @Override
+    public void onDeleteJobTransactionFinish(Database db, Table table) {
+        triggerToRefreshRelatedMVs(db, table);
+    }
 }
