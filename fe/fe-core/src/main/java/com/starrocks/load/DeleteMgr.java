@@ -95,6 +95,11 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+>>>>>>> 6ed1c1b28f ([UT] [BugFix] Trigger to refresh related mvs when base tables has deleted rows (#48106))
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -211,6 +216,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             deleteJob.run(stmt, db, table, partitions);
+        } catch (QueryStateException e) {
+            // If delete success, it will throw QueryStateException(QueryState.MysqlStateType.OK, sb.toString()).
+            if (e.getQueryState().getStateType() == QueryState.MysqlStateType.OK) {
+                // trigger after a delete job finished
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDeleteJobTransactionFinish(db, table);
+            }
+            throw e;
         } finally {
             if (!FeConstants.runningUnitTest) {
                 clearJob(deleteJob);
