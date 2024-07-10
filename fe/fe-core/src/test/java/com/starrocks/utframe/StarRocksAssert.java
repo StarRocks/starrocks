@@ -764,8 +764,6 @@ public class StarRocksAssert {
         return this;
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Wait the input mv refresh task finished.
      * @param mvId: mv id
@@ -806,7 +804,6 @@ public class StarRocksAssert {
         return this;
     }
 
->>>>>>> 6ed1c1b28f ([UT] [BugFix] Trigger to refresh related mvs when base tables has deleted rows (#48106))
     public StarRocksAssert refreshMV(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
@@ -817,7 +814,6 @@ public class StarRocksAssert {
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         getCtx().executeSql(sql);
-<<<<<<< HEAD
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
         Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
@@ -828,9 +824,6 @@ public class StarRocksAssert {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
             taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         }
-=======
-        waitRefreshFinished(mv.getId());
->>>>>>> 6ed1c1b28f ([UT] [BugFix] Trigger to refresh related mvs when base tables has deleted rows (#48106))
         return this;
     }
 

@@ -95,11 +95,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
->>>>>>> 6ed1c1b28f ([UT] [BugFix] Trigger to refresh related mvs when base tables has deleted rows (#48106))
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -180,8 +176,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
 
         DeleteJob deleteJob = null;
+        Table table = null;
         try {
-            Table table = null;
             long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
             db.readLock();
