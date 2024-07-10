@@ -667,15 +667,6 @@ public:
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
-<<<<<<< HEAD
-=======
-    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
-
-    void test_calc_memory_usage() { return _calc_memory_usage(); }
-
-    void test_force_dump();
-
->>>>>>> d96e6b052e ([BugFix] do flush before error check in BinaryOutputArchive (#48074))
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);

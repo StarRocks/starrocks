@@ -4595,15 +4595,10 @@ void PersistentIndex::_calc_memory_usage() {
     _memory_usage.store(memory_usage);
 }
 
-<<<<<<< HEAD
 void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
     }
-=======
-void PersistentIndex::test_force_dump() {
-    _dump_snapshot = true;
->>>>>>> d96e6b052e ([BugFix] do flush before error check in BinaryOutputArchive (#48074))
 }
 
 } // namespace starrocks
