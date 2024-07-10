@@ -219,16 +219,16 @@ public class ExportMgr implements MemoryTrackable {
                 }
 
                 // filter job
-                if (jobId != 0 && (id != jobId)) {
+                if (jobId != 0 && id != jobId) {
                     continue;
                 }
 
-                if (states != null && (!states.contains(state))) {
+                if (states != null && !states.contains(state)) {
                     continue;
                 }
 
                 UUID jobQueryId = job.getQueryId();
-                if (queryId != null && (!queryId.equals(jobQueryId))) {
+                if (queryId != null && !queryId.equals(jobQueryId)) {
                     continue;
                 }
 
@@ -323,11 +323,10 @@ public class ExportMgr implements MemoryTrackable {
         exportJobInfos.sort(comparator);
 
         List<List<String>> results = Lists.newArrayList();
-        for (int i = 0; i < exportJobInfos.size(); i++) {
+        //The maximum return value of Math.min(resultNum, exportJobInfos.size()) is Integer.MAX_VALUE
+        int upperBound = (int) Math.min(resultNum, exportJobInfos.size());
+        for (int i = 0; i < upperBound; i++) {
             results.add(exportJobInfos.get(i).stream().map(Object::toString).collect(Collectors.toList()));
-            if (i > resultNum - 1) {
-                break;
-            }
         }
         return results;
     }

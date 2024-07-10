@@ -23,6 +23,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -44,6 +45,8 @@ import java.util.stream.Collectors;
 public class ExportMgrTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
+    @Mocked
+    Authorizer authorizer;
 
     @Test
     public void testExpiredJob() throws Exception {
@@ -137,22 +140,13 @@ public class ExportMgrTest {
         Assert.assertEquals(1, followerMgr.getIdToJob().size());
     }
 
-
     @Test
     public void testShowExpiredJob() throws Exception {
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setThreadLocalInfo();
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.initAuth(true);
-        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        GlobalStateMgr.getCurrentState();
+
         ExportMgr mgr = new ExportMgr();
         int limit = 5;
         List<Integer> jobIds = Lists.newArrayList();
@@ -167,7 +161,8 @@ public class ExportMgrTest {
         jobIds.add(299943014);
         jobIds.add(299943012);
         jobIds.add(299942987);
-        jobIds = jobIds.stream().sorted(Collections.reverseOrder())
+        //Expected result set
+        List<Integer> exceptJobIds = jobIds.stream().sorted(Collections.reverseOrder())
                 .collect(Collectors.toList()).subList(0, Math.min(limit, jobIds.size()));
         for (Integer jobId : jobIds) {
             ExportJob job1 = new ExportJob(jobId, new UUID(1, 1));
@@ -175,6 +170,7 @@ public class ExportMgrTest {
             job1.setBrokerDesc(new BrokerDesc("DUMMY", Maps.newHashMap()));
             mgr.replayCreateExportJob(job1);
         }
+
         ArrayList<OrderByPair> orderByPairs = new ArrayList<>();
         OrderByPair pair = new OrderByPair(0, true);
         orderByPairs.add(pair);
@@ -183,14 +179,17 @@ public class ExportMgrTest {
         for (List<String> infos : exportJobInfosByIdOrState) {
             resultJobIds.add(Integer.valueOf(infos.get(0)));
         }
-        Assert.assertArrayEquals(jobIds.toArray(new Integer[0]), resultJobIds.toArray(new Integer[0]));
-
+        //Compare the sorted and limited result sets
+        Assert.assertArrayEquals(exceptJobIds.toArray(new Integer[0]), resultJobIds.toArray(new Integer[0]));
         resultJobIds.clear();
+
+
         List<List<String>> exportJobInfosByIdOrState1 = mgr.getExportJobInfosByIdOrState(-1, 0, null, null, null, limit);
         for (List<String> infos : exportJobInfosByIdOrState1) {
             resultJobIds.add(Integer.valueOf(infos.get(0)));
         }
-        Assert.assertEquals(Math.min(limit, resultJobIds.size()), exportJobInfosByIdOrState1.size());
+        //Comparing the number of unordered but limited result sets
+        Assert.assertEquals(exceptJobIds.size(), exportJobInfosByIdOrState1.size());
 
     }
 }
