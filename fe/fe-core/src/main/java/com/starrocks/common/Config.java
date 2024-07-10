@@ -856,15 +856,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
 
-<<<<<<< HEAD
-=======
-    @ConfField(mutable = true)
-    public static boolean lake_use_combined_txn_log = false;
-
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 
->>>>>>> 118c83780c ([Enhancement] Optimize creating table using a shared initial tablet metadata between tablets in shared-data mode (#45666))
     /**
      * The thrift server max worker threads
      */
