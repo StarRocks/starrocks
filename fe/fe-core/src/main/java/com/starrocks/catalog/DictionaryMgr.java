@@ -427,12 +427,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                     memoryUsage += address.getHostname() + ":" + String.valueOf(address.getPort()) + " : ";
 
                     if (result.getValue() != null) {
-                        memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + "\n";
+                        memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + ", ";
                     } else {
-                        memoryUsage += "Can not get Memory info" + "\n";
+                        memoryUsage += "Can not get Memory info" + ", ";
                     }
                 }
-                allInfo.get(allInfo.size() - 1).add(memoryUsage.substring(0, memoryUsage.length() - 1));
+                allInfo.get(allInfo.size() - 1).add(memoryUsage.substring(0, memoryUsage.length() - 2));
             }
         } finally {
             lock.unlock();
