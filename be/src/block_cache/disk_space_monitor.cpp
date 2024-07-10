@@ -50,6 +50,9 @@ void DiskSpaceMonitor::start() {
     if (!_stopped.load(std::memory_order_acquire)) {
         return;
     }
+    if (_dir_spaces.empty()) {
+        return;
+    }
     _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
     Thread::set_thread_name(_adjust_datacache_thread, "adjust_datacache");

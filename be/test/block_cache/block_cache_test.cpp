@@ -355,6 +355,57 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     fs::remove_all(cache_dir).ok();
 }
 
+TEST_F(BlockCacheTest, clear_residual_blockfiles) {
+    const std::string cache_dir = "./block_disk_cache6";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 256 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 0;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
+    options.enable_direct_io = false;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    // write cache
+    {
+        const size_t batch_size = block_size;
+        const size_t rounds = 20;
+        const std::string cache_key = "test_file";
+
+        for (size_t i = 0; i < rounds; ++i) {
+            char ch = 'a' + i % 26;
+            std::string value(batch_size, ch);
+            Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+            ASSERT_TRUE(st.ok());
+        }
+    }
+
+    {
+        std::vector<std::string> files;
+        auto st = fs::get_children(cache_dir, &files);
+        ASSERT_GT(files.size(), 0);
+    }
+
+    cache->shutdown();
+    clean_residual_datacache(cache_dir);
+
+    {
+        std::vector<std::string> files;
+        auto st = fs::get_children(cache_dir, &files);
+        ASSERT_EQ(files.size(), 0);
+    }
+
+    fs::remove_all(cache_dir).ok();
+}
+
 #endif
 
 #ifdef WITH_CACHELIB
