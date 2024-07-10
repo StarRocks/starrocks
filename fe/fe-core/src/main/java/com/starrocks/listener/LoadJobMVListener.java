@@ -15,7 +15,6 @@
 
 package com.starrocks.listener;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -23,8 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
@@ -133,19 +130,14 @@ public class LoadJobMVListener implements LoadJobListener {
                 mvIdIterator.remove();
                 continue;
             }
-            Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
-            try {
-                if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
-                    LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                    "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
-                            materializedView.getName());
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                            mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
-                            Constants.TaskRunPriority.NORMAL.value(), true, false);
-                }
-            } finally {
-                locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
+            // It's fine to no lock here, since it's not a critical operation and can be retried.
+            if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
+                LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
+                                "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
+                        materializedView.getName());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                        mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+                        Constants.TaskRunPriority.NORMAL.value(), true, false);
             }
         }
     }
