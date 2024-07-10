@@ -430,6 +430,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE = "enable_connector_sink_global_shuffle";
+
+    public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
+    public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -1091,6 +1094,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
+
+
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableConnectorSinkSpill = true;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double connectorSinkSpillMemLimitThreshold = 0.5;
 
     // execute sql don't return result, for performance test
     @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
@@ -2777,6 +2787,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillMemLimitThreshold;
     }
 
+    public void setSpillMemLimitThreshold(double spillMemLimitThreshold) {
+        this.spillMemLimitThreshold = spillMemLimitThreshold;
+    }
+
+    public double getConnectorSinkSpillMemLimitThreshold() {
+        return this.connectorSinkSpillMemLimitThreshold;
+    }
+
     public long getSpillOperatorMinBytes() {
         return this.spillOperatorMinBytes;
     }
@@ -3124,6 +3142,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableConnectorSinkGlobalShuffle() {
         return enableConnectorSinkGlobalShuffle;
+    }
+
+    public boolean isEnableConnectorSinkSpill() {
+        return enableConnectorSinkSpill;
     }
 
     public void setPipelineSinkDop(int pipelineSinkDop) {
