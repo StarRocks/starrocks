@@ -440,6 +440,7 @@ public class MetadataMgr {
                 if (stmt.isSetIfExists()) {
                     LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
                             dbName, tableName, sessionId);
+                    return;
                 } else {
                     throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
                 }
