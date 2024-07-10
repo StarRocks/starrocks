@@ -56,4 +56,9 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp wher
 -- test double as partition type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;
 
+-- test null partition
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is null order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is not null order by col_smallint;
+
 drop catalog delta_test_${uuid0}

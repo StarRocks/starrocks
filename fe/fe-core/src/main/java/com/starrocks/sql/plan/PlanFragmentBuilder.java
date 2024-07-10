@@ -1178,12 +1178,18 @@ public class PlanFragmentBuilder {
                     deltaLakeScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
+
+                deltaLakeScanNode.preProcessDeltaLakePredicate(node.getPredicate());
                 deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
+
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            } catch (UserException e) {
+                LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 

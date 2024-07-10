@@ -528,7 +528,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (!scannedTables.contains(key)) {
             tracers = tracers == null ? Tracers.get() : tracers;
             try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.processSplit." + key)) {
-                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit, tracers, connectContext);
+                collectTableStatisticsAndCacheIcebergSplit(key, table, predicate, limit, tracers, connectContext);
             }
         }
     }
@@ -538,7 +538,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = icebergTable.getRemoteDbName();
         String tableName = icebergTable.getRemoteTableName();
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-        if (!snapshot.isPresent()) {
+        if (snapshot.isEmpty()) {
             return new ArrayList<>();
         }
 
@@ -607,8 +607,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitionKeys;
     }
 
-    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate,
-                                                            long limit, Tracers tracers, ConnectContext connectContext) {
+    private void collectTableStatisticsAndCacheIcebergSplit(PredicateSearchKey key, Table table,
+                                                            ScalarOperator predicate, long limit, Tracers tracers,
+                                                            ConnectContext connectContext) {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
@@ -619,7 +620,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         long snapshotId = snapshot.get().snapshotId();
         String dbName = icebergTable.getRemoteDbName();
         String tableName = icebergTable.getRemoteTableName();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         traceIcebergMetricsConfig(nativeTbl);
