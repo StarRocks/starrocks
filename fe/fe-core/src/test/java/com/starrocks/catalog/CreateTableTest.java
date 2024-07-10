@@ -2023,7 +2023,7 @@ public class CreateTableTest {
     public void testDefaultValueHasEscapeStringNonPK() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
-        String sql1 = "CREATE TABLE `news_rt` (\n" +
+        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
                 "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
                 "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
                 ") ENGINE=OLAP \n" +
@@ -2034,8 +2034,8 @@ public class CreateTableTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(sql1);
-        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt;");
-        starRocksAssert.dropTable("news_rt");
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
+        starRocksAssert.dropTable("news_rt_non_pk");
         starRocksAssert.withTable(createTableSql);
     }
 }
