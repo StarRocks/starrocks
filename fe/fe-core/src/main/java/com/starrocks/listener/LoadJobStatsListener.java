@@ -90,4 +90,9 @@ public class LoadJobStatsListener implements LoadJobListener {
             LOG.warn("refresh mv after publish version failed:", DebugUtil.getStackTrace(t));
         }
     }
+
+    @Override
+    public void onDeleteJobTransactionFinish(Database db, Table table) {
+        // do nothing
+    }
 }
