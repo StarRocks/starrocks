@@ -293,12 +293,11 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
-        SessionVariable currentVariable = session.getSessionVariable();
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable().clone();
+        session.setSessionVariable(currentVariable);
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
-        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
         boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
                 currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
@@ -417,6 +416,15 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
+            // enable spill for connector sink
+            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                session.getSessionVariable().setEnableSpill(true);
+                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
+                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
+            }
+
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
                     targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
@@ -453,12 +461,6 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
-        } finally {
-            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
-            if (forceDisablePipeline) {
-                session.getSessionVariable().setEnablePipelineEngine(true);
-            }
-            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
