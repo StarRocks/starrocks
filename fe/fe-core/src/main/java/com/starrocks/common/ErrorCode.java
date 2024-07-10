@@ -350,6 +350,29 @@ public enum ErrorCode {
      */
     ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
             "table '%s' has location property and cannot be colocated"),
+<<<<<<< HEAD
+=======
+    ERR_BAD_DB_ERROR(5501, new byte[] {'3', 'F', '0', '0', '0'}, "Unknown database '%s'"),
+    ERR_BAD_TABLE_ERROR(5502, new byte[] {'4', '2', '6', '0', '2'}, "Unknown table '%s'"),
+    ERR_NOT_OLAP_TABLE(5503, new byte[] {'4', '2', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
+    ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
+            "Partition '%s' has sub partitions, should specify the partition id"),
+    ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_NO_DEFAULT_STORAGE_VOLUME(5506, new byte[] {'5', '5', '0', '0', '0'},
+            "The default storage volume does not exist. " +
+                    "A default storage volume can be created by following these steps: " +
+                    "1. Create a storage volume. 2. Set the storage volume as default"),
+    ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
+            "Can not enable replicated storage when the table has GIN"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
+    ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
+                    "or increase frontend config max_bucket_number_per_partition."),
+>>>>>>> c39c5018c8 ([Refactor] Add max_bucket_number_per_partition limit to partition table (#47852))
 
     /**
      * 5600 - 5699: DML operation failure

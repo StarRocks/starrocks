@@ -3032,9 +3032,16 @@ public class Config extends ConfigBase {
     // Whether restore tables into colocate group if the
     // backuped table is colocated
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean enable_colocate_restore = false;
 
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+=======
+    public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
+>>>>>>> c39c5018c8 ([Refactor] Add max_bucket_number_per_partition limit to partition table (#47852))
 }
