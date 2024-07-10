@@ -447,7 +447,28 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
     auto lake_update_manager = ExecEnv::GetInstance()->lake_update_manager();
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
+        auto interval = config::pindex_shared_data_gc_evict_interval_seconds;
+        int64_t left_seconds = interval;
+        while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            --left_seconds;
+            // Periodically check if the config has been updated
+            auto current_interval = config::pindex_shared_data_gc_evict_interval_seconds;
+            if (current_interval != interval) {
+                if (current_interval < interval) {
+                    LOG(INFO) << "pk index gc interval config shortened to " << current_interval << ", from "
+                              << interval << ", end the sleep cycle early and start gc job";
+                    break;
+                }
+                left_seconds = current_interval - (interval - left_seconds);
+                LOG(INFO) << "pk index gc interval config changed from " << interval << " to " << current_interval
+                          << ", need wait " << left_seconds << " seconds to finish sleep";
+                interval = current_interval;
+            }
+        }
+        if (_bg_worker_stopped.load(std::memory_order_consume)) {
+            break;
+        }
         for (DataDir* data_dir : get_stores()) {
             auto pk_path = data_dir->get_persistent_index_path();
             std::set<std::string> tablet_ids;
