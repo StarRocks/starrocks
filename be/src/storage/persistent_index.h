@@ -813,6 +813,8 @@ public:
 
     void test_calc_memory_usage() { return _calc_memory_usage(); }
 
+    void test_force_dump();
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
