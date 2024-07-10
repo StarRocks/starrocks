@@ -324,8 +324,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     protected void runPendingJob() throws AlterCancelException {
         boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
-        AgentBatchTask batchTask = new AgentBatchTask();
-        MarkedCountDownLatch<Long, Long> countDownLatch;
+        int batchCreateReplica = 1;
+        List<AgentBatchTask> batchTasks = Lists.newArrayList();
+        List<MarkedCountDownLatch<Long, Long>> countDownLatchs = Lists.newArrayList();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -336,8 +337,23 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
                         .mapToLong(List::size).sum();
             }
-            countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
-            createReplicaLatch = countDownLatch;
+            // batch mode to create replica
+            if ((int) numTablets > Config.max_parallel_create_replica_job_for_ddl) {
+                batchCreateReplica = ((int) numTablets / Config.max_parallel_create_replica_job_for_ddl) +
+                                     ((int) numTablets % Config.max_parallel_create_replica_job_for_ddl != 0 ? 1 : 0);
+            }
+            int remainNum = (int) numTablets;
+            for (int i = 0; i < batchCreateReplica; ++i) {
+                if (remainNum >= Config.max_parallel_create_replica_job_for_ddl) {
+                    countDownLatchs.add(new MarkedCountDownLatch<>(Config.max_parallel_create_replica_job_for_ddl));
+                    remainNum -= Config.max_parallel_create_replica_job_for_ddl;
+                } else {
+                    countDownLatchs.add(new MarkedCountDownLatch<>(remainNum));
+                    remainNum = 0;
+                }
+                batchTasks.add(new AgentBatchTask());
+            }
+            int curIndex = 0;
             long baseIndexId = table.getBaseIndexId();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -376,7 +392,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
                         }
-                        countDownLatch.addMark(computeNode.getId(), shadowTabletId);
+                        countDownLatchs.get(curIndex).addMark(computeNode.getId(), shadowTabletId);
 
                         CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(computeNode.getId())
@@ -387,7 +403,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setTabletId(shadowTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
                                 .setStorageMedium(storageMedium)
-                                .setLatch(countDownLatch)
+                                .setLatch(countDownLatchs.get(curIndex))
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
                                 .setPersistentIndexType(table.getPersistentIndexType())
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
@@ -400,10 +416,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
-                        batchTask.addTask(task);
-
                         if (enableTabletCreationOptimization) {
                             break;
+                        }
+                        batchTasks.get(curIndex).addTask(task);
+                        if (batchTasks.get(curIndex).getTaskNum() == Config.max_parallel_create_replica_job_for_ddl) {
+                            // avoid submit the task inside the DB lock.
+                            ++curIndex;
                         }
                     }
                 }
@@ -412,8 +431,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             throw new AlterCancelException(e.getMessage());
         }
 
-        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                             waitingCreatingReplica, isCancelling);
+        for (int i = 0; i < batchCreateReplica; ++i) {
+            int tasksNum = batchTasks.get(i).getTaskNum();
+            createReplicaLatch = countDownLatchs.get(i);
+            sendAgentTaskAndWait(batchTasks.get(i), countDownLatchs.get(i), Config.tablet_create_timeout_second * tasksNum,
+                                 waitingCreatingReplica, isCancelling);
+        }
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {

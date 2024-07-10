@@ -260,7 +260,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         // 1. create rollup replicas
-        AgentBatchTask batchTask = new AgentBatchTask();
+        List<AgentBatchTask> batchTasks = Lists.newArrayList();
         // count total replica num
         int totalReplicaNum = 0;
         for (MaterializedIndex rollupIdx : physicalPartitionIdToRollupIndex.values()) {
@@ -268,10 +268,29 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
         }
-        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
-        createReplicaLatch = countDownLatch;
+
+        // batch mode to create replica
+        int batchCreateReplica = 1;
+        if (totalReplicaNum > Config.max_parallel_create_replica_job_for_ddl) {
+            batchCreateReplica = (totalReplicaNum / Config.max_parallel_create_replica_job_for_ddl) +
+                                 (totalReplicaNum % Config.max_parallel_create_replica_job_for_ddl != 0 ? 1 : 0);
+        }
+        List<MarkedCountDownLatch<Long, Long>> countDownLatchs = Lists.newArrayList();
+        int remainNum = totalReplicaNum;
+        for (int i = 0; i < batchCreateReplica; ++i) {
+            if (remainNum >= Config.max_parallel_create_replica_job_for_ddl) {
+                countDownLatchs.add(new MarkedCountDownLatch<>(Config.max_parallel_create_replica_job_for_ddl));
+                remainNum -= Config.max_parallel_create_replica_job_for_ddl;
+            } else {
+                countDownLatchs.add(new MarkedCountDownLatch<>(remainNum));
+                remainNum = 0;
+            }
+            batchTasks.add(new AgentBatchTask());
+        }
+
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
+        int curIndex = 0;
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -312,7 +331,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     for (Replica rollupReplica : rollupReplicas) {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
-                        countDownLatch.addMark(backendId, rollupTabletId);
+                        countDownLatchs.get(curIndex).addMark(backendId, rollupTabletId);
                         CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(backendId)
                                 .setDbId(dbId)
@@ -322,7 +341,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setTabletId(rollupTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
                                 .setStorageMedium(storageMedium)
-                                .setLatch(countDownLatch)
+                                .setLatch(countDownLatchs.get(curIndex))
                                 .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                 .setTabletType(tabletType)
@@ -332,7 +351,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setBaseTabletId(tabletIdMap.get(rollupTabletId))
                                 .setTabletSchema(tabletSchema)
                                 .build();
-                        batchTask.addTask(task);
+                        batchTasks.get(curIndex).addTask(task);
+                        if (batchTasks.get(curIndex).getTaskNum() == Config.max_parallel_create_replica_job_for_ddl) {
+                            // avoid submit the task inside the DB lock.
+                            ++curIndex;
+                        }
                     } // end for rollupReplicas
                 } // end for rollupTablets
             }
@@ -341,41 +364,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         if (!FeConstants.runningUnitTest) {
-            // send all tasks and wait them finished
-            AgentTaskQueue.addBatchTask(batchTask);
-            AgentTaskExecutor.submit(batchTask);
-            long timeout = Math.min(Config.tablet_create_timeout_second * 1000L * totalReplicaNum,
-                    Config.max_create_table_timeout_second * 1000L);
-            boolean ok = false;
-            try {
-                waitingCreatingReplica.set(true);
-                if (isCancelling.get()) {
-                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-                    return;
-                }
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                LOG.warn("InterruptedException: ", e);
-                ok = false;
-            } finally {
-                waitingCreatingReplica.set(false);
-            }
-
-            if (!ok || !countDownLatch.getStatus().ok()) {
-                // create rollup replicas failed. just cancel the job
-                // clear tasks and show the failed replicas to user
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-                String errMsg = null;
-                if (!countDownLatch.getStatus().ok()) {
-                    errMsg = countDownLatch.getStatus().getErrorMsg();
-                } else {
-                    List<Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                    // only show at most 3 results
-                    List<Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                    errMsg = "Error replicas:" + Joiner.on(", ").join(subList);
-                }
-                LOG.warn("failed to create rollup replicas for job: {}, {}", jobId, errMsg);
-                throw new AlterCancelException("Create rollup replicas failed. Error: " + errMsg);
+            for (int i = 0; i < batchCreateReplica; ++i) {
+                int tasksNum = batchTasks.get(i).getTaskNum();
+                createReplicaLatch = countDownLatchs.get(i);
+                sendAgentTaskAndWait(batchTasks.get(i), countDownLatchs.get(i), Config.tablet_create_timeout_second * tasksNum);
             }
         }
 
@@ -822,6 +814,41 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     protected boolean isPreviousLoadFinished() throws AnalysisException {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
+    }
+
+    public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                     long timeoutSeconds) throws AlterCancelException {
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+        long timeout = 1000L * Math.min(timeoutSeconds, Config.max_create_table_timeout_second);
+        boolean ok = false;
+        try {
+            waitingCreatingReplica.set(true);
+            if (isCancelling.get()) {
+                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                return;
+            }
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+            ok = false;
+        } finally {
+            waitingCreatingReplica.set(false);
+        }
+
+        if (!ok) {
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+            String errMsg;
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg = countDownLatch.getStatus().getErrorMsg();
+            } else {
+                // only show at most 3 results
+                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                errMsg = "Error tablets:" + Joiner.on(", ").join(subList);
+            }
+            throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
+        }
     }
 
     /**
