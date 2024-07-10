@@ -45,6 +45,8 @@ namespace starrocks::parquet {
 
 class MetaHelper {
 public:
+    MetaHelper(FileMetaData* file_metadata, bool case_sensitive)
+            : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
 
     virtual void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
@@ -89,16 +91,13 @@ protected:
         return column;
     }
 
+    FileMetaData* _file_metadata = nullptr;
     bool _case_sensitive = false;
-    FileMetaData* _file_metadata;
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
-    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) {
-        _file_metadata = file_metadata;
-        _case_sensitive = case_sensitive;
-    }
+    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
@@ -111,14 +110,13 @@ public:
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 
 private:
-    bool _check_is_valid_complex_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
+    bool _is_valid_complex_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
 class IcebergMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema) {
-        _file_metadata = file_metadata;
-        _case_sensitive = case_sensitive;
+    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema)
+            : MetaHelper(file_metadata, case_sensitive) {
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
         _init_field_mapping();
@@ -136,7 +134,7 @@ public:
 
 private:
     void _init_field_mapping();
-    bool _check_is_valid_complex_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema) const;
+    bool _is_valid_complex_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema) const;
     const TIcebergSchema* _t_iceberg_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;

@@ -51,7 +51,7 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is complex type is invalid
         if (parquet_field->type.is_complex_type() &&
-            !_check_is_valid_complex_type(parquet_field, &materialized_column.slot_desc->type())) {
+            !_is_valid_complex_type(parquet_field, &materialized_column.slot_desc->type())) {
             continue;
         }
 
@@ -63,8 +63,9 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
     }
 }
 
-bool ParquetMetaHelper::_check_is_valid_complex_type(const ParquetField* parquet_field,
-                                                     const TypeDescriptor* type_descriptor) const {
+bool ParquetMetaHelper::_is_valid_complex_type(const ParquetField* parquet_field,
+                                               const TypeDescriptor* type_descriptor) const {
+    DCHECK(parquet_field->type.is_complex_type());
     // now we will only check for struct type
     // if struct has none valid subfield, we will treat this struct type as invalid type.
     if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
@@ -92,7 +93,7 @@ bool ParquetMetaHelper::_check_is_valid_complex_type(const ParquetField* parquet
             break;
         }
 
-        if (_check_is_valid_complex_type(&child_parquet_field, it->second)) {
+        if (_is_valid_complex_type(&child_parquet_field, it->second)) {
             has_valid_child = true;
             break;
         }
@@ -111,8 +112,9 @@ void IcebergMetaHelper::_init_field_mapping() {
     }
 }
 
-bool IcebergMetaHelper::_check_is_valid_complex_type(const ParquetField* parquet_field,
-                                                     const TIcebergSchemaField* field_schema) const {
+bool IcebergMetaHelper::_is_valid_complex_type(const ParquetField* parquet_field,
+                                               const TIcebergSchemaField* field_schema) const {
+    DCHECK(parquet_field->type.is_complex_type());
     // now we will only check for struct type
     // if struct has none valid subfield, we will treat this struct type as invalid type.
     if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
@@ -139,7 +141,7 @@ bool IcebergMetaHelper::_check_is_valid_complex_type(const ParquetField* parquet
             break;
         }
 
-        if (_check_is_valid_complex_type(&child_parquet_field, it->second)) {
+        if (_is_valid_complex_type(&child_parquet_field, it->second)) {
             has_valid_child = true;
             break;
         }
@@ -184,7 +186,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
         // check is complex type is invalid
-        if (parquet_field->type.is_complex_type() && !_check_is_valid_complex_type(parquet_field, iceberg_it->second)) {
+        if (parquet_field->type.is_complex_type() && !_is_valid_complex_type(parquet_field, iceberg_it->second)) {
             continue;
         }
 
