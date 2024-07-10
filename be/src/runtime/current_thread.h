@@ -72,6 +72,20 @@ private:
         MemCacheManager(const MemCacheManager&) = delete;
         MemCacheManager(MemCacheManager&&) = delete;
 
+        void consume_single(int64_t size) {
+            _cache_size += size;
+            if (_cache_size >= BATCH_SIZE) {
+                commit_single_tracker();
+            }
+        }
+
+        void release_single(int64_t size) {
+            _cache_size -= size;
+            if (_cache_size <= -BATCH_SIZE) {
+                commit_single_tracker();
+            }
+        }
+
         void consume(int64_t size) {
             size = _consume_from_reserved(size);
             _cache_size += size;
@@ -165,6 +179,14 @@ private:
             if (_cache_size <= -BATCH_SIZE) {
                 commit(false);
             }
+        }
+
+        void commit_single_tracker() {
+            MemTracker* cur_tracker = _loader();
+            if (cur_tracker != nullptr) {
+                cur_tracker->consume_single(_cache_size);
+            }
+            _cache_size = 0;
         }
 
         void commit(bool is_ctx_shift) {
@@ -288,6 +310,10 @@ public:
 
     bool is_catched() const { return _is_catched; }
 
+    void mem_consume_single(int64_t size) {
+        _mem_cache_manager.consume_single(size);
+    }
+
     void mem_consume(int64_t size) {
         _mem_cache_manager.consume(size);
         _operator_mem_cache_manager.consume(size);
@@ -321,6 +347,10 @@ public:
             _mem_cache_manager.release(size);
             _operator_mem_cache_manager.release(size);
         }
+    }
+
+    void mem_release_single(int64_t size) {
+        _mem_cache_manager.release_single(size);
     }
 
     static void mem_consume_without_cache(int64_t size) {

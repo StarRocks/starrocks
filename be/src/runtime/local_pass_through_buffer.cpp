@@ -28,7 +28,7 @@ public:
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
-            CurrentThread::current().mem_consume(_physical_bytes);
+            CurrentThread::current().mem_consume_single(_physical_bytes);
         }
     }
 
@@ -38,7 +38,7 @@ public:
         auto clone = chunk->clone_unique();
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
-        CurrentThread::current().mem_release(physical_bytes);
+        CurrentThread::current().mem_release_single(physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
@@ -52,7 +52,7 @@ public:
         bytes->swap(_bytes);
 
         // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
+        CurrentThread::current().mem_consume_single(_physical_bytes);
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
