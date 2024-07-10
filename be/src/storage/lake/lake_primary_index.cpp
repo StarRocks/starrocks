@@ -83,6 +83,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
         DCHECK(_persistent_index == nullptr);
 
         switch (metadata->persistent_index_type()) {
+        // 3.2 don't support CLOUD_NATIVE, so treat it as LOCAL.
+        case PersistentIndexTypePB::CLOUD_NATIVE:
         case PersistentIndexTypePB::LOCAL: {
             // Even if `enable_persistent_index` is enabled,
             // it may not take effect if is as compute node without any storage path.

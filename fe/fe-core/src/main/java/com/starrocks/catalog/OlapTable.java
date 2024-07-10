@@ -2359,7 +2359,8 @@ public class OlapTable extends Table {
         }
 
         // only support LOCAL for now
-        if (persistentIndexType == TPersistentIndexType.LOCAL) {
+        if (persistentIndexType == TPersistentIndexType.LOCAL
+            || persistentIndexType == TPersistentIndexType.CLOUD_NATIVE) {
             tableProperty
                     .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                             TableProperty.persistentIndexTypeToString(persistentIndexType));
