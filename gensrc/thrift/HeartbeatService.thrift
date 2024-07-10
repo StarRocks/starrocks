@@ -33,6 +33,7 @@ struct TMasterInfo {
     10: optional Types.TRunMode run_mode
     11: optional list<string> disabled_disks
     12: optional list<string> decommissioned_disks
+    13: optional bool encrypted;
 }
 
 struct TBackendInfo {

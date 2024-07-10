@@ -28,6 +28,7 @@
 #include <worker.h>
 
 #include "common/config.h"
+#include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/input_stream.h"
@@ -294,7 +295,7 @@ public:
             istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
                                                                          config::experimental_lake_wait_per_get_ms);
         }
-        return std::make_unique<RandomAccessFile>(std::move(istream), info.path, is_cache_hit);
+        return RandomAccessFile::from(std::move(istream), info.path, is_cache_hit, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -313,8 +314,8 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
-        auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
-        return std::make_unique<SequentialFile>(std::move(istream), path);
+        auto istream = std::make_unique<StarletInputStream>(std::move(*file_st));
+        return SequentialFile::from(std::move(istream), path, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
@@ -340,7 +341,8 @@ public:
         if (config::experimental_lake_wait_per_put_ms > 0) {
             os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
         }
-        return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
+        return wrap_encrypted(std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path),
+                              opts.encryption_info);
     }
 
     Status delete_file(const std::string& path) override {

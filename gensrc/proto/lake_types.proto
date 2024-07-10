@@ -89,6 +89,7 @@ message RowsetMetadataPB {
     optional int64 version = 10;
     // del_files are generated when pk table handle delete operation.
     repeated DelfileWithRowsetId del_files = 11;
+    repeated bytes segment_encryption_metas = 12;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -142,6 +143,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        repeated bytes del_encryption_metas = 5;
     }
 
     message OpCompaction {

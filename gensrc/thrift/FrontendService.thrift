@@ -1812,6 +1812,13 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TGetKeysRequest {
+}
+
+struct TGetKeysResponse {
+    1: optional list<binary> key_metas;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1823,6 +1830,8 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
+
+    TGetKeysResponse getKeys(1:TGetKeysRequest params);
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)

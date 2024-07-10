@@ -252,7 +252,8 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     }
     // 1. get relative file path by rowset segment id.
     auto& relative_file_info = params.container.rssid_to_file().at(rssid);
-    FileInfo fileinfo{.path = params.tablet->segment_location(relative_file_info.path)};
+    FileInfo fileinfo{.path = params.tablet->segment_location(relative_file_info.path),
+                      .encryption_meta = relative_file_info.encryption_meta};
     if (relative_file_info.size.has_value()) {
         fileinfo.size = relative_file_info.size;
     }

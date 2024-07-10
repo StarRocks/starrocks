@@ -33,6 +33,7 @@
 
 #include "common/config.h"
 #include "common/s3_uri.h"
+#include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
@@ -419,8 +420,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return RandomAccessFile::from(std::move(input_stream), path, false, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
@@ -430,23 +431,22 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     if (file_info.size.has_value()) {
         input_stream->set_size(file_info.size.value());
     }
-    return std::make_unique<RandomAccessFile>(std::move(input_stream), file_info.path);
+    return RandomAccessFile::from(std::move(input_stream), file_info.path, false, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                             const std::string& path) {
-    (void)opts;
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<SequentialFile>(std::move(input_stream), path);
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return SequentialFile::from(std::move(input_stream), path, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const std::string& fname) {
@@ -473,7 +473,7 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     auto ostream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
                                                         config::experimental_s3_max_single_part_size,
                                                         config::experimental_s3_min_upload_part_size);
-    return std::make_unique<OutputStreamAdapter>(std::move(ostream), fname);
+    return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(ostream), fname), opts.encryption_info);
 }
 
 Status S3FileSystem::rename_file(const std::string& src, const std::string& target) {

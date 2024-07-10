@@ -46,6 +46,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.encryption.KeyMgr;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.server.GlobalStateMgr;
@@ -100,6 +101,7 @@ public class HeartbeatMgr extends FrontendDaemon {
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
         tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
+        tMasterInfo.setEncrypted(KeyMgr.isEncrypted());
         MASTER_INFO.set(tMasterInfo);
     }
 

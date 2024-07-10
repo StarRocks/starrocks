@@ -31,6 +31,8 @@ set(EXEC_FILES
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
+        ./fs/encrypt_file_test.cpp
+        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp

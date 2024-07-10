@@ -278,6 +278,7 @@ private:
 
 StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                                 const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -304,6 +305,8 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
 
 StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(
         const RandomAccessFileOptions& opts, const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
+
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -334,6 +337,7 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
 
 StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const WritableFileOptions& opts,
                                                                             const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
             return Status::NotSupported(fmt::format("Cannot truncate a file by broker, path={}", path));

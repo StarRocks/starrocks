@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
@@ -80,8 +81,14 @@ void HorizontalGeneralTabletWriter::close() {
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -96,12 +103,13 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size});
+        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
         _data_size += segment_size;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
             segment->set_path(segment_path);
+            segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
         _seg_writer.reset();
     }
@@ -230,7 +238,7 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         RETURN_IF_ERROR(segment_writer->finalize_footer(&segment_size, &footer_position));
         const std::string& segment_path = segment_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size});
+        _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
         _data_size += segment_size;
         segment_writer.reset();
     }
@@ -258,8 +266,14 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

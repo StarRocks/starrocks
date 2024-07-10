@@ -118,6 +118,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
@@ -169,6 +170,7 @@ import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
@@ -481,6 +483,7 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);

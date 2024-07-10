@@ -111,6 +111,8 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.epack.alter.SystemHandlerEPack;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
@@ -472,6 +474,9 @@ public class GlobalStateMgr {
     private final MVLifeCycleAutoKeeper mvLifeCycleAutoKeeper;
     private final ReplicationMgr replicationMgr;
 
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
     private LockManager lockManager;
 
     private FailoverGroupMgr failoverGroupMgr;
@@ -770,6 +775,10 @@ public class GlobalStateMgr {
 
         this.replicationMgr = new ReplicationMgr();
         this.failoverGroupMgr = new FailoverGroupMgr();
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
@@ -1032,6 +1041,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
     }
 
     public LockManager getLockManager() {
@@ -1332,6 +1345,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        keyMgr.initDefaultMasterKey();
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1357,6 +1371,8 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+
+        keyRotationDaemon.start();
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -1547,6 +1563,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
                 .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, ((WarehouseManagerEPack) warehouseMgr)::load)
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1719,6 +1736,7 @@ public class GlobalStateMgr {
                 securityPolicyManager.save(dos);
                 ((WarehouseManagerEPack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
+                keyMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2432,7 +2450,7 @@ public class GlobalStateMgr {
             }
             if (!supportRefreshTableType(table)) {
                 throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
-                                "do not support refresh external table which type is %s", catalogName, dbName,
+                        "do not support refresh external table which type is %s", catalogName, dbName,
                         tblName, table.getType());
             }
         } finally {

@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
 #include "gutil/gscoped_ptr.h"
@@ -329,19 +330,19 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const string& fname) override {
-        (void)opts;
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        auto stream = std::make_shared<io::FdInputStream>(fd);
+        auto stream = std::make_unique<io::FdInputStream>(fd);
         stream->set_close_on_delete(true);
-        return std::make_unique<SequentialFile>(std::move(stream), fname);
+        return SequentialFile::from(std::move(stream), fname, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
+        std::unique_ptr<io::FdInputStream> fstream;
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Handle* h = FdCache::Instance()->lookup(fname);
             if (h == nullptr) {
@@ -352,19 +353,18 @@ public:
                 }
                 h = FdCache::Instance()->insert(fname, fd);
             }
-            auto stream = std::make_shared<CachedFdInputStream>(h);
-            stream->set_close_on_delete(false);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<CachedFdInputStream>(h);
+            fstream->set_close_on_delete(false);
         } else {
             int fd;
             RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
             if (fd < 0) {
                 return io_error(fname, errno);
             }
-            auto stream = std::make_shared<io::FdInputStream>(fd);
-            stream->set_close_on_delete(true);
-            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+            fstream = std::make_unique<io::FdInputStream>(fd);
+            fstream->set_close_on_delete(true);
         }
+        return RandomAccessFile::from(std::move(fstream), fname, false, opts.encryption_info);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
@@ -387,7 +387,8 @@ public:
         if (opts.mode == MUST_EXIST) {
             ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
-        return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
+        return wrap_encrypted(std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close),
+                              opts.encryption_info);
     }
 
     Status path_exists(const std::string& fname) override {

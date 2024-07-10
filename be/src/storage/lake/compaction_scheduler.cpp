@@ -25,6 +25,7 @@
 #include "agent/master_info.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gutil/stl_util.h"
@@ -144,6 +145,14 @@ CompactionScheduler::~CompactionScheduler() {
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                                   CompactResponse* response, ::google::protobuf::Closure* done) {
+    // when FE request a compaction, CN may not have any key cached yet, so pass an encryption_meta to refresh cache
+    if (!request->encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request->encryption_meta());
+        if (!st.ok()) {
+            LOG(WARNING) << fmt::format("refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}",
+                                        st.detailed_message());
+        }
+    }
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.

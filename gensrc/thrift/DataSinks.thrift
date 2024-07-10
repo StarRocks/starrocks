@@ -232,6 +232,7 @@ struct TOlapTableSink {
     28: optional i64 automatic_bucket_size
     29: optional bool write_txn_log
     30: optional bool ignore_out_of_partition
+    31: optional binary encryption_meta;
 }
 
 struct TSchemaTableSink {
