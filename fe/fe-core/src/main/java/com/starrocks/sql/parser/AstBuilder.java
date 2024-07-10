@@ -219,6 +219,7 @@ import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
@@ -242,6 +243,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -1353,6 +1355,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean ifNotExists = context.EXISTS() != null;
 
         return new CreateOrReplaceBranchClause(createPos(context), branchName, branchOptions, create, replace, ifNotExists);
+    }
+
+    @Override
+    public ParseNode visitDropBranchClause(StarRocksParser.DropBranchClauseContext context) {
+        String branchName = getIdentifierName(context.identifier());
+        return new DropBranchClause(createPos(context), branchName, context.EXISTS() != null);
+    }
+
+    @Override
+    public ParseNode visitDropTagClause(StarRocksParser.DropTagClauseContext context) {
+        String branchName = getIdentifierName(context.identifier());
+        return new DropTagClause(createPos(context), branchName, context.EXISTS() != null);
     }
 
     private Long safeParseLong(String name, String value) {
