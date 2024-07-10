@@ -255,7 +255,7 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
             }
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
-        if (r.ok() || r.is_already_exist()) {
+        if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += write_size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
@@ -444,7 +444,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
             options.allow_zero_copy = true;
         }
         Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
-        if (r.ok() || r.is_already_exist()) {
+        if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
@@ -466,7 +466,8 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
 }
 
 bool CacheInputStream::_can_ignore_populate_error(const Status& status) const {
-    if (status.is_resource_busy() || status.is_mem_limit_exceeded() || status.is_capacity_limit_exceeded()) {
+    if (status.is_already_exist() || status.is_resource_busy() || status.is_mem_limit_exceeded() ||
+        status.is_capacity_limit_exceeded()) {
         return true;
     }
     return false;
