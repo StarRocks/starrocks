@@ -291,9 +291,16 @@ public:
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
 
     const int64_t memory_usage() const {
+        std::ostringstream oss;
+        for (size_t i = 0;i < _agg_fn_ctxs.size();i++) {
+            oss << i << "=" << _agg_fn_ctxs[i]->mem_usage() << ",";
+        }
+        // LOG(INFO) << "ctx mem usage: " << oss.str();
         if (is_hash_set()) {
+            LOG(INFO) << "pool mem: " << hash_set_memory_usage() << ", heap: " << oss.str();
             return hash_set_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
+            LOG(INFO) << "pool mem: " << hash_map_memory_usage() << ", heap: " << oss.str();
             return hash_map_memory_usage();
         } else {
             return 0;

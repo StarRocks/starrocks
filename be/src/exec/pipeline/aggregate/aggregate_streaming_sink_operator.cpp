@@ -165,6 +165,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(c
  * SELECTIVE_PREAGG state aggregates continuous_limit chunks, then shifting to ADJUST state.
  */
 Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size) {
+    // @TODO phmap's memory is not in mem_pool
     size_t allocated_bytes = _aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool());
     const size_t continuous_limit = _auto_context.get_continuous_limit();
     switch (_auto_state) {

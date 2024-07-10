@@ -196,15 +196,39 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSet<T>;
     static constexpr size_t item_size = phmap::item_serialize_size<MyHashSet>::value;
+    // @TODO need an extra interface to know extra memory
 
+    // @TODO update should return hash??
+
+    // @TODO should return memory changed size
+    // @TODO return delta or whole?
     size_t update(T key) {
         auto pair = set.insert(key);
-        return pair.second * item_size;
+        // @TODO should consider load factor
+        if (pair.second) {
+            // @TODO better to know if rehash happens
+            size_t new_mem_usage = set.allocated_memory();
+            size_t diff = new_mem_usage - mem_usage;
+            mem_usage = new_mem_usage;
+            return diff;
+        }
+        return 0;
+        // return pair.second ? (mem_usage )
+        // LOG(INFO) << "update, old mem: " << old_mem << ", new mem: " << set.allocated_memory() << ", result: " << pair.second * item_size;
+        // return pair.second * item_size;
     }
 
     size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
         auto pair = set.emplace_with_hash(hash, key);
-        return pair.second * item_size;
+        if(pair.second) {
+            size_t new_mem_usage = set.allocated_memory();
+            size_t diff = new_mem_usage - mem_usage;
+            mem_usage = new_mem_usage;
+            return diff;
+        }
+        return 0;
+        // LOG(INFO) << "update_with_hash, old mem: " << old_mem << ", new mem: " << set.allocated_memory() << ", result: " << pair.second * item_size;
+        // return pair.second * item_size;
     }
 
     void prefetch(T key) { set.prefetch(key); }
@@ -232,7 +256,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
         memcpy(&size, src, sizeof(size));
         set.rehash(set.size() + size);
 
-        size_t old_size = set.size();
+        // size_t old_size = set.size();
         src += sizeof(size);
         for (size_t i = 0; i < size; i++) {
             T key;
@@ -240,8 +264,12 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
             set.insert(key);
             src += sizeof(T);
         }
-        size_t new_size = set.size();
-        return (new_size - old_size) * item_size;
+        size_t new_mem_usage = set.allocated_memory();
+        size_t diff = new_mem_usage - mem_usage;
+        mem_usage = new_mem_usage;
+        return diff;
+        // size_t new_size = set.size();
+        // return (new_size - old_size) * item_size;
     }
 
     SumType sum_distinct() const {
@@ -268,6 +296,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     // NOLINTEND
 
     MyHashSet set;
+    size_t mem_usage = 0;
 };
 
 template <LogicalType LT, LogicalType SumLT>
