@@ -14,8 +14,6 @@
 
 #include "meta_helper.h"
 
-#include <boost/algorithm/string/case_conv.hpp>
-
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
@@ -28,14 +26,12 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
         const std::vector<SlotDescriptor*>& slots) const {
     for (const auto& slot : slots) {
-        const std::string format_slot_name =
-                _case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
+        const std::string format_slot_name = Utils::format_name(slot->col_name(), _case_sensitive);
         for (size_t idx = 0; idx < row_group.columns.size(); idx++) {
             const auto& column = row_group.columns[idx];
             // TODO Not support for non-scalar types now.
             const std::string format_column_name =
-                    _case_sensitive ? column.meta_data.path_in_schema[0]
-                                    : boost::algorithm::to_lower_copy(column.meta_data.path_in_schema[0]);
+                    Utils::format_name(column.meta_data.path_in_schema[0], _case_sensitive);
             if (format_column_name == format_slot_name) {
                 // Put SlotDesc's origin column name here!
                 column_name_2_pos_in_meta.emplace(slot->col_name(), idx);
@@ -111,9 +107,7 @@ const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_
 
 void IcebergMetaHelper::_init_field_mapping() {
     for (const auto& each : _t_iceberg_schema->fields) {
-        const std::string& formatted_field_name =
-                _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
-        _field_name_2_iceberg_field.emplace(formatted_field_name, &each);
+        _field_name_2_iceberg_field.emplace(Utils::format_name(each.name, _case_sensitive), &each);
     }
 }
 
@@ -158,9 +152,7 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
         const std::vector<SlotDescriptor*>& slots) const {
     for (const auto& slot : slots) {
-        const std::string& format_column_name =
-                _case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
-        auto it = _field_name_2_iceberg_field.find(format_column_name);
+        auto it = _field_name_2_iceberg_field.find(Utils::format_name(slot->col_name(), _case_sensitive));
         if (it == _field_name_2_iceberg_field.end()) {
             continue;
         }
@@ -206,8 +198,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 }
 
 const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {
-    const std::string& formatted_col_name = _case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
-    auto it = _field_name_2_iceberg_field.find(formatted_col_name);
+    auto it = _field_name_2_iceberg_field.find(Utils::format_name(col_name, _case_sensitive));
     if (it == _field_name_2_iceberg_field.end()) {
         return nullptr;
     }
