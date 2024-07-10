@@ -74,6 +74,12 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
 
     for (auto& i : preds) {
         const ColumnPredicate* pred = i;
+        // index only filter only used for storage engine index filter
+        // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
+        if (pred->is_index_filter_only() && pred->is_expr_predicate()) {
+            continue;
+        }
+
         if (PredicateType::kEQ == pred->type()) {
             Datum value = pred->value();
             int code = _column_iterators[cid]->dict_lookup(value.get_slice());
