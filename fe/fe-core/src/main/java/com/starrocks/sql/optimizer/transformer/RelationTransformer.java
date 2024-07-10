@@ -736,10 +736,10 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         int relationId = columnRefFactory.getNextRelationId();
         Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
         for (int i = 0; i < outputColumns.size(); i++) {
+            ColumnRefOperator outputColumn = outputColumns.get(i);
             Column column = viewSchema.get(i);
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(),
-                    column.isAllowNull());
+            ColumnRefOperator columnRef =
+                    columnRefFactory.create(column.getName(), outputColumn.getType(), outputColumn.isNullable());
             if (outputVariables != null) {
                 outputVariables.add(columnRef);
             }
