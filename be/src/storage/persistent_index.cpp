@@ -5258,4 +5258,8 @@ void PersistentIndex::_calc_memory_usage() {
     _memory_usage.store(memory_usage);
 }
 
+void PersistentIndex::test_force_dump() {
+    _dump_snapshot = true;
+}
+
 } // namespace starrocks
