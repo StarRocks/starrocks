@@ -416,13 +416,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
-                        if (enableTabletCreationOptimization) {
-                            break;
-                        }
                         batchTasks.get(curIndex).addTask(task);
                         if (batchTasks.get(curIndex).getTaskNum() == Config.max_parallel_create_replica_job_for_ddl) {
                             // avoid submit the task inside the DB lock.
                             ++curIndex;
+                        }
+                        if (enableTabletCreationOptimization) {
+                            break;
                         }
                     }
                 }
