@@ -73,10 +73,13 @@ public class Constants {
         public boolean isSuccessState() {
             return this.equals(TaskRunState.SUCCESS) || this.equals(TaskRunState.MERGED);
         }
-    }
 
-    public static boolean isFinishState(TaskRunState state) {
-        return state.equals(TaskRunState.SUCCESS) || state.equals(TaskRunState.FAILED) || state.equals(TaskRunState.MERGED);
+        /**
+         * Whether the task run state is a finish state
+         */
+        public boolean isFinishState() {
+            return isSuccessState() || this.equals(TaskRunState.FAILED);
+        }
     }
 
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
