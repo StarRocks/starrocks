@@ -39,7 +39,6 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.4.2</iceberg.version>
-        <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.8.1</paimon.version>
         <staros.version>3.2.2</staros.version>
         <python>python</python>
@@ -297,24 +296,6 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws</artifactId>
             <version>${iceberg.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
-            <version>${awsv2.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>url-connection-client</artifactId>
-            <version>${awsv2.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>utils</artifactId>
-                    <groupId>software.amazon.awssdk</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
