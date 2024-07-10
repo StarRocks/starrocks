@@ -122,6 +122,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(op_write.dels(i));
         del_file_with_rid.set_origin_rowset_id(rowset->id());
+        // For now, op_offset is always max segment's id
+        del_file_with_rid.set_op_offset(std::max(op_write.rowset().segments_size(), 1) - 1);
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id

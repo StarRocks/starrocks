@@ -550,13 +550,18 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
                 // del file in origin rowset doesn't need to skip.
                 for (int i = 0; i < pkc->size(); i++) {
                     if (found_values[i] != IndexValue(NullIndexValue) &&
-                        found_values[i].get_rssid() > del.origin_rowset_id()) {
+                        found_values[i].get_rssid() > del.origin_rowset_id() + del.op_offset()) {
+                        // Use `rowset_id + op_offset` as delete file's rssid.
                         // delete operation is too old for this key.
                         filter[i] = true;
                     }
                 }
             }
         };
+        // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
+        // so we use max segment id as `op_offset`.
+        // TODO : support real order of mix upsert and delete in one transaction.
+        const uint32_t del_rebuild_rssid = rowset->id() + std::max(rowset->num_segments(), (int64_t)1) - 1;
         if (pkc->is_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
@@ -565,7 +570,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             generate_filter_fn();
             // 2. insert delete operations to pk index.
             RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
-                                         rowset_version, rowset->id()));
+                                         rowset_version, del_rebuild_rssid));
         } else {
             std::vector<Slice> keys;
             keys.reserve(pkc->size());
@@ -579,7 +584,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             generate_filter_fn();
             // 2. insert delete operations to pk index.
             RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
-                                         rowset_version, rowset->id()));
+                                         rowset_version, del_rebuild_rssid));
         }
     }
     return Status::OK();
