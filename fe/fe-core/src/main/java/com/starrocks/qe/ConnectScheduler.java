@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -132,6 +133,7 @@ public class ConnectScheduler {
 
     /**
      * Register one connection with its connection id.
+     *
      * @param ctx connection context
      * @return a pair, first is success or not, second is error message(if any)
      */
@@ -144,7 +146,8 @@ public class ConnectScheduler {
         // Check user
         connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
         int currentConn = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+        long currentUserMaxConn =
+                ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
         if (currentConn >= currentUserMaxConn) {
             return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                     ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
@@ -173,6 +176,15 @@ public class ConnectScheduler {
 
     public ConnectContext getContext(long connectionId) {
         return connectionMap.get(connectionId);
+    }
+
+    public ConnectContext findContextByQueryId(String queryId) {
+        return connectionMap.values().stream().filter(
+                        (Predicate<ConnectContext>) c ->
+                                c.getQueryId() != null
+                                && queryId.equals(c.getQueryId().toString())
+                )
+                .findFirst().orElse(null);
     }
 
     public int getConnectionNum() {
