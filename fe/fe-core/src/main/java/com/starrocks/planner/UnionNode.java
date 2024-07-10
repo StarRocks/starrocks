@@ -37,6 +37,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.LocalExchangerType;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
@@ -63,6 +64,15 @@ public class UnionNode extends SetOperationNode {
     protected void toThrift(TPlanNode msg) {
         toThrift(msg, TPlanNodeType.UNION_NODE);
         msg.union_node.setLocal_exchanger_type(localExchangeType.getThriftType());
+    }
+
+    @Override
+    public String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
+        String explain = super.getNodeExplainString(prefix, detailLevel);
+        if (localExchangeType != LocalExchangerType.PASS_THROUGH) {
+            explain += prefix + "local exchange type: " + localExchangeType + "\n";
+        }
+        return explain;
     }
 
     @Override
