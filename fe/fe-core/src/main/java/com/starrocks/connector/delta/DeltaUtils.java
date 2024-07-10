@@ -69,11 +69,10 @@ public class DeltaUtils {
                                                        Configuration configuration, long createTime) {
         DefaultEngine deltaEngine = DefaultEngine.create(configuration);
 
-        Table deltaTable = null;
-        SnapshotImpl snapshot = null;
+        SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
-            deltaTable = Table.forPath(deltaEngine, path);
+            Table deltaTable = Table.forPath(deltaEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
         } catch (TableNotFoundException e) {
             LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
