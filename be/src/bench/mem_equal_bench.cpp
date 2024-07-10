@@ -76,10 +76,10 @@ static void do_MemEqual(benchmark::State& state) {
         for (size_t i = 0; i < ROUND_NUM; i++) {
             if constexpr (padded) {
                 res = memequal_padded(buffer_0.data() + beginnings[i], lengths[i], buffer_1.data() + beginnings[i],
-                                lengths[i]);
+                                      lengths[i]);
             } else {
                 res = memequal(buffer_0.data() + beginnings[i], lengths[i], buffer_1.data() + beginnings[i],
-                         lengths[i]);
+                               lengths[i]);
             }
             and_res &= res;
             or_res |= res;
@@ -127,7 +127,6 @@ BM_memequal_padded_notequal/iterations:100000          2547 ns         2552 ns  
 BM_memequal_no_padded_equal/iterations:100000          8560 ns         8575 ns       100000
 BM_memequal_no_padded_notequal/iterations:100000       8272 ns         8286 ns       100000
 */
-
 
 /* if we fix the string's length as 8, the result is as below,
  * it makes sense that memequal_no_padded compare uint64 and

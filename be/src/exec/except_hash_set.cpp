@@ -39,7 +39,8 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
     if (UNLIKELY(cur_max_one_row_size > buffer_state->max_one_row_size)) {
         buffer_state->max_one_row_size = cur_max_one_row_size;
         buffer_state->mem_pool.clear();
-        buffer_state->buffer = buffer_state->mem_pool.allocate(buffer_state->max_one_row_size * state->chunk_size() + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        buffer_state->buffer = buffer_state->mem_pool.allocate(buffer_state->max_one_row_size * state->chunk_size() +
+                                                               SLICE_MEMEQUAL_OVERFLOW_PADDING);
     }
 
     _serialize_columns(chunk, exprs, chunk_size, buffer_state);
