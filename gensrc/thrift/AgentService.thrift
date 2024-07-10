@@ -121,6 +121,8 @@ struct TCreateTabletReq {
     // Whether or not need to create a separate file to hold schema information.
     20: optional bool create_schema_file = true;
     21: optional i32 compression_level = -1;
+    // Whether or not use shared tablet initial metadata.
+    22: optional bool enable_tablet_creation_optimization = false;
 }
 
 struct TDropTabletReq {

@@ -856,6 +856,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
 
+    @ConfField(mutable = true)
+    public static boolean lake_enable_tablet_creation_optimization = false;
+
     /**
      * The thrift server max worker threads
      */
