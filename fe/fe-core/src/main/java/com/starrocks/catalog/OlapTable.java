@@ -2503,6 +2503,7 @@ public class OlapTable extends Table {
             tempPartitions.dropPartition(partitionName, needDropTablet);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
             }
         }
     }
@@ -2648,6 +2649,7 @@ public class OlapTable extends Table {
         tempPartitions.addPartition(partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+            physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
     }
 
@@ -2656,6 +2658,7 @@ public class OlapTable extends Table {
             partitionInfo.dropPartition(partition.getId());
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
             }
         }
         tempPartitions.dropAll();
