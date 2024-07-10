@@ -219,6 +219,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
+    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
+    // so we use max segment id as `op_offset`.
+    // TODO : support real order of mix upsert and delete in one transaction.
+    const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, true /*reslove conflict*/,
@@ -241,7 +245,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
-            RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, rowset_id));
+            RETURN_IF_ERROR(
+                    index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, del_rebuild_rssid));
         }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
@@ -252,7 +257,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, rowset_id));
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }
@@ -601,8 +606,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
                                           DelVector* delvec) {
-    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tsid.tablet_id, meta_ver, fill_cache));
     RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, delvec));
     return Status::OK();
 }

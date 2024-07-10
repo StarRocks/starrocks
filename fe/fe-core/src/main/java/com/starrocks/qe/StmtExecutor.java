@@ -116,6 +116,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -189,6 +190,7 @@ import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
@@ -212,6 +214,7 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -750,14 +753,15 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
-                clearQueryScopeHintContext(sessionVariableBackup);
+                clearQueryScopeHintContext();
             }
 
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
         }
     }
 
-    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
-        context.setSessionVariable(sessionVariableBackup);
+    private void clearQueryScopeHintContext() {
         Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, UserVariable> entry = iterator.next();
@@ -772,6 +776,7 @@ public class StmtExecutor {
         SessionVariable clonedSessionVariable = null;
         Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
         UUID queryId = context.getQueryId();
+        final TUniqueId executionId = context.getExecutionId();
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
             if (hint instanceof SetVarHint) {
                 if (clonedSessionVariable == null) {
@@ -793,9 +798,12 @@ public class StmtExecutor {
                     SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
                     if (entry.getValue().getEvaluatedExpression() == null) {
                         try {
-                            context.setQueryId(UUIDUtil.genUUID());
+                            final UUID uuid = UUIDUtil.genUUID();
+                            context.setQueryId(uuid);
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                             entry.getValue().deriveUserVariableExpressionResult(context);
                         } finally {
+                            context.setExecutionId(executionId);
                             context.setQueryId(queryId);
                             context.resetReturnRows();
                             context.getState().reset();
@@ -987,11 +995,20 @@ public class StmtExecutor {
     // Handle kill statement.
     private void handleKill() throws DdlException {
         KillStmt killStmt = (KillStmt) parsedStmt;
-        long id = killStmt.getConnectionId();
-        ConnectContext killCtx = context.getConnectScheduler().getContext(id);
-        if (killCtx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
+        if (killStmt.getQueryId() != null) {
+            handleKillQuery(killStmt.getQueryId());
+        } else {
+            long id = killStmt.getConnectionId();
+            ConnectContext killCtx = context.getConnectScheduler().getContext(id);
+            if (killCtx == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
+            }
+            handleKill(killCtx, killStmt.isConnectionKill());
         }
+    }
+
+    // Handle kill statement.
+    private void handleKill(ConnectContext killCtx, boolean killConnection) {
         Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
@@ -1008,9 +1025,47 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill(), "killed by kill statement : " + originStmt);
+            killCtx.kill(killConnection, "killed by kill statement : " + originStmt);
         }
         context.getState().setOk();
+    }
+
+    // Handle kill running query statement.
+    private void handleKillQuery(String queryId) throws DdlException {
+        // > 0 means it is forwarded from other fe
+        if (context.getForwardTimes() == 0) {
+            String errorMsg = null;
+            // forward to all fe
+            for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+                LeaderOpExecutor leaderOpExecutor =
+                        new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
+                                context, redirectStatus);
+                try {
+                    leaderOpExecutor.execute();
+                    // if query is successfully killed by this fe, it can return now
+                    if (context.getState().getStateType() == MysqlStateType.OK) {
+                        context.getState().setOk();
+                        return;
+                    }
+                    errorMsg = context.getState().getErrorMessage();
+                } catch (TTransportException e) {
+                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
+                    LOG.warn(errorMsg, e);
+                } catch (Exception e) {
+                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
+                            e.getMessage();
+                    LOG.warn(e.getMessage(), e);
+                }
+            }
+            // if the queryId is not found in any fe, print the error message
+            context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
+            return;
+        }
+        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        if (killCtx == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+        }
+        handleKill(killCtx, false);
     }
 
     // Process set statement.
