@@ -387,8 +387,11 @@ public class InsertOverwriteJobRunner {
 
     private void doCommit(boolean isReplay) {
         Database db = getAndWriteLockDatabase(dbId);
-        OlapTable targetTable = checkAndGetTable(db, tableId);
+        OlapTable tmpTargetTable = null;
         try {
+            // try exception to release write lock finally
+            final OlapTable targetTable = checkAndGetTable(db, tableId);
+            tmpTargetTable = targetTable;
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -438,8 +441,9 @@ public class InsertOverwriteJobRunner {
             db.writeUnlock();
         }
 
-        // trigger listeners after insert overwrite committed.
-        GlobalStateMgr.getCurrentState().getOperationListenerBus().onInsertOverwriteJobCommitFinish(db, targetTable);
+        // trigger listeners after insert overwrite committed, trigger listeners after
+        // write unlock to avoid holding lock too long
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onInsertOverwriteJobCommitFinish(db, tmpTargetTable);
     }
 
     private void prepareInsert() {
