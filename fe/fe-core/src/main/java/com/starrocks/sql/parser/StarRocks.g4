@@ -790,7 +790,7 @@ adminSetPartitionVersion
     ;
 
 killStatement
-    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    : KILL (CONNECTION? | QUERY) (connId=INTEGER_VALUE | queryId=string)
     ;
 
 syncStatement
