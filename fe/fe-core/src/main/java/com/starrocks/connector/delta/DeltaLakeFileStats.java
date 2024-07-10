@@ -106,13 +106,15 @@ public class DeltaLakeFileStats {
     }
 
     public void fillColumnStats(ColumnStatistic.Builder builder, Column col) {
+        // Set default value
+        builder.setNullsFraction(0);
+        builder.setAverageRowSize(col.getType().getTypeSize());
+        builder.setDistinctValuesCount(1);
+        builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
+
         if (schema == null) {
             return;
         }
-
-        // TODO: Currently not set avg size, will be optimized later.
-        // builder.setAverageRowSize(xxx);
-        builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 
         String colName = col.getName();
         if (!nonPartitionPrimitiveColumns.contains(colName)) {
@@ -141,9 +143,7 @@ public class DeltaLakeFileStats {
 
         if (nullCounts != null) {
             Long nullCount = getNullCount(colName);
-            if (nullCount == null) {
-                builder.setNullsFraction(0);
-            } else {
+            if (nullCount != null) {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
             }
         }
