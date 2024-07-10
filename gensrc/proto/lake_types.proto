@@ -141,6 +141,8 @@ message TabletMetadataPB {
     optional TabletSchemaPB source_schema = 14;
     optional PersistentIndexSstableMetaPB sstable_meta = 15;
     optional DeltaColumnGroupMetadataPB dcg_meta = 16;
+    map<int64, TabletSchemaPB> historical_schema = 17;
+    repeated int64 rowset_schema_id = 18;
 }
 
 message MetadataUpdateInfoPB {

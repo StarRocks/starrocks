@@ -44,11 +44,45 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // But it will be remove from index cache after apply is finished
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
+        // update tablet meta
+        // 1. rowset_schema_id is empty, maybe upgrade from old version or first time to do fast ddl
+        // 2. rowset_schema_id is not empty, add the origin tablet schema into historical_schema and update the
+        //    rowset_schema_id
+        if (alter_meta.has_tablet_schema()) {
+            VLOG(2) << "old schema: " << metadata->schema().DebugString()
+                    << " new schema: " << alter_meta.tablet_schema().DebugString();
+            if (metadata->rowset_schema_id_size() == 0) {
+                metadata->mutable_historical_schema()->clear();
+                auto schema_id = metadata->schema().id();
+                auto& item = (*metadata->mutable_historical_schema())[schema_id];
+                item.CopyFrom(metadata->schema());
+                for (int i = 0; i < metadata->rowsets_size(); i++) {
+                    metadata->add_rowset_schema_id(schema_id);
+                }
+            } else {
+                auto schema_id = metadata->schema().id();
+                bool has_changed = false;
+                for (int i = 0; i < metadata->rowsets_size(); i++) {
+                    // the rowset is generate from origin latest tablet schema, so we only update this rowsets
+                    if (metadata->rowset_schema_id(i) == -1) {
+                        metadata->set_rowset_schema_id(i, schema_id);
+                        has_changed = true;
+                    }
+                }
+                if (has_changed) {
+                    auto& item = (*metadata->mutable_historical_schema())[schema_id];
+                    item.CopyFrom(metadata->schema());
+                }
+            }
+            metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
+        }
+        /*
         if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
         }
+        */
     }
     return Status::OK();
 }
@@ -197,6 +231,7 @@ private:
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
+        Status st;
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);
@@ -358,6 +393,9 @@ private:
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, rowset->segments_size()));
+            if (_metadata->rowset_schema_id_size() != 0) {
+                _metadata->add_rowset_schema_id(-1);
+            }
         }
         return Status::OK();
     }
@@ -414,6 +452,36 @@ private:
         }
         // Erase input rowsets from _metadata
         _metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
+
+        // Update historical schema and rowset schema id
+        if (_metadata->rowset_schema_id_size() != 0) {
+            std::set<int32_t> erase_id;
+            int32_t end_idx = first_idx + op_compaction.input_rowsets_size();
+            for (auto idx = first_idx; idx < end_idx; idx++) {
+                erase_id.insert(_metadata->rowset_schema_id(idx));
+            }
+
+            for (auto idx = 0; idx < first_idx && !erase_id.empty(); idx++) {
+                if (erase_id.find(_metadata->rowset_schema_id(idx)) != erase_id.end()) {
+                    erase_id.erase(_metadata->rowset_schema_id(idx));
+                }
+            }
+
+            for (auto idx = end_idx; idx < _metadata->rowset_schema_id_size() && !erase_id.empty(); idx++) {
+                if (erase_id.find(_metadata->rowset_schema_id(idx)) != erase_id.end()) {
+                    erase_id.erase(_metadata->rowset_schema_id(idx));
+                }
+            }
+            // remove no used historical schema
+            for (auto id : erase_id) {
+                _metadata->mutable_historical_schema()->erase(id);
+            }
+            // remove input rowset schema id
+            _metadata->set_rowset_schema_id(first_idx, -1);
+            auto* rowset_schema_id_fields = _metadata->mutable_rowset_schema_id();
+            rowset_schema_id_fields->erase(rowset_schema_id_fields->begin() + first_idx + 1, rowset_schema_id_fields->begin() + end_idx);
+        }
+        
 
         // Set new cumulative point
         uint32_t new_cumulative_point = 0;

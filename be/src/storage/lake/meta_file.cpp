@@ -135,6 +135,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         file_meta.set_name(orphan_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
+    if (_tablet_meta->rowset_schema_id_size() != 0) {
+        _tablet_meta->add_rowset_schema_id(-1);
+    }
 }
 
 void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) {
