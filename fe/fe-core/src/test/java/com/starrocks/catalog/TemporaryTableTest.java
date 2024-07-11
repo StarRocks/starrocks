@@ -30,6 +30,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 public class TemporaryTableTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -332,6 +334,16 @@ public class TemporaryTableTest {
             starRocksAssert.dropTemporaryTable("t1", false);
         });
         starRocksAssert.dropTemporaryTable("t1", true);
+
+    }
+
+    @Test
+    public void testShowData() throws Exception {
+        starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
+                "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                "properties('replication_num'='1')");
+        List<List<String>> showDataResult = starRocksAssert.show("show data from t1");
+        Assert.assertEquals(showDataResult.get(0).get(0), "t1");
 
     }
 
