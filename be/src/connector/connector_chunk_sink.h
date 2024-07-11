@@ -16,37 +16,63 @@
 
 #include <fmt/format.h>
 
-#include <boost/thread/future.hpp>
-#include <future>
-
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/utils.h"
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::connector {
 
+class AsyncFlushStreamPoller;
+class SinkOperatorMemoryManager;
+
+using Writer = formats::FileWriter;
+using Stream = io::AsyncFlushOutputStream;
+using WriterStreamPair = std::pair<std::unique_ptr<Writer>, Stream*>;
+using CommitResult = formats::FileWriter::CommitResult;
+using CommitFunc = std::function<void(const CommitResult& result)>;
+
 class ConnectorChunkSink {
 public:
-    // If any of the `add_chunk_futures` is not ready, the chunk sink cannot accept more chunks.
-    // The chunk sink can still accept chunks if some `add_chunk_futures` is ready or not.
-    struct Futures {
-        std::vector<std::future<Status>> add_chunk_futures;
-        std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_futures;
-    };
+    ConnectorChunkSink(std::vector<std::string> partition_columns,
+                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+                       std::unique_ptr<LocationProvider> location_provider,
+                       std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
+                       RuntimeState* state, bool support_null_partition);
+
+    void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
+
+    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
     virtual ~ConnectorChunkSink() = default;
 
-    virtual Status init() = 0;
+    Status init();
 
-    virtual StatusOr<Futures> add(ChunkPtr chunk) = 0;
+    Status add(Chunk* chunk);
 
-    virtual Futures finish() = 0;
+    Status finish();
 
-    // callback function on commit file succeed.
-    virtual std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() = 0;
+    void rollback();
+
+    virtual void callback_on_commit(const CommitResult& result) = 0;
+
+protected:
+    AsyncFlushStreamPoller* _io_poller = nullptr;
+    SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
+
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
+    std::unique_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
+    int64_t _max_file_size = 1024L * 1024 * 1024;
+    RuntimeState* _state = nullptr;
+    bool _support_null_partition{false};
+    std::vector<std::function<void()>> _rollback_actions;
+
+    std::unordered_map<std::string, WriterStreamPair> _writer_stream_pairs;
+    inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };
 
 struct ConnectorChunkSinkContext {
