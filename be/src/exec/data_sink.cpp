@@ -49,7 +49,8 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/olap_table_sink_operator.h"
@@ -68,6 +69,7 @@
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "gen_cpp/InternalService_types.h"
+#include "pipeline/exchange/multi_cast_local_exchange.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/dictionary_cache_sink.h"
@@ -158,6 +160,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
         DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
                 << "Missing mcast stream sink.";
+
         auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(state);
         const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
 
@@ -308,13 +311,13 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
-        // === create exchange ===
-        auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
-
-        // === create sink op ====
         auto* upstream = prev_operators.back().get();
         auto* upstream_source = context->source_operator(prev_operators);
         size_t upstream_plan_node_id = upstream->plan_node_id();
+        // === create exchange ===
+        auto mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
+
+        // === create sink op ====
         OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), upstream_plan_node_id, mcast_local_exchanger);
         prev_operators.emplace_back(sink_op);
