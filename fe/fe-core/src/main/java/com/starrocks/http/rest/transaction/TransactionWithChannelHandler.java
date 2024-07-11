@@ -22,6 +22,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,6 +49,12 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         String label = txnOperationParams.getLabel();
         Channel channel = txnOperationParams.getChannel();
+        String warehouseName = txnOperationParams.getWarehouseName();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new DdlException("Warehouse " + warehouseName + " not exists.");
+        }
+        long warehouseId = warehouse.getId();
         LOG.info("Handle transaction with channel info, label: {}", label);
 
         TransactionResult result = new TransactionResult();
@@ -59,7 +66,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 }
 
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result);
+                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result, warehouseId);
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(

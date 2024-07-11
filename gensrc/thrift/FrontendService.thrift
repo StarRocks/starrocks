@@ -573,6 +573,7 @@ struct TLoadInfo {
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
     24: optional string rejected_record_path
+    25: optional string warehouse
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -599,6 +600,7 @@ struct TRoutineLoadJobInfo {
     17: optional string error_log_urls
     18: optional string tracking_sql
     19: optional string other_msg
+    20: optional string warehouse
 }
 
 struct TGetStreamLoadsResult {
@@ -631,6 +633,7 @@ struct TStreamLoadInfo {
     23: string channel_state,
     24: string type
     25: string tracking_sql,
+    26: string warehouse
 
 }
 

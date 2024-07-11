@@ -41,6 +41,7 @@ public class StreamLoadsProcDir implements ProcDirInterface {
                     .add("DbName")
                     .add("TableName")
                     .add("State")
+                    .add("Warehouse")
                     .build();
 
     @Override

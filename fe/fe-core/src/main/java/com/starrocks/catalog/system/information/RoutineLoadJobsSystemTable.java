@@ -49,6 +49,7 @@ public class RoutineLoadJobsSystemTable {
                         .column("ERROR_LOG_URLS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OTHER_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
     }
 }
