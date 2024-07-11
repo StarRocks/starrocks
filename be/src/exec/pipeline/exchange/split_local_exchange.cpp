@@ -17,7 +17,6 @@
 #include <memory>
 namespace starrocks::pipeline {
 
-static constexpr size_t kBufferedRowSizeScaleFactor = config::split_exchanger_buffer_chunk_num;
 
 Status SplitLocalExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_split_expr_ctxs, state));
@@ -110,6 +109,7 @@ bool SplitLocalExchanger::can_pull_chunk(int32_t consumer_index) const {
 
 bool SplitLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
+    size_t kBufferedRowSizeScaleFactor = config::split_exchanger_buffer_chunk_num;
     if (_current_accumulated_row_size > _chunk_size * kBufferedRowSizeScaleFactor) {
         return false;
     }
