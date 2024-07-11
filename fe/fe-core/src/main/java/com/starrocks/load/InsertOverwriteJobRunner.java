@@ -386,7 +386,18 @@ public class InsertOverwriteJobRunner {
     }
 
     private void doCommit(boolean isReplay) {
+<<<<<<< HEAD
         Database db = getAndWriteLockDatabase(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
+>>>>>>> c74379ebc3 ([BugFix] Fix possible dead lock in LoadJobStatsListener (#48150))
         OlapTable tmpTargetTable = null;
         try {
             // try exception to release write lock finally

@@ -59,7 +59,6 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -275,6 +274,24 @@ public class SyncPartitionUtils {
         return getIntersectedPartitions(srcRanges, dstRanges);
     }
 
+<<<<<<< HEAD
+=======
+    private static boolean isCompatibleType(PrimitiveType srcType, PrimitiveType dstType) {
+        // date type is compatible with a datetime type
+        // eg:
+        // t1: CREATE TABLE t1 (dt DATE, num INT) PARTITION BY RANGE COLUMNS (dt);
+        //
+        // CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1) REFRESH MANUAL
+        // AS SELECT time_slice(dt, interval 5 day) as dt1,sum(num) FROM t1 GROUP BY dt1;
+        //
+        // base's type: DATE
+        // mv's type: DATETIME
+        if (srcType.isDateType() && dstType.isDateType()) {
+            return true;
+        }
+        return srcType.equals(dstType);
+    }
+>>>>>>> c74379ebc3 ([BugFix] Fix possible dead lock in LoadJobStatsListener (#48150))
 
     /**
      * @param srcRanges : src partition ranges
@@ -285,11 +302,24 @@ public class SyncPartitionUtils {
     public static Map<String, Set<String>> getIntersectedPartitions(List<PartitionRange> srcRanges,
                                                                     List<PartitionRange> dstRanges) {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
+<<<<<<< HEAD
             List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
             List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
             if (!Objects.equals(srcTypes, dstTypes)) {
                 Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes),
                         String.format("types must be identical, but %s vs %s", srcTypes, dstTypes));
+=======
+            PRangeCell srcRangeCell0 = srcRanges.get(0).getCell();
+            PRangeCell dstRangeCell0 = dstRanges.get(0).getCell();
+            List<PrimitiveType> srcTypes = srcRangeCell0.getRange().lowerEndpoint().getTypes();
+            List<PrimitiveType> dstTypes = dstRangeCell0.getRange().lowerEndpoint().getTypes();
+            int len = Math.min(srcTypes.size(), dstTypes.size());
+            for (int i = 0; i < len; i++) {
+                if (!isCompatibleType(srcTypes.get(i), dstTypes.get(i))) {
+                    throw new SemanticException(String.format("src type %s must be identical to dst type %s", srcTypes.get(i),
+                            dstTypes.get(i)));
+                }
+>>>>>>> c74379ebc3 ([BugFix] Fix possible dead lock in LoadJobStatsListener (#48150))
             }
         }
 
