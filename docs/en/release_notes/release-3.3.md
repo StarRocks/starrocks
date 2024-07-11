@@ -176,10 +176,12 @@ To downgrade a cluster from v3.3.0 or later to v3.2, users must follow these ste
    SHOW PROC '/jobs/<db>/schema_change';
    ```
 
-4. Execute the following command to create an image file for your metadata:
+4. If you want to downgrade the cluster to a patch version earlier than v3.2.8 or v3.1.14, you must drop all asynchronous materialized views you have created using `PROPERTIES('compression' = 'lz4')`.
+
+5. Execute the following command to create an image file for your metadata:
 
    ```sql
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-5. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can first downgrade a Follower FE node. If no error is returned, you can then downgrade other nodes in the cluster.
+6. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can first downgrade a Follower FE node. If no error is returned, you can then downgrade other nodes in the cluster.
