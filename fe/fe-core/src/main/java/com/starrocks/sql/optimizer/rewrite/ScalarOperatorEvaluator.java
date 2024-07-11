@@ -117,7 +117,10 @@ public enum ScalarOperatorEvaluator {
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
-        return new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+
+        Function function = new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+        function.setMetaFunction(true);
+        return function;
     }
 
     public ScalarOperator evaluation(CallOperator root) {

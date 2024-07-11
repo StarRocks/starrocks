@@ -44,8 +44,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -346,4 +348,20 @@ public class MetaFunctions {
             return ConstantOperator.createVarchar("failed");
         }
     }
+
+    @ConstantFunction(name = "get_query_dump", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDump(ConstantOperator query, ConstantOperator enableMock) {
+        com.starrocks.common.Pair<HttpResponseStatus, String> statusAndRes =
+                QueryDumper.dumpQuery("", "", query.getVarchar(), enableMock.getBoolean());
+        if (statusAndRes.first != HttpResponseStatus.OK) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "get_query_dump: " + statusAndRes.second);
+        }
+        return ConstantOperator.createVarchar(statusAndRes.second);
+    }
+
+    @ConstantFunction(name = "get_query_dump", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDump(ConstantOperator query) {
+        return getQueryDump(query, ConstantOperator.createBoolean(false));
+    }
+
 }
