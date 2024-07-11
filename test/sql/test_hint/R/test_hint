@@ -292,8 +292,6 @@ set @test = ["abc\\'"];
 select @test = ["abc\\'"];
 -- result:
 1
-<<<<<<< HEAD
-=======
 -- !result
 set @test = concat(upper('a'), '\'', '\\' 'b', '"');
 -- result:
@@ -333,5 +331,4 @@ c	1
 f	1
 b	1
 None	1
->>>>>>> 09d8d3a93a ([Enhancement] support user variable in analytic function (#47728))
 -- !result
