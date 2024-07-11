@@ -136,6 +136,9 @@ StatusOr<TxnLogPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, c
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const TxnInfoPB> txns) {
+    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
+            << ", new_version: " << new_version;
+
     if (!add_tablet(tablet_id)) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
@@ -147,9 +150,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     if (txns.size() > 1) {
         CHECK_EQ(new_version, base_version + txns.size());
     }
-
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
-            << ", new_version: " << new_version;
 
     auto commit_time = txns.back().commit_time();
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
