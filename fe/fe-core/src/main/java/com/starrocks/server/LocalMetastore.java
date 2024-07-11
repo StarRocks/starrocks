@@ -2576,47 +2576,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-<<<<<<< HEAD
-        for (long tabletId : info.getTablets()) {
-            TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
-            if (meta == null) {
-                continue;
-            }
-            Database db = getDbIncludeRecycleBin(meta.getDbId());
-            if (db == null) {
-                LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
-                continue;
-            }
-            db.writeLock();
-            try {
-                OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
-                if (olapTable == null) {
-                    LOG.warn("replay delete replica failed, table is null, meta: {}", meta);
-                    continue;
-                }
-                Partition partition = getPartitionIncludeRecycleBin(olapTable, meta.getPartitionId());
-                if (partition == null) {
-                    LOG.warn("replay delete replica failed, partition is null, meta: {}", meta);
-                    continue;
-                }
-                MaterializedIndex materializedIndex = partition.getIndex(meta.getIndexId());
-                if (materializedIndex == null) {
-                    LOG.warn("replay delete replica failed, materializedIndex is null, meta: {}", meta);
-                    continue;
-                }
-                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
-                if (tablet == null) {
-                    LOG.warn("replay delete replica failed, tablet is null, meta: {}", meta);
-                    continue;
-                }
-                tablet.deleteReplicaByBackendId(info.getBackendId());
-            } finally {
-                db.writeUnlock();
-=======
         if (info.getReplicaInfoList() != null) {
             for (ReplicaPersistInfo persistInfo : info.getReplicaInfoList()) {
                 replayDeleteReplica(persistInfo);
->>>>>>> ed0ccd6755 ([BugFix] Fix replayBatchDeleteReplica failed when doing checkpoint (#47833))
             }
         } else {
             LOG.warn("invalid BatchDeleteReplicaInfo, replicaInfoList is null");
