@@ -297,7 +297,6 @@ public class BackupJobInfo implements Writable {
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
                 partitionInfo.version = partition.getVisibleVersion();
-<<<<<<< HEAD
                 tableInfo.partitions.put(partitionInfo.name, partitionInfo);
                 // indexes
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -310,45 +309,7 @@ public class BackupJobInfo implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         BackupTabletInfo tabletInfo = new BackupTabletInfo();
                         tabletInfo.id = tablet.getId();
-                        if (tbl.isOlapTable()) {
-                            tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
-                        }
                         idxInfo.tablets.add(tabletInfo);
-=======
-                if (partition.getSubPartitions().size() == 1) {
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        BackupIndexInfo idxInfo = new BackupIndexInfo();
-                        idxInfo.id = index.getId();
-                        idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                        idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                        partitionInfo.indexes.put(idxInfo.name, idxInfo);
-                        // tablets
-                        for (Tablet tablet : index.getTablets()) {
-                            BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                            tabletInfo.id = tablet.getId();
-                            idxInfo.tablets.add(tabletInfo);
-                        }
-                    }
-                } else {
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
-                        physicalPartitionInfo.id = physicalPartition.getId();
-                        physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            BackupIndexInfo idxInfo = new BackupIndexInfo();
-                            idxInfo.id = index.getId();
-                            idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                            idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                            physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
-                            // tablets
-                            for (Tablet tablet : index.getTablets()) {
-                                BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                                tabletInfo.id = tablet.getId();
-                                idxInfo.tablets.add(tabletInfo);
-                            }
-                        }
-                        partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
->>>>>>> 2f29435c3e ([Enhancement] Remove files property from BackupJobInfo to save memory (#47200))
                     }
                 }
             }
@@ -468,54 +429,16 @@ public class BackupJobInfo implements Writable {
                     JSONObject tablets = idx.getJSONObject("tablets");
                     String[] tabletIds = JSONObject.getNames(tablets);
 
-<<<<<<< HEAD
                     JSONArray tabletsOrder = null;
                     if (idx.has("tablets_order")) {
                         tabletsOrder = idx.getJSONArray("tablets_order");
-=======
-                        JSONArray tabletsOrder = null;
-                        if (idx.has("tablets_order")) {
-                            tabletsOrder = idx.getJSONArray("tablets_order");
-                        }
-                        String[] orderedTabletIds = sortTabletIds(tabletIds, tabletsOrder);
-                        Preconditions.checkState(tabletIds.length == orderedTabletIds.length);
-
-                        for (String tabletId : orderedTabletIds) {
-                            BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                            tabletInfo.id = Long.valueOf(tabletId);
-                            indexInfo.tablets.add(tabletInfo);
-                        }
-                        partInfo.indexes.put(indexInfo.name, indexInfo);
->>>>>>> 2f29435c3e ([Enhancement] Remove files property from BackupJobInfo to save memory (#47200))
                     }
                     String[] orderedTabletIds = sortTabletIds(tabletIds, tabletsOrder);
                     Preconditions.checkState(tabletIds.length == orderedTabletIds.length);
 
-<<<<<<< HEAD
                     for (String tabletId : orderedTabletIds) {
                         BackupTabletInfo tabletInfo = new BackupTabletInfo();
                         tabletInfo.id = Long.valueOf(tabletId);
-                        JSONArray files = tablets.getJSONArray(tabletId);
-                        for (Object object : files) {
-                            tabletInfo.files.add((String) object);
-=======
-                                JSONArray tabletsOrder = null;
-                                if (idx.has("tablets_order")) {
-                                    tabletsOrder = idx.getJSONArray("tablets_order");
-                                }
-                                String[] orderedTabletIds = sortTabletIds(tabletIds, tabletsOrder);
-                                Preconditions.checkState(tabletIds.length == orderedTabletIds.length);
-
-                                for (String tabletId : orderedTabletIds) {
-                                    BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                                    tabletInfo.id = Long.valueOf(tabletId);
-                                    indexInfo.tablets.add(tabletInfo);
-                                }
-                                subPartInfo.indexes.put(indexInfo.name, indexInfo);
-                            }
-                            partInfo.subPartitions.put(subPartInfo.id, subPartInfo);
->>>>>>> 2f29435c3e ([Enhancement] Remove files property from BackupJobInfo to save memory (#47200))
-                        }
                         indexInfo.tablets.add(tabletInfo);
                     }
                     partInfo.indexes.put(indexInfo.name, indexInfo);
@@ -608,35 +531,6 @@ public class BackupJobInfo implements Writable {
                         }
                         indexes.put(idxInfo.name, idx);
                     }
-<<<<<<< HEAD
-=======
-                    JSONObject subPartitions = new JSONObject();
-                    part.put("subPartitions", subPartitions);
-                    for (BackupPhysicalPartitionInfo subPartInfo : partInfo.subPartitions.values()) {
-                        JSONObject subPart = new JSONObject();
-                        subPart.put("id", subPartInfo.id);
-                        subPart.put("version", subPartInfo.version);
-                        JSONObject idxs = new JSONObject();
-                        subPart.put("indexes", idxs);
-                        for (BackupIndexInfo idxInfo : subPartInfo.indexes.values()) {
-                            JSONObject idx = new JSONObject();
-                            idx.put("id", idxInfo.id);
-                            idx.put("schema_hash", idxInfo.schemaHash);
-                            JSONObject tablets = new JSONObject();
-                            idx.put("tablets", tablets);
-                            JSONArray tabletsOrder = new JSONArray();
-                            idx.put("tablets_order", tabletsOrder);
-                            for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
-                                JSONArray files = new JSONArray();
-                                tablets.put(String.valueOf(tabletInfo.id), files);
-                                // to save the order of tablets
-                                tabletsOrder.put(String.valueOf(tabletInfo.id));
-                            }
-                            idxs.put(idxInfo.name, idx);
-                        }
-                        subPartitions.put(String.valueOf(subPartInfo.id), subPart);
-                    }
->>>>>>> 2f29435c3e ([Enhancement] Remove files property from BackupJobInfo to save memory (#47200))
                 }
                 parts.put(partInfo.name, part);
             }
