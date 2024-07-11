@@ -19,18 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.FeMetaVersion;
-import com.starrocks.server.GlobalStateMgr;
-=======
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.utframe.UtFrameUtils;
->>>>>>> a8c8be880a ([BugFix] fix the issue of inaccurate limit data after show export sorting (#35854))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -50,8 +43,6 @@ import java.util.stream.Collectors;
 public class ExportMgrTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
-    @Mocked
-    Authorizer authorizer;
 
     @Test
     public void testExpiredJob() throws Exception {
@@ -123,27 +114,6 @@ public class ExportMgrTest {
 
         tempFile.delete();
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testLoadSaveImageJsonFormat() throws Exception {
-        ExportMgr leaderMgr = new ExportMgr();
-        UtFrameUtils.setUpForPersistTest();
-        ExportJob job = new ExportJob(3, new UUID(3, 3));
-        job.setTableName(new TableName("dummy", "dummy"));
-        leaderMgr.replayCreateExportJob(job);
-
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        leaderMgr.saveExportJobV2(image.getDataOutputStream());
-
-        ExportMgr followerMgr = new ExportMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
-        followerMgr.loadExportJobV2(reader);
-        reader.close();
-
-        Assert.assertEquals(1, followerMgr.getIdToJob().size());
-    }
 
     @Test
     public void testShowExpiredJob() throws Exception {
@@ -197,5 +167,4 @@ public class ExportMgrTest {
         Assert.assertEquals(exceptJobIds.size(), exportJobInfosByIdOrState1.size());
 
     }
->>>>>>> a8c8be880a ([BugFix] fix the issue of inaccurate limit data after show export sorting (#35854))
 }
