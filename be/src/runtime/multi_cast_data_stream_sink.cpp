@@ -55,9 +55,6 @@ Status SplitDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState* sta
         fakeDataSink.stream_sink = split_sink.sinks[i];
         RETURN_IF_ERROR(s->init(fakeDataSink, state));
     }
-    for (auto& s : _sinks) {
-        RETURN_IF_ERROR(s->init(split_sink., state));
-    }
     return Status::OK();
 }
 } // namespace starrocks

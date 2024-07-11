@@ -1355,4 +1355,6 @@ CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
+
 } // namespace starrocks::config
