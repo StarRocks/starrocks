@@ -62,6 +62,7 @@ public:
     void init();
     bool append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    void close();
     int64_t total_bytes() const;
 
 private:

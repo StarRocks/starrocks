@@ -167,6 +167,10 @@ void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks
     sender_channel->pull_chunks(chunks, bytes);
 }
 
+void PassThroughContext::close() {
+    _channel->close();
+}
+
 int64_t PassThroughContext::total_bytes() const {
     return _channel->get_total_bytes();
 }

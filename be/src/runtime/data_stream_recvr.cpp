@@ -274,6 +274,7 @@ void DataStreamRecvr::close() {
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
+    _pass_through_context.close();
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
