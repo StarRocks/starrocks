@@ -33,10 +33,10 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
-#include "runtime/memory/counting_allocator.h"
 
 namespace starrocks {
 

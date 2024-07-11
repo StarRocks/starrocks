@@ -16,35 +16,33 @@
 
 #include <iostream>
 #include <memory>
+
 #include "exprs/expr_context.h"
 
 namespace starrocks {
 
-
-template<class T>
+template <class T>
 class CountingAllocator {
 public:
     typedef T value_type;
     typedef size_t size_type;
     using propagate_on_container_copy_assignment = std::true_type; // for consistency
-	using propagate_on_container_move_assignment = std::true_type; // to avoid the pessimization
-	using propagate_on_container_swap = std::true_type; // to avoid the undefined behavior
+    using propagate_on_container_move_assignment = std::true_type; // to avoid the pessimization
+    using propagate_on_container_swap = std::true_type;            // to avoid the undefined behavior
 
     template <typename U>
     struct rebind {
         using other = CountingAllocator<U>;
     };
     CountingAllocator() = default;
-    explicit CountingAllocator(int64_t* counter): _counter(counter) {}
-    explicit CountingAllocator(const CountingAllocator& rhs): _counter(rhs._counter) {}
-    template<class U>
-    CountingAllocator(const CountingAllocator<U>& other): _counter(other._counter) {}
+    explicit CountingAllocator(int64_t* counter) : _counter(counter) {}
+    explicit CountingAllocator(const CountingAllocator& rhs) : _counter(rhs._counter) {}
+    template <class U>
+    CountingAllocator(const CountingAllocator<U>& other) : _counter(other._counter) {}
 
     ~CountingAllocator() = default;
 
-    CountingAllocator(CountingAllocator&& rhs) noexcept {
-        std::swap(_counter, rhs._counter);
-    }
+    CountingAllocator(CountingAllocator&& rhs) noexcept { std::swap(_counter, rhs._counter); }
 
     CountingAllocator& operator=(CountingAllocator&& rhs) noexcept {
         if (this != &rhs) {
@@ -70,20 +68,16 @@ public:
         return *this;
     }
 
-    template<class U>
+    template <class U>
     CountingAllocator& operator=(const CountingAllocator<U>& rhs) {
         _counter = rhs._counter;
         return *this;
     }
 
-    bool operator==(const CountingAllocator& rhs) const {
-        return _counter == rhs._counter;
-    }
+    bool operator==(const CountingAllocator& rhs) const { return _counter == rhs._counter; }
 
-    bool operator!=(const CountingAllocator& rhs) const {
-        return !(*this == rhs);
-    }
+    bool operator!=(const CountingAllocator& rhs) const { return !(*this == rhs); }
 
     int64_t* _counter = nullptr;
 };
-}
+} // namespace starrocks

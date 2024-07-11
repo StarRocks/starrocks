@@ -149,9 +149,7 @@ public:
 
     MemPool* mem_pool() { return _mem_pool; }
 
-    void set_mem_usage_counter(int64_t* mem_usage_counter) {
-        _mem_usage = mem_usage_counter;
-    }
+    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage = mem_usage_counter; }
 
     int64_t mem_usage() const {
         DCHECK(_mem_usage);

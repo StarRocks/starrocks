@@ -15,7 +15,9 @@
 #include "runtime/memory/counting_allocator.h"
 
 #include <gtest/gtest.h>
+
 #include <vector>
+
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -38,12 +40,14 @@ TEST(CountingAllocatorTest, normal) {
     ASSERT_EQ(memory_usage, 0);
     {
         // phmap
-        phmap::flat_hash_map<int, int, phmap::priv::hash_default_hash<int>, phmap::priv::hash_default_eq<int>, CountingAllocator<int>> m{CountingAllocator<int>(&memory_usage)};
-        m.insert({1,1});
+        phmap::flat_hash_map<int, int, phmap::priv::hash_default_hash<int>, phmap::priv::hash_default_eq<int>,
+                             CountingAllocator<int>>
+                m{CountingAllocator<int>(&memory_usage)};
+        m.insert({1, 1});
         ASSERT_EQ(memory_usage, 28);
-        m.insert({2,2});
+        m.insert({2, 2});
         ASSERT_EQ(memory_usage, 44);
     }
     ASSERT_EQ(memory_usage, 0);
 }
-}
+} // namespace starrocks
