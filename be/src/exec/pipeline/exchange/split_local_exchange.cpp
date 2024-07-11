@@ -17,7 +17,7 @@
 #include <memory>
 namespace starrocks::pipeline {
 
-static constexpr size_t kBufferedRowSizeScaleFactor = 16;
+static constexpr size_t kBufferedRowSizeScaleFactor = config::split_exchanger_buffer_chunk_num;
 
 Status SplitLocalExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_split_expr_ctxs, state));
