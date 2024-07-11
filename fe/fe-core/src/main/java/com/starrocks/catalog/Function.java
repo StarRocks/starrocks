@@ -116,6 +116,13 @@ public class Function implements Writable {
 
     private boolean isNullable = true;
 
+<<<<<<< HEAD
+=======
+    private Vector<Pair<String, Expr>> defaultArgExprs;
+
+    private boolean isMetaFunction = false;
+
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
     // Only used for serialization
     protected Function() {
     }
@@ -180,6 +187,7 @@ public class Function implements Writable {
         isPolymorphic = other.isPolymorphic;
         couldApplyDictOptimize = other.couldApplyDictOptimize;
         isNullable = other.isNullable;
+        isMetaFunction = other.isMetaFunction;
     }
 
     public FunctionName getFunctionName() {
@@ -259,6 +267,14 @@ public class Function implements Writable {
 
     public boolean isPolymorphic() {
         return isPolymorphic;
+    }
+
+    public boolean isMetaFunction() {
+        return isMetaFunction;
+    }
+
+    public void setMetaFunction(boolean metaFunction) {
+        isMetaFunction = metaFunction;
     }
 
     public long getFunctionId() {

@@ -17,7 +17,13 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -395,4 +401,126 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "  |  <slot 2> : uuid()\n" +
                 "  |  <slot 3> : uuid()"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testNumericLiteralComparison() throws Exception {
+        String sql;
+        String plan;
+
+        final long prevSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(prevSqlMode | SqlModeHelper.MODE_DOUBLE_LITERAL);
+
+            sql = "SELECT percentile_approx(2.25, 0), percentile_approx(2.25, 0.)";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 2> : 2: percentile_approx\n" +
+                    "  |  <slot 3> : clone(2: percentile_approx)\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: percentile_approx(2.25, 0.0)\n" +
+                    "  |  group by: ");
+
+            sql = "SELECT COUNT(CASE WHEN 1 THEN 1 END), COUNT(CASE WHEN TRUE THEN 1 END), " +
+                    "COUNT(CASE WHEN 1.0 THEN 1 END), COUNT(CASE WHEN CAST(1 AS LARGEINT) THEN 1 END)";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 2> : 2: count\n" +
+                    "  |  <slot 3> : clone(2: count)\n" +
+                    "  |  <slot 4> : clone(2: count)\n" +
+                    "  |  <slot 5> : clone(2: count)\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1)\n" +
+                    "  |  group by: ");
+
+            sql = "SELECT 1, TRUE, 0, FALSE, 1.1, 1, 1.1, TRUE, FALSE, 0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 7> : 1\n" +
+                    "  |  <slot 8> : 1.1\n" +
+                    "  |  <slot 9> : TRUE\n" +
+                    "  |  <slot 10> : FALSE\n" +
+                    "  |  <slot 11> : 0");
+
+            sql = "SELECT TRUE, 1, FALSE, 0, 1.1, 1, 1.1, TRUE, FALSE, 0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 7> : 1\n" +
+                    "  |  <slot 8> : 1.1\n" +
+                    "  |  <slot 9> : TRUE\n" +
+                    "  |  <slot 10> : FALSE\n" +
+                    "  |  <slot 11> : 0");
+
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(prevSqlMode);
+        }
+    }
+
+    @Test
+    public void testGetQueryDump() throws Exception {
+        DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+
+        try {
+            connectContext.setDumpInfo(null);
+
+            // Non-constant arguments.
+            {
+                String sql = "SELECT get_query_dump(lower('select count(v1) from t0')) from t0";
+                Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
+                        SemanticException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases.
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', false) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', true) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"SELECT count(tbl_mock_001.mock_002)...");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0') from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            // Failed cases.
+            {
+                String sql = "SELECT get_query_dump('') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: query is empty",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+            {
+                String sql = "SELECT get_query_dump('not-a-query') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: execute query failed.",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases after failed cases.
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+        } finally {
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
 }
