@@ -15,32 +15,32 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.connector.BranchOptions;
+import com.starrocks.connector.TagOptions;
 import com.starrocks.sql.parser.NodePosition;
 
-public class CreateOrReplaceBranchClause extends AlterTableClause {
-    private final String branchName;
-    private final BranchOptions branchOptions;
+public class CreateOrReplaceTagClause extends AlterTableClause {
+    private final String tagName;
+    private final TagOptions tagOptions;
     private final boolean create;
     private final boolean replace;
     private final boolean ifNotExists;
 
-    public CreateOrReplaceBranchClause(NodePosition pos, String branchName,
-                                     BranchOptions branchOptions, boolean create, boolean replace, boolean ifNotExists) {
-        super(AlterOpType.ALTER_BRANCH, pos);
-        this.branchName = branchName;
-        this.branchOptions = branchOptions;
+    public CreateOrReplaceTagClause(NodePosition pos, String tagName, TagOptions tagOptions,
+                                    boolean create, boolean replace, boolean ifNotExists) {
+        super(AlterOpType.ALTER_TAG, pos);
+        this.tagName = tagName;
+        this.tagOptions = tagOptions;
         this.create = create;
         this.replace = replace;
         this.ifNotExists = ifNotExists;
     }
 
-    public String getBranchName() {
-        return branchName;
+    public String getTagName() {
+        return tagName;
     }
 
-    public BranchOptions getBranchOptions() {
-        return branchOptions;
+    public TagOptions getTagOptions() {
+        return tagOptions;
     }
 
     public boolean isCreate() {
@@ -57,6 +57,6 @@ public class CreateOrReplaceBranchClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateOrReplaceBranchClause(this, context);
+        return visitor.visitCreateOrReplaceTagClause(this, context);
     }
 }

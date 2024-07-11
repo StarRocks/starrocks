@@ -1175,8 +1175,12 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    // ------------------------------------------- Branch ----------------------------------==------------------------
-    default R visitCreateReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
+    // ------------------------------------------- Branch/Tag ----------------------------------==------------------------
+    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
         return visitNode(clause, context);
     }
 
