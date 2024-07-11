@@ -22,11 +22,11 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -71,7 +71,7 @@ public class TunespaceExecutor {
         return INSTANCE.visit(stmt, context);
     }
 
-    public static final class TunespaceExecuteVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static final class TunespaceExecuteVisitor implements AstVisitorEPack<ShowResultSet, ConnectContext> {
         public void exec(String sql, Class<?> klass, ConnectContext context) throws Exception {
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, context.getSessionVariable());
             Preconditions.checkArgument(stmts.size() == 1 && stmts.get(0).getClass().equals(klass));

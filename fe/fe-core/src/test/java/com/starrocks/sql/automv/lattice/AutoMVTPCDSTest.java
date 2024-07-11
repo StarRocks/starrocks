@@ -17,6 +17,7 @@ package com.starrocks.sql.automv.lattice;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,6 +69,7 @@ public class AutoMVTPCDSTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
+        FeConstants.runningUnitTest = true;
         if (STARROCKS_ASSERT.get() == null) {
             STARROCKS_ASSERT.set(TestUtil.prepareTables("tpcds", TestUtil::getTPCDSCreateTableSqlList));
         }

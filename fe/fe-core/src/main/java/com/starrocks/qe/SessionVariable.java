@@ -2169,7 +2169,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean autoMVEnableComplexDerivedDimensions = true;
 
     @VarAttr(name = AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE)
-    private String autoMVDefaultPartitionByTimeGranule = TimeGranule.Unit.DAY.name();
+    private String autoMVDefaultPartitionByTimeGranule = TimeGranule.Unit.DAY.name().toLowerCase();
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
                 Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
@@ -4226,8 +4226,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setAutoMVDefaultPartitionByTimeGranule(String granule) {
-        //TimeGranule.validate(granule);
-        autoMVDefaultPartitionByTimeGranule = granule;
+        TimeGranule.validate(granule);
+        autoMVDefaultPartitionByTimeGranule = granule.toLowerCase();
     }
 
     public String getAutoMVDefaultPartitionByTimeGranule() {

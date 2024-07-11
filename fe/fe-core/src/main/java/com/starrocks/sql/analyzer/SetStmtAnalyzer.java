@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
@@ -233,6 +234,11 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
                         "supported list is %s", rewriteModeName, supportedList));
             }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE)) {
+            String value = resolvedExpression.getStringValue();
+            TimeGranule.validate(value);
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {

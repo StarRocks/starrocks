@@ -85,12 +85,10 @@ public final class BenefitTable {
         return optMostPromisingCandidateMV.isPresent();
     }
 
-    public TieredList<MVRecommendation> calculate(int times) {
-        for (int i = 0; i < times; ++i) {
-            if (!calculateOnce()) {
-                break;
-            }
+    public TieredList<MVRecommendation> calculate() {
+        while (calculateOnce()) {
         }
+        ;
         return candidateMVs.stream().filter(MVRecommendation::isProcessed).collect(TieredList.toList());
     }
 }

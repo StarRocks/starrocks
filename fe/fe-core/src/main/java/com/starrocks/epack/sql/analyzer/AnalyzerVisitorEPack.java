@@ -41,6 +41,10 @@ import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.automv.analysis.TunespaceAnalyzer;
+import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
+import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
+import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 
 public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
@@ -284,5 +288,21 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, ConnectContext context) {
         FailoverGroupAnalyzer.analyze(statement, context);
         return null;
+    }
+
+    // tunespace
+    @Override
+    public Void visitCreateTunespaceStmt(CreateTunespaceStmt node, ConnectContext context) {
+        return TunespaceAnalyzer.analyze(node, context);
+    }
+
+    @Override
+    public Void visitAlterTunespaceStmt(AlterTunespaceStmt node, ConnectContext context) {
+        return TunespaceAnalyzer.analyze(node, context);
+    }
+
+    @Override
+    public Void visitShowRecommendationsStmt(ShowRecommendationsStmt node, ConnectContext context) {
+        return TunespaceAnalyzer.analyze(node, context);
     }
 }

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.automv.column.ColumnAlias;
@@ -55,6 +56,7 @@ public class LatticeTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
+        FeConstants.runningUnitTest = true;
         if (STARROCKS_ASSERT.get() == null) {
             try {
                 STARROCKS_ASSERT.set(TestUtil.prepareTables("ssb", TestUtil::getSsbCreateTableSqlList));

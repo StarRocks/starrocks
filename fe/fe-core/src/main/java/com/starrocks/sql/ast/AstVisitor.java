@@ -61,9 +61,6 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
-import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
-import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -1437,15 +1434,4 @@ public interface AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
-    // tunespace
-    default R visitCreateTunespaceStmt(CreateTunespaceStmt node, C context) {
-        return null;
-    }
-
-    default R visitAlterTunespaceStmt(AlterTunespaceStmt node, C context) {
-        return null;
-    }
-    default R visitShowRecommendationsStmt(ShowRecommendationsStmt node, C context) {
-        return null;
-    }
 }

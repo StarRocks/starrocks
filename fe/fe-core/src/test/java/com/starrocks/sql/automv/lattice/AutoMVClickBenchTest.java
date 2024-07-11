@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.automv.util.AutoMVUtil;
@@ -34,6 +35,7 @@ public class AutoMVClickBenchTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
+        FeConstants.runningUnitTest = true;
         if (STARROCKS_ASSERT.get() == null) {
             STARROCKS_ASSERT.set(TestUtil.prepareTables("click_bench", TestUtil::getClickBenchCreateTableSqlList));
         }

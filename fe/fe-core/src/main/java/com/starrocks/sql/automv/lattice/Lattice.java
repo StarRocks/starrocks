@@ -471,8 +471,7 @@ public class Lattice {
                 .collect(Collectors.toList());
 
         BenefitTable benefitTable = new BenefitTable(candidateMVs, queryBenefits);
-        TieredList<MVRecommendation> selectedNodeAndBenefitList =
-                benefitTable.calculate(options.getMaxCalculateSteps());
+        TieredList<MVRecommendation> selectedNodeAndBenefitList = benefitTable.calculate();
 
         return selectedNodeAndBenefitList.concat(nodeAndBenefitWithLowCardList);
     }

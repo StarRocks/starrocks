@@ -17,6 +17,7 @@ package com.starrocks.sql.automv.ast;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
@@ -97,6 +98,10 @@ public class ShowRecommendationsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRecommendationsStmt(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitShowRecommendationsStmt(this, context);
+        } else {
+            return null;
+        }
     }
 }

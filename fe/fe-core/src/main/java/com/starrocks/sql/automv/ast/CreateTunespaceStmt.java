@@ -15,6 +15,7 @@
 package com.starrocks.sql.automv.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -43,6 +44,10 @@ public class CreateTunespaceStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTunespaceStmt(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitCreateTunespaceStmt(this, context);
+        } else {
+            return null;
+        }
     }
 }

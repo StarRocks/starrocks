@@ -67,7 +67,7 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
 
     public static AbstractAggregatePolicy resolvePolicy(String timeGranuleUnit) {
         try {
-            TimeGranule.Unit unit = TimeGranule.Unit.valueOf(timeGranuleUnit);
+            TimeGranule.Unit unit = TimeGranule.Unit.valueOf(timeGranuleUnit.toUpperCase());
             return POLICY_MAP.getOrDefault(unit, IDENTITY_POLICY);
         } catch (IllegalArgumentException ignored) {
             return IDENTITY_POLICY;

@@ -386,4 +386,32 @@ public class SetStmtTest {
             Assert.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
         }
     }
+
+    @Test
+    public void testSetAutoMVSessionVariables() {
+        // good
+        try {
+            String[] values = new String[] {"none", "month", "Month", "Day", "day", "Year", "year"};
+            for (String value : values) {
+                SystemVariable setVar = new SystemVariable(SetType.SESSION,
+                        SessionVariable.AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE,
+                        new StringLiteral(value));
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            }
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        // bad
+        try {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION,
+                    SessionVariable.AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE,
+                    new StringLiteral("abc"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Getting analyzing error. Detail message: unsupported value: 'abc', " +
+                    "supported values are none/hour/day/month/quarter/year.", e.getMessage());
+        }
+    }
 }

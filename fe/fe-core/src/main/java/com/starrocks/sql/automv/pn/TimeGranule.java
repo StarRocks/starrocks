@@ -18,11 +18,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -97,21 +99,22 @@ public class TimeGranule {
     }
 
     public static void validate(String granule) {
-        if (granule.equals("none")) {
-            return;
-        }
-        List<String> acceptableGranules = Stream.of(
-                TimeGranule.Unit.HOUR,
-                TimeGranule.Unit.DAY,
-                TimeGranule.Unit.MONTH,
-                TimeGranule.Unit.QUARTER,
-                TimeGranule.Unit.YEAR).map(
-                Enum::name).collect(Collectors.toList());
+        List<String> acceptableGranules = Stream.concat(
+                Stream.of("none"),
+                Stream.of(
+                                TimeGranule.Unit.HOUR,
+                                TimeGranule.Unit.DAY,
+                                TimeGranule.Unit.MONTH,
+                                TimeGranule.Unit.QUARTER,
+                                TimeGranule.Unit.YEAR).map(
+                                Enum::name)
+                        .map(String::toLowerCase)).collect(Collectors.toList());
 
-        if (!acceptableGranules.contains(granule)) {
+        String lcGranule = Optional.ofNullable(granule).orElse("").toLowerCase();
+        if (!acceptableGranules.contains(lcGranule)) {
             String acceptableValues = String.join("/", acceptableGranules);
-            throw new IllegalArgumentException(
-                    String.format("Invalid value '%s', acceptable values are %s", granule, acceptableValues));
+            throw new SemanticException(
+                    String.format("unsupported value: '%s', supported values are %s", granule, acceptableValues));
         }
     }
 

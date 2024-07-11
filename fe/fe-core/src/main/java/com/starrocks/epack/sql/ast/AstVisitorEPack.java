@@ -14,6 +14,9 @@
 package com.starrocks.epack.sql.ast;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
+import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
+import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 
 public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
 
@@ -209,5 +212,18 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
 
     default R visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    // tunespace
+    default R visitCreateTunespaceStmt(CreateTunespaceStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    default R visitAlterTunespaceStmt(AlterTunespaceStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    default R visitShowRecommendationsStmt(ShowRecommendationsStmt node, C context) {
+        return visitStatement(node, context);
     }
 }

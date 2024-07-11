@@ -21,13 +21,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,7 +51,7 @@ public class TunespaceAnalyzer {
         return INSTANCE.visit(node, context);
     }
 
-    private static final class TunespaceAnalyzeVisitor implements AstVisitor<Void, ConnectContext> {
+    private static final class TunespaceAnalyzeVisitor implements AstVisitorEPack<Void, ConnectContext> {
         private static void analyzeAndCheckFullQualifiedTableName(TableName tableName, ConnectContext context,
                                                                   Function<Optional<Table>, Optional<SemanticException>> check) {
             MetaUtils.normalizationTableName(context, tableName);

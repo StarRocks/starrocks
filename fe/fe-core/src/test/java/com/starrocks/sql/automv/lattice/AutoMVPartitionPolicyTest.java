@@ -14,17 +14,13 @@
 
 package com.starrocks.sql.automv.lattice;
 
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
-import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,6 +32,7 @@ public class AutoMVPartitionPolicyTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
+        FeConstants.runningUnitTest = true;
         if (STARROCKS_ASSERT.get() == null) {
             STARROCKS_ASSERT.set(TestUtil.prepareTables("db0", TestUtil::getPartitionedTableSqlList));
         }
@@ -45,40 +42,11 @@ public class AutoMVPartitionPolicyTest {
     @BeforeClass
     public static void setUp() throws Exception {
         StarRocksAssert starRocksAssert = getStarRocksAssert();
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
-
-        new MockUp<MvRefreshArbiter>() {
-            /**
-             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
-             */
-            @Mock
-            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
-                                                          boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
-            }
-
-            @Deprecated
-            @Mock
-            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
-                                                                boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
-
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
+        UtFrameUtils.mockTimelinessForAsyncMVTest(starRocksAssert.getCtx());
     }
 
     private void testHelper(Object[][] testCases) {

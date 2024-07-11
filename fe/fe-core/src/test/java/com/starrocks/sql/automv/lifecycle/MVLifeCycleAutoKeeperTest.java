@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.automv.lifecycle;
 
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -29,8 +26,6 @@ import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,6 +44,7 @@ public class MVLifeCycleAutoKeeperTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
+        FeConstants.runningUnitTest = true;
         if (STARROCKS_ASSERT.get() == null) {
             STARROCKS_ASSERT.set(TestUtil.prepareTables("ssb", TestUtil::getSsbCreateTableSqlList));
         }
@@ -71,26 +67,7 @@ public class MVLifeCycleAutoKeeperTest {
             m.createStatisticsTablesForTest();
         }
 
-        new MockUp<MvRefreshArbiter>() {
-            /**
-             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
-             */
-            @Mock
-            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
-                                                                boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
+        UtFrameUtils.mockTimelinessForAsyncMVTest(starRocksAssert.getCtx());
     }
 
     public static Stream<Arguments> nextFlatQuery() {
