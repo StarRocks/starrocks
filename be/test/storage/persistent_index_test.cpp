@@ -33,6 +33,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
+#include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 
 namespace starrocks {
@@ -609,6 +610,14 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    if (!config::enable_pindex_compression) {
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    }
+    std::string fp_name = "immutable_index_no_page_off";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
     write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
@@ -648,10 +657,11 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     config::l0_max_mem_usage = 100;
+    IOStat stat;
     for (auto t = 0; t < 100; ++t) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(t + 1, 0), N));
-        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &stat));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index.memory_usage() <= config::l0_max_mem_usage);
@@ -668,6 +678,8 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
 
     write_pindex_bf = true;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {

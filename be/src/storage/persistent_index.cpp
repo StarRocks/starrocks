@@ -38,6 +38,7 @@
 #include "util/crc32c.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
@@ -2938,6 +2939,7 @@ Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_s
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(immutable_index_no_page_off);
 StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file,
                                                                bool load_bf_data) {
     ASSIGN_OR_RETURN(auto file_size, file->get_size());
@@ -3028,6 +3030,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         } else {
             dest.data_size = src.data_size();
         }
+        FAIL_POINT_TRIGGER_EXECUTE(immutable_index_no_page_off, { meta.mutable_shards(i)->clear_page_off(); });
         if (src.page_off().size() == 0) {
             int off = 0;
             for (int i = 0; i < src.npage() + 1; i++) {
