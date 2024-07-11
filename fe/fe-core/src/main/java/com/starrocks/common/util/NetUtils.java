@@ -36,6 +36,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Pair;
+import org.apache.commons.net.util.SubnetUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
@@ -111,5 +112,24 @@ public class NetUtils {
             }
         }
         return accessible;
+    }
+
+    public static boolean isIPInSubnet(String ip, String subnetCidr) {
+        SubnetUtils subnetUtils = new SubnetUtils(subnetCidr);
+        subnetUtils.setInclusiveHostCount(true);
+        return subnetUtils.getInfo().isInRange(ip);
+    }
+
+    /**
+     * Get the prefix length of the CIDR, that is the `y` part of `xxx.xxx.xxx.xxx/y` in CIDR, e.g. 16 for `192.168.0.1/16`.
+     * @param cidr The CIDR format address.
+     * @return The length of the prefix. The range is within [0, 32].
+     */
+    public static int getCidrPrefixLength(String cidr) {
+        SubnetUtils subnetUtils = new SubnetUtils(cidr);
+        subnetUtils.setInclusiveHostCount(true);
+        // 2^(32 - prefixLength) = addressCount,
+        // so prefixLength = 32 - log2(addressCount) = 32 - (63 - leadingZeros(addressCount)) = leadingZeros(addressCount) - 31
+        return Long.numberOfLeadingZeros(subnetUtils.getInfo().getAddressCountLong()) - 31;
     }
 }
