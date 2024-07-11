@@ -6,10 +6,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.net.util.SubnetUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -132,7 +132,7 @@ public class ResourceGroupClassifier implements Writable {
             return false;
         }
         if (this.sourceIp != null && sourceIp != null) {
-            return new SubnetUtils(this.sourceIp).getInfo().isInRange(sourceIp);
+            return NetUtils.isIPInSubnet(sourceIp, this.sourceIp);
         }
         return true;
     }
@@ -149,8 +149,7 @@ public class ResourceGroupClassifier implements Writable {
             w += 1 + 0.1 / queryTypes.size();
         }
         if (sourceIp != null) {
-            SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(sourceIp).getInfo();
-            w += 1 + (Long.numberOfLeadingZeros(subnetInfo.getAddressCountLong() + 2) - 32) / 64.0;
+            w += 1 + NetUtils.getCidrPrefixLength(sourceIp) / 64.0;
         }
         if (CollectionUtils.isNotEmpty(databaseIds)) {
             w += 10.0 * databaseIds.size();
