@@ -52,13 +52,11 @@ public:
     }
 
     T* allocate(size_t n) {
-        std::cout << "allocate " << n * sizeof(T) << std::endl;
         *_counter += n * sizeof(T);
         return static_cast<T*>(malloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {
-        std::cout << "deallocate " << n * sizeof(T) << std::endl;
         *_counter -= n * sizeof(T);
         free(ptr);
     }
