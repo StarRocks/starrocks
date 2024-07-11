@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -70,7 +71,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
                             long tableId = columnIdentifier.getTableId();
-                            String columnName = columnIdentifier.getColumnName();
+                            ColumnId columnName = columnIdentifier.getColumnName();
                             Pair<List<TStatisticData>, Status> result = queryDictSync(columnIdentifier.getDbId(),
                                     tableId, columnName);
                             if (result.second.isGlobalDictError()) {
@@ -106,7 +107,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             .maximumSize(Config.statistic_dict_columns)
             .buildAsync(dictLoader);
 
-    private Optional<ColumnDict> deserializeColumnDict(long tableId, String columnName, TStatisticData statisticData) {
+    private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
         if (statisticData.dict == null) {
             throw new RuntimeException("Collect dict error in BE");
         }
@@ -149,7 +150,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
+    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
@@ -199,7 +200,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName) {
+    public boolean hasGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
@@ -215,7 +216,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void removeGlobalDict(long tableId, String columnName) {
+    public void removeGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // skip dictionary operator in checkpoint thread
@@ -243,7 +244,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, String columnName, long collectVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -279,7 +280,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+    public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
         if (columnFuture.isDone()) {

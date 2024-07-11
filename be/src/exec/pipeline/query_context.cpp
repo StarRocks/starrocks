@@ -104,28 +104,32 @@ void QueryContext::cancel(const Status& status) {
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg, RuntimeState* runtime_state) {
+                                    std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
+                                    RuntimeState* runtime_state) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         mem_tracker_counter->set(query_mem_limit);
+        size_t lowest_limit = parent->lowest_limit();
+        size_t tracker_reserve_limit = -1;
+
+        if (spill_mem_reserve_ratio.has_value()) {
+            tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
+        }
+
         if (wg != nullptr && big_query_mem_limit > 0 &&
             (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
+            _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
 
-        MemTracker* p = parent;
-        while (!p->has_limit()) {
-            p = p->parent();
-        }
-        _static_query_mem_limit = p->limit();
+        _static_query_mem_limit = lowest_limit;
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
         }

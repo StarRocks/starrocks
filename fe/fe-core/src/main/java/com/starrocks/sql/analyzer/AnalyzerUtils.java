@@ -44,6 +44,8 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -140,7 +142,15 @@ import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
 
-    public static final Set<String> SUPPORTED_PARTITION_FORMAT = ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by date_trunc
+    public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by time_slice
+    public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by mv date_trunc
+    public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "week", "month", "year");
 
     public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
         if (Strings.isNullOrEmpty(dbName)) {
@@ -1229,11 +1239,12 @@ public class AnalyzerUtils {
     }
 
     public static PartitionMeasure checkAndGetPartitionMeasure(
+            Map<ColumnId, Column> idToColumn,
             ExpressionRangePartitionInfo expressionRangePartitionInfo)
             throws AnalysisException {
         long interval = 1;
         String granularity;
-        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(idToColumn);
 
         if (partitionExprs.size() != 1) {
             throw new AnalysisException("automatic partition only support one expression partitionExpr.");
@@ -1283,12 +1294,14 @@ public class AnalyzerUtils {
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
+            PartitionMeasure measure = checkAndGetPartitionMeasure(olapTable.getIdToColumn(),
+                    (ExpressionRangePartitionInfo) partitionInfo);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure,
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
+                    .toDistributionDesc(olapTable.getIdToColumn());
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
@@ -1351,10 +1364,12 @@ public class AnalyzerUtils {
             throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
-        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
+        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
+                .get(0).getType();
         String partitionPrefix = "p";
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
+                .toDistributionDesc(olapTable.getIdToColumn());
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
@@ -1543,8 +1558,20 @@ public class AnalyzerUtils {
         }
     }
 
-    // check the partition expr is legal and extract partition columns
     public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        return checkAndExtractPartitionCol(expr, columnDefs, AnalyzerUtils.DATE_TRUNC_SUPPORTED_PARTITION_FORMAT);
+    }
+
+    /**
+     * Check the partition expr is legal and extract partition columns
+     * TODO: support date_trunc('week', dt) for normal olap table.
+     * @param expr partition expr
+     * @param columnDefs partition column defs
+     * @param supportedDateTruncFormats date trunc supported formats which are a bit different bewtween mv and olap table
+     * @return partition column names
+     */
+    public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                                           Set<String> supportedDateTruncFormats) {
         String functionName = expr.getFnName().getFunction();
         NodePosition pos = expr.getPos();
         List<String> columnList = Lists.newArrayList();
@@ -1566,7 +1593,7 @@ public class AnalyzerUtils {
             if (firstExpr instanceof StringLiteral) {
                 StringLiteral stringLiteral = (StringLiteral) firstExpr;
                 String fmt = stringLiteral.getValue();
-                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                if (!supportedDateTruncFormats.contains(fmt.toLowerCase())) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             pos);
                 }
@@ -1592,7 +1619,7 @@ public class AnalyzerUtils {
             if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
                 StringLiteral stringLiteral = (StringLiteral) thirdExpr;
                 String fmt = stringLiteral.getValue();
-                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                if (!AnalyzerUtils.TIME_SLICE_SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             pos);
                 }

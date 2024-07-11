@@ -58,20 +58,33 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
         const auto value = values[i];
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
-        if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
-            std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
-                                                  hexdump((const char*)key.data(), size));
-            LOG(WARNING) << msg;
-            return Status::AlreadyExist(msg);
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
+            _keys_size += key.capacity() + sizeof(std::string);
+        } else {
+            auto& old_index_value_vers = it->second;
+            auto old_index_value = old_index_value_vers.front().second;
+            if (old_index_value.get_value() != NullIndexValue) {
+                // shouldn't happen
+                std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
+                                                      hexdump((const char*)key.data(), size));
+                LOG(ERROR) << msg;
+                if (!config::experimental_lake_ignore_pk_consistency_check) {
+                    return Status::AlreadyExist(msg);
+                } else {
+                    update_index_value(&old_index_value_vers, version, value);
+                }
+            } else {
+                // cover delete operation.
+                update_index_value(&old_index_value_vers, version, value);
+            }
         }
-        _keys_size += key.capacity() + sizeof(std::string);
         _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
-                                      size_t* num_found, int64_t version) {
+                                      size_t* num_found, int64_t version, uint32_t rowset_id) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -89,7 +102,31 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
         }
     }
+    // Delete is after upsert, so using UINT32_MAX as it's rowid
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
     *num_found = nfound;
+    return Status::OK();
+}
+
+Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter,
+                                                  int64_t version, uint32_t rowset_id) {
+    for (size_t i = 0; i < n; ++i) {
+        if (filter[i]) {
+            // skip
+            continue;
+        }
+        auto key = keys[i].to_string();
+        std::list<IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(version, IndexValue(NullIndexValue));
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
+            _keys_size += key.capacity() + sizeof(std::string);
+        } else {
+            auto& old_index_value_vers = it->second;
+            update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
+        }
+    }
+    // Delete is after upsert, so using UINT32_MAX as it's rowid
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
     return Status::OK();
 }
 

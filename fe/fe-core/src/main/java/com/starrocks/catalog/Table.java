@@ -44,16 +44,14 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
@@ -199,8 +197,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected Map<String, Column> nameToColumn;
     protected Map<ColumnId, Column> idToColumn;
 
-    // DO NOT persist this variable.
-    protected boolean isTypeRead = false;
     // table(view)'s comment
     @SerializedName(value = "comment")
     protected String comment = "";
@@ -235,10 +231,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-    }
-
-    public void setTypeRead(boolean isTypeRead) {
-        this.isTypeRead = isTypeRead;
     }
 
     public long getId() {
@@ -423,6 +415,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return fullSchema;
     }
 
+    public Map<ColumnId, Column> getIdToColumn() {
+        return idToColumn;
+    }
+
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
         updateSchemaIndex();
@@ -464,105 +460,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException(msg);
     }
 
+    public Map<String, Column> getNameToColumn() {
+        return nameToColumn;
+    }
+
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return null;
     }
 
-    public static Table read(DataInput in) throws IOException {
-        Table table;
-        TableType type = TableType.deserialize(Text.readString(in));
-        if (type == TableType.OLAP) {
-            table = new OlapTable();
-        } else if (type == TableType.MYSQL) {
-            table = new MysqlTable();
-        } else if (type == TableType.VIEW) {
-            table = new View();
-        } else if (type == TableType.BROKER) {
-            table = new BrokerTable();
-        } else if (type == TableType.ELASTICSEARCH) {
-            table = new EsTable();
-        } else if (type == TableType.HIVE) {
-            table = new HiveTable();
-        } else if (type == TableType.FILE) {
-            table = new FileTable();
-        } else if (type == TableType.HUDI) {
-            table = new HudiTable();
-        } else if (type == TableType.OLAP_EXTERNAL) {
-            table = new ExternalOlapTable();
-        } else if (type == TableType.ICEBERG) {
-            table = new IcebergTable();
-        } else if (type == TableType.JDBC) {
-            table = new JDBCTable();
-        } else if (type == TableType.MATERIALIZED_VIEW) {
-            table = MaterializedView.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.CLOUD_NATIVE) {
-            table = LakeTable.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) {
-            table = LakeMaterializedView.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.ODPS) {
-            table = new OdpsTable();
-        } else {
-            throw new IOException("Unknown table type: " + type.name());
-        }
-
-        table.setTypeRead(true);
-        table.readFields(in);
-        return table;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
-        // ATTN: must write type first
-        Text.writeString(out, TableType.serialize(type));
-
-        // write last check time
-        super.write(out);
-
-        out.writeLong(id);
-        Text.writeString(out, name);
-
-        // base schema
-        int columnCount = fullSchema.size();
-        out.writeInt(columnCount);
-        for (Column column : fullSchema) {
-            column.write(out);
-        }
-
-        Text.writeString(out, comment);
-
-        // write create time
-        out.writeLong(createTime);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            type = TableType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
-
-        super.readFields(in);
-
-        this.id = in.readLong();
-        this.name = Text.readString(in);
-
-        // base schema
-        int columnCount = in.readInt();
-        for (int i = 0; i < columnCount; i++) {
-            Column column = Column.read(in);
-            this.fullSchema.add(column);
-            this.nameToColumn.put(column.getName(), column);
-        }
-
-        comment = Text.readString(in);
-
-        // read create time
-        this.createTime = in.readLong();
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

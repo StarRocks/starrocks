@@ -60,6 +60,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private final long version;
     private final TCompressionType compressionType;
+    private final int compressionLevel;
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
     private TPersistentIndexType persistentIndexType;
@@ -81,6 +82,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private int primaryIndexCacheExpireSec = 0;
     private boolean createSchemaFile = true;
+    private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
 
     private CreateReplicaTask(Builder builder) {
@@ -94,9 +96,11 @@ public class CreateReplicaTask extends AgentTask {
         this.persistentIndexType = builder.getPersistentIndexType();
         this.tabletType = builder.getTabletType();
         this.compressionType = builder.getCompressionType();
+        this.compressionLevel = builder.getCompressionLevel();
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
+        this.enableTabletCreationOptimization = builder.isEnableTabletCreationOptimization();
         this.baseTabletId = builder.getBaseTabletId();
         this.recoverySource = builder.getRecoverySource();
         this.inRestoreMode = builder.isInRestoreMode();
@@ -169,8 +173,10 @@ public class CreateReplicaTask extends AgentTask {
             createTabletReq.setBase_schema_hash(baseSchemaHash);
         }
         createTabletReq.setCompression_type(compressionType);
+        createTabletReq.setCompression_level(compressionLevel);
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
+        createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
         return createTabletReq;
     }
 
@@ -185,6 +191,7 @@ public class CreateReplicaTask extends AgentTask {
         private long tabletId = INVALID_ID;
         private long version = INVALID_ID;
         private TCompressionType compressionType;
+        private int compressionLevel;
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
@@ -196,6 +203,7 @@ public class CreateReplicaTask extends AgentTask {
         private RecoverySource recoverySource;
         private int primaryIndexCacheExpireSec = 0;
         private boolean createSchemaFile = true;
+        private boolean enableTabletCreationOptimization = false;
         private TTabletSchema tabletSchema;
 
         private Builder() {
@@ -272,6 +280,15 @@ public class CreateReplicaTask extends AgentTask {
             this.compressionType = compressionType;
             return this;
         }
+
+        public int getCompressionLevel() {
+            return compressionLevel;
+        }
+
+        public Builder setCompressionLevel(int compressionLevel) {
+            this.compressionLevel = compressionLevel;
+            return this;
+        }        
 
         public TStorageMedium getStorageMedium() {
             return storageMedium;
@@ -369,6 +386,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setCreateSchemaFile(boolean createSchemaFile) {
             this.createSchemaFile = createSchemaFile;
+            return this;
+        }
+
+        public boolean isEnableTabletCreationOptimization() {
+            return enableTabletCreationOptimization;
+        }
+
+        public Builder setEnableTabletCreationOptimization(boolean enableTabletCreationOptimization) {
+            this.enableTabletCreationOptimization = enableTabletCreationOptimization;
             return this;
         }
 

@@ -113,6 +113,7 @@ set(EXEC_FILES
     dictionary_cache_writer.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
+    paimon/paimon_delete_file_builder.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -173,6 +174,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp

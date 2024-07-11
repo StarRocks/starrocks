@@ -270,7 +270,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   >
   > The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 
-- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/management/resource_management/resource_group.md).
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. The default value of this property is `default_mv_wg`, which is a system-defined resource group specifically used for materialized view refresh. The `cpu_core_limit` of `default_mv_wg` is `1`, `mem_limit` is `0.8`. For more about resource groups, see [Resource group](../../../administration/management/resource_management/resource_group.md).
 - `query_rewrite_consistency`: The query rewrite rule for the asynchronous materialized views. This property is supported from v3.2. Valid values:
   - `disable`: Disable automatic query rewrite of the asynchronous materialized view.
   - `checked` (Default value): Enable automatic query rewrite only when the materialized view meets the timeliness requirement, which means:
@@ -287,7 +287,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `default` (Default): The system will not perform semantic checks on the materialized view, but only the SPJG-type materialized views can be used for query rewrite. Note that if the text-based query rewrite is enabled, non-SPJG-type materialized views can also be used for query rewrite.
   - `true`: The system will perform semantic checks when creating or modifying the materialized view. If the materialized view is not eligible for query rewrite (that is, the definition of the materialized view is not an SPJG-type query), a failure will be returned.
   - `false`: The materialized view will not be used for query rewrite.
-- `transparent_mv_rewrite_mode`: Specifies the transparent rewrite mode for **queries directly against the materialized view**. This feature is supported from v3.3.0 onwards. Valid values:
+- [Preview] `transparent_mv_rewrite_mode`: Specifies the transparent rewrite mode for **queries directly against the materialized view**. This feature is supported from v3.3.0 onwards. Valid values:
   - `false` (Default, compatible with the behavior in earlier versions): Queries directly against the materialized view will not be rewritten, and are only returned with the existing data in the materialized view. Their query results may be different from those of queries based on the definition of the materialized view according to the refresh status (data consistency) of the materialized view.
   - `true`: Queries directly against the materialized view will be rewritten and returned with the most updated data, which is consistent with the result of the materialized view definition query. Please note that when the materialized view is inactive or does not support transparent query rewrite, these queries will be executed as the materialized view definition query.
   - `transparent_or_error`: Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with an error.

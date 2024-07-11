@@ -1,0 +1,11 @@
+-- name: test_connection
+
+SELECT 1, 2;
+
+trino: SELECT 1, 2;
+
+spark: SELECT 1, 2;
+
+hive: SELECT 1, 2;
+
+function: assert_equal_result("select 1, 2;", "hive: select 1, 2;", "trino: select 1, 2;", "spark: select 1, 2;")

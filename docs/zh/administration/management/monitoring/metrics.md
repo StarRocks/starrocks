@@ -513,6 +513,24 @@ displayed_sidebar: "Chinese"
 - 类型：平均值
 - 描述：已用磁盘容量。
 
+### encryption_keys_created
+
+- 单位：个
+- 类型：累计值
+- 描述：加密文件时创建密钥的次数
+
+### encryption_keys_unwrapped
+
+- 单位：个
+- 类型：累计值
+- 描述：解密文件时解码密钥的次数
+
+### encryption_keys_in_cache
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前密钥缓存中密钥的个数
+
 ### starrocks_fe_query_resource_group
 
 - 单位：个

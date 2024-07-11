@@ -34,6 +34,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -41,6 +42,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -48,7 +50,6 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -487,27 +488,29 @@ public class MaterializedViewAnalyzer {
                     .map(Field::getName).collect(Collectors.toList());
             Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
+            List<ColWithComment> colWithComments = statement.getColWithComments();
+            if (colWithComments != null) {
+                if (colWithComments.size() != relationFields.size()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                }
+                for (ColWithComment colWithComment : colWithComments) {
+                    colWithComment.analyze();
+                }
+            }
             List<Column> mvColumns = Lists.newArrayList();
             for (int i = 0; i < relationFields.size(); ++i) {
                 Type type = AnalyzerUtils.transformTableColumnType(relationFields.get(i).getType(), false);
-                Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
+                String colName = columnNames.get(i);
+                if (colWithComments != null) {
+                    colName = colWithComments.get(i).getColName();
+                }
+                Column column = new Column(colName, type, relationFields.get(i).isNullable());
+                if (colWithComments != null) {
+                    column.setComment(colWithComments.get(i).getComment());
+                }
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);
-            }
-
-            if (statement.getColWithComments() != null) {
-                List<ColWithComment> colWithComments = statement.getColWithComments();
-                if (colWithComments.size() != mvColumns.size()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
-                }
-                for (int i = 0; i < colWithComments.size(); ++i) {
-                    Column column = mvColumns.get(i);
-                    ColWithComment colWithComment = colWithComments.get(i);
-                    colWithComment.analyze();
-                    column.setName(colWithComment.getColName());
-                    column.setComment(colWithComment.getComment());
-                }
             }
 
             // set duplicate key, when sort key is set, it is dup key col.
@@ -572,12 +575,14 @@ public class MaterializedViewAnalyzer {
 
                 for (IndexDef indexDef : indexDefs) {
                     indexDef.analyze();
+                    List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                     for (String indexColName : indexDef.getColumns()) {
                         boolean found = false;
                         for (Column column : columns) {
                             if (column.getName().equalsIgnoreCase(indexColName)) {
                                 indexDef.checkColumn(column, statement.getKeysType());
                                 found = true;
+                                columnIds.add(column.getColumnId());
                                 break;
                             }
                         }
@@ -586,7 +591,7 @@ public class MaterializedViewAnalyzer {
                                     indexDef.getPos());
                         }
                     }
-                    indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                    indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
                             indexDef.getComment()));
                     indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
                     colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
@@ -782,12 +787,12 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseOlapTable(SlotRef slotRef, OlapTable table) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
-            if (partitionInfo instanceof SinglePartitionInfo) {
+            if (partitionInfo.isUnPartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
-            } else if (partitionInfo instanceof RangePartitionInfo) {
+            } else if (partitionInfo.isRangePartition()) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
                 if (partitionColumns.size() != 1) {
                     throw new SemanticException("Materialized view related base table partition columns " +
                             "only supports single column");
@@ -798,6 +803,16 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
+            } else if (partitionInfo.isListPartition()) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
+                        .map(col -> col.getName())
+                        .collect(Collectors.toSet());
+                // mv's partition columns should be subset of the base table's partition columns
+                if (!partitionColumns.contains(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");
@@ -1077,12 +1092,11 @@ public class MaterializedViewAnalyzer {
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
             }
-            if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
+            if (table.getPartitionInfo().isUnPartitioned()) {
                 throw new SemanticException("Not support refresh by partition for single partition mv",
                         mvName.getPos());
             }
-            Column partitionColumn =
-                    ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);
+            Column partitionColumn = table.getPartitionInfo().getPartitionColumns(table.getIdToColumn()).get(0);
             if (partitionColumn.getType().isDateType()) {
                 validateDateTypePartition(statement.getPartitionRangeDesc());
             } else if (partitionColumn.getType().isIntegerType()) {

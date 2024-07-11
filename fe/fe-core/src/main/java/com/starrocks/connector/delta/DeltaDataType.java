@@ -35,11 +35,12 @@ import io.delta.kernel.types.TimestampType;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * An Enum representing Delta's {@link DataType} class types.
- *
  */
 public enum DeltaDataType {
     ARRAY(ArrayType.class),
@@ -78,10 +79,35 @@ public enum DeltaDataType {
 
     /**
      * @param deltaDataType A concrete implementation of {@link DataType} class that we would
-     *                        like to map to {@link com.starrocks.catalog.Type} instance.
+     *                      like to map to {@link com.starrocks.catalog.Type} instance.
      * @return mapped instance of {@link DeltaDataType} Enum.
      */
     public static DeltaDataType instanceFrom(Class<? extends DataType> deltaDataType) {
         return LOOKUP_MAP.getOrDefault(deltaDataType, OTHER);
+    }
+
+    public static final Set<DeltaDataType> PRIMITIVE_TYPES = new HashSet<>() {
+        {
+            add(DeltaDataType.BOOLEAN);
+            add(DeltaDataType.BYTE);
+            add(DeltaDataType.SMALLINT);
+            add(DeltaDataType.INTEGER);
+            add(DeltaDataType.LONG);
+            add(DeltaDataType.FLOAT);
+            add(DeltaDataType.DOUBLE);
+            add(DeltaDataType.DATE);
+            add(DeltaDataType.TIMESTAMP);
+            add(DeltaDataType.TIMESTAMP_NTZ);
+            add(DeltaDataType.BINARY);
+            add(DeltaDataType.STRING);
+        }
+    };
+
+    public static boolean isPrimitiveType(DataType type) {
+        return PRIMITIVE_TYPES.contains(instanceFrom(type.getClass()));
+    }
+
+    public static boolean canUseStatsType(DataType type) {
+        return isPrimitiveType(type) || type instanceof DecimalType;
     }
 }

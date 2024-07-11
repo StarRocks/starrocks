@@ -18,6 +18,7 @@
 
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
@@ -116,6 +117,15 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
+    // collect del files
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        DelfileWithRowsetId del_file_with_rid;
+        del_file_with_rid.set_name(op_write.dels(i));
+        del_file_with_rid.set_origin_rowset_id(rowset->id());
+        // For now, op_offset is always max segment's id
+        del_file_with_rid.set_op_offset(std::max(op_write.rowset().segments_size(), 1) - 1);
+        rowset->add_del_files()->CopyFrom(del_file_with_rid);
+    }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
@@ -123,11 +133,6 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         DCHECK(is_segment(orphan_file));
         FileMetaPB file_meta;
         file_meta.set_name(orphan_file);
-        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-    }
-    for (const auto& del_file : op_write.dels()) {
-        FileMetaPB file_meta;
-        file_meta.set_name(del_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -169,6 +174,33 @@ static int delete_from_protobuf_map(T* protobuf_map, const std::vector<std::pair
     return erase_cnt;
 }
 
+// When using cloud native persistent index, the del files which are above rebuild point,
+// need to be transfer to compaction's output rowset.
+// Use this function to collect all del files that need to be transfer.
+void MetaFileBuilder::_collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
+                                                             std::vector<DelfileWithRowsetId>* collect_del_files) {
+    if (!_tablet_meta->enable_persistent_index() ||
+        _tablet_meta->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        // do nothing, unpersisted del files is collect only for cloud native persistent index.
+        return;
+    }
+    if (rowset->del_files_size() == 0) {
+        return;
+    }
+    const auto& sstables = _tablet_meta->sstable_meta().sstables();
+    // Rebuild persistent index from `rebuild_rss_rowid_point`
+    const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+    const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
+    if (LakePersistentIndex::needs_rowset_rebuild(*rowset, rebuild_rss_id)) {
+        // Above rebuild point
+        for (const auto& each : rowset->del_files()) {
+            collect_del_files->push_back(each);
+        }
+        // These del files will be collect and transfer to compaction's output rowset.
+        rowset->clear_del_files();
+    }
+}
+
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                          uint32_t max_compact_input_rowset_id) {
     // delete input rowsets
@@ -178,6 +210,8 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         uint32_t id;
         bool operator()(const uint32_t rowid) const { return rowid == id; }
     };
+    // Only used for cloud native persistent index.
+    std::vector<DelfileWithRowsetId> collect_del_files;
     auto it = _tablet_meta->mutable_rowsets()->begin();
     while (it != _tablet_meta->mutable_rowsets()->end()) {
         auto search_it = std::find_if(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end(),
@@ -185,6 +219,8 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         if (search_it != op_compaction.input_rowsets().end()) {
             // find it
             delete_delvec_sid_range.emplace_back(it->id(), it->id() + it->segments_size() - 1);
+            // Collect del files.
+            _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
@@ -221,13 +257,20 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     }
 
     // add output rowset
-    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0) {
+    if (op_compaction.has_output_rowset() &&
+        (op_compaction.output_rowset().segments_size() > 0 || !collect_del_files.empty())) {
+        // NOTICE: we need output rowset in two scenarios:
+        // 1. We have output segments after compactions.
+        // 2. We need del files to rebuild cloud native PK index.
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         rowset->set_version(_tablet_meta->version());
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+        for (const auto& each : collect_del_files) {
+            rowset->add_del_files()->CopyFrom(each);
+        }
+        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     }
 
     VLOG(2) << fmt::format(

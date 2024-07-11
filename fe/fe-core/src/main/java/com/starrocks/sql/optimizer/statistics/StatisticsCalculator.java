@@ -40,6 +40,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -412,23 +413,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalDeltaLakeScan(LogicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalDeltaLakeScan(PhysicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context,
+    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context, Table table,
                                           Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        // Use default statistics for now.
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), node.getLimit());
+            context.setStatistics(stats);
+
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalDeltaLakeScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
         }
-        builder.setOutputRowCount(1);
-        context.setStatistics(builder.build());
 
         return visitOperator(node, context);
     }
@@ -575,7 +582,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             } else {
                 predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
             }
-            List<PartitionKey> partitionKeys = predicates.getSelectedPartitionKeys();
+            // If partition pruned, we should use the selected partition keys to estimate the statistics,
+            // otherwise, we should use all partition keys to estimate the statistics.
+            List<PartitionKey> partitionKeys = predicates.hasPrunedPartition() ? predicates.getSelectedPartitionKeys() :
+                    PartitionUtil.getPartitionKeys(table);
 
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
@@ -1440,10 +1450,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeTopNNode(ExpressionContext context, Operator node) {
         Preconditions.checkState(context.arity() == 1);
 
+        long partitionLimit = 0;
+        List<ColumnRefOperator> partitions = Collections.emptyList();
+        if (node instanceof LogicalTopNOperator) {
+            partitionLimit = ((LogicalTopNOperator) node).getPartitionLimit();
+            partitions = ((LogicalTopNOperator) node).getPartitionByColumns();
+        } else if (node instanceof PhysicalTopNOperator) {
+            partitionLimit = ((PhysicalTopNOperator) node).getPartitionLimit();
+            partitions = ((PhysicalTopNOperator) node).getPartitionByColumns();
+        }
+
         Statistics.Builder builder = Statistics.builder();
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+
+        if (partitionLimit > 0 && !partitions.isEmpty()
+                && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
+            double partitionNums = partitions.stream()
+                    .map(inputStatistics::getColumnStatistic)
+                    .map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b).orElse(1D);
+            double rowCount = Math.min(inputStatistics.getOutputRowCount(), partitionLimit * partitionNums);
+            builder.setOutputRowCount(rowCount);
+        }
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);

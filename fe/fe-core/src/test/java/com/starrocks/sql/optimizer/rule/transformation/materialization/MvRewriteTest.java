@@ -28,14 +28,21 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -891,7 +898,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testAggExprRewrite() throws Exception {
         // Group by Cast Expr
-        starRocksAssert.withTable("json_tbl",
+        starRocksAssert.withMTable("json_tbl",
                 () -> {
                     {
                         String mvName = "mv_q15";
@@ -954,7 +961,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPkFk() throws SQLException {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("parent_table1", "k1",
                                 List.of(
                                         "k1 INT",
@@ -1803,6 +1810,31 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 String mvName = "plan_cache_mv_" + i;
                 starRocksAssert.dropMaterializedView(mvName);
             }
+        }
+
+        {
+            // Planner exception
+            String mvSql = "create materialized view mv_with_window" + " distributed by hash(t1d) as" +
+                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" + " from test_all_type";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "mv_with_window");
+
+            new MockUp<Optimizer>() {
+
+                @Mock
+                public OptExpression optimize(ConnectContext connectContext, OptExpression logicOperatorTree,
+                                              PhysicalPropertySet requiredProperty, ColumnRefSet requiredColumns,
+                                              ColumnRefFactory columnRefFactory) {
+                    throw new RuntimeException("optimize failed");
+                }
+            };
+            // build cache
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertEquals(Lists.newArrayList(), planContexts);
+            // hit cache
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertEquals(Lists.newArrayList(), planContexts);
         }
     }
 

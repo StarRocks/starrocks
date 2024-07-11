@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -163,7 +164,7 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
-    default List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+    default List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
 
@@ -321,7 +322,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void cancelRefreshMaterializedView(String dbName, String mvName)
+    default void cancelRefreshMaterializedView(CancelRefreshMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException {
     }
 

@@ -1481,7 +1481,7 @@ public class ShowExecutor {
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                     }
 
-                    Table table = db.getTable(tableName);
+                    Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                     if (table == null) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
@@ -2209,8 +2209,9 @@ public class ShowExecutor {
                 } else if (table instanceof OlapTable) {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
                     for (Index index : indexes) {
+                        List<String> indexColumnNames = MetaUtils.getColumnNamesByColumnIds(table, index.getColumns());
                         rows.add(Lists.newArrayList(statement.getTableName().toString(), "",
-                                index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
+                                index.getIndexName(), "", String.join(",", indexColumnNames), "", "", "", "",
                                 "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
                                 index.getComment()));
                     }

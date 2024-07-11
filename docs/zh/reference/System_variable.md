@@ -479,6 +479,22 @@ SELECT /*+ SET_VAR
 * 类型：Boolean
 * 引入版本：v2.5.6、v3.0.8、v3.1.4、v3.2.0
 
+### enable_lake_tablet_internal_parallel
+
+* 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v3.3.0
+
+### tablet_internal_parallel_mode
+
+* 描述：Tablet 内部并行 Scan 策略。有效值:
+  * `auto`: 在 BE 或 CN 节点需要扫描的 Tablet 数小于 DOP 时，系统根据预估的 Tablet 大小自动判断是否需要并行 Scan。
+  * `force_split`: 强制对 Tablet 进行拆分和并行扫描。
+* 默认值：auto
+* 类型：String
+* 引入版本：v2.5.0
+
 ### enable_scan_datacache
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
@@ -490,6 +506,18 @@ SELECT /*+ SET_VAR
 * 描述：StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。默认值为 `true`。如果只想读取，不进行缓存，可以将该参数设置为 `false`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
 * 默认值：true
 * 引入版本：v2.5
+
+### enable_datacache_io_adaptor
+
+* 描述：是否开启 Data Cache I/O 自适应开关。`true` 表示开启。开启后，系统会根据当前磁盘 I/O 负载自动将一部分缓存请求路由到远端存储来减少磁盘压力。
+* 默认值：true
+* 引入版本：v3.3.0
+
+### enable_file_metacache
+
+* 描述：是否启用远端文件元数据缓存（Footer Cache）。`true` 表示开启。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。该功能依赖 Data Cache 的内存缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值后才会生效。
+* 默认值：true
+* 引入版本：v3.3.0
 
 ### enable_tablet_internal_parallel
 

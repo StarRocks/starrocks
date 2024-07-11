@@ -18,25 +18,23 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.delta.DeltaLakeRemoteFileDesc;
 import com.starrocks.connector.delta.DeltaUtils;
-import com.starrocks.connector.delta.ExpressionConverter;
-import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.delta.FileScanTask;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -47,44 +45,33 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import io.delta.kernel.Scan;
-import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.expressions.And;
-import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.SnapshotImpl;
-import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
-import io.delta.kernel.types.StructType;
-import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-    private DeltaLakeTable deltaLakeTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
-    private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private Optional<Predicate> deltaLakePredicates = Optional.empty();
+    private final DeltaLakeTable deltaLakeTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private ScalarOperator predicate = null;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -98,6 +85,10 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public DeltaLakeTable getDeltaLakeTable() {
         return deltaLakeTable;
+    }
+
+    public void preProcessDeltaLakePredicate(ScalarOperator predicate) {
+        this.predicate = predicate;
     }
 
     private void setupCloudCredential() {
@@ -121,80 +112,49 @@ public class DeltaLakeScanNode extends ScanNode {
         return helper.toString();
     }
 
-    private void preProcessConjuncts(StructType tableSchema) {
-        List<Predicate> expressions = new ArrayList<>(conjuncts.size());
-        ExpressionConverter convertor = new ExpressionConverter(tableSchema);
-        for (Expr expr : conjuncts) {
-            try {
-                // convert expr to delta expression, some expr can not convert and will throw exception
-                Predicate filterExpr = convertor.convert(expr);
-                if (filterExpr != null) {
-                    expressions.add(filterExpr);
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to convert expr: {}", expr.debugString(), e);
-            }
-        }
-
-        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
-                expressions.size(), conjuncts.size());
-        deltaLakePredicates = expressions.stream().reduce(And::new);
-    }
-
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
+    public void setupScanRangeLocations(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
-            setupScanRangeLocationsImpl(descTbl);
+            setupScanRangeLocationsImpl(descTbl, fieldNames);
         }
     }
 
-    public void setupScanRangeLocationsImpl(DescriptorTable descTbl) throws AnalysisException {
+    public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
-        DeltaUtils.checkTableFeatureSupported(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
-                deltaMetadata);
+        SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
+        DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), deltaMetadata);
 
-        preProcessConjuncts(deltaMetadata.getSchema());
-        List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
-        // PartitionKey -> partition id
+        String catalogName = deltaLakeTable.getCatalogName();
+        Engine engine = deltaLakeTable.getDeltaEngine();
+        long snapshotId = snapshot.getVersion(engine);
+        String dbName = deltaLakeTable.getDbName();
+        String tableName = deltaLakeTable.getTableName();
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
-        Scan scan = deltaLakePredicates.isPresent() ?
-                scanBuilder.withFilter(deltaEngine, deltaLakePredicates.get()).build() :
-                scanBuilder.build();
+        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                catalogName, deltaLakeTable, null, snapshotId, predicate, fieldNames, -1);
+        if (splits.isEmpty()) {
+            LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
+            return;
+        }
 
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
-            while (scanFilesAsBatches.hasNext()) {
-                FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+        DeltaLakeRemoteFileDesc remoteFileDesc = (DeltaLakeRemoteFileDesc) splits.get(0).getFiles().get(0);
+        if (remoteFileDesc == null) {
+            LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
+            return;
+        }
 
-                try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
-                    while (scanFileRows.hasNext()) {
-                        Row scanFileRow = scanFileRows.next();
-                        DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
-                        if (dv != null) {
-                            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
-                                    "Delta table feature [deletion vectors] is not supported");
-                        }
-                        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow);
-                        Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(scanFileRow);
-                        List<String> partitionValues =
-                                partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                                        Collectors.toList());
-                        PartitionKey partitionKey =
-                                PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                                        deltaLakeTable.getType());
-                        addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
-                    }
-                }
-            }
-        } catch (IOException e) {
-            LOG.error("Failed to get delta lake scan files", e);
-            throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
+        List<FileScanTask> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
+        for (FileScanTask split : splitsInfo) {
+            List<String> partitionValues = new ArrayList<>();
+            split.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
+            PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
+                    deltaLakeTable.getPartitionColumns(), deltaLakeTable);
+            addPartitionLocations(partitionKeys, partitionKey, descTbl, split.getFileStatus(), deltaMetadata);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());

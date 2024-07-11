@@ -24,18 +24,23 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -47,13 +52,18 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -89,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -108,6 +119,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -959,13 +971,35 @@ public class MvUtils {
         return rangeParts;
     }
 
-    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
-        List<Expr> listPart = Lists.newArrayList();
-        for (LiteralExpr value : values) {
-            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
-            listPart.add(predicate);
+    /**
+     * Convert partition range to IN predicate
+     * @param slotRef the comparison column
+     * @param values the target partition values
+     * @return in predicate
+     */
+    public static Expr convertToInPredicate(Expr slotRef, List<Expr> values) {
+        if (values == null || values.isEmpty()) {
+            return new BoolLiteral(true);
         }
-        return listPart;
+        // to avoid duplicate values
+        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+    }
+
+    /**
+     * Convert partition range to IN predicate scalar operator
+     * @param col the comparison operator
+     * @param values the target scalar operators
+     * @return in predicate scalar operator
+     */
+    public static ScalarOperator convertToInPredicate(ScalarOperator col,
+                                                      List<ScalarOperator> values) {
+        if (values == null || values.isEmpty()) {
+            return ConstantOperator.TRUE;
+        }
+        List<ScalarOperator> inArgs = Lists.newArrayList();
+        inArgs.add(col);
+        inArgs.addAll(values);
+        return new InPredicateOperator(false, inArgs);
     }
 
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
@@ -1376,5 +1410,54 @@ public class MvUtils {
     public static boolean isStr2Date(Expr expr) {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+
+    public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
+        Map<String, String> partitionProperties = new HashMap<>(4);
+        partitionProperties.put("replication_num",
+                String.valueOf(materializedView.getDefaultReplicationNum()));
+        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
+        String storageCooldownTime =
+                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
+        if (storageCooldownTime != null
+                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
+        }
+        return partitionProperties;
+    }
+
+    public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
+        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+        if (distributionInfo instanceof HashDistributionInfo) {
+            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
+                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
+            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
+        } else {
+            return new RandomDistributionDesc();
+        }
+    }
+
+    /**
+     * Trim the input set if its size is larger than maxLength.
+     * @return the trimmed set.
+     */
+    public static Set<String> shrinkToSize(Set<String> set, int maxLength) {
+        if (set != null && set.size() > maxLength) {
+            return set.stream().limit(maxLength).collect(Collectors.toSet());
+        }
+        return set;
+    }
+
+    /**
+     * Trim the input map if its size is larger than maxLength.
+     * @return the trimmed map.
+     */
+    public static Map<String, Set<String>> shrinkToSize(Map<String, Set<String>> map, int maxLength) {
+        if (map != null && map.size() > maxLength) {
+            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return map;
     }
 }

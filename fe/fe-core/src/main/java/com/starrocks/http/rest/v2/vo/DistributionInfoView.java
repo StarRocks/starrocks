@@ -18,6 +18,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
 import java.util.Objects;
@@ -41,7 +43,7 @@ public class DistributionInfoView {
     /**
      * Create from {@link DistributionInfo}
      */
-    public static DistributionInfoView createFrom(DistributionInfo distributionInfo) {
+    public static DistributionInfoView createFrom(Table table, DistributionInfo distributionInfo) {
         DistributionInfoView dvo = new DistributionInfoView();
         Optional.ofNullable(distributionInfo.getType())
                 .map(Enum::name).ifPresent(dvo::setType);
@@ -49,7 +51,8 @@ public class DistributionInfoView {
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo hdi = (HashDistributionInfo) distributionInfo;
             dvo.setBucketNum(hdi.getBucketNum());
-            Optional.ofNullable(hdi.getDistributionColumns())
+
+            Optional.of(MetaUtils.getColumnsByColumnIds(table, hdi.getDistributionColumns()))
                     .map(columns -> columns.stream()
                             .filter(Objects::nonNull)
                             .map(ColumnView::createFrom)

@@ -4,13 +4,46 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.9
+
+Release date: July 11, 2024
+
+### New Features
+
+- Paimon tables now support DELETE Vectors. [#45866](https://github.com/StarRocks/starrocks/issues/45866)
+- Supports Column-level access control through Apache Ranger. [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+- Stream Load can automatically convert JSON strings into STRUCT/MAP/ARRAY types during loading. [#45406](https://github.com/StarRocks/starrocks/pull/45406)
+- JDBC Catalog now supports Oracle and SQL Server. [#35691](https://github.com/StarRocks/starrocks/issues/35691)
+
+### Improvements
+
+- Improved privilege management by restricting `user_admin` role users from resetting the password of the root user. [#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- Stream Load now supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+- Optimized memory usage during data loading. [#47047](https://github.com/StarRocks/starrocks/pull/47047)
+- Supports masking authentication information for the Files() function in audit logs. [#46893](https://github.com/StarRocks/starrocks/pull/46893)
+- Hive tables now support the `skip.header.line.count` property. [#47001](https://github.com/StarRocks/starrocks/pull/47001)
+- JDBC Catalog supports more data types. [#47618](https://github.com/StarRocks/starrocks/pull/47618)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- BE crash caused by ALTER TABLE ADD COLUMN after upgrading a shared-data cluster from v3.2.x to v3.3.0 and then rolling it back. [#47826](https://github.com/StarRocks/starrocks/pull/47826)
+- Tasks initiated through SUBMIT TASK showed a Running status indefinitely in the QueryDetail interface. [#47619](https://github.com/StarRocks/starrocks/pull/47619)
+- Forwarding queries to the FE Leader node caused a null pointer exception. [#47559](https://github.com/StarRocks/starrocks/pull/47559)
+- SHOW MATERIALIZED VIEWS with WHERE conditions caused a null pointer exception. [#47811](https://github.com/StarRocks/starrocks/pull/47811)
+- Vertical Compaction fails for Primary Key tables in shared-data clusters. [#47192](https://github.com/StarRocks/starrocks/pull/47192)
+- Improper handling of I/O Error when sinking data to Hive or Iceberg tables. [#46979](https://github.com/StarRocks/starrocks/pull/46979)
+- Table properties do not take effect when whitespaces are added to their values. [#47119](https://github.com/StarRocks/starrocks/pull/47119)
+- BE crash caused by concurrent migration and Index Compaction operations on Primary Key tables. [#46675](https://github.com/StarRocks/starrocks/pull/46675)
+
 ## 3.2.8
 
 Release date: June 7, 2024
 
 ### New Features
 
-- **[Supports adding labels on BEs](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/)**: Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers. [#38833](https://github.com/StarRocks/starrocks/pull/38833)
+- **[Supports adding labels on BEs](https://docs.starrocks.io/docs/3.2/administration/management/resource_management/be_label/)**: Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers. [#38833](https://github.com/StarRocks/starrocks/pull/38833)
 
 ### Bug Fixes
 
@@ -30,8 +63,8 @@ Release date: May 24, 2024
 - Optimized the garbage collection (GC) mechanism in shared-data clusters. Supports manual compaction for tables or partitions stored in object storage. [#39532](https://github.com/StarRocks/starrocks/issues/39532)
 - Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
 - Supports populating Data Cache asynchronously during queries, reducing the impact of populating cache on query performance. [#40489](https://github.com/StarRocks/starrocks/pull/40489)
-- ANALYZE TABLE supports collecting histograms for external tables, effectively addressing data skews. For more information, see [CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/#collect-statistics-of-hiveiceberghudi-tables). [#42693](https://github.com/StarRocks/starrocks/pull/42693)
-- Lateral Join with [UNNEST](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/unnest/) supports LEFT JOIN. [#43973](https://github.com/StarRocks/starrocks/pull/43973)
+- ANALYZE TABLE supports collecting histograms for external tables, effectively addressing data skews. For more information, see [CBO statistics](https://docs.starrocks.io/docs/3.2/using_starrocks/Cost_based_optimizer/#collect-statistics-of-hiveiceberghudi-tables). [#42693](https://github.com/StarRocks/starrocks/pull/42693)
+- Lateral Join with [UNNEST](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/unnest/) supports LEFT JOIN. [#43973](https://github.com/StarRocks/starrocks/pull/43973)
 - Query Pool supports configuring memory usage threshold that triggers spilling via BE static parameter `query_pool_spill_mem_limit_threshold`. Once the threshold is reached, intermediate results of queries will be spilled to disks to reduce memory usage, thus avoiding OOM.
 - Supports creating asynchronous materialized views based on Hive views.
 
@@ -84,7 +117,7 @@ This version has been taken offline due to privilege issues in querying external
 
 ### New Features
 
-- Supports the [dict_mapping](https://docs.starrocks.io/docs/sql-reference/sql-functions/dict-functions/dict_mapping/) column property, which can significantly facilitate the loading process during the construction of a global dictionary, accelerating the exact COUNT DISTINCT calculation.
+- Supports the [dict_mapping](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/dict-functions/dict_mapping/) column property, which can significantly facilitate the loading process during the construction of a global dictionary, accelerating the exact COUNT DISTINCT calculation.
 
 ### Behavior Changes
 
@@ -133,7 +166,7 @@ This version has been taken offline due to privilege issues in querying external
 - Cloud-native Primary Key tables in shared-data clusters support Size-tiered Compaction to reduce the write I/O amplification. [#41034](https://github.com/StarRocks/starrocks/pull/41034)
 - Added the date function `milliseconds_diff`. [#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - Added the session variable `catalog`, which specifies the catalog to which the session belongs. [#41329](https://github.com/StarRocks/starrocks/pull/41329)
-- Supports [setting user-defined variables in hints](https://docs.starrocks.io/docs/administration/Query_planning/#user-defined-variable-hint). [#40746](https://github.com/StarRocks/starrocks/pull/40746)
+- Supports [setting user-defined variables in hints](https://docs.starrocks.io/docs/3.2/administration/Query_planning/#user-defined-variable-hint). [#40746](https://github.com/StarRocks/starrocks/pull/40746)
 - Supports CREATE TABLE LIKE in Hive catalogs. [#37685](https://github.com/StarRocks/starrocks/pull/37685) 
 - Added the view `information_schema.partitions_meta`, which records detailed metadata of partitions. [#39265](https://github.com/StarRocks/starrocks/pull/39265)
 - Added the view `sys.fe_memory_usage`, which records the memory usage for StarRocks. [#40464](https://github.com/StarRocks/starrocks/pull/40464)
@@ -196,7 +229,7 @@ Release date: February 8, 2024
 - Added the BE configuration item `enable_lazy_delta_column_compaction`. The default value is `true`, indicating that StarRocks does not perform frequent compaction operations on delta columns. [#36654](https://github.com/StarRocks/starrocks/pull/36654)
 - Added the FE configuration item `default_mv_refresh_immediate`, which specifies whether to immediately refresh the materialized view after the materialized view is created. The default value is `true`. [#37093](https://github.com/StarRocks/starrocks/pull/37093)
 - Changed the default value of the FE configuration item `default_mv_refresh_partition_num`to `1`. This indicates that when multiple partitions need to be updated during a materialized view refresh, the task will be split in batches, refreshing only one partition at a time. This helps reduce resource consumption during each refresh. [#36560](https://github.com/StarRocks/starrocks/pull/36560)
-- Changed the default value of the BE/CN configuration item `starlet_use_star_cache` to `true`. This indicates that block data cache is enabled by default in shared-data clusters. If, before upgrading, you have manually configured the BE/CN configuration item `starlet_cache_evict_high_water` to `X`, you must configure the BE/CN configuration item `starlet_star_cache_disk_size_percent` to `(1.0 - X) * 100`. For example, if you have set `starlet_cache_evict_high_water` to `0.3` before upgrading, you must set `starlet_star_cache_disk_size_percent` to `70`. This ensures that both file data cache and block data cache will not exceed the disk capacity limit. [#38200](https://github.com/StarRocks/starrocks/pull/38200)
+- Changed the default value of the BE/CN configuration item `starlet_use_star_cache` to `true`. This indicates that Data Cache is enabled by default in shared-data clusters. If, before upgrading, you have manually configured the BE/CN configuration item `starlet_cache_evict_high_water` to `X`, you must configure the BE/CN configuration item `starlet_star_cache_disk_size_percent` to `(1.0 - X) * 100`. For example, if you have set `starlet_cache_evict_high_water` to `0.3` before upgrading, you must set `starlet_star_cache_disk_size_percent` to `70`. This ensures that both file data cache and Data Cache will not exceed the disk capacity limit. [#38200](https://github.com/StarRocks/starrocks/pull/38200)
 
 ### Improvements
 
@@ -240,7 +273,7 @@ Release date: December 21, 2023
 
 #### Data Lake Analytics
 
-- Supports reading [Hive Catalog](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/) tables and file external tables in Avro, SequenceFile, and RCFile formats through Java Native Interface (JNI).
+- Supports reading [Hive Catalog](https://docs.starrocks.io/docs/3.2/data_source/catalog/hive_catalog/) tables and file external tables in Avro, SequenceFile, and RCFile formats through Java Native Interface (JNI).
 
 #### Materialized View
 
@@ -252,8 +285,8 @@ Release date: December 21, 2023
 #### Query and SQL functions
 
 - Supports the prepared statement. It allows better performance for processing high-concurrency point lookup queries. It also prevents SQL injection effectively.
-- Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
-- Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_unique_agg/).
+- Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
+- Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_unique_agg/).
 
 #### Monitoring and alerts
 
@@ -266,17 +299,17 @@ Release date: December 21, 2023
 ### Improvements
 
 - Upgraded the default GC algorithm in JDK8 to G1. [#37268](https://github.com/StarRocks/starrocks/pull/37268)
-- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for [AWS S3 in Broker Load jobs](https://docs.starrocks.io/docs/loading/s3/) are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/3.2/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for [AWS S3 in Broker Load jobs](https://docs.starrocks.io/docs/3.2/loading/s3/) are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes. [#35615](https://github.com/StarRocks/starrocks/pull/35615)
-- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
 
 ### Bug Fixes
 
 Fixed the following issues:
 
 - The BEs crash if users create persistent indexes in the event of data corruption.[#30841](https://github.com/StarRocks/starrocks/pull/30841)
-- The [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- The [array_distinct](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
 - After the DISTINCT window operator pushdown feature is enabled, errors are reported if SELECT DISTINCT operations are performed on the complex expressions of the columns computed by window functions.  [#36357](https://github.com/StarRocks/starrocks/pull/36357)
 - Some S3-compatible object storage returns duplicate files, causing the BEs to crash. [#36103](https://github.com/StarRocks/starrocks/pull/36103)
 
@@ -288,7 +321,7 @@ Release date: December 1, 2023
 
 #### Shared-data cluster
 
-- Supports persisting indexes of [Primary Key tables](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/) to local disks.
+- Supports persisting indexes of [Primary Key tables](https://docs.starrocks.io/docs/3.2/table_design/table_types/primary_key_table/) to local disks.
 - Supports even distribution of Data Cache among multiple local disks.
 
 #### Materialized View
@@ -300,25 +333,25 @@ Release date: December 1, 2023
 
 #### Data Lake Analytics
 
-- Supports creating and dropping databases and managed tables in [Hive catalogs](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/), and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
-- Supports [Unified Catalog](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/), with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
+- Supports creating and dropping databases and managed tables in [Hive catalogs](https://docs.starrocks.io/docs/3.2/data_source/catalog/hive_catalog/), and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
+- Supports [Unified Catalog](https://docs.starrocks.io/docs/3.2/data_source/catalog/unified_catalog/), with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
 - Supports collecting statistics of Hive and Iceberg tables using ANALYZE TABLE, and storing the statistics in StarRocks, thus facilitating optimization of query plans and accelerating subsequent queries.
 - Supports Information Schema for external tables, providing additional convenience for interactions between external systems (such as BI tools) and StarRocks.
 
 #### Storage engine, data ingestion, and export
 
-- Added the following features of loading with the table function [FILES()](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/):
+- Added the following features of loading with the table function [FILES()](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/table-functions/files/):
   - Loading Parquet and ORC format data from Azure or GCP.
   - Extracting the value of a key/value pair from the file path as the value of a column using the parameter `columns_from_path`.
   - Loading complex data types including ARRAY, JSON, MAP, and STRUCT.
-- Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](https://docs.starrocks.io/docs/unloading/unload_using_insert_into_files/).
-- Supports [manual optimization of table structure and data distribution strategy](https://docs.starrocks.io/docs/table_design/Data_distribution#optimize-data-distribution-after-table-creation-since-32) used in an existing table to optimize the query and loading performance. You can set a new bucket key, bucket number, or sort key for a table. You can also set a different bucket number for specific partitions.
-- Supports continuous data loading from [AWS S3](https://docs.starrocks.io/docs/loading/s3/#use-pipe) or [HDFS](https://docs.starrocks.io/docs/loading/hdfs_load/#use-pipe) using the PIPE method.
+- Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](https://docs.starrocks.io/docs/3.2/unloading/unload_using_insert_into_files/).
+- Supports [manual optimization of table structure and data distribution strategy](https://docs.starrocks.io/docs/3.2/table_design/Data_distribution#optimize-data-distribution-after-table-creation-since-32) used in an existing table to optimize the query and loading performance. You can set a new bucket key, bucket number, or sort key for a table. You can also set a different bucket number for specific partitions.
+- Supports continuous data loading from [AWS S3](https://docs.starrocks.io/docs/3.2/loading/s3/#use-pipe) or [HDFS](https://docs.starrocks.io/docs/3.2/loading/hdfs_load/#use-pipe) using the PIPE method.
   - When PIPE detects new  or modifications in a remote storage directory, it can automatically load the new or modified data into the destination table in StarRocks. While loading data, PIPE automatically splits a large loading task into smaller, serialized tasks, enhancing stability in large-scale data ingestion scenarios and reducing the cost of error retries.
 
 #### Query
 
-- Supports [HTTP SQL API](https://docs.starrocks.io/docs/reference/HTTP_API/SQL/), enabling users to access StarRocks data via HTTP and execute SELECT, SHOW, EXPLAIN, or KILL operations.
+- Supports [HTTP SQL API](https://docs.starrocks.io/docs/3.2/reference/HTTP_API/SQL/), enabling users to access StarRocks data via HTTP and execute SELECT, SHOW, EXPLAIN, or KILL operations.
 - Supports Runtime Profile and text-based Profile analysis commands (SHOW PROFILELIST, ANALYZE PROFILE, EXPLAIN ANALYZE) to allow users to directly analyze profiles via MySQL clients, facilitating bottleneck identification and discovery of optimization opportunities.
 
 #### SQL reference
@@ -335,12 +368,12 @@ Added the following functions:
 
 #### Privileges and security
 
-StarRocks supports access control through [Apache Ranger](https://docs.starrocks.io/docs/administration/ranger_plugin/), providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
+StarRocks supports access control through [Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/ranger_plugin/), providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
 
 - When accessing internal tables, external tables, or other objects in StarRocks, access control can be enforced based on the access policies configured for the StarRocks Service in Ranger.
 - When accessing an external catalog, access control can also leverage the corresponding Ranger service of the original data source (such as Hive Service) to control access (currently, access control for exporting data to Hive is not yet supported).
 
-For more information, see [Manage permissions with Apache Ranger](https://docs.starrocks.io/docs/administration/ranger_plugin/).
+For more information, see [Manage permissions with Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/ranger_plugin/).
 
 ### Improvements
 
@@ -374,7 +407,7 @@ For more information, see [Manage permissions with Apache Ranger](https://docs.s
 - Data consistency:
   - Added the property `query_rewrite_consistency` for asynchronous materialized view creation. This property defines the query rewrite rules based on the consistency check.
   - Add the property `force_external_table_query_rewrite` for external catalog-based asynchronous materialized view creation. This property defines whether to allow force query rewrite for asynchronous materialized views created upon external catalogs.
-  - For detailed information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/).
+  - For detailed information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/).
 - Added a consistency check for materialized views' partitioning key.
   - When users create an asynchronous materialized view with window functions that include a PARTITION BY expression, the partitioning column of the window function must match that of the materialized view.
 
@@ -382,10 +415,10 @@ For more information, see [Manage permissions with Apache Ranger](https://docs.s
 
 - Optimized the persistent index for Primary Key tables by improving memory usage logic while reducing I/O read and write amplification. [#24875](https://github.com/StarRocks/starrocks/pull/24875)  [#27577](https://github.com/StarRocks/starrocks/pull/27577)  [#28769](https://github.com/StarRocks/starrocks/pull/28769)
 - Supports data re-distribution across local disks for Primary Key tables.
-- Partitioned tables support automatic cooldown based on the partition time range and cooldown time. Compared to the original cooldown logic, it is more convenient to perform hot and cold data management on the partition level. For more information, see [Specify initial storage medium, automatic storage cooldown time, replica number](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number).
-- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. For more information, see [enable_sync_publish](https://docs.starrocks.io/docs/administration/FE_configuration#enable_sync_publish).
-- Supports Fast Schema Evolution, which is controlled by the table property [`fast_schema_evolution`](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#set-fast-schema-evolution). After this feature is enabled, the execution efficiency of adding or dropping columns is significantly improved. This mode is disabled by default (Default value is `false`). You cannot modify this property for existing tables using ALTER TABLE.
-- [Supports dynamically adjusting the number of tablets to create](https://docs.starrocks.io/docs/table_design/Data_distribution#set-the-number-of-buckets) according to cluster information and the size of the data for **Duplicate Key** tables created with the Radom Bucketing strategy.
+- Partitioned tables support automatic cooldown based on the partition time range and cooldown time. Compared to the original cooldown logic, it is more convenient to perform hot and cold data management on the partition level. For more information, see [Specify initial storage medium, automatic storage cooldown time, replica number](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number).
+- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. For more information, see [enable_sync_publish](https://docs.starrocks.io/docs/3.2/administration/FE_configuration#enable_sync_publish).
+- Supports Fast Schema Evolution, which is controlled by the table property [`fast_schema_evolution`](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#set-fast-schema-evolution). After this feature is enabled, the execution efficiency of adding or dropping columns is significantly improved. This mode is disabled by default (Default value is `false`). You cannot modify this property for existing tables using ALTER TABLE.
+- [Supports dynamically adjusting the number of tablets to create](https://docs.starrocks.io/docs/3.2/table_design/Data_distribution#set-the-number-of-buckets) according to cluster information and the size of the data for **Duplicate Key** tables created with the Radom Bucketing strategy.
 
 #### Query
 
@@ -393,7 +426,7 @@ For more information, see [Manage permissions with Apache Ranger](https://docs.s
 
 #### SQL Reference
 
-- [array_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) supports the keyword DISTINCT.
+- [array_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_agg/) supports the keyword DISTINCT.
 - INSERT, UPDATE, and DELETE operations now support `SET_VAR`. [#35283](https://github.com/StarRocks/starrocks/pull/35283)
 
 #### Others

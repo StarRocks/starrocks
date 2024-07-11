@@ -21,7 +21,9 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/async_flush_stream_poller.h"
 #include "connector/connector.h"
+#include "connector/sink_memory_manager.h"
 #include "connector_chunk_sink.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
@@ -42,25 +44,7 @@ public:
 
     ~HiveChunkSink() override = default;
 
-    Status init() override;
-
-    StatusOr<Futures> add(ChunkPtr chunk) override;
-
-    Futures finish() override;
-
-    std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() override;
-
-private:
-    const std::vector<std::string> _partition_column_names;
-    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
-    std::unique_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    const int64_t _max_file_size;
-    RuntimeState* _state;
-
-    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
-
-    inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
+    void callback_on_commit(const CommitResult& result) override;
 };
 
 struct HiveChunkSinkContext : public ConnectorChunkSinkContext {

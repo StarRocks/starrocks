@@ -2020,6 +2020,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
                 LOG(WARNING) << err_msg;
                 return Status::InternalError(err_msg);
             }
+            if (!ar_out.close()) {
+                std::string err_msg =
+                        strings::Substitute("failed to dump snapshot to file $0, because of close", file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
         }
         // dump snapshot success, set _index_file to new snapshot file
         WritableFileOptions wblock_opts;
@@ -2587,10 +2593,6 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
                     found_keys_info->key_infos.emplace_back(key_idx, h.hash);
                     break;
                 }
-            }
-            if (values[key_idx].get_value() == NullIndexValue) {
-                LOG(INFO) << "can not find key:" << keys[key_idx] << ", pageid:" << pageid
-                          << ", real pageid:" << bucket_info.pageid;
             }
         }
     }
@@ -5260,6 +5262,10 @@ void PersistentIndex::_calc_memory_usage() {
         memory_usage += _l2_vec[i]->memory_usage();
     }
     _memory_usage.store(memory_usage);
+}
+
+void PersistentIndex::test_force_dump() {
+    _dump_snapshot = true;
 }
 
 } // namespace starrocks

@@ -190,6 +190,10 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public void clearRowOutputInfo() {
+        rowOutputInfo = null;
+    }
+
     public DomainProperty getDomainProperty(List<OptExpression> inputs) {
         if (domainProperty == null) {
             domainProperty = deriveDomainProperty(inputs);

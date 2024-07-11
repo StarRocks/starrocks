@@ -118,6 +118,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -163,6 +164,7 @@ import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
 import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
@@ -393,7 +395,6 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
-
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -457,6 +458,7 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
@@ -666,7 +668,7 @@ public class GsonUtils {
         @Override
         public ColumnId deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
                 throws JsonParseException {
-            return new ColumnId(json.getAsJsonPrimitive().getAsString());
+            return ColumnId.create(json.getAsJsonPrimitive().getAsString());
         }
 
         @Override
@@ -720,39 +722,5 @@ public class GsonUtils {
                 return PrimitiveType.INVALID_TYPE;
             }
         }
-    }
-
-    /*
-    * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
-    * which would cause problems for the future expansion of Expr. This class is for code compatibility.
-    * Starting from version 3.2, this compatibility class can be deleted.
-    *
-    *
-    private static class ExpressionSerializer implements JsonSerializer<Expr> {
-        @Override
-        public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
-            JsonObject expressionJson = new JsonObject();
-            expressionJson.addProperty("expr", expr.toSql());
-            return expressionJson;
-        }
-    }
-
-    private static class ExpressionDeserializer implements JsonDeserializer<Expr> {
-        @Override
-        public Expr deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context)
-                throws JsonParseException {
-            JsonObject expressionObject = jsonElement.getAsJsonObject();
-            String expressionSql = expressionObject.get("expr").getAsString();
-            return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
-        }
-    }
-     */
-    public static class ExpressionSerializedObject {
-        public ExpressionSerializedObject(String expressionSql) {
-            this.expressionSql = expressionSql;
-        }
-
-        @SerializedName("expr")
-        public String expressionSql;
     }
 }

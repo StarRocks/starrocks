@@ -23,6 +23,8 @@ import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
@@ -130,24 +132,10 @@ public class GINIndexTest extends PlanTestBase {
     }
 
     @Test
-    public void testIndexPropertiesWithDefault() {
-        Map<String, String> properties = new HashMap<>();
-        // empty set default
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.size(),
-                Arrays.stream(CommonIndexParamKey.values()).map(CommonIndexParamKey::needDefault).count());
-
-        // set values, so do not set default
-        properties.put(IMP_LIB.name(), "other");
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.get(IMP_LIB.name()), "other");
-    }
-
-    @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "test_index";
-        List<String> columns = Collections.singletonList("f1");
+        List<ColumnId> columns = Collections.singletonList(ColumnId.create("f1"));
 
         Index index = new Index(indexId, indexName, columns, IndexType.GIN, "", new HashMap<>() {{
             put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
@@ -164,7 +152,7 @@ public class GINIndexTest extends PlanTestBase {
         Assertions.assertEquals(indexId, olapIndex.getIndex_id());
         Assertions.assertEquals(indexName, olapIndex.getIndex_name());
         Assertions.assertEquals(TIndexType.GIN, olapIndex.getIndex_type());
-        Assertions.assertEquals(columns, olapIndex.getColumns());
+        Assertions.assertEquals(Lists.newArrayList("f1"), olapIndex.getColumns());
         Assertions.assertEquals(
                 Collections.singletonMap(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name()),
                 olapIndex.getCommon_properties());

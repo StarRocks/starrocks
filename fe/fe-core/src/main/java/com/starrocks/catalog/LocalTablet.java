@@ -520,6 +520,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return tabletRowCount;
     }
 
+    @Override
+    public long getFuzzyRowCount() {
+        long tabletRowCount = 0L;
+        for (Replica replica : immutableReplicas) {
+            if (replica.getRowCount() > tabletRowCount) {
+                tabletRowCount = replica.getRowCount();
+            }
+        }
+        return tabletRowCount;
+    }
+
     /**
      * check if this tablet is ready to be repaired, based on priority.
      * VERY_HIGH: repair immediately

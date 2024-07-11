@@ -25,6 +25,7 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BasicTable;
@@ -437,8 +438,9 @@ public class MetadataMgr {
             Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
             if (tableId == null) {
                 if (stmt.isSetIfExists()) {
-                    LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                    LOG.debug("drop temporary table[{}.{}] which doesn't exist in session[{}]",
                             dbName, tableName, sessionId);
+                    return;
                 } else {
                     throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
                 }
@@ -688,22 +690,44 @@ public class MetadataMgr {
                                          ScalarOperator predicate,
                                          long limit) {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
-        Statistics statistics = FeConstants.runningUnitTest ? null :
+        // Get basic/histogram stats from internal statistics.
+        Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null ||
-                statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
+        if (internalStatistics == null ||
+                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            // Get basic stats from connector metadata.
             session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
-                return statistics;
+                return internalStatistics;
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-                return connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
                         session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+                if (connectorBasicStats != null && internalStatistics != null &&
+                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
+                                columnStatistic -> columnStatistic.getHistogram() != null)) {
+                    // combine connector metadata basic stats and histogram from internal stats
+                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
+                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
+                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
+                        if (internalColumnStatsMap.containsKey(key)) {
+                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
+                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
+                        } else {
+                            combinedColumnStatsMap.put(key, value);
+                        }
+                    });
+
+                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                } else {
+                    return connectorBasicStats;
+                }
             }
         } else {
             session.setObtainedFromInternalStatistics(true);
-            return statistics;
+            return internalStatistics;
         }
     }
 
@@ -732,12 +756,12 @@ public class MetadataMgr {
         return ImmutableList.copyOf(files.build());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfoForPartitions(table, partitionNames)
+                connectorMetadata.get().getRemotePartitions(table, partitionNames)
                         .forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",

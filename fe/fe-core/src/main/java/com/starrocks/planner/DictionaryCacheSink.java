@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
@@ -118,7 +117,7 @@ public class DictionaryCacheSink extends DataSink {
                 .collect(Collectors.toList()));
         for (Column column : table.getBaseSchema()) {
             TColumn tColumn = column.toThrift();
-            tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
+            tColumn.setColumn_name(column.getColumnId().getId());
             columnsDesc.add(tColumn);
         }
         TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 0);
@@ -129,9 +128,11 @@ public class DictionaryCacheSink extends DataSink {
     }
 
     private TOlapTableSchemaParam buildTSchema() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(
+                                        dictionary.getCatalogName(), dictionary.getDbName());
         String queryableObject = dictionary.getQueryableObject();
-        Table tbl = db.getTable(queryableObject);
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                        dictionary.getCatalogName(), dictionary.getDbName(), queryableObject);
         Preconditions.checkNotNull(tbl);
 
         TupleDescriptor tupleDescriptor = new TupleDescriptor(TupleId.createGenerator().getNextId());

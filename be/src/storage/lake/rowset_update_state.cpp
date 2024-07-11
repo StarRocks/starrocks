@@ -15,6 +15,7 @@
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -82,11 +83,13 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
         _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
                                                -1 /*unused*/, params.tablet_schema);
     }
-    _upserts.resize(_rowset_ptr->num_segments());
-    _base_versions.resize(_rowset_ptr->num_segments());
-    _partial_update_states.resize(_rowset_ptr->num_segments());
-    _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
-    _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+    TRY_CATCH_BAD_ALLOC({
+        _upserts.resize(_rowset_ptr->num_segments());
+        _base_versions.resize(_rowset_ptr->num_segments());
+        _partial_update_states.resize(_rowset_ptr->num_segments());
+        _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+        _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+    });
 
     if (_upserts.size() == 0) {
         // Empty rowset
@@ -192,6 +195,7 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 }
 
 Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
@@ -205,7 +209,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = _segment_iters[segment_id].get();
@@ -220,13 +225,13 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
             } else if (!st.ok()) {
                 return st;
             } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
             }
         }
         itr->close();
     }
     dest = std::move(col);
-    dest->raw_data();
+    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
 
     return Status::OK();
@@ -254,6 +259,7 @@ static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
                                                                         const RowsetUpdateStateParams& params,
                                                                         bool need_lock) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_auto_increment_partial_update_states");
     const auto& txn_meta = params.op_write.txn_meta();
 
     uint32_t auto_increment_column_id = 0;
@@ -329,8 +335,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
                                                                    &read_column,
                                                                    &_auto_increment_partial_update_states[segment_id]));
 
-    _auto_increment_partial_update_states[segment_id].write_column->append_selective(*read_column[0], idxes.data(), 0,
-                                                                                     idxes.size());
+    TRY_CATCH_BAD_ALLOC(_auto_increment_partial_update_states[segment_id].write_column->append_selective(
+            *read_column[0], idxes.data(), 0, idxes.size()));
     _memory_usage += _auto_increment_partial_update_states[segment_id].write_column->memory_usage();
     /*
         * Suppose we have auto increment ids for the rows which are not exist in the previous version.
@@ -347,8 +353,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     _auto_increment_delete_pks[segment_id].reset();
     _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const int64* data =
-            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[segment_id].write_column->raw_data());
+    const int64* data = nullptr;
+    TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
+                                _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
@@ -359,8 +366,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     }
 
     if (delete_idxes.size() != 0) {
-        _auto_increment_delete_pks[segment_id]->append_selective(*_upserts[segment_id], delete_idxes.data(), 0,
-                                                                 delete_idxes.size());
+        TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
+                *_upserts[segment_id], delete_idxes.data(), 0, delete_idxes.size()));
         _memory_usage += _auto_increment_delete_pks[segment_id]->memory_usage();
     }
     return Status::OK();
@@ -368,6 +375,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
 Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                                          bool need_lock) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
@@ -396,8 +404,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, read_column_ids, num_default > 0,
                                                                    rowids_by_rssid, &read_columns));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-        _partial_update_states[segment_id].write_columns[col_idx]->append_selective(*read_columns[col_idx],
-                                                                                    idxes.data(), 0, idxes.size());
+        TRY_CATCH_BAD_ALLOC(_partial_update_states[segment_id].write_columns[col_idx]->append_selective(
+                *read_columns[col_idx], idxes.data(), 0, idxes.size()));
         _memory_usage += _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
     }
     TRACE_COUNTER_INCREMENT("partial_upt_total_rows", total_rows);
@@ -421,6 +429,7 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                           std::map<int, FileInfo>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
@@ -510,6 +519,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
 Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                             int64_t base_version) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_resolve_conflict");
     // There are two cases that we must resolve conflict here:
     // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
     // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
@@ -591,7 +601,8 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
-            new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+            TRY_CATCH_BAD_ALLOC(new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0,
+                                                                   read_idxes.size()));
             RETURN_IF_EXCEPTION(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
                     *new_write_column, conflict_idxes.data()));
         }
@@ -669,7 +680,8 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 
         std::unique_ptr<Column> new_write_column =
                 _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
-        new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size());
+        TRY_CATCH_BAD_ALLOC(
+                new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size()));
         RETURN_IF_EXCEPTION(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
                 *new_write_column, conflict_idxes.data()));
 
@@ -677,8 +689,9 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         _auto_increment_delete_pks[segment_id].reset();
         _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->clone_empty();
         std::vector<uint32_t> delete_idxes;
-        const int64* data = reinterpret_cast<const int64*>(
-                _auto_increment_partial_update_states[segment_id].write_column->raw_data());
+        const int64* data = nullptr;
+        TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
+                                    _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
 
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
@@ -689,8 +702,8 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         }
 
         if (delete_idxes.size() != 0) {
-            _auto_increment_delete_pks[segment_id]->append_selective(*_upserts[segment_id], delete_idxes.data(), 0,
-                                                                     delete_idxes.size());
+            TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
+                    *_upserts[segment_id], delete_idxes.data(), 0, delete_idxes.size()));
         }
     }
     return Status::OK();
@@ -709,6 +722,7 @@ void RowsetUpdateState::release_segment(uint32_t segment_id) {
 }
 
 Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStateParams& params) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
     TRACE_COUNTER_SCOPE_LATENCY_US("load_delete_us");
     _deletes.resize(params.op_write.dels_size());
@@ -727,12 +741,17 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(params.tablet->del_location(path)));
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-    std::vector<uint8_t> read_buffer(file_size);
-    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+    RandomAccessFileOptions opts;
+    auto& meta = params.op_write.del_encryption_metas(del_id);
+    if (!meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
+    ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
-    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+    if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()) ==
+        nullptr) {
         return Status::InternalError("column deserialization failed");
     }
     col->raw_data();

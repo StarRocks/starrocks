@@ -199,6 +199,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetKeysRequest;
+import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
@@ -323,6 +325,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -852,7 +855,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(null);
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
 
         for (TaskRunStatus status : taskRunList) {
             if (status.getDbName() == null) {
@@ -914,6 +917,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTable_privs(tTablePrivs);
         // TODO(yiming): support showing user privilege info in information_schema later
         return result;
+    }
+
+    @Override
+    public TGetKeysResponse getKeys(TGetKeysRequest params) throws TException {
+        // get encrypted keys as binary meta format
+        LOG.debug("getKeys request: {}", params);
+        try {
+            return GlobalStateMgr.getCurrentState().getKeyMgr().getKeys(params);
+        } catch (IOException e) {
+            throw new TException(e);
+        }
     }
 
     @Override
@@ -2113,7 +2127,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(physicalPartition.getParentId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
@@ -2482,7 +2496,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {

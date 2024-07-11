@@ -112,6 +112,8 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -133,6 +135,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
+import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -187,6 +190,7 @@ import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -300,6 +304,7 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -453,12 +458,16 @@ public class GlobalStateMgr {
 
     private final ReplicationMgr replicationMgr;
 
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
     private LockManager lockManager;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
+    private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
@@ -744,6 +753,10 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
@@ -954,6 +967,10 @@ public class GlobalStateMgr {
         return replicationMgr;
     }
 
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
+    }
+
     public LockManager getLockManager() {
         return lockManager;
     }
@@ -1074,6 +1091,7 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+            createTableKeeper();
 
             // 7. init starosAgent
             if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
@@ -1248,6 +1266,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        keyMgr.initDefaultMasterKey();
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1273,6 +1292,8 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+
+        keyRotationDaemon.start();
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -1454,6 +1475,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1621,6 +1643,7 @@ public class GlobalStateMgr {
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
+                keyMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -1654,8 +1677,13 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
+                setInterval(Config.task_check_interval_second * 1000L);
             }
         };
+    }
+
+    public void createTableKeeper() {
+        tableKeeper = TableKeeper.startDaemon();
     }
 
     public void createTxnTimeoutChecker() {
@@ -2330,7 +2358,7 @@ public class GlobalStateMgr {
             }
             if (!supportRefreshTableType(table)) {
                 throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
-                                "do not support refresh external table which type is %s", catalogName, dbName,
+                        "do not support refresh external table which type is %s", catalogName, dbName,
                         tblName, table.getType());
             }
         } finally {
@@ -2499,6 +2527,10 @@ public class GlobalStateMgr {
 
     public SlotProvider getLocalSlotProvider() {
         return localSlotProvider;
+    }
+
+    public GlobalLoadJobListenerBus getOperationListenerBus() {
+        return operationListenerBus;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {

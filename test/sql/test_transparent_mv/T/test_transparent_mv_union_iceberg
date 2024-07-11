@@ -156,5 +156,8 @@ SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}
 SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3
 
 DROP MATERIALIZED VIEW test_mv1;
+
 drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
 drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 force;
+drop database default_catalog.db_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;

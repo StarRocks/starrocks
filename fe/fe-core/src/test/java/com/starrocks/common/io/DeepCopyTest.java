@@ -17,23 +17,11 @@
 
 package com.starrocks.common.io;
 
-import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.gson.GsonSerializationTest;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class DeepCopyTest {
-
-    @Test
-    public void test() {
-        TableInfo info = TableInfo.createForTableRename(1, 2, "newTbl");
-        TableInfo copied = new TableInfo();
-        boolean res = DeepCopy.copy(info, copied, TableInfo.class);
-        Assert.assertTrue(res);
-        Assert.assertEquals(1, copied.getDbId());
-        Assert.assertEquals(2, copied.getTableId());
-        Assert.assertEquals("newTbl", copied.getNewTableName());
-    }
 
     @Test
     public void testCopyWithJson() {

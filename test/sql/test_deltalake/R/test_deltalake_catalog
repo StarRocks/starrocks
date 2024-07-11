@@ -164,6 +164,35 @@ select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type 
 2024-04-25 12:00:00
 2024-04-26 12:00:00
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+3	None
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+-- result:
+3	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+-- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 -- result:
 E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
@@ -183,9 +212,55 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp wher
 -- result:
 2	2	2023-01-01 01:01:01
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+3	None
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+-- result:
+3	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+-- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;
 -- result:
 E: (1064, 'Table partition by float/double/decimal datatype is not supported')
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+4	44	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is null order by col_smallint;
+-- result:
+4	44	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is not null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:

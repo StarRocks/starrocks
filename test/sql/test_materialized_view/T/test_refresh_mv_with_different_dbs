@@ -35,7 +35,7 @@ INSERT INTO db2.t1 VALUES (1,2,2);
 analyze full table t1;
 analyze full table db2.t1;
 
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
 function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db2.t1 t2 on t1.k1=t2.k1;", "mv1")
 
 SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4

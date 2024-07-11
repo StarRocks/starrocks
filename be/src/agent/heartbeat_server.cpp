@@ -74,10 +74,14 @@ void HeartbeatServer::init_cluster_id_or_die() {
 
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
     //print heartbeat in every minute
-    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE."
-                          << "host:" << master_info.network_address.hostname
+    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
+
+    if (master_info.encrypted != config::enable_transparent_data_encryption) {
+        LOG(FATAL) << "inconsistent encryption config, FE encrypted:" << master_info.encrypted
+                   << " BE/CN:" << config::enable_transparent_data_encryption;
+    }
 
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
@@ -133,6 +137,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
+        heartbeat_result.backend_info.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
         if (reboot_time == 0) {
             std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);

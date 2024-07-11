@@ -39,18 +39,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -119,16 +114,16 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     // not have committedVersion because committedVersion = nextVersion - 1
     @SerializedName(value = "visibleVersion")
-    private long visibleVersion;
+    private volatile long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
-    private long visibleVersionTime;
+    private volatile long visibleVersionTime;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
-    private long visibleTxnId = -1;
+    private volatile long visibleTxnId = -1;
     @SerializedName(value = "nextVersion")
-    private long nextVersion;
+    private volatile long nextVersion;
 
     private volatile long lastVacuumTime = 0;
 
@@ -307,6 +302,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return distributionInfo;
     }
 
+    public void setDistributionInfo(DistributionInfo distributionInfo) {
+        this.distributionInfo = distributionInfo;
+    }
+
     public void createRollupIndex(MaterializedIndex mIndex) {
         if (mIndex.getState().isVisible()) {
             this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);
@@ -355,7 +354,8 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     }
 
     public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState) {
-        List<MaterializedIndex> indices = Lists.newArrayList();
+        int expectedSize = 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
+        List<MaterializedIndex> indices = Lists.newArrayListWithExpectedSize(expectedSize);
         switch (extState) {
             case ALL:
                 indices.add(baseIndex);
@@ -372,27 +372,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
                 break;
         }
         return indices;
-    }
-
-    public int getMaterializedIndicesCount(IndexExtState extState) {
-        switch (extState) {
-            case ALL:
-                return 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
-            case VISIBLE:
-                return 1 + idToVisibleRollupIndex.size();
-            case SHADOW:
-                return idToVisibleRollupIndex.size();
-            default:
-                return 0;
-        }
-    }
-
-    public int getVisibleMaterializedIndicesCount() {
-        int count = 0;
-        for (PhysicalPartition subPartition : getSubPartitions()) {
-            count += subPartition.getMaterializedIndices(IndexExtState.VISIBLE).size();
-        }
-        return count;
     }
 
     @Override
@@ -430,9 +409,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getRowCount() {
         long rowCount = 0;
-        for (PhysicalPartition subPartition : getSubPartitions()) {
+        for (PhysicalPartition subPartition : idToSubPartition.values()) {
             rowCount += subPartition.storageRowCount();
         }
+        rowCount += this.storageRowCount();
         return rowCount;
     }
 
@@ -496,85 +476,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return true;
     }
 
-    public static Partition read(DataInput in) throws IOException {
-        Partition partition = new Partition();
-        partition.readFields(in);
-        return partition;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        out.writeLong(id);
-        Text.writeString(out, name);
-        Text.writeString(out, state.name());
-
-        baseIndex.write(out);
-
-        int rollupCount = (idToVisibleRollupIndex != null) ? idToVisibleRollupIndex.size() : 0;
-        out.writeInt(rollupCount);
-        if (idToVisibleRollupIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                entry.getValue().write(out);
-            }
-        }
-
-        out.writeInt(idToShadowIndex.size());
-        for (MaterializedIndex shadowIndex : idToShadowIndex.values()) {
-            shadowIndex.write(out);
-        }
-
-        out.writeLong(visibleVersion);
-        out.writeLong(visibleVersionTime);
-        out.writeLong(0); // write a version_hash for compatibility
-
-        out.writeLong(nextVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeLong(0); // write a version_hash for compatibility
-
-        Text.writeString(out, distributionInfo.getType().name());
-        distributionInfo.write(out);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-        name = Text.readString(in);
-        state = PartitionState.valueOf(Text.readString(in));
-
-        baseIndex = MaterializedIndex.read(in);
-
-        int rollupCount = in.readInt();
-        for (int i = 0; i < rollupCount; ++i) {
-            MaterializedIndex rollupTable = MaterializedIndex.read(in);
-            idToVisibleRollupIndex.put(rollupTable.getId(), rollupTable);
-        }
-
-        int shadowIndexCount = in.readInt();
-        for (int i = 0; i < shadowIndexCount; i++) {
-            MaterializedIndex shadowIndex = MaterializedIndex.read(in);
-            idToShadowIndex.put(shadowIndex.getId(), shadowIndex);
-        }
-
-        visibleVersion = in.readLong();
-        visibleVersionTime = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        nextVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        in.readLong(); // read a version_hash for compatibility
-        DistributionInfoType distriType = DistributionInfoType.valueOf(Text.readString(in));
-        if (distriType == DistributionInfoType.HASH) {
-            distributionInfo = HashDistributionInfo.read(in);
-        } else if (distriType == DistributionInfoType.RANDOM) {
-            distributionInfo = RandomDistributionInfo.read(in);
-        } else {
-            throw new IOException("invalid distribution type: " + distriType);
-        }
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(id, visibleVersion, baseIndex, distributionInfo);
@@ -623,15 +524,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         buffer.append("distribution_info: ").append(distributionInfo.toString());
 
         return buffer.toString();
-    }
-
-    public boolean convertRandomDistributionToHashDistribution(List<Column> baseSchema) {
-        boolean hasChanged = false;
-        if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
-            distributionInfo = ((RandomDistributionInfo) distributionInfo).toHashDistributionInfo(baseSchema);
-            hasChanged = true;
-        }
-        return hasChanged;
     }
 
     public long getLastVacuumTime() {

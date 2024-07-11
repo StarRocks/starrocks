@@ -101,6 +101,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             res = self.save_r_into_db(self.case_info.file, self.case_info.name, self.res_log, self.version)
 
         self.close_starrocks()
+        self.close_trino()
+        self.close_spark()
+        self.close_hive()
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
@@ -156,8 +159,56 @@ Start to run: %s
                 uncheck = True
                 sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
 
+            if sql.startswith(sr_sql_lib.TRINO_FLAG):
+                sql = sql[len(sr_sql_lib.TRINO_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                actual_res = self.trino_execute_sql(sql)
+                self_print("[TRINO]: %s" % sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.SPARK_FLAG):
+                sql = sql[len(sr_sql_lib.SPARK_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                actual_res = self.spark_execute_sql(sql)
+                self_print("[SPARK]: %s" % sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.HIVE_FLAG):
+                sql = sql[len(sr_sql_lib.HIVE_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                actual_res = self.hive_execute_sql(sql)
+                self_print("[HIVE]: %s" % sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
             # execute command in files
-            if sql.startswith(sr_sql_lib.SHELL_FLAG):
+            elif sql.startswith(sr_sql_lib.SHELL_FLAG):
                 sql = sql[len(sr_sql_lib.SHELL_FLAG):]
 
                 # analyse var set
