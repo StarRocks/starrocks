@@ -19,7 +19,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
-#include "column/struct_column.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
@@ -70,14 +70,50 @@ void OrcOutputStream::close() {
     }
 }
 
-ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOutputStream> output_stream,
+AsyncOrcOutputStream::AsyncOrcOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {}
+
+uint64_t AsyncOrcOutputStream::getLength() const {
+    return _stream->tell();
+}
+
+uint64_t AsyncOrcOutputStream::getNaturalWriteSize() const {
+    return config::vector_chunk_size;
+}
+
+const std::string& AsyncOrcOutputStream::getName() const {
+    return _stream->filename();
+}
+
+void AsyncOrcOutputStream::write(const void* buf, size_t length) {
+    if (_is_closed) {
+        throw std::runtime_error("The output stream is closed but there are still inputs");
+    }
+    const uint8_t* ch = static_cast<const uint8_t*>(buf);
+    Status st = _stream->write(ch, length);
+    if (!st.ok()) {
+        throw std::runtime_error("write to orc failed: " + st.to_string());
+    }
+    return;
+}
+
+void AsyncOrcOutputStream::close() {
+    if (_is_closed) {
+        return;
+    }
+    _is_closed = true;
+
+    if (auto st = _stream->close(); !st.ok()) {
+        throw std::runtime_error("close orc output stream failed: " + st.to_string());
+    }
+}
+
+ORCFileWriter::ORCFileWriter(const std::string& location, std::shared_ptr<orc::OutputStream> output_stream,
                              const std::vector<std::string>& column_names,
                              const std::vector<TypeDescriptor>& type_descs,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                              TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()>& rollback_action, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state)
+                             const std::function<void()>& rollback_action)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
@@ -85,9 +121,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
           _writer_options(writer_options),
-          _rollback_action(rollback_action),
-          _executors(executors),
-          _runtime_state(runtime_state) {}
+          _rollback_action(rollback_action) {}
 
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
@@ -95,82 +129,60 @@ Status ORCFileWriter::init() {
     auto options = orc::WriterOptions();
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     options.setCompression(compression);
+    options.setMemoryPool(&_memory_pool);
     _writer = orc::createWriter(*_schema, _output_stream.get(), options);
     _writer->addUserMetadata(STARROCKS_ORC_WRITER_VERSION_KEY, get_short_version());
     return Status::OK();
 }
 
 int64_t ORCFileWriter::get_written_bytes() {
-    // TODO(letian-jiang): fixme
     return _output_stream->getLength();
 }
 
-std::future<Status> ORCFileWriter::write(ChunkPtr chunk) {
-    auto cvb = _convert(chunk);
-    if (!cvb.ok()) {
-        return make_ready_future(cvb.status());
-    }
-
-    // TODO(letian-jiang): aware of flush operations and execute async
-    _writer->add(*cvb.value());
-    _row_counter += chunk->num_rows();
-    return make_ready_future(Status::OK());
+int64_t ORCFileWriter::get_allocated_bytes() {
+    return _memory_pool.bytes_allocated();
 }
 
-std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
+Status ORCFileWriter::write(Chunk* chunk) {
+    ASSIGN_OR_RETURN(auto cvb, _convert(chunk));
+    _writer->add(*cvb);
+    _row_counter += chunk->num_rows();
+    return Status::OK();
+}
+
+FileWriter::CommitResult ORCFileWriter::commit() {
+    FileWriter::CommitResult result{
+            .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
+    try {
+        _writer->close();
+    } catch (const std::exception& e) {
+        result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
+    }
+
+    try {
+        _output_stream->close();
+    } catch (const std::exception& e) {
+        result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", e.what())));
+    }
+
+    if (result.io_status.ok()) {
+        result.file_statistics.record_count = _row_counter;
+        result.file_statistics.file_size = _output_stream->getLength();
+    }
+
     auto promise = std::make_shared<std::promise<FileWriter::CommitResult>>();
     std::future<FileWriter::CommitResult> future = promise->get_future();
 
-    auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
-                 row_counter = _row_counter, location = _location, state = _runtime_state] {
-#ifndef BE_TEST
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-        CurrentThread::current().set_query_id(state->query_id());
-        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
-#endif
-        FileWriter::CommitResult result{
-                .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
-        try {
-            writer->close();
-        } catch (const std::exception& e) {
-            result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
-        }
-
-        try {
-            output_stream->close();
-        } catch (const std::exception& e) {
-            result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", e.what())));
-        }
-
-        if (result.io_status.ok()) {
-            result.file_statistics.record_count = row_counter;
-            result.file_statistics.file_size = output_stream->getLength();
-        }
-
-        p->set_value(result);
-    };
-
-    if (_executors) {
-        bool ok = _executors->try_offer(task);
-        if (!ok) {
-            Status exception = Status::ResourceBusy("submit close file task fails");
-            LOG(WARNING) << exception;
-            promise->set_value(FileWriter::CommitResult{.io_status = exception, .rollback_action = _rollback_action});
-        }
-    } else {
-        task();
-    }
-
     _writer = nullptr;
-    return future;
+    return result;
 }
 
-StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(const ChunkPtr& chunk) {
+StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(Chunk* chunk) {
     auto cvb = _writer->createRowBatch(chunk->num_rows());
     auto root = down_cast<orc::StructVectorBatch*>(cvb.get());
 
     for (size_t i = 0; i < _column_evaluators.size(); ++i) {
-        ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk.get()));
+        ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk));
         RETURN_IF_ERROR(_write_column(*root->fields[i], column, _type_descs[i]));
     }
 
@@ -485,17 +497,23 @@ Status ORCFileWriterFactory::init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
+StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
-    auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
-    return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _compression_type, _parsed_options,
-                                           rollback_action, _executors, _runtime_state);
+    auto async_output_stream =
+            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+    auto orc_output_stream = std::make_shared<AsyncOrcOutputStream>(async_output_stream.get());
+    auto writer =
+            std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),
+                                            _compression_type, _parsed_options, rollback_action);
+    return WriterAndStream{
+            .writer = std::move(writer),
+            .stream = std::move(async_output_stream),
+    };
 }
 
 } // namespace starrocks::formats

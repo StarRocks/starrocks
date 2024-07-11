@@ -52,6 +52,7 @@ add_library(Formats STATIC
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
         orc/memory_stream/MemoryOutputStream.cc
+        parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
