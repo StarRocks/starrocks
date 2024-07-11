@@ -1647,10 +1647,17 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
-    EXPECT_TRUE(!status.ok());
-    if (!status.ok()) {
-        std::cout << status.message() << std::endl;
-    }
+    EXPECT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1024, chunk->num_rows());
+    EXPECT_EQ("[0, NULL]", chunk->debug_row(0));
 }
 
 TEST_F(FileReaderTest, TestReadStructNull) {
