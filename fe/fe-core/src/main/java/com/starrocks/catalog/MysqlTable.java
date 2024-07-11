@@ -237,7 +237,7 @@ public class MysqlTable extends Table {
     }
 
     @Override
-    public boolean supportTimeTravel() {
+    public boolean isTemporal() {
         return true;
     }
 }

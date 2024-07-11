@@ -751,7 +751,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
-    public boolean supportTimeTravel() {
+    public boolean isTemporal() {
         return false;
     }
 

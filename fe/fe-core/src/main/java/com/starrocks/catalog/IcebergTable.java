@@ -372,7 +372,7 @@ public class IcebergTable extends Table {
     }
 
     @Override
-    public boolean supportTimeTravel() {
+    public boolean isTemporal() {
         return true;
     }
 

@@ -102,7 +102,7 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
     }
 
     @Override
-    public boolean supportTimeTravel() {
+    public boolean isTemporal() {
         return true;
     }
 }
