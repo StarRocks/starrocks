@@ -1,4 +1,5 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2477,10 +2478,6 @@ Status ImmutableIndex::_read_page(size_t shard_idx, size_t pageid, LargeIndexPag
     if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_size * pageid, page->data(),
                                              shard_info.page_size));
-        if (stat != nullptr) {
-            stat->read_iops++;
-            stat->read_io_bytes += shard_info.page_size;
-        }
     } else {
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], compressed_page.data,
                                              shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]));
@@ -2490,10 +2487,10 @@ Status ImmutableIndex::_read_page(size_t shard_idx, size_t pageid, LargeIndexPag
                               shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]);
         Slice decompressed_body((uint8_t*)page->data(), shard_info.page_size);
         RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
-        if (stat != nullptr) {
-            stat->read_iops++;
-            stat->read_io_bytes += shard_info.page_off[pageid + 1] - shard_info.page_off[pageid];
-        }
+    }
+    if (stat != nullptr) {
+        stat->read_iops++;
+        stat->read_io_bytes += shard_info.page_off[pageid + 1] - shard_info.page_off[pageid];
     }
     return Status::OK();
 }
@@ -3033,7 +3030,11 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
             dest.data_size = src.data_size();
         }
         if (src.page_off().size() == 0) {
-            dest.page_off.emplace_back(0);
+            int off = 0;
+            for (int i = 0; i < src.npage() + 1; i++) {
+                dest.page_off.emplace_back(off);
+                off += page_size;
+            }
         } else {
             for (int i = 0; i < src.npage() + 1; i++) {
                 dest.page_off.emplace_back(src.page_off(i));
