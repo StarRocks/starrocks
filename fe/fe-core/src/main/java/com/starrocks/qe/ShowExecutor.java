@@ -1473,7 +1473,7 @@ public class ShowExecutor {
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                     }
 
-                    Table table = db.getTable(tableName);
+                    Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                     if (table == null) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
