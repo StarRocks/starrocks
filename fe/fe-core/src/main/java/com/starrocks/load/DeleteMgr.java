@@ -89,6 +89,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -163,8 +164,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
 
         DeleteJob deleteJob = null;
+        Table table = null;
         try {
-            Table table = null;
             long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
             db.readLock();
@@ -199,6 +200,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             deleteJob.run(stmt, db, table, partitions);
+        } catch (QueryStateException e) {
+            // If delete success, it will throw QueryStateException(QueryState.MysqlStateType.OK, sb.toString()).
+            if (e.getQueryState().getStateType() == QueryState.MysqlStateType.OK) {
+                // trigger after a delete job finished
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDeleteJobTransactionFinish(db, table);
+            }
+            throw e;
         } finally {
             if (!FeConstants.runningUnitTest) {
                 clearJob(deleteJob);
