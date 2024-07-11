@@ -77,6 +77,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -303,6 +304,22 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
+            String tableName = node.getTableName();
+            List<OrderByPair> orderByPairs = new ArrayList<>();
+            List<OrderByElement> orderByElements = node.getOrderByElements();
+            if (CollectionUtils.isNotEmpty(orderByElements)) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        throw new SemanticException("Should order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = ShowDataStmt.analyzeColumn(tableName, slotRef.getColumnName());
+                    OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                    orderByPairs.add(orderByPair);
+                }
+            }
+
+            node.setOrderByPairs(orderByPairs);
             return null;
         }
 

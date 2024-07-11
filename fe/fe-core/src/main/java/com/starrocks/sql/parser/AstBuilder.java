@@ -699,12 +699,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowDataStmt(StarRocksParser.ShowDataStmtContext context) {
         NodePosition pos = createPos(context);
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
         if (context.FROM() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-            return new ShowDataStmt(targetTableName.getDb(), targetTableName.getTbl(), pos);
+            return new ShowDataStmt(targetTableName.getDb(), targetTableName.getTbl(), orderByElements, pos);
         } else {
-            return new ShowDataStmt(null, null, pos);
+            return new ShowDataStmt(null, null, orderByElements, pos);
         }
     }
 

@@ -98,7 +98,6 @@ import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
@@ -261,9 +260,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -1406,15 +1402,12 @@ public class ShowExecutor {
             locker.lockDatabase(db, LockType.READ);
             try {
                 String tableName = statement.getTableName();
-                List<List<String>> totalRows = statement.getResultRows();
+                List<List<Comparable>> totalRows = new ArrayList<>();
                 if (tableName == null) {
                     long totalSize = 0;
                     long totalReplicaCount = 0;
 
-                    // sort by table name
                     List<Table> tables = db.getTables();
-                    SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
-
                     for (Table table : tables) {
                         try {
                             Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
@@ -1422,54 +1415,38 @@ public class ShowExecutor {
                         } catch (AccessDeniedException e) {
                             continue;
                         }
-
-                        sortedTables.add(table);
                     }
-
-                    for (Table table : sortedTables) {
+                    for (Table table : tables) {
                         if (!table.isNativeTableOrMaterializedView()) {
                             continue;
                         }
-
                         OlapTable olapTable = (OlapTable) table;
                         long tableSize = olapTable.getDataSize();
                         long replicaCount = olapTable.getReplicaCount();
-
-                        Pair<Double, String> tableSizePair = DebugUtil.getByteUint(tableSize);
-                        String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(tableSizePair.first) + " "
-                                + tableSizePair.second;
-
-                        List<String> row = Arrays.asList(table.getName(), readableSize, String.valueOf(replicaCount));
-                        totalRows.add(row);
-
+                        totalRows.add(Arrays.asList(table.getName(), tableSize, replicaCount));
                         totalSize += tableSize;
                         totalReplicaCount += replicaCount;
                     } // end for tables
 
-                    Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
-                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
-                            + totalSizePair.second;
-                    List<String> total = Arrays.asList("Total", readableSize, String.valueOf(totalReplicaCount));
-                    totalRows.add(total);
+                    // order by
+                    List<OrderByPair> orderByPairs = statement.getOrderByPairs();
+                    Comparator<List<Comparable>> comparator = CollectionUtils.isEmpty(orderByPairs)
+                            ? new ListComparator<>(0)
+                            : new ListComparator<>(orderByPairs);
+                    totalRows.sort(comparator);
+
+                    // total
+                    totalRows.add(Arrays.asList("Total", totalSize, totalReplicaCount));
 
                     // quota
                     long quota = db.getDataQuota();
                     long replicaQuota = db.getReplicaQuota();
-                    Pair<Double, String> quotaPair = DebugUtil.getByteUint(quota);
-                    String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaPair.first) + " "
-                            + quotaPair.second;
-
-                    List<String> quotaRow = Arrays.asList("Quota", readableQuota, String.valueOf(replicaQuota));
-                    totalRows.add(quotaRow);
+                    totalRows.add(Arrays.asList("Quota", quota, replicaQuota));
 
                     // left
                     long left = Math.max(0, quota - totalSize);
                     long replicaCountLeft = Math.max(0, replicaQuota - totalReplicaCount);
-                    Pair<Double, String> leftPair = DebugUtil.getByteUint(left);
-                    String readableLeft = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftPair.first) + " "
-                            + leftPair.second;
-                    List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
-                    totalRows.add(leftRow);
+                    totalRows.add(Arrays.asList("Left", left, replicaCountLeft));
                 } else {
                     try {
                         Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
@@ -1480,26 +1457,19 @@ public class ShowExecutor {
                                 context.getCurrentRoleIds(),
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                     }
-
                     Table table = db.getTable(tableName);
                     if (table == null) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
-
                     if (!table.isNativeTableOrMaterializedView()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
-
                     OlapTable olapTable = (OlapTable) table;
-                    int i = 0;
                     long totalSize = 0;
                     long totalReplicaCount = 0;
-
                     // sort by index name
                     Map<String, Long> indexNames = olapTable.getIndexNameToId();
-                    Map<String, Long> sortedIndexNames = new TreeMap<>(indexNames);
-
-                    for (Long indexId : sortedIndexNames.values()) {
+                    for (Long indexId : indexNames.values()) {
                         long indexSize = 0;
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
@@ -1509,36 +1479,28 @@ public class ShowExecutor {
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
                         }
-
-                        Pair<Double, String> indexSizePair = DebugUtil.getByteUint(indexSize);
-                        String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(indexSizePair.first) + " "
-                                + indexSizePair.second;
-
-                        List<String> row = null;
-                        if (i == 0) {
-                            row = Arrays.asList(tableName,
-                                    olapTable.getIndexNameById(indexId),
-                                    readableSize, String.valueOf(indexReplicaCount),
-                                    String.valueOf(indexRowCount));
-                        } else {
-                            row = Arrays.asList("",
-                                    olapTable.getIndexNameById(indexId),
-                                    readableSize, String.valueOf(indexReplicaCount),
-                                    String.valueOf(indexRowCount));
-                        }
-
+                        List<Comparable> row = Arrays.asList(tableName,
+                                olapTable.getIndexNameById(indexId),
+                                indexSize,
+                                indexReplicaCount,
+                                indexRowCount);
                         totalSize += indexSize;
                         totalReplicaCount += indexReplicaCount;
                         totalRows.add(row);
-
-                        i++;
                     } // end for indices
-
-                    Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
-                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
-                            + totalSizePair.second;
-                    List<String> row = Arrays.asList("", "Total", readableSize, String.valueOf(totalReplicaCount), "");
+                    // order by
+                    List<OrderByPair> orderByPairs = statement.getOrderByPairs();
+                    Comparator<List<Comparable>> comparator = CollectionUtils.isEmpty(orderByPairs)
+                            ? new ListComparator<>(1)
+                            : new ListComparator<>(orderByPairs);
+                    totalRows.sort(comparator);
+                    List<Comparable> row = Arrays.asList(tableName, "Total", totalSize, totalReplicaCount, "");
                     totalRows.add(row);
+                }
+                // add 'totalRows' to statement ResultRows
+                for (List<Comparable> row : totalRows) {
+                    List<String> resRow = row.stream().map(it -> it.toString()).collect(Collectors.toList());
+                    statement.getResultRows().add(resRow);
                 }
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
