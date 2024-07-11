@@ -725,9 +725,10 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert dropTemporaryTable(String tableName) throws Exception {
+    public StarRocksAssert dropTemporaryTable(String tableName, boolean ifExists) throws Exception {
         DropTemporaryTableStmt dropTemporaryTableStmt = (DropTemporaryTableStmt)
-                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + tableName + ";", ctx);
+                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + (ifExists ? "if exists " : "")
+                        + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
         return this;
     }
