@@ -970,6 +970,8 @@ TEST_F(VecMathFunctionsTest, ExpTest) {
         auto tc1 = DoubleColumn::create();
         tc1->append(0);
         tc1->append(2.0);
+        tc1->append(709.0);
+
         columns.emplace_back(tc1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -978,14 +980,16 @@ TEST_F(VecMathFunctionsTest, ExpTest) {
         ASSERT_EQ(false, result_exp->is_null(0));
         ASSERT_EQ(std::exp(0), result_exp->get(0).get_double());
         ASSERT_EQ(std::exp(2), result_exp->get(1).get_double());
+        ASSERT_EQ(std::exp(709), result_exp->get(2).get_double());
     }
 }
 
-TEST_F(VecMathFunctionsTest, ExpOverflowTest) {
+TEST_F(VecMathFunctionsTest, InfNanTest) {
     {
         Columns columns;
 
         auto tc1 = DoubleColumn::create();
+        tc1->append(710.0);
         tc1->append(2.47498282E8);
         tc1->append(2.47498282E3);
         columns.emplace_back(tc1);
@@ -995,6 +999,33 @@ TEST_F(VecMathFunctionsTest, ExpOverflowTest) {
 
         ASSERT_EQ(true, result_exp->is_null(0));
         ASSERT_EQ(true, result_exp->is_null(1));
+        ASSERT_EQ(true, result_exp->is_null(2));
+    }
+
+    {
+        Columns binary_columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(-0.9);
+        tc1->append(0.2);
+        tc1->append(0.3);
+        tc1->append(4.0);
+        binary_columns.emplace_back(tc1);
+
+        auto tc2 = DoubleColumn::create();
+        tc2->append(0.8);
+        tc2->append(0.2);
+        tc2->append(0.3);
+        tc2->append(1024.0);
+        binary_columns.emplace_back(tc2);
+
+        std::vector<bool> null_expect = {true, false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::pow(ctx.get(), binary_columns).value();
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
     }
 }
 
@@ -1404,30 +1435,6 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::log2(ctx.get(), columns).value();
-        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
-        ASSERT_EQ(nullable->size(), null_expect.size());
-        for (size_t i = 0; i < nullable->size(); i++) {
-            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
-        }
-    }
-
-    {
-        Columns binary_columns;
-        auto tc1 = DoubleColumn::create();
-        tc1->append(-0.9);
-        tc1->append(0.2);
-        tc1->append(0.3);
-        binary_columns.emplace_back(tc1);
-
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.8);
-        tc2->append(0.2);
-        tc2->append(0.3);
-        binary_columns.emplace_back(tc2);
-
-        std::vector<bool> null_expect = {true, false, false};
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = MathFunctions::pow(ctx.get(), binary_columns).value();
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
         ASSERT_EQ(nullable->size(), null_expect.size());
         for (size_t i = 0; i < nullable->size(); i++) {
