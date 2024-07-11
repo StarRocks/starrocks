@@ -166,6 +166,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [10: N_NAME, CHAR, false] = 'ARGENTINA'
 partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10258
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -338,6 +339,12 @@ probe runtime filters:
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+<<<<<<< HEAD
 * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 * L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] ESTIMATE
 [end]
+=======
+* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+* L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] MCV: [[1993-08-04:264600][1993-08-17:263300][1993-10-28:262500][1993-04-22:261400][1993-07-07:260900]] ESTIMATE
+[end]
+>>>>>>> dbd35c1cf3 ([BugFix] clear invalid statistics before into memo (#47776))
