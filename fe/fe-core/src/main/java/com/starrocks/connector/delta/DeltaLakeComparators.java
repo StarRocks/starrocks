@@ -16,19 +16,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
-import io.delta.kernel.types.BinaryType;
-import io.delta.kernel.types.BooleanType;
-import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
-import io.delta.kernel.types.DateType;
-import io.delta.kernel.types.DoubleType;
-import io.delta.kernel.types.FloatType;
-import io.delta.kernel.types.IntegerType;
-import io.delta.kernel.types.LongType;
-import io.delta.kernel.types.ShortType;
-import io.delta.kernel.types.StringType;
-import io.delta.kernel.types.TimestampNTZType;
-import io.delta.kernel.types.TimestampType;
 
 import java.util.Comparator;
 
@@ -36,25 +24,26 @@ public class DeltaLakeComparators {
     private DeltaLakeComparators() {
     }
 
-    private static final ImmutableMap<DataType, Comparator<?>> COMPARATORS =
-            ImmutableMap.<DataType, Comparator<?>>builder()
-                    .put(BooleanType.BOOLEAN, Comparator.naturalOrder())
-                    .put(ShortType.SHORT, Comparator.naturalOrder())
-                    .put(IntegerType.INTEGER, Comparator.naturalOrder())
-                    .put(LongType.LONG, Comparator.naturalOrder())
-                    .put(FloatType.FLOAT, Comparator.naturalOrder())
-                    .put(DoubleType.DOUBLE, Comparator.naturalOrder())
-                    .put(TimestampType.TIMESTAMP, Comparator.naturalOrder())
-                    .put(TimestampNTZType.TIMESTAMP_NTZ, Comparator.naturalOrder())
-                    .put(DateType.DATE, Comparator.naturalOrder())
-                    .put(StringType.STRING, Comparator.naturalOrder())
-                    .put(BinaryType.BINARY, Comparator.naturalOrder())
-                    .put(ByteType.BYTE, Comparator.naturalOrder())
+    private static final ImmutableMap<DeltaDataType, Comparator<?>> COMPARATORS =
+            ImmutableMap.<DeltaDataType, Comparator<?>>builder()
+                    .put(DeltaDataType.BOOLEAN, Comparator.naturalOrder())
+                    .put(DeltaDataType.SMALLINT, Comparator.naturalOrder())
+                    .put(DeltaDataType.INTEGER, Comparator.naturalOrder())
+                    .put(DeltaDataType.LONG, Comparator.naturalOrder())
+                    .put(DeltaDataType.FLOAT, Comparator.naturalOrder())
+                    .put(DeltaDataType.DOUBLE, Comparator.naturalOrder())
+                    .put(DeltaDataType.TIMESTAMP, Comparator.naturalOrder())
+                    .put(DeltaDataType.TIMESTAMP_NTZ, Comparator.naturalOrder())
+                    .put(DeltaDataType.DATE, Comparator.naturalOrder())
+                    .put(DeltaDataType.STRING, Comparator.naturalOrder())
+                    .put(DeltaDataType.BINARY, Comparator.naturalOrder())
+                    .put(DeltaDataType.BYTE, Comparator.naturalOrder())
+                    .put(DeltaDataType.DECIMAL, Comparator.naturalOrder())
                     .buildOrThrow();
 
     @SuppressWarnings("unchecked")
     public static <T> Comparator<T> forType(DataType type) {
-        Comparator<?> cmp = COMPARATORS.get(type);
+        Comparator<?> cmp = COMPARATORS.get(DeltaDataType.instanceFrom(type.getClass()));
         if (cmp != null) {
             return (Comparator<T>) cmp;
         } else {

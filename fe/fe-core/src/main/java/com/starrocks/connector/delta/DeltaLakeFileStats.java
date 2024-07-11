@@ -19,20 +19,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import io.delta.kernel.types.BinaryType;
-import io.delta.kernel.types.BooleanType;
-import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
-import io.delta.kernel.types.DateType;
-import io.delta.kernel.types.DoubleType;
-import io.delta.kernel.types.FloatType;
-import io.delta.kernel.types.IntegerType;
-import io.delta.kernel.types.LongType;
-import io.delta.kernel.types.ShortType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
-import io.delta.kernel.types.TimestampNTZType;
-import io.delta.kernel.types.TimestampType;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -295,35 +285,50 @@ public class DeltaLakeFileStats {
     }
 
     private static Object parseMinMaxValue(DataType type, Object value) {
-        if (type == BooleanType.BOOLEAN) {
-            return (boolean) value ? 1d : 0d;
-        } else if (type == ByteType.BYTE || type == ShortType.SHORT || type == IntegerType.INTEGER
-                || type == LongType.LONG || type == FloatType.FLOAT || type == DoubleType.DOUBLE
-                || type == StringType.STRING || type == BinaryType.BINARY) {
-            return value;
-        } else if (type == TimestampNTZType.TIMESTAMP_NTZ) {
-            return parseTimestampNTZ((String) value);
-        } else if (type == TimestampType.TIMESTAMP) {
-            return parseTimestampWithAtZone((String) value);
-        } else if (type == DateType.DATE) {
-            return parseDate((String) value);
-        } else {
-            return null;
+        DeltaDataType deltaDataType = DeltaDataType.instanceFrom(type.getClass());
+        switch (deltaDataType) {
+            case BOOLEAN:
+                return (boolean) value ? 1d : 0d;
+            case BYTE:
+            case SMALLINT:
+            case INTEGER:
+            case LONG:
+            case FLOAT:
+            case DOUBLE:
+            case STRING:
+            case BINARY:
+            case DECIMAL:
+                return value;
+            case TIMESTAMP_NTZ:
+                return parseTimestampNTZ((String) value);
+            case TIMESTAMP:
+                return parseTimestampWithAtZone((String) value);
+            case DATE:
+                return parseDate((String) value);
+            default:
+                return null;
         }
     }
 
     private Object parsePartitionValue(DataType type, String value) {
-        if (type == BooleanType.BOOLEAN) {
-            return value.equalsIgnoreCase("false") ? 0d : 1d;
-        } else if (type == ByteType.BYTE || type == ShortType.SHORT || type == IntegerType.INTEGER
-                || type == LongType.LONG || type == FloatType.FLOAT || type == DoubleType.DOUBLE) {
-            return Double.parseDouble(value);
-        } else if (type == StringType.STRING || type == BinaryType.BINARY) {
-            return value;
-        } else if (type == DateType.DATE || type == TimestampType.TIMESTAMP || type == TimestampNTZType.TIMESTAMP_NTZ) {
-            return parseDate(value);
-        } else {
-            return null;
+        DeltaDataType deltaDataType = DeltaDataType.instanceFrom(type.getClass());
+        switch (deltaDataType) {
+            case BOOLEAN:
+                return value.equalsIgnoreCase("false") ? 0d : 1d;
+            case BYTE:
+            case SMALLINT:
+            case INTEGER:
+            case LONG:
+            case FLOAT:
+            case DOUBLE:
+            case DECIMAL:
+                return Double.parseDouble(value);
+            case DATE:
+            case TIMESTAMP:
+            case TIMESTAMP_NTZ:
+                return parseDate(value);
+            default:
+                return null;
         }
     }
 }
