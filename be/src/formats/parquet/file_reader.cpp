@@ -65,7 +65,6 @@
 #include "util/hash_util.hpp"
 #include "util/memcmp.h"
 #include "util/runtime_profile.h"
-#include "util/slice.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 

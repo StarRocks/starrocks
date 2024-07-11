@@ -59,7 +59,7 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
                                                         materialized_column.decode_needed);
         read_cols.emplace_back(column);
-        existed_column_names.emplace(materialized_column.name());
+        existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
 }
 
@@ -173,8 +173,8 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
-        const std::string& name = materialized_column.formatted_name(_case_sensitive);
-        auto iceberg_it = _field_name_2_iceberg_field.find(name);
+        const std::string& formatted_name = Utils::format_name(materialized_column.name(), _case_sensitive);
+        auto iceberg_it = _field_name_2_iceberg_field.find(formatted_name);
         if (iceberg_it == _field_name_2_iceberg_field.end()) {
             continue;
         }
@@ -195,7 +195,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
                                                         materialized_column.decode_needed, iceberg_it->second);
         read_cols.emplace_back(column);
-        existed_column_names.emplace(name);
+        existed_column_names.emplace(formatted_name);
     }
 }
 
