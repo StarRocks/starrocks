@@ -1724,4 +1724,8 @@ public abstract class Type implements Cloneable {
     public String toMysqlColumnTypeString() {
         return "unknown";
     }
+
+    public int getMaxUniqueId() {
+        return -1;
+    }
 }

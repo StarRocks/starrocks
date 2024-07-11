@@ -1906,8 +1906,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
 
-                // increase maxColUniqueId and assign the uniqueId to new added field
-                int id = olapTable.incAndGetMaxColUniqueId();
+                int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {
