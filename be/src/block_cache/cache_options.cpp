@@ -14,6 +14,8 @@
 
 #include "block_cache/cache_options.h"
 
+#include <fmt/format.h>
+
 #include <filesystem>
 
 #include "common/logging.h"
@@ -109,6 +111,19 @@ Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, con
         disk_spaces->push_back({.path = p, .size = static_cast<size_t>(disk_size)});
     }
     return Status::OK();
+}
+
+void clean_residual_datacache(const std::string& disk_path) {
+    auto st = FileSystem::Default()->iterate_dir2(disk_path, [&](DirEntry entry) {
+        if (!entry.is_dir.value_or(false) && entry.name.find("blockfile_") == 0) {
+            auto file = fmt::format("{}/{}", disk_path, entry.name);
+            auto ret = FileSystem::Default()->delete_file(file);
+            LOG_IF(WARNING, !ret.ok()) << "fail to delete residual datacache file: " << file
+                                       << ", reason: " << ret.message();
+        }
+        return true;
+    });
+    LOG_IF(WARNING, !st.ok()) << "fail to clean residual datacache data, reason: " << st.message();
 }
 
 } // namespace starrocks
