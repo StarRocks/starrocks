@@ -39,7 +39,6 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.4.2</iceberg.version>
-        <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.8.1</paimon.version>
         <staros.version>3.2.2</staros.version>
         <python>python</python>
@@ -300,24 +299,6 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
-            <version>${awsv2.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>url-connection-client</artifactId>
-            <version>${awsv2.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>utils</artifactId>
-                    <groupId>software.amazon.awssdk</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
             <groupId>io.delta</groupId>
             <artifactId>delta-standalone_2.12</artifactId>
             <version>0.5.0</version>
@@ -480,6 +461,10 @@ under the License.
                     <artifactId>hadoop-client</artifactId>
                 </exclusion>
                 <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
+                <exclusion>
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
@@ -494,6 +479,10 @@ under the License.
                 <exclusion>
                     <artifactId>stream</artifactId>
                     <groupId>com.clearspring.analytics</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -598,6 +587,16 @@ under the License.
                     <artifactId>reload4j</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-runtime</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -814,6 +813,12 @@ under the License.
             <groupId>org.apache.ranger</groupId>
             <artifactId>ranger-plugins-common</artifactId>
             <version>2.4.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.amazonaws</groupId>
+                    <artifactId>aws-java-sdk-bundle</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

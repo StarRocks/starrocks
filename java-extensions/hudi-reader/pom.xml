@@ -18,7 +18,7 @@
         <slf4j.version>1.7.36</slf4j.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
         <parquet-hadoop.version>1.12.3</parquet-hadoop.version>
-        <hadoop.version>3.3.6</hadoop.version>
+        <hadoop.version>3.4.0</hadoop.version>
         <hudi.version>0.14.1</hudi.version>
         <airlift.version>0.25</airlift.version>
         <avro.version>1.11.3</avro.version>
@@ -109,6 +109,12 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
             <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>bundle</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
