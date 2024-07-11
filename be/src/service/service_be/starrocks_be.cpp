@@ -202,7 +202,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream
-    // load needs to send thrift rpc to FE
+    // load will send thrift rpc to FE after http server is started
     ThriftRpcHelper::setup(exec_env);
 
     // Start thrift server
