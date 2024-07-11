@@ -761,7 +761,6 @@ public class ResourceGroupStmtTest {
                 "    (source_ip='192.168.2.1/32')\n" +
                 "with (\n" +
                 "    'cpu_core_limit' = '10',\n" +
-                "    'max_cpu_cores' = '8',\n" +
                 "    'mem_limit' = '20%'\n" +
                 ");";
         starRocksAssert.executeResourceGroupDdlSql(createSQL);
