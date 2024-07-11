@@ -108,6 +108,47 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
+AsyncParquetOutputStream::AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {
+    set_mode(arrow::io::FileMode::WRITE);
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
+    arrow::Status st = Write(data->data(), data->size());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to write data to output stream, err msg: " << st.message();
+    }
+    return st;
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const void* data, int64_t nbytes) {
+    if (_is_closed) {
+        return arrow::Status::IOError("The output stream is closed but there are still inputs");
+    }
+
+    auto status = _stream->write(static_cast<const uint8_t*>(data), nbytes);
+    if (!status.ok()) {
+        return arrow::Status::IOError(status.message());
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Result<int64_t> AsyncParquetOutputStream::Tell() const {
+    return _stream->tell();
+}
+
+arrow::Status AsyncParquetOutputStream::Close() {
+    if (_is_closed) {
+        return arrow::Status::OK();
+    }
+    _is_closed = true;
+    Status st = _stream->close();
+    if (!st.ok()) {
+        LOG(WARNING) << "close parquet output stream failed: " << st;
+        return arrow::Status::IOError(st.to_string());
+    }
+    return arrow::Status::OK();
+}
+
 StatusOr<::parquet::Compression::type> ParquetBuildHelper::convert_compression_type(
         const TCompressionType::type& compression_type) {
     auto codec = ::parquet::Compression::UNCOMPRESSED;
