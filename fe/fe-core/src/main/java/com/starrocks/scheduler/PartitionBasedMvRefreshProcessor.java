@@ -42,7 +42,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -57,8 +56,6 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableUpdateArbitrator;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -1393,32 +1390,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             baseTableInfo.getTableInfoStr());
                 }
                 Table table = tableOpt.get();
-                if (table.isView()) {
+                if (table.isOlapOrCloudNativeTable()) {
+                    OlapTable olapTable = (OlapTable) table;
+                    OlapTable copied = new OlapTable();
+                    olapTable.copyOnlyForQuery(copied);
+                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                } else if (table.isView()) {
                     // skip to collect snapshots for views
-                } else if (table.isOlapTable()) {
-                    OlapTable copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy olap table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
-                } else if (table.isOlapMaterializedView()) {
-                    MaterializedView copied = DeepCopy.copyWithGson(table, MaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
-                } else if (table.isCloudNativeTable()) {
-                    LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
-                } else if (table.isCloudNativeMaterializedView()) {
-                    LakeMaterializedView copied = DeepCopy.copyWithGson(table, LakeMaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 } else {
                     // for other table types, use the table directly which needs to lock if visits the table metadata.
                     tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, table));
