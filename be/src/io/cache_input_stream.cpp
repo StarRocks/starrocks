@@ -251,7 +251,7 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
                     LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
                 };
                 options.callback = cb;
-                options.allow_zero_copy = true;
+                options.allow_zero_copy = false;
             }
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
@@ -441,7 +441,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
                 LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
             };
             options.callback = cb;
-            options.allow_zero_copy = true;
+            options.allow_zero_copy = false;
         }
         Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
         if (r.ok()) {
