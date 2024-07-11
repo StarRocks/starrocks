@@ -610,7 +610,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             fields.add(field);
         }
-        if (fields == null || fields.size() <= 0) {
+        if (fields.isEmpty()) {
             throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
                                    "], can not drop any more.");
         }
