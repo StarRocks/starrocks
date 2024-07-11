@@ -69,6 +69,10 @@ public class Dictionary implements Writable {
 
     private Map<String, String> properties = Maps.newHashMap();
 
+    // =============== Runtime parameter ===========================
+    // This parameters are serialized ONLY use for sync refresh state from leader
+    // to follower. When FE restart, all kinds of this runtime parameter will be
+    // reset.
     @SerializedName(value = "lastSuccessRefreshTime")
     private long lastSuccessRefreshTime = 0;
     @SerializedName(value = "lastSuccessFinishedTime")
@@ -81,6 +85,7 @@ public class Dictionary implements Writable {
     private String runtimeErrMsg;
     @SerializedName(value = "lastSuccessVersion")
     private long lastSuccessVersion = 0;
+    // =============== Runtime parameter ===========================
 
     public Dictionary(long dictionaryId, String dictionaryName, String queryableObject,
                       String catalogName, String dbName, List<String> dictionaryKeys,
