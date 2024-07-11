@@ -295,8 +295,22 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         _sub_readers = std::make_unique<SubReaderList>();
+        LOG(INFO) << "meta children_columns_size:" << meta->children_columns_size();
         for (int i = 0; i < meta->children_columns_size(); ++i) {
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
+            if (sub_column != nullptr) {
+                // the type of unique_id in meta is uint32_t and the default value is -1
+                // so cast to int64 to compare
+                int64_t uid_in_meta = static_cast<int64_t>(meta->mutable_children_columns(i)->unique_id());
+                int64_t uid_in_col = static_cast<int64_t>(sub_column->unique_id());
+                if (uid_in_meta != uid_in_col) {
+                    std::string msg =
+                            strings::Substitute("sub_column($0) unique id in meta($0) is not equal to schema($1)",
+                                                sub_column->name(), uid_in_meta, uid_in_col);
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
+            }
             auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
