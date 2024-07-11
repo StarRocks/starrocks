@@ -72,6 +72,9 @@ public class SetStmtAnalyzer {
         List<SetListItem> setVars = setStmt.getSetListItems();
         HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
         boolean hasUserVar = setVars.stream().anyMatch(var -> var instanceof UserVariable);
+        //Record the order in which user variables appear in SQL
+        //set @a = 1, @b = @c+1, @c = 1; var b shouldn't be reanalyzed.
+        List<String> userVarSequenceInSql = new ArrayList<>();
         if (hasUserVar) {
             cloneUserVars.putAll(session.getUserVariables());
         }
@@ -87,9 +90,14 @@ public class SetStmtAnalyzer {
                     }
 
                     analyzeUserVariable(userVar);
-                    List<String> varDependency = ExpressionAnalyzer.
+                    List<String> varDependencies = ExpressionAnalyzer.
                             analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());
-                    userVar.setUserVariableDependencyWithoutFind(varDependency);
+                    boolean hasPreDependency = varDependencies.stream().anyMatch(varDep -> userVarSequenceInSql.contains(varDep));
+                    if (!varDependencies.isEmpty() && hasPreDependency) {
+                        userVar.setUserVariableDependencyNotInConnContext(varDependencies);
+                    }
+
+                    userVarSequenceInSql.add(userVar.getVariable());
                 } else if (var instanceof SetUserPropertyVar) {
                     analyzeSetUserPropertyVar((SetUserPropertyVar) var);
                 } else if (var instanceof SetNamesVar) {

@@ -150,10 +150,10 @@ public class ExpressionAnalyzer {
     }
 
     public void analyzeUserVarDependency(Expr expression, Scope scope,
-                                         List<String> userVariableDependencyWithoutFind) {
+                                         List<String> userVariableDependencyNotInConnContext) {
         CheckUserVariableDependencyVisitor visitor =
                 new CheckUserVariableDependencyVisitor(session,
-                        userVariableDependencyWithoutFind);
+                        userVariableDependencyNotInConnContext);
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -2078,18 +2078,18 @@ public class ExpressionAnalyzer {
 
     public static class CheckUserVariableDependencyVisitor implements AstVisitor<Void, Scope> {
         private final ConnectContext session;
-        private List<String> userVariableDependencyWithoutFind;
+        private List<String> userVariableDependencyNotInConnContext;
 
         public CheckUserVariableDependencyVisitor(ConnectContext session,
-                                                  List<String> userVariableDependencyWithoutFind) {
+                                                  List<String> userVariableDependencyNotInConnContext) {
             this.session = session;
-            this.userVariableDependencyWithoutFind = userVariableDependencyWithoutFind;
+            this.userVariableDependencyNotInConnContext = userVariableDependencyNotInConnContext;
         }
 
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
             UserVariable userVariable = session.getUserVariable(node.getName());
             if (userVariable == null) {
-                userVariableDependencyWithoutFind.add(node.getName());
+                userVariableDependencyNotInConnContext.add(node.getName());
             }
             return null;
         }

@@ -149,7 +149,7 @@ public class HintFactory {
     private static UserVariableHint buildUserVariableHint(String text, Token token, SessionVariable sessionVariable) {
         text = trimWithSpace(text);
 
-        //To ensure that the dependency order of the User-defined hint variable.
+        //To ensure that the dependency sequence of the User-defined hint variable.
         ImmutableMap.Builder<String, UserVariable> builder = new ImmutableMap.Builder<String, UserVariable>();
         if (text.startsWith("(") && text.endsWith(")")) {
             List<Expr> exprs;

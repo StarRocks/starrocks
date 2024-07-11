@@ -67,7 +67,7 @@ public class SetExecutor {
             }
 
             //reanalyze UserVariable
-            if (userVariable.getUserVariableDependencyWithoutFind().size() > 0) {
+            if (userVariable.getUserVariableDependencyNotInConnContext().size() > 0) {
                 SetStmtAnalyzer.analyzeUserVariable(userVariable);
             }
 

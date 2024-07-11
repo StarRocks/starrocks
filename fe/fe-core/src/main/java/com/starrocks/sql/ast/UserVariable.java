@@ -45,7 +45,7 @@ public class UserVariable extends SetListItem {
     private final String variable;
     private Expr unevaluatedExpression;
     private Expr evaluatedExpression;
-    private List<String> userVariableDependencyWithoutFind = new ArrayList<>();
+    private List<String> userVariableDependencyNotInConnContext = new ArrayList<>();
 
 
     private final boolean isFromHint;
@@ -85,12 +85,12 @@ public class UserVariable extends SetListItem {
         this.evaluatedExpression = evaluatedExpression;
     }
 
-    public List<String> getUserVariableDependencyWithoutFind() {
-        return this.userVariableDependencyWithoutFind;
+    public List<String> getUserVariableDependencyNotInConnContext() {
+        return this.userVariableDependencyNotInConnContext;
     }
 
-    public void setUserVariableDependencyWithoutFind(List<String> userVariableDependencyWithoutFind) {
-        this.userVariableDependencyWithoutFind = userVariableDependencyWithoutFind;
+    public void setUserVariableDependencyNotInConnContext(List<String> userVariableDependencyNotInConnContext) {
+        this.userVariableDependencyNotInConnContext = userVariableDependencyNotInConnContext;
     }
 
     public boolean isFromHint() {
