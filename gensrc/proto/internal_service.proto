@@ -105,6 +105,7 @@ message PTransmitChunkResult {
     optional StatusPB status = 1;
     optional int64 receive_timestamp = 2; // Deprecated
     optional int64 receiver_post_process_time = 3;
+    optional bool is_eof = 4;
 };
 
 message PTransmitRuntimeFilterForwardTarget {
