@@ -15,7 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.DictionaryMgr;
+import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -122,5 +124,32 @@ public class DictionaryMgrTest {
     @Test
     public void testShowDictionary() throws Exception {
         dictionaryMgr.getAllInfo("dict");
+    }
+
+    @Test
+    public void testResetStateFunction() throws Exception {
+        Dictionary dictionary = new Dictionary();
+        dictionary.resetState();
+    }
+
+    @Test
+    public void testFollower() throws Exception {
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().isLeader();
+                minTimes = 0;
+                result = false;
+            }
+        };
+
+        Dictionary dictionary = new Dictionary();
+        List<Dictionary> dictionaries = Lists.newArrayList();
+        dictionaries.add(dictionary);
+
+        DictionaryMgrInfo dictionaryMgrInfo = new DictionaryMgrInfo(1, 1, dictionaries);
+
+        dictionaryMgr.syncDictionaryMeta(dictionaries);
+        dictionaryMgr.scheduleTasks();
+        dictionaryMgr.replayModifyDictionaryMgr(dictionaryMgrInfo);
     }
 }
