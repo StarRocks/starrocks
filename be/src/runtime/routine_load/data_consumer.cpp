@@ -283,7 +283,8 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             st = Status::InternalError(fmt::format(
                     "kafka consume failed, err: {}. You should add or modify the consumer group '{}' with READ "
                     "permission for this topic: {} in consumer group ACLs and set the routine load job with "
-                    "`property.group.id` property", msg->errstr(), _group_id, _topic));
+                    "`property.group.id` property",
+                    msg->errstr(), _group_id, _topic));
             break;
         }
         default:
@@ -447,8 +448,8 @@ Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_
     RdKafka::ErrorCode err = _k_consumer->commitSync(topic_partitions);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id << ", err: "
-           << RdKafka::err2str(err);
+        ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+           << ", err: " << RdKafka::err2str(err);
         return Status::InternalError(ss.str());
     }
     return Status::OK();
