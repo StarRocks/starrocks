@@ -72,9 +72,9 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -105,8 +105,8 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -128,9 +128,9 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -146,8 +146,8 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -168,9 +168,9 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -187,8 +187,8 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -209,9 +209,9 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -228,8 +228,8 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -250,9 +250,9 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -278,8 +278,8 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -300,9 +300,9 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -328,8 +328,8 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -349,9 +349,9 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -371,8 +371,8 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -398,9 +398,9 @@ TEST_F(CSVFileWriterTest, TestWriteArray) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_ERROR(writer->init());
 }
 
@@ -421,9 +421,9 @@ TEST_F(CSVFileWriterTest, TestWriteMap) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_ERROR(writer->init());
 }
 
@@ -444,52 +444,10 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_ERROR(writer->init());
-}
-
-TEST_F(CSVFileWriterTest, TestWriteWithExecutors) {
-    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
-    std::vector<TypeDescriptor> type_descs{type_bool};
-
-    auto column_names = _make_type_names(type_descs);
-    auto maybe_output_file = _fs.new_writable_file(_file_path);
-    EXPECT_OK(maybe_output_file.status());
-    auto output_file = std::move(maybe_output_file.value());
-    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
-    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
-    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
-    auto executors = PriorityThreadPool("test", 1, 1);
-    auto writer = std::make_unique<formats::CSVFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, &executors, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto data_column = BooleanColumn::create();
-        std::vector<uint8_t> values = {0, 1, 1, 0};
-        data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
-        auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
-        null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // verify correctness
-    std::string content;
-    ASSERT_OK(_fs.read_file(_file_path, &content));
-    std::string expect = "\\N\ntrue\n\\N\nfalse\n";
-    ASSERT_EQ(content, expect);
 }
 
 TEST_F(CSVFileWriterTest, TestUnknownCompression) {
@@ -503,7 +461,7 @@ TEST_F(CSVFileWriterTest, TestUnknownCompression) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {});
     ASSERT_ERROR(writer->init());
 }
 
@@ -519,8 +477,6 @@ TEST_F(CSVFileWriterTest, TestFactory) {
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create("/test.csv");
     ASSERT_OK(maybe_writer.status());
-    auto writer = maybe_writer.value();
-    ASSERT_OK(writer->init());
 }
 
 } // namespace starrocks::formats

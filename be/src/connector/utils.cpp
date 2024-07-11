@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "utils.h"
+#include "connector/utils.h"
 
 #include "column/column.h"
 #include "column/datum.h"
@@ -24,30 +24,17 @@ namespace starrocks::connector {
 
 StatusOr<std::string> HiveUtils::make_partition_name(
         const std::vector<std::string>& column_names,
-        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk) {
+        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
+        bool support_null_partition) {
     DCHECK_EQ(column_names.size(), column_evaluators.size());
     std::stringstream ss;
     for (size_t i = 0; i < column_evaluators.size(); i++) {
         ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
-        if (column->has_null()) {
+        if (!support_null_partition && column->has_null()) {
             return Status::NotSupported("Partition value can't be null.");
         }
         auto type = column_evaluators[i]->type();
-        ASSIGN_OR_RETURN(auto value, column_value(type, column));
-        ss << column_names[i] << "=" << value << "/";
-    }
-    return ss.str();
-}
-
-StatusOr<std::string> HiveUtils::make_partition_name_nullable(
-        const std::vector<std::string>& column_names,
-        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk) {
-    DCHECK_EQ(column_names.size(), column_evaluators.size());
-    std::stringstream ss;
-    for (size_t i = 0; i < column_evaluators.size(); i++) {
-        ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
-        auto type = column_evaluators[i]->type();
-        ASSIGN_OR_RETURN(auto value, column_value(type, column));
+        ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
         ss << column_names[i] << "=" << value << "/";
     }
     return ss.str();
@@ -64,9 +51,9 @@ std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
 }
 
 // TODO(letian-jiang): translate org.apache.hadoop.hive.common.FileUtils#makePartName
-StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column) {
-    DCHECK_GT(column->size(), 0);
-    auto datum = column->get(0);
+StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int i) {
+    DCHECK(i < column->size() && i >= 0);
+    auto datum = column->get(i);
     if (datum.is_null()) {
         return "null";
     }
@@ -107,35 +94,6 @@ StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, c
         return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
     }
     }
-}
-
-StatusOr<ConnectorChunkSink::Futures> HiveUtils::hive_style_partitioning_write_chunk(
-        const ChunkPtr& chunk, bool partitioned, const std::string& partition, int64_t max_file_size,
-        const formats::FileWriterFactory* file_writer_factory, LocationProvider* location_provider,
-        std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers) {
-    ConnectorChunkSink::Futures futures;
-    auto it = partition_writers.find(partition);
-    if (it != partition_writers.end()) {
-        auto* writer = it->second.get();
-        if (writer->get_written_bytes() >= max_file_size) {
-            futures.commit_file_futures.push_back(writer->commit());
-            partition_writers.erase(it);
-            auto path = partitioned ? location_provider->get(partition) : location_provider->get();
-            ASSIGN_OR_RETURN(auto new_writer, file_writer_factory->create(path));
-            RETURN_IF_ERROR(new_writer->init());
-            futures.add_chunk_futures.push_back(new_writer->write(chunk));
-            partition_writers.emplace(partition, std::move(new_writer));
-        } else {
-            futures.add_chunk_futures.push_back(writer->write(chunk));
-        }
-    } else {
-        auto path = partitioned ? location_provider->get(partition) : location_provider->get();
-        ASSIGN_OR_RETURN(auto new_writer, file_writer_factory->create(path));
-        RETURN_IF_ERROR(new_writer->init());
-        futures.add_chunk_futures.push_back(new_writer->write(chunk));
-        partition_writers.emplace(partition, std::move(new_writer));
-    }
-    return futures;
 }
 
 } // namespace starrocks::connector

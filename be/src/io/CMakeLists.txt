@@ -33,4 +33,6 @@ add_library(IO STATIC
         s3_output_stream.cpp
         cache_input_stream.cpp
         shared_buffered_input_stream.cpp
+        async_flush_output_stream.cpp
+        direct_s3_output_stream.cpp
         )

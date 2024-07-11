@@ -30,6 +30,8 @@
 namespace starrocks::pipeline {
 namespace {
 
+using CommitResult = formats::FileWriter::CommitResult;
+
 class ConnectorSinkOperatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -44,137 +46,6 @@ protected:
     FragmentContext* _fragment_context;
     RuntimeState* _runtime_state;
 };
-
-class MockConnectorChunkSink : public connector::ConnectorChunkSink {
-public:
-    MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(StatusOr<Futures>, add, (ChunkPtr), (override));
-    MOCK_METHOD(Futures, finish, (), (override));
-    MOCK_METHOD(std::function<void(const formats::FileWriter::CommitResult& result)>, callback_on_success, (),
-                (override));
-};
-
-using ::testing::Return;
-using ::testing::ByMove;
-using Futures = connector::ConnectorChunkSink::Futures;
-using CommitResult = formats::FileWriter::CommitResult;
-using ::testing::_;
-
-TEST_F(ConnectorSinkOperatorTest, test_prepare) {
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        EXPECT_CALL(*mock_sink, init()).WillOnce(Return(Status::Unknown("error")));
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
-        ASSERT_ERROR(op->prepare(_runtime_state));
-        ASSERT_FALSE(op->has_output());
-    }
-
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        EXPECT_CALL(*mock_sink, init()).WillOnce(Return(Status::OK()));
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
-        ASSERT_OK(op->prepare(_runtime_state));
-        ASSERT_FALSE(op->has_output());
-    }
-}
-
-TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(Futures{})));   // don't block
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{}))); // don't block
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
-        auto chunk = std::make_shared<Chunk>();
-        EXPECT_TRUE(op->need_input());
-        EXPECT_OK(op->push_chunk(_runtime_state, chunk));
-        EXPECT_TRUE(op->need_input()); // ready immediately
-        EXPECT_FALSE(op->is_finished());
-        EXPECT_OK(op->set_finishing(_runtime_state));
-        EXPECT_TRUE(op->is_finished());
-    }
-
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        auto promise = std::promise<Status>();
-        auto futures = Futures{};
-        futures.add_chunk_futures.push_back(promise.get_future()); // block
-        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{}))); // don't block
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
-        auto chunk = std::make_shared<Chunk>();
-        EXPECT_TRUE(op->need_input());
-        EXPECT_OK(op->push_chunk(_runtime_state, chunk));
-        EXPECT_FALSE(op->need_input()); // block on flushing rowgroup
-        promise.set_value(Status::OK());
-        EXPECT_TRUE(op->need_input()); // can accept more chunks
-        EXPECT_OK(op->set_finishing(_runtime_state));
-        EXPECT_TRUE(op->is_finished());
-        EXPECT_FALSE(op->pending_finish());
-    }
-
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        auto promise = std::promise<CommitResult>();
-        auto futures = Futures{};
-        futures.commit_file_futures.push_back(promise.get_future()); // block
-        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{})));                  // don't block
-        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r) {})); // don't block
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
-        auto chunk = std::make_shared<Chunk>();
-        EXPECT_TRUE(op->need_input());
-        EXPECT_OK(op->push_chunk(_runtime_state, chunk));
-        EXPECT_TRUE(op->need_input());
-        EXPECT_OK(op->set_finishing(_runtime_state));
-        EXPECT_FALSE(op->is_finished());
-        promise.set_value(CommitResult{
-                .io_status = Status::OK(),
-                .rollback_action = []() {},
-        });
-        EXPECT_TRUE(op->is_finished());
-        EXPECT_FALSE(op->pending_finish());
-    }
-}
-
-TEST_F(ConnectorSinkOperatorTest, test_push_chunk_error) {
-    {
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        auto promise = std::promise<Status>();
-        auto futures = Futures{};
-        futures.add_chunk_futures.push_back(promise.get_future()); // block
-        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), _fragment_context);
-        auto chunk = std::make_shared<Chunk>();
-        EXPECT_TRUE(op->need_input());
-        EXPECT_OK(op->push_chunk(_runtime_state, chunk));
-        EXPECT_FALSE(op->need_input()); // block on flushing rowgroup
-        promise.set_value(Status::IOError("io error"));
-        EXPECT_TRUE(op->need_input()); // can accept more chunks
-        EXPECT_TRUE(_fragment_context->is_canceled());
-    }
-}
-
-TEST_F(ConnectorSinkOperatorTest, test_cleanup_after_cancel) {
-    {
-        bool cleanup = false;
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        auto futures = Futures{};
-        futures.commit_file_futures.push_back(make_ready_future(CommitResult{
-                .io_status = Status::OK(),
-                .rollback_action = [&]() { cleanup = true; },
-        }));
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(std::move(futures))));         // don't block
-        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r) {})); // don't block
-        auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), _fragment_context);
-
-        EXPECT_OK(op->set_finishing(_runtime_state));
-        EXPECT_TRUE(op->is_finished());
-        EXPECT_OK(op->set_cancelled(_runtime_state));
-        EXPECT_FALSE(cleanup);
-        op->close(_runtime_state); // execute rollback action
-        EXPECT_TRUE(cleanup);
-    }
-}
 
 TEST_F(ConnectorSinkOperatorTest, test_factory) {
     {
@@ -195,7 +66,6 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->fragment_context = _fragment_context;
         auto op_factory =
                 std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
-        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto op = op_factory->create(1, 0);
         EXPECT_OK(op->prepare(_runtime_state));
     }

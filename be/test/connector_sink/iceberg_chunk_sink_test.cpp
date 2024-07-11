@@ -22,6 +22,7 @@
 #include <thread>
 
 #include "connector/connector_chunk_sink.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
@@ -30,6 +31,12 @@
 
 namespace starrocks::connector {
 namespace {
+
+using CommitResult = formats::FileWriter::CommitResult;
+using WriterAndStream = formats::WriterAndStream;
+using ::testing::Return;
+using ::testing::ByMove;
+using ::testing::_;
 
 class IcebergChunkSinkTest : public ::testing::Test {
 protected:
@@ -49,186 +56,8 @@ protected:
 class MockFileWriterFactory : public formats::FileWriterFactory {
 public:
     MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (const override));
+    MOCK_METHOD(StatusOr<WriterAndStream>, create, (const std::string&), (const override));
 };
-
-class MockFileWriter : public formats::FileWriter {
-public:
-    MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(int64_t, get_written_bytes, (), (override));
-    MOCK_METHOD(std::future<Status>, write, (ChunkPtr), (override));
-    MOCK_METHOD(std::future<CommitResult>, commit, (), (override));
-};
-
-using ::testing::Return;
-using ::testing::ByMove;
-using Futures = connector::ConnectorChunkSink::Futures;
-using CommitResult = formats::FileWriter::CommitResult;
-using ::testing::_;
-
-TEST_F(IcebergChunkSinkTest, test_unpartitioned_sink) {
-    {
-        std::vector<std::string> partition_column_names = {};
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = {};
-        auto mock_file_writer = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
-        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer_factory, create(_)).WillOnce(Return(ByMove(mock_file_writer)));
-        auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
-        auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                       std::move(location_provider),
-                                                       std::move(mock_file_writer_factory), 100, _runtime_state);
-
-        EXPECT_OK(sink->init());
-        auto chunk = std::make_shared<Chunk>();
-        auto futures = sink->add(chunk);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-    }
-
-    {
-        std::vector<std::string> partition_column_names = {};
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = {};
-        auto mock_file_writer1 = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer1, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer1, get_written_bytes()).WillOnce(Return(100));
-        EXPECT_CALL(*mock_file_writer1, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        EXPECT_CALL(*mock_file_writer1, commit())
-                .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
-        auto mock_file_writer2 = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer2, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer2, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        EXPECT_CALL(*mock_file_writer2, commit())
-                .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
-        auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
-        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer_factory, create(_))
-                .WillOnce(Return(ByMove(mock_file_writer1)))
-                .WillOnce(Return(ByMove(mock_file_writer2)));
-        auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
-        auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                       std::move(location_provider),
-                                                       std::move(mock_file_writer_factory), 100, _runtime_state);
-
-        EXPECT_OK(sink->init());
-        auto futures = sink->add(nullptr);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-
-        futures = sink->add(nullptr);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
-        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-
-        futures = sink->finish();
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
-        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
-    }
-}
-
-TEST_F(IcebergChunkSinkTest, test_partitioned_sink) {
-    {
-        std::vector<std::string> partition_column_names = {"k1"};
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        auto mock_file_writer = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
-        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer_factory, create(_)).WillOnce(Return(ByMove(mock_file_writer)));
-        auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
-        auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                       std::move(location_provider),
-                                                       std::move(mock_file_writer_factory), 100, _runtime_state);
-
-        EXPECT_OK(sink->init());
-        auto chunk = std::make_shared<Chunk>();
-        {
-            auto partition_column = BinaryColumn::create();
-            partition_column->append("hello");
-            chunk->append_column(partition_column, chunk->num_columns());
-        }
-        auto futures = sink->add(chunk);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-    }
-
-    {
-        std::vector<std::string> partition_column_names = {"k1"};
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        auto mock_file_writer1 = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer1, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer1, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        EXPECT_CALL(*mock_file_writer1, commit())
-                .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
-        auto mock_file_writer2 = std::make_shared<MockFileWriter>();
-        EXPECT_CALL(*mock_file_writer2, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer2, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
-        EXPECT_CALL(*mock_file_writer2, commit())
-                .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
-        auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
-        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer_factory, create(_))
-                .WillOnce(Return(ByMove(mock_file_writer1)))
-                .WillOnce(Return(ByMove(mock_file_writer2)));
-        auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
-        auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                       std::move(location_provider),
-                                                       std::move(mock_file_writer_factory), 100, _runtime_state);
-
-        EXPECT_OK(sink->init());
-        auto chunk = std::make_shared<Chunk>();
-        {
-            auto partition_column = BinaryColumn::create();
-            partition_column->append("hello");
-            chunk->append_column(partition_column, 0);
-        }
-        auto futures = sink->add(chunk);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-
-        chunk = std::make_shared<Chunk>();
-        {
-            auto partition_column = BinaryColumn::create();
-            partition_column->append("world");
-            chunk->append_column(partition_column, 0);
-        }
-        futures = sink->add(chunk);
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
-        EXPECT_OK(futures.value().add_chunk_futures[0].get());
-
-        futures = sink->finish();
-        EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_futures.size(), 2);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
-        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[1]));
-        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
-        EXPECT_OK(futures.value().commit_file_futures[1].get().io_status);
-    }
-}
 
 TEST_F(IcebergChunkSinkTest, test_callback) {
     {
@@ -240,7 +69,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
                                                        std::move(location_provider), std::move(mock_writer_factory),
                                                        100, _runtime_state);
-        sink->callback_on_success()(CommitResult{
+        sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,
                 .file_statistics =
@@ -272,6 +101,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        SinkOperatorMemoryManager mm;
+        sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
     }
 
@@ -290,6 +121,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        SinkOperatorMemoryManager mm;
+        sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init()); // format is not supported
     }
 }
