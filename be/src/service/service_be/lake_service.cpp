@@ -239,11 +239,15 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             // Used to collect statistics when the partition is first imported
                             response->mutable_tablet_row_nums()->insert({tablet_id, row_nums});
                         }
+                        LOG(INFO) << "Publish version successfully tablet_id: " << tablet_id
+                                  << " txn_ids=" << JoinMapped(txns, txn_info_string, ";")
+                                  << " base_version: " << base_version << " new_version: " << new_version;
                     } else {
                         g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
-                            VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                            LOG(INFO) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                      << " txns=" << JoinMapped(txns, txn_info_string, ",")
+                                      << " version=" << new_version;
                         } else {
                             LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                          << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
