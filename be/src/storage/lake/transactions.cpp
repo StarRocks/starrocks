@@ -136,7 +136,7 @@ StatusOr<TxnLogPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, c
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const TxnInfoPB> txns) {
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
+    LOG(INFO) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
             << ", new_version: " << new_version;
 
     if (!add_tablet(tablet_id)) {

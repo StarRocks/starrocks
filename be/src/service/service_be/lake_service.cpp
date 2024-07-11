@@ -217,8 +217,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 auto score = compaction_score(_tablet_mgr, metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
-                LOG(INFO) << "publish version tablet_id: " << tablet_id << ", txns: " << txns
-                          << ", base_version: " << base_version << ", new_version: " << new_version;
+                LOG(INFO) << "publish version tablet_id: " << tablet_id
+                          << ", txns: " << JoinMapped(txns, txn_info_string, ",") << ", base_version: " << base_version
+                          << ", new_version: " << new_version;
             } else {
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
