@@ -29,7 +29,9 @@
 #include "io/input_stream.h"
 #include "util/defer_op.h"
 
+#ifdef __x86_64__
 extern "C" unsigned int OPENSSL_ia32cap_P[];
+#endif
 
 namespace starrocks {
 
@@ -40,7 +42,11 @@ bool openssl_supports_aesni() {
         LOG(FATAL) << "OpenSSL initialization failed";
     }
 #endif
+#ifdef __x86_64__
     return OPENSSL_ia32cap_P[1] & (1 << (57 - 32));
+#else
+    return false;
+#endif
 }
 
 bvar::Adder<int64_t> g_encryption_bytes("encryption_bytes");
