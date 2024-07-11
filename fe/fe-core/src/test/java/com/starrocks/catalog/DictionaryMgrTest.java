@@ -136,7 +136,7 @@ public class DictionaryMgrTest {
     public void testFollower() throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getCurrentState().isLeader();
+                globalStateMgr.isLeader();
                 minTimes = 0;
                 result = false;
             }
