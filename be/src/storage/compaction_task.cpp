@@ -216,7 +216,7 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
 
     // if there is only one non-overlapping rowset, but the input rowset schema is different with output schema
     // we can not do shortcut compaction too.
-    // the reason is after we support add/drop field for struct column, we need to make sure the rowset schema is 
+    // the reason is after we support add/drop field for struct column, we need to make sure the rowset schema is
     // consistent with segment data because of some compatible issue. so we will skip shortcut compaction when we
     // found the scheam id is different.
     if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping() &&
