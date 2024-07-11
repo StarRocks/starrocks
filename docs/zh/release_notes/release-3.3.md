@@ -176,11 +176,13 @@ displayed_sidebar: "Chinese"
    SHOW PROC '/jobs/<db>/schema_change';
    ```
 
-4. 执行以下语句为元数据创建镜像文件：
+4. 如果您想将集群降级至 v3.2.8 或 v3.1.14 之前的补丁版本，则必须删除所有使用 `PROPERTIES('compression' = 'lz4')` 属性创建的异步物化视图。
+
+5. 执行以下语句为元数据创建镜像文件：
 
    ```sql
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-5. 在新的镜像文件传输到所有 FE 节点的目录 **meta/image** 之后，降级其中一个 Follower FE 节点，确认没有问题后继续降级集群中的其他节点。
+6. 在新的镜像文件传输到所有 FE 节点的目录 **meta/image** 之后，降级其中一个 Follower FE 节点，确认没有问题后继续降级集群中的其他节点。
 
