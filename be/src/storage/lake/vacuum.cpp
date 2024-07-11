@@ -184,7 +184,11 @@ private:
     // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
         if (_prev_task_status.valid()) {
-            return _prev_task_status.get();
+            try {
+                return _prev_task_status.get();
+            } catch (const std::exception& e) {
+                return Status::InternalError(e.what());
+            }
         } else {
             return Status::OK();
         }
@@ -285,8 +289,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version > 0) {
-        auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
-        auto res = tablet_mgr->get_tablet_metadata(path, false);
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
             break;
@@ -302,7 +305,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
                     compare_time = metadata->commit_time();
                 } else {
-                    ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
+                    /*
+                    * The path is not available since we get tablet metadata by tablet_id and version.
+                    * We remove the code which is to get file modified time by path.
+                    * This change will break some compatibility when upgraded from a old version which have no commit time.
+                    * In that case, the compare_time is 0, making a result that the vacuum will keep the latest version.
+                    * The incompatibility will be vanished after a few versions ingestion/compaction/GC.
+                    */
+
+                    // ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
                     TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
                 }
 
@@ -582,12 +593,12 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         // Find metadata files that has garbage data files and delete all those files
         for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
-            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
-            auto res = tablet_mgr->get_tablet_metadata(path, false);
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {
-                LOG(ERROR) << "Fail to read " << path << ": " << res.status();
+                LOG(ERROR) << "Fail to read tablet_id=" << tablet_id << ", version=" << garbage_version << ": "
+                           << res.status();
                 return res.status();
             } else {
                 auto metadata = std::move(res).value();

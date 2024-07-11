@@ -438,8 +438,9 @@ public class MetadataMgr {
             Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
             if (tableId == null) {
                 if (stmt.isSetIfExists()) {
-                    LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                    LOG.debug("drop temporary table[{}.{}] which doesn't exist in session[{}]",
                             dbName, tableName, sessionId);
+                    return;
                 } else {
                     throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
                 }

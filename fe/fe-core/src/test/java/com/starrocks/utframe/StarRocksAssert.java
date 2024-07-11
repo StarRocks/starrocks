@@ -725,9 +725,10 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert dropTemporaryTable(String tableName) throws Exception {
+    public StarRocksAssert dropTemporaryTable(String tableName, boolean ifExists) throws Exception {
         DropTemporaryTableStmt dropTemporaryTableStmt = (DropTemporaryTableStmt)
-                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + tableName + ";", ctx);
+                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + (ifExists ? "if exists " : "")
+                        + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
         return this;
     }
@@ -930,10 +931,10 @@ public class StarRocksAssert {
         TaskRunManager taskRunManager = tm.getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
-        int maxTimes = 120;
+        int maxTimes = 1200;
         int count = 0;
         while (taskRun != null && count < maxTimes) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(300L);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(500L);
             taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
             count += 1;
         }
@@ -968,8 +969,6 @@ public class StarRocksAssert {
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         getCtx().executeSql(sql);
-        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-
         waitRefreshFinished(mv.getId());
         return this;
     }

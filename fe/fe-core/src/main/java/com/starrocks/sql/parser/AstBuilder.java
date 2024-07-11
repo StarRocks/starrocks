@@ -219,6 +219,7 @@ import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
@@ -242,6 +243,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -1355,6 +1357,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CreateOrReplaceBranchClause(createPos(context), branchName, branchOptions, create, replace, ifNotExists);
     }
 
+    @Override
+    public ParseNode visitDropBranchClause(StarRocksParser.DropBranchClauseContext context) {
+        String branchName = getIdentifierName(context.identifier());
+        return new DropBranchClause(createPos(context), branchName, context.EXISTS() != null);
+    }
+
+    @Override
+    public ParseNode visitDropTagClause(StarRocksParser.DropTagClauseContext context) {
+        String branchName = getIdentifierName(context.identifier());
+        return new DropTagClause(createPos(context), branchName, context.EXISTS() != null);
+    }
+
     private Long safeParseLong(String name, String value) {
         try {
             return Long.parseLong(value);
@@ -2362,10 +2376,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
         NodePosition pos = createPos(context);
-        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        long id = context.connId != null ? Long.parseLong(context.connId.getText()) : -1;
+        String queryId = context.queryId != null ? ((StringLiteral) visit(context.queryId)).getStringValue() : null;
         if (context.QUERY() != null) {
-            return new KillStmt(false, id, pos);
+            if (queryId != null) {
+                return new KillStmt(queryId, pos);
+            }
+            return new KillStmt(id, pos);
         } else {
+            if (queryId != null) {
+                throw new ParsingException(String.format("connection id %s should be a positive integer", queryId));
+            }
             return new KillStmt(true, id, pos);
         }
     }

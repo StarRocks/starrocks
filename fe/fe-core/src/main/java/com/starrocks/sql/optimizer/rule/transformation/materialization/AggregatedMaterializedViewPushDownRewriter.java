@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.api.client.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -721,7 +722,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             logMVRewrite(mvRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
 
             MvRewriteContext newMvRewriteContext = new MvRewriteContext(mvRewriteContext.getMaterializationContext(),
-                    queryTables, optExpression, queryColumnRefRewriter, queryPredicateSplit, null, rule);
+                    queryTables, optExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
             // set aggregate push down context to be used in the final stage
             newMvRewriteContext.setAggregatePushDownContext(ctx);
             AggregatedMaterializedViewRewriter rewriter = new AggregatedMaterializedViewRewriter(newMvRewriteContext);

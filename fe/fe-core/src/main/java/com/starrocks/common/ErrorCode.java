@@ -93,6 +93,7 @@ public enum ErrorCode {
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
+    ERR_NO_SUCH_QUERY(1365, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -294,6 +295,9 @@ public enum ErrorCode {
     ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
             "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
     ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
+                    "or increase frontend config max_bucket_number_per_partition."),
 
     /**
      * 5600 - 5699: DML operation failure

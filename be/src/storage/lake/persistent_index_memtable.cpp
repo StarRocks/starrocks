@@ -102,7 +102,8 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
         }
     }
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32);
+    // Delete is after upsert, so using UINT32_MAX as it's rowid
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
     *num_found = nfound;
     return Status::OK();
 }
@@ -124,7 +125,8 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
         }
     }
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32);
+    // Delete is after upsert, so using UINT32_MAX as it's rowid
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
     return Status::OK();
 }
 

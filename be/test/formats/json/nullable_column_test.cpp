@@ -20,6 +20,7 @@
 #include "runtime/types.h"
 #include "simdjson.h"
 #include "testutil/assert.h"
+#include "util/json_converter.h"
 
 namespace starrocks {
 
@@ -141,5 +142,34 @@ TEST_F(AddNullableColumnTest, test_add_map) {
     ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
 
     ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_invalid_json_convert) {
+    {
+        simdjson::ondemand::parser parser;
+        auto json = R"(  { "key" : "abc \ssn\"" }  )"_padded;
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field("key");
+        auto st = convert_from_simdjson(val).status();
+        ASSERT_TRUE(!st.ok());
+        ASSERT_TRUE(st.message().find("Failed to convert simdjson value") != std::string_view::npos &&
+                    st.message().find("<truncated>") == std::string_view::npos);
+    }
+
+    {
+        simdjson::ondemand::parser parser;
+        std::string json_str = R"(  { "key" : "abc \ssn\"" }  )";
+        auto pos = json_str.find('c');
+        std::string to_insert(2000, 'a');
+        json_str.insert(pos, to_insert);
+        auto json = simdjson::padded_string(json_str);
+
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field("key");
+        auto st = convert_from_simdjson(val).status();
+        ASSERT_TRUE(!st.ok());
+        ASSERT_TRUE(st.message().find("Failed to convert simdjson value") != std::string_view::npos &&
+                    st.message().find("<truncated>") != std::string_view::npos);
+    }
 }
 } // namespace starrocks

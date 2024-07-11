@@ -70,4 +70,24 @@ public class CreateTableAnalyzerTest {
                 .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);
     }
+
+    @Test
+    public void testAnalyzeMaxBucket() throws Exception {
+        String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
+                "(\n" +
+                "    `tag_id` bigint not null,\n" +
+                "    `tag_name` string\n" +
+                ") DUPLICATE KEY(`tag_id`)\n" +
+                "PARTITION BY (`tag_id`)\n" +
+                "DISTRIBUTED BY HASH(`tag_id`) BUCKETS 1025\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("max_bucket_number_per_partition");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
 }

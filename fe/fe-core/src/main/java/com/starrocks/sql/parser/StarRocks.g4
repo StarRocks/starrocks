@@ -683,7 +683,7 @@ adminSetPartitionVersion
     ;
 
 killStatement
-    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    : KILL (CONNECTION? | QUERY) (connId=INTEGER_VALUE | queryId=string)
     ;
 
 syncStatement
@@ -860,6 +860,8 @@ alterClause
     | dropFieldClause
     | createOrReplaceBranchClause
     | createOrReplaceTagClause
+    | dropBranchClause
+    | dropTagClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1034,6 +1036,14 @@ createOrReplaceTagClause
 createOrReplaceBranchClause
     : (CREATE OR)? REPLACE BRANCH identifier branchOptions
     | CREATE BRANCH (IF NOT EXISTS)? identifier branchOptions
+    ;
+
+dropBranchClause
+    : DROP BRANCH (IF EXISTS)? identifier
+    ;
+
+dropTagClause
+    : DROP TAG (IF EXISTS)? identifier
     ;
 
 tagOptions

@@ -65,14 +65,16 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         return Status::Cancelled("runtime state is cancelled");
     }
 
-    // channnel:
-    //
     // if has spill task. we should wait all spill task finished then to call finished
-    // TODO: test cancel case
+
+    // This callback function is delayed executed, and in some cases the source operator will be is_finished
+    // earlier, at which point the sink operator will call set_finished and close, at which point
+    // this->chunks_sorter will become null. That's why we need to catch the chunks here.
+    // So we need to capture the shared_ptr of chunks_sorter here.
     auto chunk_sorter = _chunks_sorter.get();
     _sort_context->ref();
     auto set_call_back_function = [this, chunk_sorter](RuntimeState* state) {
-        return _chunks_sorter->spiller()->set_flush_all_call_back(
+        return chunk_sorter->spiller()->set_flush_all_call_back(
                 [this, chunk_sorter]() {
                     // Current partition sort is ended, and
                     // the last call will drive LocalMergeSortSourceOperator to work.
@@ -82,7 +84,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
+                state, TRACKER_WITH_SPILLER_GUARD(state, chunk_sorter->spiller()));
     };
 
     Status ret_status;
