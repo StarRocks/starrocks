@@ -766,7 +766,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.executeResourceGroupDdlSql(createSQL);
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         assertThat(rowsToString(rows)).isEqualTo(
-                "rg1|10|20.0%|8|0|0|0|null|100%|NORMAL|(weight=1.5, source_ip=192.168.2.1/32)");
+                "rg1|10|20.0%|8|0|0|0|NORMAL|(weight=1.5, source_ip=192.168.2.1/32)");
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
