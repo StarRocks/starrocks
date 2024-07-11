@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +36,7 @@ public class TemporaryTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
     }
 
@@ -256,7 +258,7 @@ public class TemporaryTableTest {
                     "\"replication_num\" = \"1\"\n" +
                     ");", showCreateTable);
         }
-        starRocksAssert.dropTemporaryTable("t1");
+        starRocksAssert.dropTemporaryTable("t1", false);
         {
             String showCreateTable = getShowCreateTableResult("t1", connectContext);
 
@@ -318,6 +320,19 @@ public class TemporaryTableTest {
                     "properties('replication_num'='1')");
 
         });
+    }
+
+    @Test
+    public void testDropTable() throws Exception {
+        starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
+                "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                "properties('replication_num'='1')");
+        starRocksAssert.dropTemporaryTable("t1", false);
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "", () -> {
+            starRocksAssert.dropTemporaryTable("t1", false);
+        });
+        starRocksAssert.dropTemporaryTable("t1", true);
+
     }
 
 }
