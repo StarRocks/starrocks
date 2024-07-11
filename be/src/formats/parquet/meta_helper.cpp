@@ -63,36 +63,47 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 }
 
 bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const {
+    if (type_descriptor->is_unknown_type()) {
+        return false;
+    }
     // only check for complex type now
     // if complex type has none valid subfield, we will treat this struct type as invalid type.
     if (!parquet_field->type.is_complex_type()) {
         return true;
     }
 
-    bool has_valid_child = false;
-
-    std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
-    for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-        field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
-                                  &type_descriptor->children[idx]);
+    if (parquet_field->type.type != type_descriptor->type) {
+        // complex type mismatched
+        return false;
     }
 
-    // start to check struct type
-    for (const auto& child_parquet_field : parquet_field->children) {
-        auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
-        if (it == field_name_2_type.end()) {
-            continue;
+    bool has_valid_child = false;
+
+    if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
+        for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
+            if (_is_valid_type(&parquet_field->children[idx], &type_descriptor->children[idx])) {
+                has_valid_child = true;
+                break;
+            }
+        }
+    } else if (parquet_field->type.is_struct_type()) {
+        std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
+        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+            field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
+                                      &type_descriptor->children[idx]);
         }
 
-        // is scalar type, return true
-        if (!child_parquet_field.type.is_complex_type()) {
-            has_valid_child = true;
-            break;
-        }
+        // start to check struct type
+        for (const auto& child_parquet_field : parquet_field->children) {
+            auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
+            if (it == field_name_2_type.end()) {
+                continue;
+            }
 
-        if (_is_valid_type(&child_parquet_field, it->second)) {
-            has_valid_child = true;
-            break;
+            if (_is_valid_type(&child_parquet_field, it->second)) {
+                has_valid_child = true;
+                break;
+            }
         }
     }
 
@@ -129,12 +140,6 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field,
         auto it = field_id_2_iceberg_schema.find(child_parquet_field.field_id);
         if (it == field_id_2_iceberg_schema.end()) {
             continue;
-        }
-
-        // is scalar type, return true
-        if (!child_parquet_field.type.is_complex_type()) {
-            has_valid_child = true;
-            break;
         }
 
         // is compelx type, recursive check it's children
