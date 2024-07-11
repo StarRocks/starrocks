@@ -34,6 +34,11 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
+=======
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableMap;
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -50,12 +55,14 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
@@ -280,6 +287,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     private static GlobalStateMgr newDelegateGlobalStateMgr() {
+<<<<<<< HEAD
         try {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
@@ -296,6 +304,20 @@ public abstract class StarRocksHttpTestCase {
                     globalStateMgr.getAuth();
                     minTimes = 0;
                     result = auth;
+=======
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+        Database db = new Database(testDbId, "testDb");
+        OlapTable table = newTable(TABLE_NAME);
+        table.setTableProperty(new TableProperty(ImmutableMap.of(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1")));
+        db.registerTableUnlocked(table);
+        OlapTable table1 = newTable(TABLE_NAME + 1);
+        db.registerTableUnlocked(table1);
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
+        db.registerTableUnlocked(esTable);
+        OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+        db.registerTableUnlocked(newEmptyTable);
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
 
                     globalStateMgr.getDb(db.getId());
                     minTimes = 0;
@@ -426,6 +448,38 @@ public abstract class StarRocksHttpTestCase {
                 return tabletInvertedIndex;
             }
         };
+<<<<<<< HEAD
+=======
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.isSafeMode();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+>>>>>>> d42320f9a2 ([Feature] Add function get_query_dump (#48105))
         assignBackends();
         doSetUp();
     }
