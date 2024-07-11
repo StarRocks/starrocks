@@ -103,6 +103,7 @@ You can find a built-in function based on the following categories:
 - [element_at](./array-functions/element_at.md)
 - [reverse](./string-functions/reverse.md)
 - [unnest](./array-functions/unnest.md)
+- [array_repeat](./array-functions/array_repeat.md)
 
 ## Binary functions
 
