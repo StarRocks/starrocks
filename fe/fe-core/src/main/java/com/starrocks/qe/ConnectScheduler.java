@@ -165,24 +165,6 @@ public class ConnectScheduler {
         } finally {
             connStatsLock.unlock();
         }
-<<<<<<< HEAD
-        // Check user
-        connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
-        int currentConn = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
-        if (currentConn >= currentUserMaxConn) {
-            return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
-                    ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
-                    "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
-                    ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
-                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
-        }
-        numberConnection.incrementAndGet();
-        connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
-        connectionMap.put((long) ctx.getConnectionId(), ctx);
-        return new Pair<>(true, null);
-=======
->>>>>>> 4d1ea245db ([BugFix] Fix incorrect connection state update when register/unregister conn (#48056))
     }
 
     public void unregisterConnection(ConnectContext ctx) {
@@ -200,17 +182,8 @@ public class ConnectScheduler {
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
-<<<<<<< HEAD
-            LOG.info("Connection closed. remote={}, connectionId={}",
-                    ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
-=======
         } finally {
             connStatsLock.unlock();
-        }
-
-        if (removed) {
-            ctx.cleanTemporaryTable();
->>>>>>> 4d1ea245db ([BugFix] Fix incorrect connection state update when register/unregister conn (#48056))
         }
     }
 
