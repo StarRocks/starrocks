@@ -17,7 +17,10 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
 
