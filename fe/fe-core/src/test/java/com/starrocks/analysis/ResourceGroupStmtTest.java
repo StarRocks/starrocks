@@ -216,7 +216,7 @@ public class ResourceGroupStmtTest {
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
-                "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
+                "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
                 "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
                 "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
