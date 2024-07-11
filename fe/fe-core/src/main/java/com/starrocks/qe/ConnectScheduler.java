@@ -41,6 +41,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ConnectScheduler {
     private static final Logger LOG = LogManager.getLogger(ConnectScheduler.class);
@@ -49,7 +50,12 @@ public class ConnectScheduler {
     private final AtomicInteger nextConnectionId;
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+<<<<<<< HEAD
     private final Map<String, AtomicInteger> connByUser = Maps.newConcurrentMap();
+=======
+    private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
+    private final ReentrantLock connStatsLock = new ReentrantLock();
+>>>>>>> 4d1ea245db ([BugFix] Fix incorrect connection state update when register/unregister conn (#48056))
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
@@ -116,11 +122,37 @@ public class ConnectScheduler {
      * @return a pair, first is success or not, second is error message(if any)
      */
     public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
-        if (numberConnection.get() >= maxConnections.get()) {
-            return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
-                    ", connectionMap.size=" + connectionMap.size() +
-                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
+        try {
+            connStatsLock.lock();
+            if (numberConnection.get() >= maxConnections.get()) {
+                return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
+                        ", connectionMap.size=" + connectionMap.size() +
+                        ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
+            }
+            // Check user
+            connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
+            AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
+            int currentConn = currentConnAtomic.get();
+            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+            if (currentConn >= currentUserMaxConn) {
+                String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
+                        ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
+                        "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
+                        ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                        ", user.currConn=" + currentConn +
+                        ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode();
+                LOG.info(userErrMsg + ", details: connectionId={}, connByUser={}",
+                        ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+            numberConnection.incrementAndGet();
+            currentConnAtomic.incrementAndGet();
+            connectionMap.put((long) ctx.getConnectionId(), ctx);
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
         }
+<<<<<<< HEAD
         // Check user
         connByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
         int conns = connByUser.get(ctx.getQualifiedUser()).get();
@@ -152,6 +184,31 @@ public class ConnectScheduler {
             }
             LOG.info("Connection closed. remote={}, connectionId={}",
                     ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
+=======
+    }
+
+    public void unregisterConnection(ConnectContext ctx) {
+        boolean removed;
+        try {
+            connStatsLock.lock();
+            removed = connectionMap.remove((long) ctx.getConnectionId()) != null;
+            if (removed) {
+                numberConnection.decrementAndGet();
+                AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
+                if (conns != null) {
+                    conns.decrementAndGet();
+                }
+                LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
+                        ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
+                        ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
+            }
+        } finally {
+            connStatsLock.unlock();
+        }
+
+        if (removed) {
+            ctx.cleanTemporaryTable();
+>>>>>>> 4d1ea245db ([BugFix] Fix incorrect connection state update when register/unregister conn (#48056))
         }
     }
 
