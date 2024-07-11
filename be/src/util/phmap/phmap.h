@@ -1688,10 +1688,6 @@ public:
     size_t hash(const K& key) const {
         return HashElement{hash_ref()}(key);
     }
-    // @TODO need a interface to get current allocate memory?
-    size_t allocated_memory() const {
-        return capacity_ == 0 ? 0: sizeof(ctrl_t) * (capacity_ + Group::kWidth + 1) + sizeof(slot_type) * capacity_;
-    }
 
 private:
     template <class Container, typename Enabler>
@@ -1832,14 +1828,12 @@ private:
 
         auto layout = MakeLayout(capacity_);
         char* mem = static_cast<char*>(Allocate<Layout::Alignment()>(&alloc_ref(), layout.AllocSize()));
-        // @TODO should know real alloc size, should consider aligment
         ctrl_ = reinterpret_cast<ctrl_t*>(layout.template Pointer<0>(mem));
         slots_ = layout.template Pointer<1>(mem);
         reset_ctrl();
         reset_growth_left();
         infoz_.RecordStorageChanged(size_, capacity_);
     }
-
 
     void destroy_slots() {
         if (!capacity_) return;
