@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
   When doing concurrent loading remote files, some variables can be shared and reused to save costs.
   And in this context, we maintain fields can be shared and reused.
  */
-public class RemoteFileLoadingContext {
+public class RemoteFileScanContext {
     // ---- concurrent initialization -----
     public AtomicBoolean init = new AtomicBoolean(false);
     public ReentrantLock lock = new ReentrantLock();

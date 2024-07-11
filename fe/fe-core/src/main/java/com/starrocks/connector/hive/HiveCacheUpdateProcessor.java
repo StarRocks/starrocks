@@ -29,7 +29,7 @@ import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.RemoteFileIO;
-import com.starrocks.connector.RemoteFileLoadingContext;
+import com.starrocks.connector.RemoteFileScanContext;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -215,10 +215,10 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             List<RemotePathKey> remotePathKeys = partitions.values().stream()
                     .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive))
                     .collect(Collectors.toList());
-            RemoteFileLoadingContext loadingContext = new RemoteFileLoadingContext();
-            loadingContext.hudiTableLocation = hmsTable.getTableLocation();
+            RemoteFileScanContext scanContext = new RemoteFileScanContext();
+            scanContext.hudiTableLocation = hmsTable.getTableLocation();
             remotePathKeys.forEach(path -> {
-                path.setLoadingContext(loadingContext);
+                path.setScanContext(scanContext);
                 remoteFileIO.get().updateRemoteFiles(path);
             });
         }
@@ -292,16 +292,16 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                                         List<RemotePathKey> invalidateKeys,
                                         ExecutorService refreshExecutor) {
         Preconditions.checkArgument(remoteFileIO.isPresent());
-        RemoteFileLoadingContext loadingContext = new RemoteFileLoadingContext();
-        loadingContext.hudiTableLocation = tableLocation;
+        RemoteFileScanContext scanContext = new RemoteFileScanContext();
+        scanContext.hudiTableLocation = tableLocation;
         List<Future<?>> futures = Lists.newArrayList();
         updateKeys.forEach(pathKey -> {
-            pathKey.setLoadingContext(loadingContext);
+            pathKey.setScanContext(scanContext);
             futures.add(refreshExecutor.submit(() ->
                     remoteFileIO.get().updateRemoteFiles(pathKey)));
         });
         invalidateKeys.forEach(pathKey -> {
-            pathKey.setLoadingContext(loadingContext);
+            pathKey.setScanContext(scanContext);
             futures.add(refreshExecutor.submit(() ->
                     remoteFileIO.get().invalidatePartition(pathKey)));
         });

@@ -93,8 +93,8 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Options options) {
-        RemoteFileLoadingContext loadingContext = new RemoteFileLoadingContext();
-        loadingContext.hudiTableLocation = options.hudiTableLocation;
+        RemoteFileScanContext scanContext = new RemoteFileScanContext();
+        scanContext.hudiTableLocation = options.hudiTableLocation;
 
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
@@ -116,7 +116,7 @@ public class RemoteFileOperations {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
-                pathKey.setLoadingContext(loadingContext);
+                pathKey.setScanContext(scanContext);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = pullRemoteFileExecutor.submit(() ->
                         remoteFileIO.getRemoteFiles(pathKey, options.useCache));
                 futures.add(future);

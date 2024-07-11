@@ -19,7 +19,7 @@ import java.util.Objects;
 public class RemotePathKey {
     private final String path;
     private final boolean isRecursive;
-    private RemoteFileLoadingContext loadingContext;
+    private RemoteFileScanContext scanContext;
 
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive);
@@ -72,16 +72,16 @@ public class RemotePathKey {
     }
 
     public void drop() {
-        if (loadingContext != null) {
-            loadingContext = null;
+        if (scanContext != null) {
+            scanContext = null;
         }
     }
 
-    public void setLoadingContext(RemoteFileLoadingContext ctx) {
-        loadingContext = ctx;
+    public void setScanContext(RemoteFileScanContext ctx) {
+        scanContext = ctx;
     }
 
-    public RemoteFileLoadingContext getLoadingContext() {
-        return loadingContext;
+    public RemoteFileScanContext getScanContext() {
+        return scanContext;
     }
 }
