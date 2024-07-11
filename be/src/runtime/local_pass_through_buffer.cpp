@@ -32,26 +32,52 @@ public:
         }
     }
 
-    void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+    bool append_chunk(const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+        {
+            std::unique_lock lock(_mutex);
+            if (_is_closed) {
+                return false;
+            }
+        }
+
         // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         auto clone = chunk->clone_unique();
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
-        CurrentThread::current().mem_release(physical_bytes);
 
-        std::unique_lock lock(_mutex);
-        _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
-        _bytes.push_back(chunk_size);
-        _physical_bytes += physical_bytes;
-        _total_bytes += physical_bytes;
+        {
+            std::unique_lock lock(_mutex);
+
+            _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
+            _bytes.push_back(chunk_size);
+            _physical_bytes += physical_bytes;
+            _total_bytes += physical_bytes;
+            CurrentThread::current().mem_release(physical_bytes);
+        }
+
+        return true;
     }
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         std::unique_lock lock(_mutex);
+        if (_is_closed) {
+            return;
+        }
         chunks->swap(_buffer);
         bytes->swap(_bytes);
 
         // Consume physical bytes in current MemTracker, since later it would be released
+        CurrentThread::current().mem_consume(_physical_bytes);
+        _total_bytes -= _physical_bytes;
+        _physical_bytes = 0;
+    }
+
+    void close() {
+        std::unique_lock lock(_mutex);
+        _is_closed = true;
+        _buffer.clear();
+        _bytes.clear();
+
         CurrentThread::current().mem_consume(_physical_bytes);
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
@@ -63,6 +89,7 @@ private:
     std::vector<size_t> _bytes;
     int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
     std::atomic_int64_t& _total_bytes;
+    bool _is_closed = false;
 };
 
 // channel per [fragment_instance_id, dest_node_id]
@@ -84,6 +111,13 @@ public:
             delete it.second;
         }
         _sender_id_to_channel.clear();
+    }
+
+    void close() {
+        std::unique_lock lock(_mutex);
+        for (auto& it : _sender_id_to_channel) {
+            it.second->close();
+        }
     }
 
     int64_t get_total_bytes() const { return _total_bytes; }
@@ -124,9 +158,9 @@ void PassThroughContext::init() {
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
 }
 
-void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+bool PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
-    sender_channel->append_chunk(chunk, chunk_size, driver_sequence);
+    return sender_channel->append_chunk(chunk, chunk_size, driver_sequence);
 }
 void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);

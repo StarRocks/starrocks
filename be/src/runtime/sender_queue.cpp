@@ -722,7 +722,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,
                    total_chunk_bytes);
 
-    if (_is_cancelled) {
+    if (_is_cancelled || chunks.empty()) {
         return Status::OK();
     }
 

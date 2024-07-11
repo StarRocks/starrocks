@@ -238,9 +238,13 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
-            TRY_CATCH_BAD_ALLOC(
-                    _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
+            bool append_succ = false;
+            TRY_CATCH_BAD_ALLOC(append_succ = _pass_through_context.append_chunk(
+                                        _parent->_sender_id, chunk, chunk_size,
+                                        _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
+            if (!append_succ) {
+                return Status::OK();
+            }
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
