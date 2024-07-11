@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
