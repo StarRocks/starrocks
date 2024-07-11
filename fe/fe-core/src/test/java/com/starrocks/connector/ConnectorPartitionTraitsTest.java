@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
@@ -96,5 +97,15 @@ public class ConnectorPartitionTraitsTest {
                 HiveTable.HiveTableType.MANAGED_TABLE);
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hiveTable);
         Assert.assertEquals(connectorPartitionTraits.getTableName(), "hiveTable");
+    }
+
+    @Test
+    public void testHudiResourceTableName() {
+        HudiTable hudiTable = new HudiTable(0, "name", "hdui_catalog", "hudiDb",
+                "hudiTable",  "resource_name", "",
+                Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList(), 0,
+                Maps.newHashMap());
+        ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
+        Assert.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }
 }

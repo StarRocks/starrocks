@@ -40,6 +40,11 @@ public class HudiPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public String getTableName() {
+        return ((HiveMetaStoreTable) table).getTableName();
+    }
+
+    @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
         // TODO: implement

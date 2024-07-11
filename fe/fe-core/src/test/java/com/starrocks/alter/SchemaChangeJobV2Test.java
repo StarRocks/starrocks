@@ -83,7 +83,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 
 public class SchemaChangeJobV2Test extends DDLTestBase {
-    private static String fileName = "./SchemaChangeV2Test";
+    private static final String TEST_FILE_NAME = SchemaChangeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     @Rule
@@ -319,7 +319,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSerializeOfSchemaChangeJob() throws IOException {
         // prepare file
-        File file = new File(fileName);
+        File file = new File(TEST_FILE_NAME);
         file.createNewFile();
         file.deleteOnExit();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));

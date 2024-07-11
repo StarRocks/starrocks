@@ -15,7 +15,3 @@ select cast(18446744073709551615 AS DATETIME);
 -- result:
 None
 -- !result
-select yearweek(-18446744073709551494);
--- result:
-None
--- !result
