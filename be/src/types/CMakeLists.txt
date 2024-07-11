@@ -27,4 +27,6 @@ add_library(Types STATIC
     map_type_info.cpp
     struct_type_info.cpp
     timestamp_value.cpp
+    checker/type_checker.cpp
+    type_checker_manager.cpp
 )
