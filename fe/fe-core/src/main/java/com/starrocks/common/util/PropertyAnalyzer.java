@@ -1302,9 +1302,6 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
             if (type.equalsIgnoreCase("LOCAL")) {
                 return TPersistentIndexType.LOCAL;
-            } else if (type.equalsIgnoreCase("CLOUD_NATIVE")) {
-                // treat CLOUD_NATIVE as LOCAL in 3.2
-                return TPersistentIndexType.LOCAL;
             } else {
                 throw new AnalysisException("Invalid persistent index type: " + type);
             }
