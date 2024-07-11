@@ -186,6 +186,25 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public void clearRowOutputInfo() {
+        rowOutputInfo = null;
+    }
+
+    public DomainProperty getDomainProperty(List<OptExpression> inputs) {
+        if (domainProperty == null) {
+            domainProperty = deriveDomainProperty(inputs);
+        }
+
+        if (projection != null) {
+            domainProperty = domainProperty.projectDomainProperty(projection.getColumnRefMap());
+        }
+
+        return domainProperty;
+    }
+
+>>>>>>> dbd35c1cf3 ([BugFix] clear invalid statistics before into memo (#47776))
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
     }

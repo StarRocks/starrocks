@@ -145,10 +145,21 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
+<<<<<<< HEAD
     public void initRowOutputInfo() {
+=======
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
+    public void clearStatsAndInitOutputInfo() {
+>>>>>>> dbd35c1cf3 ([BugFix] clear invalid statistics before into memo (#47776))
         for (OptExpression optExpression : inputs) {
-            optExpression.initRowOutputInfo();
+            optExpression.clearStatsAndInitOutputInfo();
         }
+        // clear statistics cache and row output info cache
+        setStatistics(null);
+        op.clearRowOutputInfo();
         getRowOutputInfo();
     }
 
