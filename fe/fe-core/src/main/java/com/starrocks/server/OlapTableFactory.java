@@ -16,12 +16,14 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -288,9 +290,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     bfFpp = 0;
                 }
 
-                table.setBloomFilterInfo(bfColumns, bfFpp);
+                Set<ColumnId> bfColumnIds = null;
+                if (bfColumns != null && !bfColumns.isEmpty()) {
+                    bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    bfColumnIds.addAll(bfColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                }
+                table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
-                BloomFilterIndexUtil.analyseBfWithNgramBf(new HashSet<>(stmt.getIndexes()), bfColumns);
+                BloomFilterIndexUtil.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

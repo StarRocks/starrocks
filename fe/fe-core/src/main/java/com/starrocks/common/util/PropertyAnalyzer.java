@@ -50,6 +50,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
@@ -1380,7 +1381,14 @@ public class PropertyAnalyzer {
                 } else if (bfColumns == null) {
                     bfFpp = 0;
                 }
-                materializedView.setBloomFilterInfo(bfColumns, bfFpp);
+                Set<ColumnId> bfColumnIds = null;
+                if (bfColumns != null && !bfColumns.isEmpty()) {
+                    bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    for (String colName : bfColumns) {
+                        bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+                    }
+                }
+                materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
             }
             // mv_rewrite_staleness second.
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {

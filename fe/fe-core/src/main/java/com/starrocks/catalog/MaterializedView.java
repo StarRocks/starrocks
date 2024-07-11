@@ -1164,7 +1164,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (CollectionUtils.isNotEmpty(getIndexes())) {
             for (Index index : getIndexes()) {
                 sb.append(",\n");
-                sb.append("  ").append(index.toSql());
+                sb.append("  ").append(index.toSql(this));
             }
         }
 
@@ -1262,7 +1262,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             appendUniqueProperties(sb);
         }
         // bloom filter
-        Set<String> bfColumnNames = getCopiedBfColumns();
+        Set<String> bfColumnNames = getBfColumnNames();
         if (bfColumnNames != null) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     .append("\" = \"");

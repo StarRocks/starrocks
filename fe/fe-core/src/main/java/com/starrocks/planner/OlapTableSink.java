@@ -39,7 +39,6 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.LiteralExpr;
@@ -312,7 +311,7 @@ public class OlapTableSink extends DataSink {
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
-                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
+                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds());
                 columnsDesc.add(tColumn);
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {

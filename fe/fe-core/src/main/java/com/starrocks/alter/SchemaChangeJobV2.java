@@ -51,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -160,7 +161,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
-    private Set<String> bfColumns = null;
+    private Set<ColumnId> bfColumns = null;
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -238,7 +239,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return this.waitingCreatingReplica.get();
     }
 
-    public void setBloomFilterInfo(boolean hasBfChange, Set<String> bfColumns, double bfFpp) {
+    public void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
@@ -847,7 +848,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL

@@ -36,6 +36,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -69,9 +70,9 @@ public class PartitionCommitInfo implements Writable {
     // not TableCommitInfo.
 
     @SerializedName(value = "invalidColumns")
-    private List<String> invalidDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
-    private List<String> validDictCacheColumns = Lists.newArrayList();
+    private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "DictCollectedVersion")
     private List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -91,8 +92,8 @@ public class PartitionCommitInfo implements Writable {
     }
 
     public PartitionCommitInfo(long partitionId, long version, long visibleTime,
-                               List<String> invalidDictCacheColumns,
-                               List<String> validDictCacheColumns,
+                               List<ColumnId> invalidDictCacheColumns,
+                               List<ColumnId> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
         this.partitionId = partitionId;
@@ -134,11 +135,11 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
-    public List<String> getInvalidDictCacheColumns() {
+    public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
 
-    public List<String> getValidDictCacheColumns() {
+    public List<ColumnId> getValidDictCacheColumns() {
         return validDictCacheColumns;
     }
 

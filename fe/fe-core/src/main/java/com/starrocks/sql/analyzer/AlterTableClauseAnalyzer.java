@@ -127,10 +127,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Only assign meaningful indexId for OlapTable
         if (table.isOlapTableOrMaterializedView()) {
             long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
-            index = new Index(indexId, indexDef.getIndexName(), indexDef.getColumns(),
+            index = new Index(indexId, indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         } else {
-            index = new Index(indexDef.getIndexName(), indexDef.getColumns(),
+            index = new Index(indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
         clause.setIndex(index);
