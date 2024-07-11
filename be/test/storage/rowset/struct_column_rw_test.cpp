@@ -101,7 +101,7 @@ protected:
             // init integer sub column
             ColumnMetaPB* f1_meta = writer_opts.meta->add_children_columns();
             f1_meta->set_column_id(0);
-            f1_meta->set_unique_id(0);
+            f1_meta->set_unique_id(1);
             f1_meta->set_type(f1_tablet_column.type());
             f1_meta->set_length(f1_tablet_column.length());
             f1_meta->set_encoding(DEFAULT_ENCODING);
@@ -110,7 +110,7 @@ protected:
 
             ColumnMetaPB* f2_meta = writer_opts.meta->add_children_columns();
             f2_meta->set_column_id(0);
-            f2_meta->set_unique_id(0);
+            f2_meta->set_unique_id(2);
             f2_meta->set_type(f2_tablet_column.type());
             f2_meta->set_length(f2_tablet_column.length());
             f2_meta->set_encoding(DEFAULT_ENCODING);
