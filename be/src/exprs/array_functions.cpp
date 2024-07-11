@@ -1627,4 +1627,65 @@ StatusOr<ColumnPtr> ArrayFunctions::array_sortby_multi(FunctionContext* ctx, con
 
     return std::move(dest_column);
 }
+
+StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    DCHECK(columns.size() == 2);
+
+    const ColumnPtr& src_column = columns[0];
+    size_t num_rows = src_column->size();
+
+    const ColumnPtr& repeat_count_column = columns[1];
+    ColumnViewer<TYPE_INT> repeat_count_viewer(repeat_count_column);
+
+    ColumnPtr dest_column_elements = nullptr;
+    // Because the _elements of ArrayColumn must be nullable, but a non-null ConstColumn cannot be converted to nullable;
+    // therefore, the _data of ConstColumn is extracted as dest_column_elements.
+    if (src_column->is_constant() && !src_column->is_nullable()) {
+        ConstColumn* const_src_column = down_cast<ConstColumn*>(src_column.get());
+        dest_column_elements = const_src_column->data_column()->clone_empty();
+    } else {
+        dest_column_elements = src_column->clone_empty();
+    }
+    auto dest_offsets = UInt32Column::create(1);
+    size_t total_repeated_rows = 0;
+    for (int cur_row = 0; cur_row < num_rows; cur_row++) {
+        if (repeat_count_viewer.is_null(cur_row)) {
+            dest_offsets->append(total_repeated_rows);
+        } else {
+            Datum source_value = src_column->get(cur_row);
+            auto repeat_count = repeat_count_viewer.value(cur_row);
+            if (repeat_count > 0) {
+                for (int repeat_index = 0; repeat_index < repeat_count; repeat_index++) {
+                    TRY_CATCH_BAD_ALLOC(dest_column_elements->append_datum(source_value));
+                }
+                total_repeated_rows = total_repeated_rows + repeat_count;
+                dest_offsets->append(total_repeated_rows);
+            } else {
+                dest_offsets->append(total_repeated_rows);
+            }
+        }
+    }
+
+    ColumnPtr dest_column = nullptr;
+    if (dest_column_elements->is_nullable()) {
+        dest_column = ArrayColumn::create(std::move(dest_column_elements), std::move(dest_offsets));
+    } else {
+        auto nullable_dest_column_elements = NullableColumn::create(
+                dest_column_elements, NullColumn::create(dest_column_elements->size(), DATUM_NOT_NULL));
+        dest_column = ArrayColumn::create(std::move(nullable_dest_column_elements), std::move(dest_offsets));
+    }
+
+    NullColumnPtr null_result = nullptr;
+    if (repeat_count_column->is_nullable()) {
+        const auto* nullable_repeat_count_column = down_cast<const NullableColumn*>(repeat_count_column.get());
+        null_result = NullColumn::create(*nullable_repeat_count_column->null_column());
+    }
+
+    if (null_result) {
+        return NullableColumn::create(dest_column, null_result);
+    } else {
+        return dest_column;
+    }
+}
 } // namespace starrocks
