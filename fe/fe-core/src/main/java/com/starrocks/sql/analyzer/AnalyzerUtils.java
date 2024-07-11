@@ -1106,6 +1106,10 @@ public class AnalyzerUtils {
     }
 
     public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
+        return getAllTableNames(dbId, tableId);
+    }
+
+    public static Set<TableName> getAllTableNames(long dbId, long tableId) {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -1207,8 +1211,24 @@ public class AnalyzerUtils {
         } else if (parts.size() == 1) {
             return new TableName(null, null, parts.get(0));
         } else {
-            throw new ParsingException("error table name ");
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
         }
+    }
+
+    public static List<String> stringToDbMeta(String antiQualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> dbMeta = Lists.newArrayList();
+        List<String> parts = Splitter.on(".").omitEmptyStrings().trimResults().splitToList(antiQualifiedName);
+        if (parts.size() == 1) {
+            dbMeta.addAll(Arrays.asList(parts.get(0), null, null));
+        } else if (parts.size() == 2) {
+            dbMeta.addAll(Arrays.asList(parts.get(0), parts.get(1), null));
+        } else if (parts.size() == 3) {
+            dbMeta.addAll(Arrays.asList(parts.get(0), parts.get(1), parts.get(2)));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidCatalogFormat(antiQualifiedName.toString()));
+        }
+        return dbMeta;
     }
 
     public static String parseLiteralExprToDateString(PartitionKey partitionKey, int offset) {

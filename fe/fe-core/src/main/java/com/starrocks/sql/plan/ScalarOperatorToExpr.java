@@ -52,6 +52,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
@@ -509,6 +510,8 @@ public class ScalarOperatorToExpr {
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
                         callExpr = new FunctionCallExpr(call.getFnName(), FunctionParams.createStarParam());
+                    } else if (call.isSystemFunction()) {
+                        callExpr = new SystemFunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }

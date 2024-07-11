@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
@@ -594,5 +595,17 @@ public class StatisticUtils {
             }
         }
         return baseColumnType;
+    }
+
+    public static Table getTable(long dbId, long tableId) throws MetaNotFoundException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("No found table: " + tableId);
+        }
+        return table;
     }
 }

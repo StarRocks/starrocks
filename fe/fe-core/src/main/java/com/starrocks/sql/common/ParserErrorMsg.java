@@ -49,6 +49,9 @@ public interface ParserErrorMsg {
             "''expr_children_limit'' in FE conf")
     String argsOfExprExceedLimit(long a0, int a1);
 
+    @BaseMessage("Invalid catalog name format ''{0}''")
+    String invalidCatalogFormat(String a0);
+
     @BaseMessage("Invalid db name format ''{0}''")
     String invalidDbFormat(String a0);
 

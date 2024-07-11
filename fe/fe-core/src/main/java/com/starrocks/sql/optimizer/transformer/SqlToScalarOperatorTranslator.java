@@ -46,12 +46,14 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -693,6 +695,28 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            return callOperator;
+        }
+
+        @Override
+        public ScalarOperator visitSystemFunctionCall(SystemFunctionCallExpr node, Context context) {
+            // check privilege
+            GenericFunction genericFunc = Expr.getGenericFunction(node.getFn());
+            genericFunc.prepare(node, session);
+
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+
+            CallOperator callOperator = new CallOperator(
+                    node.getFnName().getFunction(),
+                    node.getType(),
+                    arguments,
+                    node.getFn(),
+                    node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            callOperator.setIsSystemFunction(true);
             return callOperator;
         }
 

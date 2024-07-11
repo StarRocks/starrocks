@@ -18,7 +18,6 @@ package com.starrocks.statistic;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
@@ -114,15 +113,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + dbId);
-        }
-        Table table = db.getTable(tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + tableId);
-        }
-        return table.getName();
+        return StatisticUtils.getTable(this.dbId, this.tableId).getName();
     }
 
     @Override

@@ -234,6 +234,11 @@ public class Authorizer {
 
     public static void checkActionForAnalyzeStatement(UserIdentity userIdentity, Set<Long> currentRoleIds,
                                                       TableName tableName) {
+        checkTablePrivilege(userIdentity, currentRoleIds, tableName);
+    }
+
+    public static void checkTablePrivilege(UserIdentity userIdentity, Set<Long> currentRoleIds,
+                                           TableName tableName) {
         try {
             Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
                     tableName, PrivilegeType.SELECT);

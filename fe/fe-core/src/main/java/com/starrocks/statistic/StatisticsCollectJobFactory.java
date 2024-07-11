@@ -245,6 +245,20 @@ public class StatisticsCollectJobFactory {
             }
         }
 
+        //check analyze exclusion
+        List<ExternalAnalyzeExclusion> externalAnalyzeExclusionList
+                = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllExternalAnalyzeExclusionList();
+        ExternalAnalyzeExclusion externalAnalyzeExclusion
+                = new ExternalAnalyzeExclusion(job.getCatalogName(), job.getDbName(),
+                job.getTableName(), job.getAnalyzeType());
+        boolean isExclusionMatch = externalAnalyzeExclusionList.stream().anyMatch(exclusion ->
+                exclusion.equals(externalAnalyzeExclusion));
+        if (isExclusionMatch) {
+            LOG.info("statistics job is excluded: {}", String.format("%s.%s.%s, sample type:%s",
+                    job.getCatalogName(), job.getDbName(), job.getTableName(), job.getAnalyzeType()));
+            return;
+        }
+
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
         if (basicStatsMeta != null) {
@@ -383,6 +397,19 @@ public class StatisticsCollectJobFactory {
                 LOG.debug("statistics job exclude pattern {}, hit table: {}", regex, name);
                 return;
             }
+        }
+
+        //check analyze exclusion
+        List<NativeAnalyzeExclusion> nativeAnalyzeExclusionList
+                = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeExclusionList();
+        NativeAnalyzeExclusion nativeAnalyzeExclusionPattern
+                = new NativeAnalyzeExclusion(job.getDbId(), job.getTableId(), job.getAnalyzeType());
+        boolean isExclusionMatch = nativeAnalyzeExclusionList.stream().anyMatch(exclusion ->
+                exclusion.equals(nativeAnalyzeExclusionPattern));
+        if (isExclusionMatch) {
+            LOG.info("statistics job statistics job is excluded, hit table: {}",
+                    regex, String.format("%s.%s", db.getFullName(), table.getName()));
+            return;
         }
 
         BasicStatsMeta basicStatsMeta =

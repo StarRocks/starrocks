@@ -2295,6 +2295,7 @@ functionCall
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
+    | SYSTEM DOLLAR identifier '(' (expression (',' expression)*)? ')'                    #systemFunctionCall
     ;
 
 aggregationFunction
