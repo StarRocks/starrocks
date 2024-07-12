@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -17,8 +16,6 @@ where
     where
             l_partkey = p_partkey
 ) ;
-=======
->>>>>>> dbd35c1cf3 ([BugFix] clear invalid statistics before into memo (#47776))
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:49: expr
@@ -63,19 +60,6 @@ OutPut Exchange Id: 12
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
 |
 9:SELECT
-<<<<<<< HEAD
-                                                                                                                                                                                                                                 |  predicates: 5: L_QUANTITY < 0.2 * 50: avg
-                                                                                                                                                                                                                                 |  cardinality: 307009
-                                                                                                                                                                                                                                 |  column statistics:
-                                                                                                                                                                                                                                 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
-                                                                                                                                                                                                                                 |  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
-                                                                                                                                                                                                                                 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
-                                                                                                                                                                                                                                 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                 |
-                                                                                                                                                                                                                                 8:ANALYTIC
-                                                                                                                                                                                                                                 |  functions: [, avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
-=======
 |  predicates: 5: L_QUANTITY < 0.2 * 50: avg
 |  cardinality: 307009
 |  column statistics:
@@ -87,7 +71,6 @@ OutPut Exchange Id: 12
 |
 8:ANALYTIC
 |  functions: [, avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
->>>>>>> dbd35c1cf3 ([BugFix] clear invalid statistics before into memo (#47776))
 |  partition by: [18: P_PARTKEY, INT, false]
 |  cardinality: 614017
 |  column statistics:
@@ -150,6 +133,7 @@ OutPut Exchange Id: 06
 table: lineitem, rollup: lineitem
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=20/20
+tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
 actualRows=0, avgRowSize=24.0
 cardinality: 600000000
 probe runtime filters:
@@ -177,6 +161,7 @@ table: part, rollup: part
 preAggregation: on
 Predicates: [21: P_BRAND, CHAR, false] = 'Brand#35', [24: P_CONTAINER, CHAR, false] = 'JUMBO CASE'
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10266,10268,10270,10272,10274,10276,10278,10280,10282,10284
 actualRows=0, avgRowSize=28.0
 cardinality: 20467
 column statistics:
@@ -184,4 +169,3 @@ column statistics:
 * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 [end]
-
