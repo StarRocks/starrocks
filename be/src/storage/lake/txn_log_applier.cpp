@@ -51,27 +51,31 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
-            if (metadata->rowset_schema_id_size() == 0) {
-                metadata->mutable_historical_schema()->clear();
-                auto schema_id = metadata->schema().id();
-                auto& item = (*metadata->mutable_historical_schema())[schema_id];
-                item.CopyFrom(metadata->schema());
-                for (int i = 0; i < metadata->rowsets_size(); i++) {
-                    metadata->add_rowset_schema_id(schema_id);
-                }
-            } else {
-                auto schema_id = metadata->schema().id();
-                bool has_changed = false;
-                for (int i = 0; i < metadata->rowsets_size(); i++) {
-                    // the rowset is generate from origin latest tablet schema, so we only update this rowsets
-                    if (metadata->rowset_schema_id(i) == -1) {
-                        metadata->set_rowset_schema_id(i, schema_id);
-                        has_changed = true;
-                    }
-                }
-                if (has_changed) {
+            // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the 
+            // `enable_alter_struct` configuration. Once testing is complete, this configuration will be removed.
+            if (config::enable_alter_struct) {
+                if (metadata->rowset_schema_id_size() == 0) {
+                    metadata->mutable_historical_schema()->clear();
+                    auto schema_id = metadata->schema().id();
                     auto& item = (*metadata->mutable_historical_schema())[schema_id];
                     item.CopyFrom(metadata->schema());
+                    for (int i = 0; i < metadata->rowsets_size(); i++) {
+                        metadata->add_rowset_schema_id(schema_id);
+                    }
+                } else {
+                    auto schema_id = metadata->schema().id();
+                    bool has_changed = false;
+                    for (int i = 0; i < metadata->rowsets_size(); i++) {
+                        // the rowset is generate from origin latest tablet schema, so we only update this rowsets
+                        if (metadata->rowset_schema_id(i) == -1) {
+                            metadata->set_rowset_schema_id(i, schema_id);
+                            has_changed = true;
+                        }
+                    }
+                    if (has_changed) {
+                        auto& item = (*metadata->mutable_historical_schema())[schema_id];
+                        item.CopyFrom(metadata->schema());
+                    }
                 }
             }
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
@@ -442,6 +446,7 @@ private:
         }
 
         auto first_idx = static_cast<uint32_t>(first_input_pos - _metadata->mutable_rowsets()->begin());
+        bool has_output_rowset = false;
         if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
             // Replace the first input rowset with output rowset
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
@@ -449,19 +454,25 @@ private:
             output_rowset->set_id(_metadata->next_rowset_id());
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + output_rowset->segments_size());
             ++first_input_pos;
+            has_output_rowset = true;
         }
         // Erase input rowsets from _metadata
         _metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
 
         // Update historical schema and rowset schema id
         if (_metadata->rowset_schema_id_size() != 0) {
-            std::set<int32_t> erase_id;
+            int32_t start_idx = has_output_rowset ? first_idx + 1 : first_idx;
             int32_t end_idx = first_idx + op_compaction.input_rowsets_size();
-            for (auto idx = first_idx; idx < end_idx; idx++) {
+            // update input rowset schema id
+            if (has_output_rowset && op_compaction.input_rowsets_size() > 1) {
+                _metadata->set_rowset_schema_id(first_idx, -1);
+            }
+            std::set<int64_t> erase_id;
+            for (auto idx = start_idx; idx < end_idx; idx++) {
                 erase_id.insert(_metadata->rowset_schema_id(idx));
             }
 
-            for (auto idx = 0; idx < first_idx && !erase_id.empty(); idx++) {
+            for (auto idx = 0; idx < start_idx && !erase_id.empty(); idx++) {
                 if (erase_id.find(_metadata->rowset_schema_id(idx)) != erase_id.end()) {
                     erase_id.erase(_metadata->rowset_schema_id(idx));
                 }
@@ -476,10 +487,8 @@ private:
             for (auto id : erase_id) {
                 _metadata->mutable_historical_schema()->erase(id);
             }
-            // remove input rowset schema id
-            _metadata->set_rowset_schema_id(first_idx, -1);
             auto* rowset_schema_id_fields = _metadata->mutable_rowset_schema_id();
-            rowset_schema_id_fields->erase(rowset_schema_id_fields->begin() + first_idx + 1, rowset_schema_id_fields->begin() + end_idx);
+            rowset_schema_id_fields->erase(rowset_schema_id_fields->begin() + start_idx, rowset_schema_id_fields->begin() + end_idx);
         }
         
 

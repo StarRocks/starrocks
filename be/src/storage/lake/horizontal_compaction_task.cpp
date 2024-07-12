@@ -33,7 +33,7 @@ namespace starrocks::lake {
 Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    auto tablet_schema = _tablet.get_schema();
+    //auto tablet_schema = _tablet.get_schema();
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
@@ -43,7 +43,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
-    Schema schema = ChunkHelper::convert_schema(tablet_schema);
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
     TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
@@ -78,7 +78,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         {
             SCOPED_RAW_TIMER(&reader_time_ns);
             auto st = Status::OK();
-            if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
                 st = reader.get_next(chunk.get(), &rssid_rowids);
             } else {
                 st = reader.get_next(chunk.get());
@@ -89,7 +89,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                 return st;
             }
         }
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
         if (rssid_rowids.empty()) {
             RETURN_IF_ERROR(writer->write(*chunk));
         } else {
@@ -136,7 +136,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
@@ -152,7 +152,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
-    auto tablet_schema = _tablet.get_schema();
+    //auto tablet_schema = _tablet.get_schema();
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
@@ -162,7 +162,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
-                auto uid = tablet_schema->column(i).unique_id();
+                auto uid = _tablet_schema->column(i).unique_id();
                 const auto* column_reader = segment->column_with_uid(uid);
                 if (column_reader == nullptr) {
                     continue;

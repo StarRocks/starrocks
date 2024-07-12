@@ -1378,4 +1378,6 @@ CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 
+CONF_mBool(enable_alter_struct, "true");
+
 } // namespace starrocks::config

@@ -34,7 +34,7 @@ namespace starrocks::lake {
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    _tablet_schema = _tablet.get_schema();
+    //_tablet_schema = _tablet.get_schema();
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();

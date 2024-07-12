@@ -1912,22 +1912,25 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
+                /*
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
                 }
+                */
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
+                /*
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Drop field for struct column not support shared-data mode so far");
                 }
+                */
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");
                 }

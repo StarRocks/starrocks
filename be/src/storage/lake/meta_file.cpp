@@ -213,6 +213,21 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         uint32_t id;
         bool operator()(const uint32_t rowid) const { return rowid == id; }
     };
+
+    struct RowsetFinder {
+        int64_t id;
+        bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
+    };
+    // get input rowset index
+    std::set<uint32_t> input_rowset_index;
+    for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
+        auto input_id = op_compaction.input_rowsets(i);
+        auto it = std::find_if(_tablet_meta->mutable_rowsets()->begin(), _tablet_meta->mutable_rowsets()->end(), RowsetFinder{input_id});
+        if (it != _tablet_meta->mutable_rowsets()->end()) {
+            input_rowset_index.insert(static_cast<uint32_t>(it - _tablet_meta->mutable_rowsets()->begin()));
+        }
+    }
+    
     // Only used for cloud native persistent index.
     std::vector<DelfileWithRowsetId> collect_del_files;
     auto it = _tablet_meta->mutable_rowsets()->begin();
@@ -260,6 +275,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     }
 
     // add output rowset
+    bool has_output_rowset = false;
     if (op_compaction.has_output_rowset() &&
         (op_compaction.output_rowset().segments_size() > 0 || !collect_del_files.empty())) {
         // NOTICE: we need output rowset in two scenarios:
@@ -274,6 +290,37 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             rowset->add_del_files()->CopyFrom(each);
         }
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+        has_output_rowset = true;
+    }
+
+    // update rowset schema id
+    if (_tablet_meta->rowset_schema_id_size() > 0) {
+        std::set<int64_t> erase_id;
+        std::vector<int64_t> schema_ids;
+        for (int32_t i = 0; i < _tablet_meta->rowset_schema_id_size(); i++) {
+            if (input_rowset_index.count(i) > 0) {
+                erase_id.insert(_tablet_meta->rowset_schema_id(i));
+            } else {
+                schema_ids.emplace_back(_tablet_meta->rowset_schema_id(i));
+            }
+        }
+
+        for (int32_t i = 0; i < schema_ids.size() && !erase_id.empty(); i++) {
+            if (erase_id.count(schema_ids[i]) > 0) {
+                erase_id.erase(schema_ids[i]);
+            }
+        }
+
+        for (auto id : erase_id) {
+            _tablet_meta->mutable_historical_schema()->erase(id);
+        }
+        _tablet_meta->clear_rowset_schema_id();
+        for (auto id : schema_ids) {
+            _tablet_meta->add_rowset_schema_id(id);
+        }
+        if (has_output_rowset) {
+            _tablet_meta->add_rowset_schema_id(-1);
+        }
     }
 
     VLOG(2) << fmt::format(

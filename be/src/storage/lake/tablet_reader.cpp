@@ -59,15 +59,17 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets)
+                           std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
           _rowsets_inited(true),
-          _rowsets(std::move(rowsets)) {}
+          _rowsets(std::move(rowsets)), 
+          _tablet_schema(tablet_schema) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer)
+                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                           std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
@@ -75,7 +77,8 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
-          _mask_buffer(mask_buffer) {
+          _mask_buffer(mask_buffer),
+          _tablet_schema(tablet_schema) {
     DCHECK(_mask_buffer);
 }
 
@@ -84,7 +87,9 @@ TabletReader::~TabletReader() {
 }
 
 Status TabletReader::prepare() {
-    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    if (_tablet_schema == nullptr) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    }
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");
     }
