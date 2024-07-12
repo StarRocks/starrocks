@@ -707,6 +707,9 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "with C1 as (select * from t0) select * from C1";
         assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
+        sql = "with C1 as (select * from t0) select * from c1";
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
+
         sql = "with C1 as (select * from t0) select * from C1 a where a.v1 = 1";
         assertPlanContains(sql, "PREDICATES: 1: v1 = 1");
     }
