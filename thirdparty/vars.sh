@@ -145,10 +145,10 @@ ZLIB_SOURCE=zlib-1.2.11
 ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
 
 # lz4
-LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
-LZ4_NAME=lz4-1.9.3.tar.gz
-LZ4_SOURCE=lz4-1.9.3
-LZ4_MD5SUM="3a1ab1684e14fc1afc66228ce61b2db3"
+LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.4.tar.gz"
+LZ4_NAME=lz4-1.9.4.tar.gz
+LZ4_SOURCE=lz4-1.9.4
+LZ4_MD5SUM="e9286adb64040071c5e23498bf753261"
 
 # bzip
 BZIP_DOWNLOAD="https://fossies.org/linux/misc/bzip2-1.0.8.tar.gz"
