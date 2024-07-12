@@ -459,7 +459,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                         DCHECK(not_founds);
                         (*not_founds)[i] = 1;
                     }
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -489,7 +489,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                         DCHECK(not_founds);
                         (*not_founds)[i] = 1;
                     }
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -539,7 +539,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             if constexpr (compute_not_founds) {
                 (*not_founds)[row] = 1;
             }
-            uint8_t* pos = pool->allocate(key.size);
+            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
             AggDataPtr pv = allocate_func(pk);
@@ -596,7 +596,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
+              buffer(mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
@@ -653,7 +653,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                         (*not_founds)[i] = 1;
                     }
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -697,7 +697,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                         (*not_founds)[i] = 1;
                     }
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);

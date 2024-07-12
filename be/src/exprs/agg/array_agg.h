@@ -41,7 +41,7 @@ struct ArrayAggAggregateState {
                     auto raw_key = column.get_slice(offset + i);
                     KeyType key(raw_key);
                     set.template lazy_emplace(key, [&](const auto& ctor) {
-                        uint8_t* pos = mem_pool->allocate(key.size);
+                        uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                         assert(pos != nullptr);
                         memcpy(pos, key.data, key.size);
                         ctor(pos, key.size, key.hash);
