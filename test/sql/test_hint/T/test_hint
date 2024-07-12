@@ -199,6 +199,8 @@ insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
 insert into cities(city_id, population, city) values(5, 2000, "chengdu");
 
 select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
-
+select @aVarHint, @bVarHint;
+set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
+select @secondVar,@thirdVar;
 
 

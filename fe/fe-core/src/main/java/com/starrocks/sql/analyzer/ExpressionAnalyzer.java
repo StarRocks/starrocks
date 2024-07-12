@@ -2099,9 +2099,9 @@ public class ExpressionAnalyzer {
     public static List<String> analyzeUserVariableExprDependency(Expr expression, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
-        List<String> userVariableDependencyWithoutFind = new ArrayList<>();
-        expressionAnalyzer.analyzeUserVarDependency(expression, scope, userVariableDependencyWithoutFind);
-        return userVariableDependencyWithoutFind;
+        List<String> userVariableDependencyNotInConnContext = new ArrayList<>();
+        expressionAnalyzer.analyzeUserVarDependency(expression, scope, userVariableDependencyNotInConnContext);
+        return userVariableDependencyNotInConnContext;
     }
 
 }
