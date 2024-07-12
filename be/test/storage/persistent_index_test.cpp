@@ -732,13 +732,9 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 
     write_pindex_bf = true;
-<<<<<<< HEAD
-    //ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
-=======
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
->>>>>>> 5725f4c14f ([BugFix] Fix the bug of array out-of-bounds access (#48230))
 }
 
 TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
