@@ -57,6 +57,7 @@
           "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
         },
         {
+<<<<<<< HEAD
           "type": "category",
           "label": "Data distribution",
           "link": {"type": "doc", "id": "table_design/Data_distribution"},
@@ -84,6 +85,20 @@
           "label": "Load data from Apache Kafka",
           "link": {"type": "doc", "id": "cover_pages/loading_kafka"},
           "items": ["loading/Kafka-connector-starrocks", "loading/RoutineLoad"]
+=======
+            "type": "category",
+            "label": "快速开始",
+            "link": {
+                "type": "doc",
+                "id": "quick_start/quick_start"
+            },
+            "items": [
+                "quick_start/shared-nothing",
+                "quick_start/shared-data",
+                "quick_start/iceberg",
+                "quick_start/helm"
+            ]
+>>>>>>> b1fdbfb8f7 ([Doc] Add Helm quickstart to Chinese docs (#48314))
         },
         {
           "type": "category",
