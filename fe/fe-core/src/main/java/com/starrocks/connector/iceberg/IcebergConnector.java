@@ -77,6 +77,7 @@ public class IcebergConnector implements Connector {
 
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
+            case DLF_CATALOG:
                 return new IcebergHiveCatalog(catalogName, conf, properties);
             case GLUE_CATALOG:
                 return new IcebergGlueCatalog(catalogName, conf, properties);

@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 
 public enum IcebergCatalogType {
     HIVE_CATALOG,
+    DLF_CATALOG,
     CUSTOM_CATALOG,
     GLUE_CATALOG,
     REST_CATALOG,
