@@ -118,8 +118,7 @@ public class TestLockException {
         Database db = new Database(1, "db");
         Locker locker = new Locker();
         Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db, LockType.READ));
-        Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db, LockType.READ,
-                10000, TimeUnit.MILLISECONDS));
+        Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db, LockType.READ, 10000));
 
         Assert.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
                 db, Lists.newArrayList(2L), LockType.READ));
