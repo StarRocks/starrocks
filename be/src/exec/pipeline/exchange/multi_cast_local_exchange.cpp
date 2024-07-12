@@ -126,10 +126,7 @@ StatusOr<ChunkPtr> InMemoryMultiCastLocalExchanger::pull_chunk(RuntimeState* sta
     DCHECK(_progress[mcast_consumer_index] != nullptr);
     Cell* cell = _progress[mcast_consumer_index];
     if (cell->next == nullptr) {
-        if (_opened_sink_number == 0) {
-            LOG(INFO) << "eof, index:" << mcast_consumer_index;
-            return Status::EndOfFile("mcast_local_exchanger eof");
-        }
+        if (_opened_sink_number == 0) return Status::EndOfFile("mcast_local_exchanger eof");
         return Status::InternalError("unreachable in multicast local exchanger");
     }
     cell = cell->next;

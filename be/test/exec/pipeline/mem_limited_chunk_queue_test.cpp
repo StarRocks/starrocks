@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// @TODO test exchanger
-
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -99,7 +97,6 @@ TEST_F(MemLimitedChunkQueueTest, test_iterator) {
     options.block_size = 1024 * 128;
     options.memory_limit = INT64_MAX; // disable spill
     options.block_manager = dummy_block_mgr.get();
-    // @TODO test different block size
     MemLimitedChunkQueue queue(&dummy_runtime_state, 1, options);
     ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
 
@@ -108,7 +105,7 @@ TEST_F(MemLimitedChunkQueueTest, test_iterator) {
 
     for (size_t i = 0; i < 100; i++) {
         auto chunk = builder.get_next();
-        ASSERT_OK(queue.push(chunk, nullptr));
+        ASSERT_OK(queue.push(chunk));
     }
     MemLimitedChunkQueue::Iterator iter = MemLimitedChunkQueue::Iterator(queue._head, 0);
 
@@ -150,7 +147,7 @@ TEST_F(MemLimitedChunkQueueTest, test_push_pop_without_spill) {
 
     for (size_t i = 0; i < 100; i++) {
         auto chunk = builder.get_next();
-        ASSERT_OK(queue.push(chunk, nullptr));
+        ASSERT_OK(queue.push(chunk));
     }
 
     size_t expected_head_acc_rows = 0;
@@ -179,7 +176,6 @@ TEST_F(MemLimitedChunkQueueTest, test_back_pressure) {
     options.memory_limit = 1024 * 256;
     options.max_unconsumed_bytes = 1024 * 64;
     options.block_manager = dummy_block_mgr.get();
-    // @TODO test different block size
     int32_t consumer_number = 1;
     MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
     ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
@@ -190,10 +186,10 @@ TEST_F(MemLimitedChunkQueueTest, test_back_pressure) {
     // 32k per chunk,
     AutoIncChunkBuilder builder;
     ASSERT_TRUE(queue.can_push());
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
     ASSERT_TRUE(queue.can_push());
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
-    // unconsumed bytes is 16k, can't push before consume
+    ASSERT_OK(queue.push(builder.get_next()));
+    // unconsumed bytes is 16k, can't push before consuming
     ASSERT_FALSE(queue.can_push());
 
     // consume
@@ -220,13 +216,13 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
     AutoIncChunkBuilder builder;
 
     // push some chunks, trigger spill, submit spill
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_OK(queue.push(builder.get_next()));
 
     // only one block, cannot trigger flush
     ASSERT_TRUE(queue.can_push());
 
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
     // after push the third chunk, there are 2 blocks and the 1st should be flushed
     int32_t submitted_flush_tasks = 0, finished_flush_task = 0;
     SyncPoint::GetInstance()->EnableProcessing();
@@ -252,9 +248,9 @@ TEST_F(MemLimitedChunkQueueTest, test_push_with_flush) {
 
     ASSERT_TRUE(queue.can_push());
 
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
     ASSERT_TRUE(queue.can_push());
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
     ASSERT_FALSE(queue.can_push());
     wait_flush_task_done(queue);
     ASSERT_EQ(submitted_flush_tasks, 2);
@@ -278,13 +274,13 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     // 32k per chunk,
     AutoIncChunkBuilder builder;
 
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_OK(queue.push(builder.get_next()));
 
     // only one block, cannot trigger flush
     ASSERT_TRUE(queue.can_push());
 
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
 
     int32_t submitted_flush_tasks = 0, finished_flush_task = 0;
     SyncPoint::GetInstance()->EnableProcessing();
@@ -320,9 +316,9 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
     ASSERT_EQ(finished_flush_task, 1);
 
     ASSERT_TRUE(queue.can_push());
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
     ASSERT_TRUE(queue.can_push());
-    ASSERT_OK(queue.push(builder.get_next(), nullptr));
+    ASSERT_OK(queue.push(builder.get_next()));
 
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "before execute flush task";
@@ -374,17 +370,16 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         AutoIncChunkBuilder builder;
 
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_FALSE(queue.can_push());
         wait_flush_task_done(queue);
         int32_t submitted_load_tasks = 0;
         SyncPoint::GetInstance()->EnableProcessing();
         SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task", [&](void* arg) {
-            // MemLimitedChunkQueue::Block* block = (MemLimitedChunkQueue::Block*)arg;
             submitted_load_tasks++;
         });
         DeferOp defer([]() {
@@ -430,11 +425,11 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
 
         // push 3 chunks, consumer 0 consume 1 chunk, consumer 2 do nothing
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
 
         ASSERT_TRUE(queue.can_pop(0));
         ASSERT_OK(queue.pop(0));
@@ -485,13 +480,13 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         AutoIncChunkBuilder builder;
 
         // force push and wait spill
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         ASSERT_TRUE(queue.can_push());
-        ASSERT_OK(queue.push(builder.get_next(), nullptr));
+        ASSERT_OK(queue.push(builder.get_next()));
         for (int i = 0; i < 10; i++) {
             ASSERT_FALSE(queue.can_push());
             wait_flush_task_done(queue);
-            ASSERT_OK(queue.push(builder.get_next(), nullptr));
+            ASSERT_OK(queue.push(builder.get_next()));
         }
         for (int i = 0; i < 10; i++) {
             while (!queue.can_pop(0)) {

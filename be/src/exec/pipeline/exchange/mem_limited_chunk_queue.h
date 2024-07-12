@@ -92,6 +92,7 @@ private:
 
         Block* get_block() { return block; }
     };
+
     static const size_t kDefaultBlockSize = 8L * 1024 * 1024;
     static const size_t kDefaultMaxUnconsumedBytes = 16L * 1024 * 1024;
     static const size_t kDefaultMemoryLimit = 16L * 1024 * 1024;
@@ -99,12 +100,11 @@ private:
 public:
     struct Options {
         int32_t plan_node_id = 0;
+        int encode_level = 7;
         // memory block size
         size_t block_size = kDefaultBlockSize;
         size_t memory_limit = kDefaultMemoryLimit;
         size_t max_unconsumed_bytes = kDefaultMaxUnconsumedBytes;
-        int encode_level = 7;
-        CompressionTypePB compress_type = CompressionTypePB::LZ4;
         spill::BlockManager* block_manager = nullptr;
         workgroup::WorkGroupPtr wg;
     };
@@ -135,16 +135,17 @@ private:
 
     void _close_consumer(int32_t consumer_index);
 
-    Status flush();
+    Status _flush();
     // trigger flush task
-    Status submit_flush_task();
+    Status _submit_flush_task();
     // reload block from disk
-    Status load(Block* block);
-    Status submit_load_task(Block* block);
+    Status _load(Block* block);
 
-    void evict_loaded_block();
+    Status _submit_load_task(Block* block);
 
-    inline void update_io_task_status(const Status& status) {
+    void _evict_loaded_block();
+
+    inline void _update_io_task_status(const Status& status) {
         if (status.ok() || _io_task_status.load() != nullptr) {
             return;
         }
@@ -152,7 +153,7 @@ private:
         auto new_status = std::make_shared<Status>(status);
         _io_task_status.compare_exchange_strong(old_status, new_status);
     }
-    Status get_io_task_status() const {
+    Status _get_io_task_status() const {
         auto status = _io_task_status.load();
         return status == nullptr ? Status::OK() : *status;
     }
@@ -175,7 +176,7 @@ public:
     int32_t _opened_source_number = 0;
     int32_t _opened_sink_number = 0;
     std::vector<int32_t> _opened_source_opcount;
-    // record consume progress
+    // consumption progress of each consumer
     std::vector<std::unique_ptr<Iterator>> _consumer_progress;
 
     // all
@@ -184,11 +185,9 @@ public:
     // head
     size_t _head_accumulated_rows = 0;
     size_t _head_accumulated_bytes = 0;
-
     // not flushed
     size_t _flushed_accumulated_rows = 0;
     size_t _flushed_accumulated_bytes = 0;
-
     // consumer
     size_t _fastest_accumulated_rows = 0;
     size_t _fastest_accumulated_bytes = 0;

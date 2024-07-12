@@ -87,7 +87,7 @@ Status MemLimitedChunkQueue::init_metrics(RuntimeProfile* parent) {
 }
 
 Status MemLimitedChunkQueue::push(const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(get_io_task_status());
+    RETURN_IF_ERROR(_get_io_task_status());
     std::unique_lock l(_mutex);
     if (UNLIKELY(_chunk_builder == nullptr)) {
         _chunk_builder = chunk->clone_empty();
@@ -138,9 +138,9 @@ bool MemLimitedChunkQueue::can_push() {
     if (in_memory_bytes >= _opts.memory_limit && _next_flush_block->next != nullptr) {
         if (bool expected = false; _has_flush_io_task.compare_exchange_strong(expected, true)) {
             TEST_SYNC_POINT("MemLimitedChunkQueue::can_push::before_submit_flush_task");
-            auto status = submit_flush_task();
+            auto status = _submit_flush_task();
             if (!status.ok()) {
-                update_io_task_status(status);
+                _update_io_task_status(status);
                 return true;
             }
         }
@@ -152,7 +152,7 @@ bool MemLimitedChunkQueue::can_push() {
 
 StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
     DCHECK(consumer_index <= _consumer_number);
-    RETURN_IF_ERROR(get_io_task_status());
+    RETURN_IF_ERROR(_get_io_task_status());
     std::unique_lock l(_mutex);
 
     DCHECK(_consumer_progress[consumer_index] != nullptr);
@@ -180,7 +180,7 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
     return result;
 }
 
-void MemLimitedChunkQueue::evict_loaded_block() {
+void MemLimitedChunkQueue::_evict_loaded_block() {
     if (_loaded_blocks.size() < _consumer_number) {
         return;
     }
@@ -211,9 +211,9 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::can_pop::before_submit_load_task", next_iter.block);
         if (bool expected = false; next_iter.block->has_load_task.compare_exchange_strong(expected, true)) {
             VLOG_ROW << fmt::format("[MemLimitedChunkQueue] submit load task for block [{}]", (void*)next_iter.block);
-            auto status = submit_load_task(next_iter.block);
+            auto status = _submit_load_task(next_iter.block);
             if (!status.ok()) {
-                update_io_task_status(status);
+                _update_io_task_status(status);
                 return true;
             }
         }
@@ -291,11 +291,10 @@ void MemLimitedChunkQueue::_update_progress(Iterator* iter) {
         VLOG_ROW << fmt::format("release chunk, current head_accumulated_rows[{}], head_accumulated_bytes[{}]",
                                 _head_accumulated_rows, _head_accumulated_bytes);
         cell->chunk.reset();
-        if (_iterator.has_next()) {
-            _iterator.move_to_next();
-        } else {
+        if (!_iterator.has_next()) {
             break;
         }
+        _iterator.move_to_next();
     }
 }
 
@@ -313,7 +312,7 @@ void MemLimitedChunkQueue::_close_consumer(int32_t consumer_index) {
     _update_progress();
 }
 
-Status MemLimitedChunkQueue::flush() {
+Status MemLimitedChunkQueue::_flush() {
     Block* block = nullptr;
     std::vector<ChunkPtr> chunks;
     {
@@ -425,7 +424,7 @@ Status MemLimitedChunkQueue::flush() {
     return Status::OK();
 }
 
-Status MemLimitedChunkQueue::submit_flush_task() {
+Status MemLimitedChunkQueue::_submit_flush_task() {
     auto flush_task = [this, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)](auto& yield_ctx) {
         TEST_SYNC_POINT("MemLimitedChunkQueue::before_execute_flush_task");
         RETURN_IF(!guard.scoped_begin(), (void)0);
@@ -435,9 +434,9 @@ Status MemLimitedChunkQueue::submit_flush_task() {
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
         });
 
-        auto status = flush();
+        auto status = _flush();
         if (!status.ok()) {
-            update_io_task_status(status);
+            _update_io_task_status(status);
             return;
         }
     };
@@ -448,7 +447,7 @@ Status MemLimitedChunkQueue::submit_flush_task() {
 }
 
 // reload block from disk
-Status MemLimitedChunkQueue::load(Block* block) {
+Status MemLimitedChunkQueue::_load(Block* block) {
     std::shared_ptr<spill::BlockReader> block_reader;
     raw::RawString buffer;
     size_t block_len;
@@ -491,7 +490,7 @@ Status MemLimitedChunkQueue::load(Block* block) {
         }
         block->in_mem = true;
         block->has_load_task = false;
-        evict_loaded_block();
+        _evict_loaded_block();
         _loaded_blocks.push(block);
         _current_load_rows += block->flush_rows;
         _current_load_bytes += block->flush_bytes;
@@ -502,14 +501,14 @@ Status MemLimitedChunkQueue::load(Block* block) {
     return Status::OK();
 }
 
-Status MemLimitedChunkQueue::submit_load_task(Block* block) {
+Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
     auto load_task = [this, block, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)](auto& yield_ctx) {
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::before_execute_load_task", block);
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
-        auto status = load(block);
+        auto status = _load(block);
         if (!status.ok()) {
-            update_io_task_status(status);
+            _update_io_task_status(status);
         }
     };
     auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(load_task));
