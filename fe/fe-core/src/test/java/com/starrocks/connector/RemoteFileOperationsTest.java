@@ -72,7 +72,8 @@ public class RemoteFileOperationsTest {
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
-        List<RemoteFileInfo> remoteFileInfos = ops.getRemoteFiles(Lists.newArrayList(partitions.values()));
+        List<RemoteFileInfo> remoteFileInfos =
+                ops.getRemoteFiles(Lists.newArrayList(partitions.values()), RemoteFileOperations.Options.DEFAULT);
         Assert.assertEquals(2, remoteFileInfos.size());
         Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 

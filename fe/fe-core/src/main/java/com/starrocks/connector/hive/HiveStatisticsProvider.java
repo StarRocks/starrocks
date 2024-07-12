@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
@@ -45,7 +44,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
@@ -148,8 +146,8 @@ public class HiveStatisticsProvider {
                 Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
                 Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
 
-        Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
-        List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);
+        List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions,
+                RemoteFileOperations.Options.toUseHudiTableLocation(hmsTbl.getTableLocation()));
 
         long totalBytes = 0;
         for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
@@ -326,7 +324,7 @@ public class HiveStatisticsProvider {
                 .mapToDouble(x -> x)
                 .max();
 
-        return  ndv.isPresent() ? ndv.getAsDouble() : 1;
+        return ndv.isPresent() ? ndv.getAsDouble() : 1;
     }
 
     private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
@@ -357,7 +355,6 @@ public class HiveStatisticsProvider {
         return (double) totalNullsNums / totalRowNums;
     }
 
-
     private double averageRowSize(Column column, Collection<HivePartitionStats> partitionStatistics, double totalRowNums) {
         if (!column.getType().isStringType()) {
             return column.getType().getTypeSize();
@@ -384,7 +381,7 @@ public class HiveStatisticsProvider {
     }
 
     private double max(List<HiveColumnStats> columnStatistics) {
-        OptionalDouble max =  columnStatistics.stream()
+        OptionalDouble max = columnStatistics.stream()
                 .map(HiveColumnStats::getMax)
                 .filter(value -> value != POSITIVE_INFINITY)
                 .mapToDouble(x -> x)
@@ -393,7 +390,7 @@ public class HiveStatisticsProvider {
     }
 
     private double min(List<HiveColumnStats> columnStatistics) {
-        OptionalDouble min =  columnStatistics.stream()
+        OptionalDouble min = columnStatistics.stream()
                 .map(HiveColumnStats::getMin)
                 .filter(value -> value != NEGATIVE_INFINITY)
                 .mapToDouble(x -> x)

@@ -155,7 +155,8 @@ public class HudiMetadata implements ConnectorMetadata {
             }
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), Optional.of(hmsTbl.getTableLocation()));
+        return fileOps.getRemoteFiles(partitions.build(),
+                RemoteFileOperations.Options.toUseHudiTableLocation(hmsTbl.getTableLocation()));
     }
 
     @Override

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -118,7 +117,7 @@ public class HiveStatisticsProviderTest {
         Statistics statistics = statisticsProvider.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(0, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
@@ -187,7 +186,7 @@ public class HiveStatisticsProviderTest {
 
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
-        fileOps.getRemoteFiles(Lists.newArrayList(partitions.values()));
+        fileOps.getRemoteFiles(Lists.newArrayList(partitions.values()), RemoteFileOperations.Options.DEFAULT);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
@@ -222,7 +221,6 @@ public class HiveStatisticsProviderTest {
         stats.initialize(columnStatisticsData, 10);
         Assert.assertEquals(0, stats.getMax(), 0.000001);
         Assert.assertEquals(0, stats.getMin(), 0.000001);
-
 
         columnStatisticsData = new ColumnStatisticsData();
         LongColumnStatsData longColumnStatsData = new LongColumnStatsData();
