@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -38,6 +39,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     public static final long PARTITION_INIT_VERSION = 1L;
 
+    public static final long INVALID_SHARD_GROUP_ID = -1L;
+
     @SerializedName(value = "id")
     private long id;
 
@@ -46,8 +49,9 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @SerializedName(value = "parentId")
     private long parentId;
 
+    // DEPRECATED
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = INVALID_SHARD_GROUP_ID;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -127,10 +131,19 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     public void setParentId(long parentId) {
         this.parentId = parentId;
     }
- 
+
+    // DEPRECATED
     @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    @Override
+    public List<Long> getShardGroupIds() {
+        List<Long> result = new ArrayList<>();
+        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        return result;
     }
 
     @Override

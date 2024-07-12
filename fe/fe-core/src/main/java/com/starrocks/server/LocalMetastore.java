@@ -1571,8 +1571,8 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-        Long id = GlobalStateMgr.getCurrentState().getNextId();
-        long shardGroupId = 0;
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), olapTable.getId(), id);
@@ -1719,16 +1719,9 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-        // create shard group
-        long shardGroupId = 0;
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                    createShardGroup(db.getId(), table.getId(), partitionId);
-        }
-
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()),
-                        distributionInfo, shardGroupId);
+                        distributionInfo);
         // version
         if (version != null) {
             partition.updateVisibleVersion(version);
@@ -1740,6 +1733,15 @@ public class LocalMetastore implements ConnectorMetadata {
             long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
+
+            // create shard group
+            long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                long indexShardGroupId = getNextId();
+                shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(db.getId(), table.getId(), indexShardGroupId);
+                index.setShardGroupId(shardGroupId);
+            }
 
             // create tablets
             TabletMeta tabletMeta =
@@ -1758,6 +1760,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partition.createRollupIndex(index);
             }
         }
+
         return partition;
     }
 

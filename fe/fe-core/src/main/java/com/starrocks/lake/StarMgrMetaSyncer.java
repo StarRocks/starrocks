@@ -81,8 +81,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
                                 .map(Partition::getSubPartitions)
-                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupId))
-                                .forEach(groupIds::add);
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                                .forEach(groupIds::addAll);
                     }
                 }
             } finally {
@@ -306,18 +306,17 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (table.getState() != OlapTable.OlapTableState.NORMAL) {
                     return false; // table might be in schema change
                 }
-                // no need to check db/table/partition again, everything still works
-                long groupId = physicalPartition.getShardGroupId();
-                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    List<Long> starmgrShardIds = starOSAgent.listShard(materializedIndex.getShardGroupId());
+                    Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }
+                    // collect shard in starmgr but not in fe
+                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
                 }
-                // collect shard in starmgr but not in fe
-                redundantGroupToShards.put(groupId, starmgrShardIdsSet);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }

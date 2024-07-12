@@ -1234,7 +1234,7 @@ public class QueryAnalyzer {
                         try {
                             // Add read lock to avoid concurrent problems.
                             locker.lockDatabase(db, LockType.READ);
-                            OlapTable mvOlapTable = new OlapTable();
+                            OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                             ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                             // Copy the necessary olap table meta to avoid changing original meta;
                             mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());

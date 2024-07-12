@@ -46,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +85,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private DistributionInfo distributionInfo;
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
+
+    @SerializedName(value = "shardGroupIdList")
+    private List<Long> shardGroupIdList;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -149,13 +153,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         this.distributionInfo = distributionInfo;
     }
 
-    public Partition(long id, String name,
-                     MaterializedIndex baseIndex,
-                     DistributionInfo distributionInfo, long shardGroupId) {
-        this(id, name, baseIndex, distributionInfo);
-        this.shardGroupId = shardGroupId;
-    }
-
     public Partition shallowCopy() {
         Partition partition = new Partition();
         partition.id = this.id;
@@ -169,6 +166,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         partition.nextVersion = this.nextVersion;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
+        partition.shardGroupIdList = this.shardGroupIdList;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         return partition;
     }
@@ -226,8 +224,18 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return;
     }
 
+    @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    @Override
+    public List<Long> getShardGroupIds() {
+        List<Long> result = new ArrayList<>();
+        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        result.add(baseIndex.getShardGroupId());
+        return result;
     }
 
     public void setName(String newName) {

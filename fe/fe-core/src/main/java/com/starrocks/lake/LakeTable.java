@@ -172,7 +172,7 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId) {
+                                          long partitionId) {
         FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
@@ -181,7 +181,8 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
+                    null, properties,
                     StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
@@ -203,7 +204,9 @@ public class LakeTable extends OlapTable {
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
-            shardGroupIds.add(p.getShardGroupId());
+            for (MaterializedIndex index : p.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
         }
         return shardGroupIds;
     }

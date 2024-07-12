@@ -157,6 +157,16 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 baseSchemaColumns, rollupJobV2Params);
     }
 
+    public static AlterReplicaTask rollupLakeTablet(long backendId, long dbId, long tableId, long partitionId,
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long version, long jobId, RollupJobV2Params rollupJobV2Params,
+                                                     List<Column> baseSchemaColumns, long txnId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.ROLLUP,
+                TTabletType.TABLET_TYPE_LAKE, txnId, null,
+                baseSchemaColumns, rollupJobV2Params);
+    }
+
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType,
