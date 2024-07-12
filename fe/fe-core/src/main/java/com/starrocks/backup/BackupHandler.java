@@ -629,6 +629,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             job.replayRun();
         }
         if (isJobExpired(job, System.currentTimeMillis())) {
+            AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
+            // remove the existed job info if the job is expired
+            if (existingJob != null) {
+                dbIdToBackupOrRestoreJob.remove(job.getDbId());
+                mvRestoreContext.discardExpiredBackupTableInfo(job);
+            }
             LOG.warn("skip expired job {}", job);
             return;
         }
@@ -728,7 +734,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     /**
      * will remove finished/cancelled job periodically
      */
-    private boolean isJobExpired(AbstractJob job, long currentTimeMs) {
+    public boolean isJobExpired(AbstractJob job, long currentTimeMs) {
         return (job.isDone() || job.isCancelled())
                 && (currentTimeMs - job.getFinishedTime()) / 1000 > Config.history_job_keep_max_second;
     }

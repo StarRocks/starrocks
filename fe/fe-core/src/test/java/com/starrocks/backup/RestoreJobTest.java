@@ -555,5 +555,28 @@ public class RestoreJobTest {
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
+    @Test
+    public void testReplayAddExpiredJob() {
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        RestoreJob job2 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        backupHandler.replayAddJob(job1);
+        job2.setState(RestoreJob.RestoreJobState.COMMIT);
+        backupHandler.replayAddJob(job2);
+        new MockUp<MockBackupHandler>() {
+            @Mock
+            private boolean isJobExpired(AbstractJob job, long currentTimeMs) {
+                return true;
+            }
+        };
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        backupHandler.replayAddJob(job3);
+    }
 }
-

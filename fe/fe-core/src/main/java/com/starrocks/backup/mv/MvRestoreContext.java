@@ -119,6 +119,9 @@ public class MvRestoreContext {
             }
 
             BackupMeta backupMeta = restoreJob.getBackupMeta();
+            if (backupMeta == null) {
+                continue;
+            }
             Table remoteTable = backupMeta.getTable(e.getKey());
             if (remoteTable == null || !remoteTable.isMaterializedView()) {
                 continue;
