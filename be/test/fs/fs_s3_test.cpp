@@ -511,4 +511,29 @@ TEST_F(S3FileSystemTest, test_delete_nonexist_file) {
     ASSERT_OK(fs->delete_file(S3Path("/nonexist.dat")));
 }
 
+TEST_F(S3FileSystemTest, test_prefetch) {
+    std::unordered_map<std::string, std::string> params = {{"fs.s3a.readahead.range", "100"}};
+    RandomAccessFileOptions rand_opts{.skip_fill_local_cache = true};
+    SequentialFileOptions seq_opts{.skip_fill_local_cache = true};
+    std::unique_ptr<FSOptions> fs_options = std::make_unique<FSOptions>(params);
+    std::unique_ptr<FileSystem> fs = new_fs_s3(*fs_options);
+    std::string path = S3Path("a.file");
+    FileInfo file_info{.path = path};
+    ASSIGN_OR_ABORT(auto rfa, fs->new_random_access_file(rand_opts, path));
+    ASSIGN_OR_ABORT(auto rfb, fs->new_random_access_file(rand_opts, file_info));
+    ASSIGN_OR_ABORT(auto sf, fs->new_sequential_file(seq_opts, path));
+}
+
+TEST_F(S3FileSystemTest, test_params) {
+    std::unordered_map<std::string, std::string> params = {
+            {"fs.s3a.retry.limit", "10"},          {"fs.s3a.retry.interval", "10"},
+            {"fs.s3a.path.style.access", "false"}, {"fs.s3a.access.key", "xxx"},
+            {"fs.s3a.secret.key", "xxx"},          {"fs.s3a.endpoint", "xxx"},
+            {"fs.s3a.endpoint.region", "xxx"},     {"fs.s3a.connection.ssl.enabled", "xxx"}};
+    std::unique_ptr<FSOptions> fs_options = std::make_unique<FSOptions>(params);
+
+    std::unique_ptr<FileSystem> fs = new_fs_s3(*fs_options);
+    ASSERT_TRUE(fs != nullptr);
+}
+
 } // namespace starrocks

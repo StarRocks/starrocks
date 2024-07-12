@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -332,6 +333,65 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
 
     // `close()` directly without calling `finish()`
     writer->close();
+}
+
+#ifdef USE_STAROS
+
+TEST_P(LakeTabletWriterTest, test_write_sdk) {
+    auto provider = std::make_shared<starrocks::lake::StarletLocationProvider>();
+    auto location = provider->root_location(12345);
+
+    Tablet tablet(_tablet_mgr.get(), next_id(), provider, _tablet_metadata);
+    auto meta_location = tablet.metadata_location(0);
+    auto column_size = tablet.get_schema()->get()->num_columns();
+    auto txn_log_location = tablet.txn_log_location(0);
+    auto txn_vlog_location = tablet.txn_vlog_location(0);
+    auto test_segment_location = tablet.segment_location("test_segment");
+    auto root_location = tablet.root_location();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), 1));
+    writer->close();
+}
+
+#endif // USE_STAROS
+
+// mock locationProvider
+class MockLocationProvider : public LocationProvider {
+public:
+    std::string segment_location(const std::string& tablet_id, const std::string& path) override { return path; }
+};
+
+// mock file deleted
+class MockFileManager : public FileManager {
+public:
+    void delete_files_async(const std::vector<std::string>& paths) override {
+        for (const std::string& path : paths) {
+            _deleted_files.emplace_back(path);
+        }
+    }
+
+    const std::vector<std::string>& get_deleted_files() const { return _deleted_files; }
+
+private:
+    std::vector<std::string> _deleted_files;
+};
+
+TEST(LakeTabletWriterTest, Close) {
+    MockLocationProvider mock_location_provider;
+    MockFileManager mock_file_manager;
+
+    VerticalGeneralTabletWriter writer(&mock_location_provider, &mock_file_manager);
+
+    writer.add_file("file1.txt");
+    writer.add_file("file2.txt");
+    writer.add_file("file3.txt");
+
+    writer.close();
+
+    std::vector<std::string> deleted_files = mock_file_manager.get_deleted_files();
+    EXPECT_EQ(3, deleted_files.size());
+    EXPECT_EQ("file1.txt", deleted_files[0]);
+    EXPECT_EQ("file2.txt", deleted_files[1]);
+    EXPECT_EQ("file3.txt", deleted_files[2]);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,

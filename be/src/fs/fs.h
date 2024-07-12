@@ -33,6 +33,7 @@ struct ResultFileOptions;
 class TUploadReq;
 class TDownloadReq;
 struct WritableFileOptions;
+class FileSystem;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -47,13 +48,15 @@ struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
               const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
-              const TCloudConfiguration* cloud_configuration)
+              const TCloudConfiguration* cloud_configuration,
+              const std::unordered_map<std::string, std::string>& fs_options = {})
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
               download(download),
-              cloud_configuration(cloud_configuration) {}
+              cloud_configuration(cloud_configuration),
+              _fs_options(fs_options) {}
 
 public:
     FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
@@ -73,6 +76,9 @@ public:
     FSOptions(const TCloudConfiguration* cloud_configuration)
             : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
 
+    FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
+
     const THdfsProperties* hdfs_properties() const;
 
     const TBrokerScanRangeParams* scan_range_params;
@@ -81,6 +87,7 @@ public:
     const TUploadReq* upload;
     const TDownloadReq* download;
     const TCloudConfiguration* cloud_configuration;
+    const std::unordered_map<std::string, std::string> _fs_options;
 };
 
 struct SequentialFileOptions {
@@ -112,6 +119,7 @@ struct FileInfo {
     std::string path;
     std::optional<int64_t> size;
     std::string encryption_meta;
+    std::shared_ptr<FileSystem> fs;
 };
 
 struct FileWriteStat {
@@ -137,6 +145,8 @@ public:
 
     FileSystem() = default;
     virtual ~FileSystem() = default;
+
+    static StatusOr<std::shared_ptr<FileSystem>> Create(std::string_view uri, const FSOptions& options);
 
     static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
                                                                         FSOptions options = FSOptions());
