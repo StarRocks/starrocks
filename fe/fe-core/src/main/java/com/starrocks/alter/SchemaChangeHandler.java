@@ -1964,7 +1964,7 @@ public class SchemaChangeHandler extends AlterHandler {
      * Check related synchronous materialized views before modified columns, throw exceptions
      * if modified columns affect the related rollup/synchronous mvs.
      */
-    private void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
+    public void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
                                                          Set<String> modifiedColumns) throws DdlException {
         if (modifiedColumns == null || modifiedColumns.isEmpty()) {
             return;
