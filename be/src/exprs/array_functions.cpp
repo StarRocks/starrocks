@@ -1656,9 +1656,8 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
             Datum source_value = src_column->get(cur_row);
             auto repeat_count = repeat_count_viewer.value(cur_row);
             if (repeat_count > 0) {
-                for (int repeat_index = 0; repeat_index < repeat_count; repeat_index++) {
-                    TRY_CATCH_BAD_ALLOC(dest_column_elements->append_datum(source_value));
-                }
+                TRY_CATCH_BAD_ALLOC(
+                        dest_column_elements->append_value_multiple_times(*src_column, cur_row, repeat_count));
                 total_repeated_rows = total_repeated_rows + repeat_count;
                 dest_offsets->append(total_repeated_rows);
             } else {
