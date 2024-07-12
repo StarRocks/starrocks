@@ -94,9 +94,18 @@ import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
+<<<<<<< HEAD
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
+=======
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
+import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+>>>>>>> d0cb4123b1 ([BugFix] fix snapshot inconsistent during query (#48228))
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "IcebergCatalog";
@@ -853,6 +862,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRefreshTableWithResource() {
         Map<String, String> config = new HashMap<>();
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
@@ -875,6 +885,8 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+=======
+>>>>>>> d0cb4123b1 ([BugFix] fix snapshot inconsistent during query (#48228))
     public void testRefreshTableWithCatalog() {
         Map<String, String> config = new HashMap<>();
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");

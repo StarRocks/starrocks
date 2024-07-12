@@ -200,8 +200,13 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+<<<<<<< HEAD
         Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
         if (!snapshot.isPresent()) {
+=======
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (snapshot.isEmpty()) {
+>>>>>>> d0cb4123b1 ([BugFix] fix snapshot inconsistent during query (#48228))
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getRemoteTableName()));
             return;
         }
