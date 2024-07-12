@@ -116,7 +116,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
         size_t ret = 0;
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate(key.size);
+            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
@@ -129,7 +129,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
         size_t ret = 0;
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate(key.size);
+            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
@@ -171,7 +171,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             KeyType key(raw_key);
             // we only memcpy when the key is new
             set.template lazy_emplace(key, [&](const auto& ctor) {
-                uint8_t* pos = mem_pool->allocate(key.size);
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
