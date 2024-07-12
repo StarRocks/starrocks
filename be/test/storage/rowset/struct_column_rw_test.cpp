@@ -176,6 +176,13 @@ protected:
             TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
             ASSERT_TRUE(f3_tablet_column.has_default_value());
             new_struct_column.add_sub_column(f3_tablet_column);
+            {
+                auto f1_meta = meta2.children_columns(0);
+                f1_meta->set_unique_id(0);
+                auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+                ASSERT_FALSE(res.ok());
+                f1_meta->set_unique_id(1);
+            }
             auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
             ASSERT_TRUE(res.ok());
             auto struct_reader = std::move(res).value();
