@@ -722,7 +722,7 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 
     write_pindex_bf = true;
-    //ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {

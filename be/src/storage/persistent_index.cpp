@@ -3034,7 +3034,11 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
             dest.data_size = src.data_size();
         }
         if (src.page_off().size() == 0) {
-            dest.page_off.emplace_back(0);
+            int off = 0;
+            for (int i = 0; i < src.npage() + 1; i++) {
+                dest.page_off.emplace_back(off);
+                off += page_size;
+            }
         } else {
             for (int i = 0; i < src.npage() + 1; i++) {
                 dest.page_off.emplace_back(src.page_off(i));
