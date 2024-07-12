@@ -2553,8 +2553,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 } catch (SemanticException e) {
                     throw new DdlException(
-                            String.format("analyze table unique constraint:%s failed",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)), e);
+                            String.format("analyze table unique constraint:%s failed, msg: %s",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT), e.getDetailMsg()), e);
                 }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
@@ -2573,8 +2573,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 } catch (SemanticException e) {
                     throw new DdlException(
-                            String.format("analyze table foreign key constraint:%s failed",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)), e);
+                            String.format("analyze table foreign key constraint:%s failed, msg: %s",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT), e.getDetailMsg()), e);
                 }
             }
         }
