@@ -1725,6 +1725,9 @@ public abstract class Type implements Cloneable {
         return "unknown";
     }
 
+    // This function is called by Column::getMaxUniqueId()
+    // If type is a scalar type, it does not have field Id because scalar type does not have sub fields
+    // If type is struct type, it will return the max field id(default value of field id is -1)
     public int getMaxUniqueId() {
         return -1;
     }
