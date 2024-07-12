@@ -227,7 +227,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testGetFileWithSubdir() throws StarRocksConnectorException {
-        RemotePathKey pathKey = new RemotePathKey("hdfs://127.0.0.1:10000/hive.db", true, Optional.empty());
+        RemotePathKey pathKey = new RemotePathKey("hdfs://127.0.0.1:10000/hive.db", true);
         Map<RemotePathKey, List<RemoteFileDesc>> files = hiveRemoteFileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> remoteFileDescs = files.get(pathKey);
         Assert.assertEquals(1, remoteFileDescs.size());

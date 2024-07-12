@@ -330,7 +330,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
                 KeyType key(tmp);
                 this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
@@ -355,7 +355,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
@@ -451,7 +451,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
@@ -467,7 +467,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         KeyType key(tmp);
 
         this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = pool->allocate(key.size);
+            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
@@ -501,7 +501,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
 
     AggHashSetOfSerializedKey(int32_t chunk_size)
             : _mem_pool(std::make_unique<MemPool>()),
-              _buffer(_mem_pool->allocate(max_one_row_size * chunk_size)),
+              _buffer(_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
     // When compute_and_allocate=false:
@@ -544,7 +544,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
                 KeyType key(tmp);
                 this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
@@ -567,7 +567,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
@@ -632,7 +632,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
 
     AggHashSetOfSerializedKeyFixedSize(int32_t chunk_size)
             : _mem_pool(std::make_unique<MemPool>()),
-              buffer(_mem_pool->allocate(max_fixed_size * chunk_size)),
+              buffer(_mem_pool->allocate(max_fixed_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
