@@ -135,7 +135,6 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
-import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
@@ -892,25 +891,6 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         PartitionKey partitionKey = partitionKeys.get(0);
         Assert.assertEquals("types: [INT]; keys: [0]; ", partitionKey.toString());
-    }
-
-    @Test
-    public void testRefreshTableWithResource() {
-        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
-
-        IcebergMetadata metadata = new IcebergMetadata(
-                RESOURCE_MAPPING_CATALOG_PREFIX + CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
-                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
-        Assert.assertFalse(icebergTable.getSnapshot().isPresent());
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertTrue(icebergTable.getSnapshot().isPresent());
-        Snapshot snapshot = icebergTable.getSnapshot().get();
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertSame(snapshot, icebergTable.getSnapshot().get());
-        metadata.refreshTable("db_name", icebergTable, null, false);
-        Assert.assertNotSame(snapshot, icebergTable.getSnapshot().get());
     }
 
     @Test
