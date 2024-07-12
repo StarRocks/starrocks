@@ -82,4 +82,3 @@ Caching can be enabled when creating tables. If caching is enabled, data will be
 ## Learn by doing
 
 - Give [shared-data](../quick_start/shared-data.md) a try using MinIO for object storage.
-- Kubernetes users can use the [Helm quick start](../quick_start/helm.md) and deploy three FEs and three BEs in a shared-nothing architecture using persistent volumes.
