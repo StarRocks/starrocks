@@ -734,7 +734,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     /**
      * will remove finished/cancelled job periodically
      */
-    public boolean isJobExpired(AbstractJob job, long currentTimeMs) {
+    private boolean isJobExpired(AbstractJob job, long currentTimeMs) {
         return (job.isDone() || job.isCancelled())
                 && (currentTimeMs - job.getFinishedTime()) / 1000 > Config.history_job_keep_max_second;
     }
