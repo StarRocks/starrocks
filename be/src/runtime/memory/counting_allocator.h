@@ -52,13 +52,16 @@ public:
     }
 
     T* allocate(size_t n) {
-        *_counter += n * sizeof(T);
-        return static_cast<T*>(malloc(n * sizeof(T)));
+        DCHECK(_counter != nullptr);
+        T* result = static_cast<T*>(malloc(n * sizeof(T)));
+        *_counter += (result != nullptr) ? n * sizeof(T) : 0;
+        return result;
     }
 
     void deallocate(T* ptr, size_t n) {
-        *_counter -= n * sizeof(T);
+        DCHECK(_counter != nullptr);
         free(ptr);
+        *_counter -= n * sizeof(T);
     }
 
     CountingAllocator& operator=(const CountingAllocator& rhs) {

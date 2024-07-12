@@ -60,7 +60,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     int64_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
         int64_t prev_memory = memory_usage;
-        auto pair = set.emplace_with_hash(hash, key);
+        set.emplace_with_hash(hash, key);
         return memory_usage - prev_memory;
     }
 

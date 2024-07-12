@@ -215,6 +215,8 @@ ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) 
 template <typename T, typename TResult>
 void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                        TResult update_result2, TResult merge_result) {
+    int64_t mem_usage = 0;
+    ctx->set_mem_usage_counter(&mem_usage);
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
     auto result_column = ResultColumn::create();
 
