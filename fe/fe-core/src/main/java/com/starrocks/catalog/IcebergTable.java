@@ -68,7 +68,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
-    private Optional<Snapshot> snapshot = Optional.empty();
+    private Optional<Snapshot> snapshot = null;
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -127,7 +127,7 @@ public class IcebergTable extends Table {
     }
 
     public Optional<Snapshot> getSnapshot() {
-        if (snapshot.isPresent()) {
+        if (snapshot != null) {
             return snapshot;
         } else {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
