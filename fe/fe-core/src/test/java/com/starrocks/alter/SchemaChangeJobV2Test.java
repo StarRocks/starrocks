@@ -51,6 +51,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -441,12 +442,14 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         assertEquals(-1, replica1.getLastFailedVersion());
         assertEquals(1, replica1.getLastSuccessVersion());
 
+        FeConstants.runningUnitTest = false;
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
-     
+
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);
+        FeConstants.runningUnitTest = true;
     }
 }

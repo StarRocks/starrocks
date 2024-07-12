@@ -51,6 +51,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.OriginStatement;
@@ -313,6 +314,7 @@ public class RollupJobV2Test extends DDLTestBase {
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
         materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
 
+        FeConstants.runningUnitTest = false;
         rollupJob.setIsCancelling(true);
         rollupJob.runPendingJob();
         rollupJob.setIsCancelling(false);
@@ -320,5 +322,6 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.setWaitingCreatingReplica(true);
         rollupJob.cancel("");
         rollupJob.setWaitingCreatingReplica(false);
+        FeConstants.runningUnitTest = true;
     }
 }
