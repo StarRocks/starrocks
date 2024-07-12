@@ -417,9 +417,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
                 baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
             } catch (Exception e) {
+                LOG.warn("Failed to compute candidate partitions for materialized view {} in sync partitions",
+                        materializedView.getName(), e);
                 // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
                 // the base-table not exists before refreshExternalTable, so we just need to swallow this exception
-                if (!e.getMessage().contains("not exist")) {
+                if (e.getMessage() == null || !e.getMessage().contains("not exist")) {
                     throw e;
                 }
             }
@@ -1097,8 +1099,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         SlotRef slotRef = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         for (TableSnapshotInfo snapshotInfo : tableSnapshotInfos.values()) {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
-            Table table = snapshotInfo.getBaseTable();
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
+                Table table = snapshotInfo.getBaseTable();
                 return Pair.create(table, table.getColumn(slotRef.getColumnName()));
             }
         }
@@ -1389,10 +1391,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.",
                             baseTableInfo.getTableInfoStr());
                 }
+
+                // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
+                // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
                 Table table = tableOpt.get();
-                if (table.isOlapOrCloudNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable copied = null;
+                    if (table.isOlapOrCloudNativeTable()) {
+                        copied = new OlapTable();
+                    } else {
+                        copied = new MaterializedView();
+                    }
                     OlapTable olapTable = (OlapTable) table;
-                    OlapTable copied = new OlapTable();
                     olapTable.copyOnlyForQuery(copied);
                     tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 } else if (table.isView()) {
