@@ -54,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -570,13 +571,9 @@ public class RestoreJobTest {
         backupHandler.replayAddJob(job1);
         job2.setState(RestoreJob.RestoreJobState.COMMIT);
         backupHandler.replayAddJob(job2);
-        new MockUp<MockBackupHandler>() {
-            @Mock
-            private boolean isJobExpired(AbstractJob job, long currentTimeMs) {
-                return true;
-            }
-        };
+        int oldVal = Config.history_job_keep_max_second;
         job3.setState(RestoreJob.RestoreJobState.FINISHED);
         backupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
     }
 }
