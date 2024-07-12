@@ -136,6 +136,6 @@ public class QueryProfileAction extends WebBaseAction {
                 "  URL.revokeObjectURL(a.href);\n" +
                 "}" + "</script>");
         buffer.append("<input type=\"button\" onclick=\"copyProfile();\" value=\"Copy Profile\"></input>");
-        buffer.append("<input type=\"button\" onclick=\"downloadProfile();\" value=\"download Profile\"></input>");
+        buffer.append("<input type=\"button\" onclick=\"downloadProfile();\" value=\"Download Profile\"></input>");
     }
 }
