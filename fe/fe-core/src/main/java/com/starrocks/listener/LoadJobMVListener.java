@@ -82,6 +82,10 @@ public class LoadJobMVListener implements LoadJobListener {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
+            return;
+        }
         for (long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
