@@ -103,6 +103,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         private final Expr whereExpr;
         private final DescriptorTable descTabl;
         private final List<ColumnId> baseTableColIds;
+
         public RollupJobV2Params(Map<String, Expr> defineExprs,
                                  Expr whereExpr,
                                  DescriptorTable descTabl,
@@ -141,16 +142,17 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
-            long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
+                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
                 TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList(), null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
-            long rollupIndexId, long rollupTabletId, long baseTabletId,
-            long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
+                                                     long jobId, RollupJobV2Params rollupJobV2Params,
+                                                     List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
@@ -160,7 +162,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType,
-                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, 
+                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq,
                              List<Column> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
@@ -303,13 +305,15 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
+
+        OlapTable tbl = (OlapTable) db.getTable(getTableId());
+        if (tbl == null) {
+            throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(getTableId());
-            if (tbl == null) {
-                throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
-            }
             PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
                 throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
@@ -349,7 +353,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
         setFinished(true);
     }
