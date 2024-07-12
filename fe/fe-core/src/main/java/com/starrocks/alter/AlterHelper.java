@@ -24,7 +24,6 @@ import java.util.Optional;
 import java.util.Set;
 
 public class AlterHelper {
-    private static final Logger LOG = LogManager.getLogger(AlterHelper.class);
     static Set<String> collectDroppedOrModifiedColumns(List<Column> oldColumns, List<Column> newColumns) {
         Set<Integer> columnUniqueIdSet = new HashSet<>();
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
