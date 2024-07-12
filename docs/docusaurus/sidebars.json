@@ -1492,7 +1492,8 @@
             "items": [
                 "quick_start/shared-nothing",
                 "quick_start/shared-data",
-                "quick_start/iceberg"
+                "quick_start/iceberg",
+                "quick_start/helm"
             ]
         },
         {
