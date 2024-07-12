@@ -1485,7 +1485,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
                 // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
-                Table table = tableOpt.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable copied = null;
                     if (table.isOlapOrCloudNativeTable()) {
@@ -1495,7 +1494,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                     OlapTable olapTable = (OlapTable) table;
                     olapTable.copyOnlyForQuery(copied);
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else if (table.isView()) {
                     // skip to collect snapshots for views
                 } else {
