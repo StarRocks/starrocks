@@ -51,7 +51,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -63,8 +62,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -422,9 +419,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
                 baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
             } catch (Exception e) {
+                LOG.warn("Failed to compute candidate partitions for materialized view {} in sync partitions",
+                        materializedView.getName(), e);
                 // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
                 // the base-table not exists before refreshExternalTable, so we just need to swallow this exception
-                if (!e.getMessage().contains("not exist")) {
+                if (e.getMessage() == null || !e.getMessage().contains("not exist")) {
                     throw e;
                 }
             }
@@ -972,8 +971,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         SlotRef slotRef = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         for (Pair<BaseTableInfo, Table> tableInfo : tables.values()) {
             BaseTableInfo baseTableInfo = tableInfo.first;
-            Table table = tableInfo.second;
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
+                Table table = tableInfo.second;
                 return Pair.create(table, table.getColumn(slotRef.getColumnName()));
             }
         }
@@ -1547,32 +1546,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
 
-                if (table.isView()) {
+                // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
+                // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable copied = null;
+                    if (table.isOlapOrCloudNativeTable()) {
+                        copied = new OlapTable();
+                    } else {
+                        copied = new MaterializedView();
+                    }
+                    OlapTable olapTable = (OlapTable) table;
+                    olapTable.copyOnlyForQuery(copied);
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
+                } else if (table.isView()) {
                     // skip to collect snapshots for views
-                } else if (table.isOlapTable()) {
-                    OlapTable copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy olap table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isOlapMaterializedView()) {
-                    MaterializedView copied = DeepCopy.copyWithGson(table, MaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isCloudNativeTable()) {
-                    LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isCloudNativeMaterializedView()) {
-                    LakeMaterializedView copied = DeepCopy.copyWithGson(table, LakeMaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else {
                     // for other table types, use the table directly which needs to lock if visits the table metadata.
                     tables.put(table.getId(), Pair.create(baseTableInfo, table));
