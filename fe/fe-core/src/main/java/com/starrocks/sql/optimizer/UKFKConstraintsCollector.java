@@ -135,8 +135,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             List<UniqueConstraint> ukConstraints = table.getUniqueConstraints();
             for (UniqueConstraint ukConstraint : ukConstraints) {
                 // For now, we only handle one column primary key or foreign key
-                if (ukConstraint.getUniqueColumns().size() == 1) {
-                    String ukColumn = ukConstraint.getUniqueColumns().get(0);
+                if (ukConstraint.getUniqueColumnNames().size() == 1) {
+                    String ukColumn = ukConstraint.getUniqueColumnNames().get(0);
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
                             .filter(columnNameToColRefMap::containsKey)
@@ -154,7 +154,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                                         nonUkColumnRefs, usedColumns.isEmpty()));
                     }
                 } else {
-                    List<String> ukColNames = ukConstraint.getUniqueColumns();
+                    List<String> ukColNames = ukConstraint.getUniqueColumnNames();
                     boolean containsAllUk = true;
                     for (String colName : ukColNames) {
                         ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
@@ -186,8 +186,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             ColumnRefOperator firstKeyColumnRef = columnNameToColRefMap.get(firstKeyColumn.getName());
             List<ForeignKeyConstraint> fkConstraints = table.getForeignKeyConstraints();
             for (ForeignKeyConstraint fkConstraint : fkConstraints) {
-                if (fkConstraint.getColumnRefPairs().size() == 1) {
-                    Pair<String, String> pair = fkConstraint.getColumnRefPairs().get(0);
+                if (fkConstraint.getColumnNameRefPairs(table).size() == 1) {
+                    Pair<String, String> pair = fkConstraint.getColumnNameRefPairs(table).get(0);
                     ColumnRefOperator fkColumnRef = columnNameToColRefMap.get(pair.first);
                     if (fkColumnRef != null && outputColumns.contains(fkColumnRef)) {
                         constraint.addForeignKey(fkColumnRef.getId(),

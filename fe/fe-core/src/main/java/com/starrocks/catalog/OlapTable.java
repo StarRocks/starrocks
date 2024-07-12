@@ -2693,8 +2693,8 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
-                    new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
-                            Collectors.toList())));
+                    new UniqueConstraint(this, getKeyColumns()
+                            .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
             uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
@@ -3075,14 +3075,15 @@ public class OlapTable extends Table {
         // unique constraint
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
         if (!Strings.isNullOrEmpty(uniqueConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, uniqueConstraint);
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints()));
         }
 
         // foreign key constraint
         String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
-                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()));
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
         }
 
         // storage type

@@ -1234,7 +1234,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 sb.append("\"")
                         .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                         .append("\" = \"")
-                        .append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
+                        .append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()))
                         .append("\"");
             } else if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
                 sb.append("\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
