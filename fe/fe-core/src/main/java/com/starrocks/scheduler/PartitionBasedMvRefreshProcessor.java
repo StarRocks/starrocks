@@ -62,12 +62,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
-<<<<<<< HEAD
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
-=======
-import com.starrocks.connector.TableUpdateArbitrator;
->>>>>>> af19cfbcb2 ([BugFix] Use copyOnlyForQuery instead of deepCopy to avoid time costs in mv refresh's collectBaseTableSnapshotInfos (#48256))
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -975,16 +969,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Pair<Table, Column> getRefBaseTableAndPartitionColumn(
             Map<Long, Pair<BaseTableInfo, Table>> tables) {
         SlotRef slotRef = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
-<<<<<<< HEAD
         for (Pair<BaseTableInfo, Table> tableInfo : tables.values()) {
             BaseTableInfo baseTableInfo = tableInfo.first;
-            Table table = tableInfo.second;
-=======
-        for (TableSnapshotInfo snapshotInfo : tableSnapshotInfos.values()) {
-            BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
->>>>>>> af19cfbcb2 ([BugFix] Use copyOnlyForQuery instead of deepCopy to avoid time costs in mv refresh's collectBaseTableSnapshotInfos (#48256))
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
-                Table table = snapshotInfo.getBaseTable();
+                Table table = tableInfo.second;
                 return Pair.create(table, table.getColumn(slotRef.getColumnName()));
             }
         }
@@ -1558,37 +1546,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
 
-<<<<<<< HEAD
-                if (table.isView()) {
-                    // skip to collect snapshots for views
-                } else if (table.isOlapTable()) {
-                    OlapTable copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy olap table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isOlapMaterializedView()) {
-                    MaterializedView copied = DeepCopy.copyWithGson(table, MaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isCloudNativeTable()) {
-                    LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isCloudNativeMaterializedView()) {
-                    LakeMaterializedView copied = DeepCopy.copyWithGson(table, LakeMaterializedView.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy lake materialized view: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-=======
                 // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
                 // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
-                Table table = tableOpt.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable copied = null;
                     if (table.isOlapOrCloudNativeTable()) {
@@ -1598,10 +1557,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                     OlapTable olapTable = (OlapTable) table;
                     olapTable.copyOnlyForQuery(copied);
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else if (table.isView()) {
                     // skip to collect snapshots for views
->>>>>>> af19cfbcb2 ([BugFix] Use copyOnlyForQuery instead of deepCopy to avoid time costs in mv refresh's collectBaseTableSnapshotInfos (#48256))
                 } else {
                     // for other table types, use the table directly which needs to lock if visits the table metadata.
                     tables.put(table.getId(), Pair.create(baseTableInfo, table));
