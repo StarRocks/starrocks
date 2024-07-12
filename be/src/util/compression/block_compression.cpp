@@ -148,7 +148,7 @@ private:
             }
         }
 
-        int32_t acceleration = 1;
+        int32_t acceleration = 65537;
         size_t compressed_size =
                 LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
 
