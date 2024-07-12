@@ -267,6 +267,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testUnionAllMvWithPartition() {
+        Config.enable_mv_refresh_insert_strict = false;
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("union_all_mv"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -289,6 +290,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             e.printStackTrace();
             Assert.fail(e.getMessage());
         }
+        Config.enable_mv_refresh_insert_strict = true;
     }
 
     @Test

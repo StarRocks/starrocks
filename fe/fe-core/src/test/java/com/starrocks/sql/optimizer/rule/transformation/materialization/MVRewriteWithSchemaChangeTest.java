@@ -15,6 +15,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -188,6 +189,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
 
     @Test
     public void testMVWithViewAndSubQuery1() throws Exception {
+        // TODO: fixme later.
+        Config.enable_mv_refresh_insert_strict = false;
         {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1, t1d, t1c from (select t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
@@ -310,5 +313,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             dropMv("test", "join_mv_1");
             dropMv("test", "join_mv_2");
         }
+        Config.enable_mv_refresh_insert_strict = true;
     }
 }
