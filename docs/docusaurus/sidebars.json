@@ -1270,9 +1270,16 @@
                 "id": "quick_start/quick_start"
             },
             "items": [
+<<<<<<< HEAD
                 "quick_start/deploy_with_docker",
                 "quick_start/Create_table",
                 "quick_start/Import_and_query"
+=======
+                "quick_start/shared-nothing",
+                "quick_start/shared-data",
+                "quick_start/iceberg",
+                "quick_start/helm"
+>>>>>>> b1fdbfb8f7 ([Doc] Add Helm quickstart to Chinese docs (#48314))
             ]
         },
         {
