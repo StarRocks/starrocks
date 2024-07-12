@@ -59,7 +59,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Preconditions.checkState(partitionInfo.isExprRangePartitioned());
         // If non-partition-by table has changed, should refresh all mv partitions
         Expr partitionExpr = mv.getPartitionExpr();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumnMap();
+        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         if (refBaseTableAndColumns.isEmpty()) {
             mv.setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", mv.getName());
@@ -95,7 +95,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // record the relation of partitions between materialized view and base partition table
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
-        Map<Table, Expr> baseTableToPartitionExprs = mv.getRefBaseTablePartitionExprMap();
+        Map<Table, Expr> baseTableToPartitionExprs = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
                 .generateBaseRefMap(basePartitionNameToRangeMap, baseTableToPartitionExprs, mvPartitionNameToRangeMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer

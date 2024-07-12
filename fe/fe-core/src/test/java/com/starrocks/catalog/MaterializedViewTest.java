@@ -281,7 +281,7 @@ public class MaterializedViewTest {
         MaterializedView oldMv = (MaterializedView) table;
         Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
         Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
-        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumnMap();
+        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();

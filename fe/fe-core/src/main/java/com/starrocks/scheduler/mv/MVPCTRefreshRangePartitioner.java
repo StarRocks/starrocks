@@ -122,7 +122,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
-        Map<Table, Expr> tableToExprMap = mv.getRefBaseTablePartitionExprMap();
+        Map<Table, Expr> tableToExprMap = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
                 .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvRangePartitionMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer

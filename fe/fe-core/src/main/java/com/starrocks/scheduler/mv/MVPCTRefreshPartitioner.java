@@ -168,7 +168,7 @@ public abstract class MVPCTRefreshPartitioner {
      */
     protected Set<String> getMvPartitionNamesToRefresh(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumnMap();
+        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
             // refresh all mv partitions when the ref base table is not supported partition refresh
@@ -212,7 +212,7 @@ public abstract class MVPCTRefreshPartitioner {
      * - its non-ref base table except un-supported base table has updated.
      */
     protected boolean needsRefreshBasedOnNonRefTables(Map<Long, TableSnapshotInfo> snapshotBaseTables) {
-        Map<Table, Column> tableColumnMap = mv.getRefBaseTablePartitionColumnMap();
+        Map<Table, Column> tableColumnMap = mv.getRefBaseTablePartitionColumns();
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             if (!isPartitionRefreshSupported(snapshotTable)) {

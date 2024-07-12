@@ -1,4 +1,10 @@
 -- name: test_mv_refresh_with_multi_union3
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE `u1` (
   `id` int(11) NOT NULL,
   `dt` date NOT NULL
@@ -107,10 +113,22 @@ from
 ) t group by dt;
 -- result:
 -- !result
-refresh materialized view test_mv1 with sync mode;
-refresh materialized view test_mv2 with sync mode;
-refresh materialized view test_mv3 with sync mode;
-refresh materialized view test_mv4 with sync mode;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4")
+-- result:
+None
+-- !result
 select count(1) from test_mv1;
 -- result:
 9
@@ -181,10 +199,22 @@ INSERT INTO u1 (id,dt) VALUES (1,'2024-03-10');
 INSERT INTO u2 (id,dt) VALUES (1,'2024-04-10');
 -- result:
 -- !result
-refresh materialized view test_mv1 with sync mode;
-refresh materialized view test_mv2 with sync mode;
-refresh materialized view test_mv3 with sync mode;
-refresh materialized view test_mv4 with sync mode;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3")
+-- result:
+None
+-- !result
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4")
+-- result:
+None
+-- !result
 select count(1) from test_mv1;
 -- result:
 9
@@ -259,5 +289,8 @@ drop materialized view test_mv3;
 -- result:
 -- !result
 drop materialized view test_mv4;
+-- result:
+-- !result
+drop database db_${uuid0} force;
 -- result:
 -- !result

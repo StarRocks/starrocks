@@ -185,7 +185,7 @@ public class MvRefreshArbiter {
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
-            Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumnMap();
+            Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
                 return baseTableUpdateInfo;
