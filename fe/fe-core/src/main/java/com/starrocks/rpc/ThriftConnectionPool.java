@@ -12,28 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/GenericPool.java
+package com.starrocks.rpc;
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.common;
-
+import com.starrocks.common.Config;
+import com.starrocks.thrift.BackendService;
+import com.starrocks.thrift.FrontendService;
+import com.starrocks.thrift.HeartbeatService;
+import com.starrocks.thrift.TFileBrokerService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.PooledObject;
@@ -50,17 +35,65 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.lang.reflect.Constructor;
 
-public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
-    private static final Logger LOG = LogManager.getLogger(GenericPool.class);
-    private GenericKeyedObjectPool<TNetworkAddress, VALUE> pool;
-    private String className;
-    private int timeoutMs;
+public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient> {
+    private static final Logger LOG = LogManager.getLogger(ThriftConnectionPool.class);
 
-    public GenericPool(String className, GenericKeyedObjectPoolConfig config, int timeoutMs) {
+    static GenericKeyedObjectPoolConfig heartbeatConfig = new GenericKeyedObjectPoolConfig();
+
+    static {
+        heartbeatConfig.setLifo(true);            // set Last In First Out strategy
+        heartbeatConfig.setMaxIdlePerKey(2);      // (default 2)
+        heartbeatConfig.setMinIdlePerKey(1);      // (default 1)
+        heartbeatConfig.setMaxTotalPerKey(-1);    // (default -1)
+        heartbeatConfig.setMaxTotal(-1);          // (default -1)
+        heartbeatConfig.setMaxWaitMillis(500);    //  wait for the connection
+    }
+
+    static GenericKeyedObjectPoolConfig backendConfig = new GenericKeyedObjectPoolConfig();
+
+    static {
+        backendConfig.setLifo(true);            // set Last In First Out strategy
+        backendConfig.setMaxIdlePerKey(128);    // (default 128)
+        backendConfig.setMinIdlePerKey(2);      // (default 2)
+        backendConfig.setMaxTotalPerKey(-1);    // (default -1)
+        backendConfig.setMaxTotal(-1);          // (default -1)
+        backendConfig.setMaxWaitMillis(500);    //  wait for the connection
+    }
+
+    static GenericKeyedObjectPoolConfig brokerPoolConfig = new GenericKeyedObjectPoolConfig();
+
+    static {
+        brokerPoolConfig.setLifo(true);            // set Last In First Out strategy
+        brokerPoolConfig.setMaxIdlePerKey(128);    // (default 128)
+        brokerPoolConfig.setMinIdlePerKey(2);      // (default 2)
+        brokerPoolConfig.setMaxTotalPerKey(-1);    // (default -1)
+        brokerPoolConfig.setMaxTotal(-1);          // (default -1)
+        brokerPoolConfig.setMaxWaitMillis(500);    //  wait for the connection
+    }
+
+    public static ThriftConnectionPool<HeartbeatService.Client> beHeartbeatPool =
+            new ThriftConnectionPool<>("HeartbeatService", heartbeatConfig, Config.heartbeat_timeout_second * 1000);
+    public static ThriftConnectionPool<TFileBrokerService.Client> brokerHeartbeatPool =
+            new ThriftConnectionPool<>("TFileBrokerService", heartbeatConfig, Config.heartbeat_timeout_second * 1000);
+    public static ThriftConnectionPool<FrontendService.Client> frontendPool =
+            new ThriftConnectionPool<>("FrontendService", backendConfig, Config.thrift_rpc_timeout_ms);
+    public static ThriftConnectionPool<BackendService.Client> backendPool =
+            new ThriftConnectionPool<>("BackendService", backendConfig, Config.thrift_rpc_timeout_ms);
+    public static ThriftConnectionPool<TFileBrokerService.Client> brokerPool =
+            new ThriftConnectionPool<>("TFileBrokerService", brokerPoolConfig, Config.broker_client_timeout_ms);
+
+    private final GenericKeyedObjectPool<TNetworkAddress, VALUE> pool;
+    private final String className;
+    private int defaultTimeoutMs;
+
+    public ThriftConnectionPool(String className, GenericKeyedObjectPoolConfig config, int defaultTimeoutMs) {
         this.className = "com.starrocks.thrift." + className + "$Client";
-        ThriftClientFactory factory = new ThriftClientFactory();
-        pool = new GenericKeyedObjectPool<TNetworkAddress, VALUE>(factory, config);
-        this.timeoutMs = timeoutMs;
+        this.pool = new GenericKeyedObjectPool<>(new ThriftClientFactory(), config);
+        this.defaultTimeoutMs = defaultTimeoutMs;
+    }
+
+    public int getDefaultTimeoutMs() {
+        return defaultTimeoutMs;
     }
 
     public boolean reopen(VALUE object, int timeoutMs) {
@@ -71,17 +104,6 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
             // transport.open() doesn't set timeout, Maybe the timeoutMs change.
             TSocket socket = (TSocket) object.getOutputProtocol().getTransport();
             socket.setTimeout(timeoutMs);
-        } catch (TTransportException e) {
-            ok = false;
-        }
-        return ok;
-    }
-
-    public boolean reopen(VALUE object) {
-        boolean ok = true;
-        object.getOutputProtocol().getTransport().close();
-        try {
-            object.getOutputProtocol().getTransport().open();
         } catch (TTransportException e) {
             LOG.warn("reopen error", e);
             ok = false;
@@ -126,10 +148,6 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
         }
     }
 
-    public void setTimeoutMs(int timeoutMs) {
-        this.timeoutMs = timeoutMs;
-    }
-
     private class ThriftClientFactory extends BaseKeyedPooledObjectFactory<TNetworkAddress, VALUE> {
 
         private Object newInstance(String className, TProtocol protocol) throws Exception {
@@ -142,9 +160,9 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
         public VALUE create(TNetworkAddress key) throws Exception {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("before create socket hostname={} key.port={} timeoutMs={}",
-                        key.hostname, key.port, timeoutMs);
+                        key.hostname, key.port, defaultTimeoutMs);
             }
-            TTransport transport = new TSocket(key.hostname, key.port, timeoutMs);
+            TTransport transport = new TSocket(key.hostname, key.port, defaultTimeoutMs);
             transport.open();
             TProtocol protocol = new TBinaryProtocol(transport);
             VALUE client = (VALUE) newInstance(className, protocol);

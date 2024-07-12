@@ -17,11 +17,18 @@ package com.starrocks.server;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
 import java.net.UnknownHostException;
+import java.net.UnknownServiceException;
 import java.util.UUID;
 
 public class NodeMgrTest {
@@ -70,5 +77,33 @@ public class NodeMgrTest {
         Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.removeClusterIdAndRole();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+    }
+
+    @Test
+    public void t() {
+        new MockUp<URL>() {
+            public URLConnection openConnection() throws java.io.IOException {
+                return new HttpURLConnection(null) {
+                    @Override
+                    public void disconnect() {
+
+                    }
+
+                    @Override
+                    public boolean usingProxy() {
+                        return false;
+                    }
+
+                    @Override
+                    public void connect() throws IOException {
+
+                    }
+                };
+            }
+
+            public InputStream getInputStream() throws IOException {
+                throw new UnknownServiceException("protocol doesn't support input");
+            }
+        };
     }
 }
