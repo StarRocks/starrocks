@@ -150,7 +150,6 @@ public class StructField {
         return new StructField(name, fieldId, type.clone(), comment);
     }
 
-    @Override
     public int getMaxUniqueId() {
         return Math.max(fieldId, type.getMaxUniqueId());
     }
