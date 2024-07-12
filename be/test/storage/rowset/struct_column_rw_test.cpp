@@ -177,7 +177,7 @@ protected:
             ASSERT_TRUE(f3_tablet_column.has_default_value());
             new_struct_column.add_sub_column(f3_tablet_column);
             {
-                auto f1_meta = meta2.children_columns(0);
+                auto f1_meta = meta2.mutable_children_columns(0);
                 f1_meta->set_unique_id(0);
                 auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
                 ASSERT_FALSE(res.ok());
