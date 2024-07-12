@@ -302,12 +302,7 @@ public class OlapTable extends Table {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-<<<<<<< HEAD
-        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-=======
         olapTable.nameToColumn = new CaseInsensitiveMap(this.nameToColumn);
-        olapTable.idToColumn = new CaseInsensitiveMap(this.idToColumn);
->>>>>>> af19cfbcb2 ([BugFix] Use copyOnlyForQuery instead of deepCopy to avoid time costs in mv refresh's collectBaseTableSnapshotInfos (#48256))
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
