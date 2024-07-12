@@ -60,17 +60,17 @@ OutPut Exchange Id: 12
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
 |
 9:SELECT
-                                                                                                                                                                                                                                 |  predicates: 5: L_QUANTITY < 0.2 * 50: avg
-                                                                                                                                                                                                                                 |  cardinality: 307009
-                                                                                                                                                                                                                                 |  column statistics:
-                                                                                                                                                                                                                                 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
-                                                                                                                                                                                                                                 |  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
-                                                                                                                                                                                                                                 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
-                                                                                                                                                                                                                                 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                 |
-                                                                                                                                                                                                                                 8:ANALYTIC
-                                                                                                                                                                                                                                 |  functions: [, avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
+|  predicates: 5: L_QUANTITY < 0.2 * 50: avg
+|  cardinality: 307009
+|  column statistics:
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|
+8:ANALYTIC
+|  functions: [, avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
 |  partition by: [18: P_PARTKEY, INT, false]
 |  cardinality: 614017
 |  column statistics:
@@ -167,4 +167,3 @@ column statistics:
 * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
 [end]
-

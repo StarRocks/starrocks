@@ -164,6 +164,10 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public void clearRowOutputInfo() {
+        rowOutputInfo = null;
+    }
+
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
     }
