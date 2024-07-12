@@ -222,6 +222,7 @@ datacache_auto_adjust_enable=true
 - [enable_populate_datacache](../reference/System_variable.md#enable_populate_datacache25-及以后)
 - [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../reference/System_variable.md)
 
 ### BE 参数
 
