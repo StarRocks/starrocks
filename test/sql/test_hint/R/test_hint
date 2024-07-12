@@ -370,7 +370,7 @@ set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- !result
 select @xVar, @yVar, @zVar;
 -- result:
-1       None     1
+1       None    1
 -- !result
 set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- result:
