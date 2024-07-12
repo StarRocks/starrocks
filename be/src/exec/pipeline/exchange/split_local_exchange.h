@@ -57,6 +57,8 @@ private:
     // every source can have dop operators
     std::vector<int32_t> _opened_source_opcount;
 
+    size_t kBufferedRowSizeScaleFactor = config::split_exchanger_buffer_chunk_num;
+
     mutable std::mutex _mutex;
 };
 
