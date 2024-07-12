@@ -703,6 +703,15 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
         assertPlanContains(sql, "8:NESTLOOP JOIN", "LEFT SEMI JOIN (PARTITIONED)");
+
+        sql = "with C1 as (select * from t0) select * from C1";
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
+
+        sql = "with C1 as (select * from t0) select * from c1";
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
+
+        sql = "with C1 as (select * from t0) select * from C1 a where a.v1 = 1";
+        assertPlanContains(sql, "PREDICATES: 1: v1 = 1");
     }
 
     @Test
