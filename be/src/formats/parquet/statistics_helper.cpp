@@ -222,12 +222,22 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     //  but there are many places in our reader just treat column as nullable, and use down_cast<NullableColumn>
     ColumnPtr min_col = ColumnHelper::create_column(c->type(), true);
     min_col->reserve(min_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(min_col, min_values, c->type(), field, timezone));
+    auto st = decode_value_into_column(min_col, min_values, c->type(), field, timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, field " << field->name;
+        return Status::OK();
+    }
     DCHECK(!min_col->has_null());
     min_col = down_cast<NullableColumn*>(min_col.get())->data_column();
     ColumnPtr max_col = ColumnHelper::create_column(c->type(), true);
     max_col->reserve(max_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(max_col, max_values, c->type(), field, timezone));
+    st = decode_value_into_column(max_col, max_values, c->type(), field, timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, field " << field->name;
+        return Status::OK();
+    }
     DCHECK(!max_col->has_null());
     max_col = down_cast<NullableColumn*>(max_col.get())->data_column();
 
