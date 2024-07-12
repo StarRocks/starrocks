@@ -36,16 +36,18 @@ namespace starrocks {
 
 class Ranges {
 public:
-    Ranges(std::span<const uint32_t> offsets, const uint8_t* need_sort_per_range)
-            : _offsets(offsets), _need_sort_per_range(need_sort_per_range) {}
+    Ranges(std::span<const uint32_t> source_offsets, std::span<const uint32_t> key_offsets)
+            : _source_offsets(source_offsets), _key_offsets(key_offsets) {
+        DCHECK_EQ(_source_offsets.size(), _key_offsets.size());
+    }
 
     bool next() {
-        while (_next_index + 1 < _offsets.size()) {
+        while (_next_index + 1 < _key_offsets.size()) {
             const size_t i = _next_index++;
-            if (!_need_sort_per_range[i]) {
+            if (_source_offsets[i] == _source_offsets[i + 1]) {
                 continue;
             }
-            if (_offsets[i] == _offsets[i + 1]) {
+            if (_key_offsets[i] == _key_offsets[i + 1]) {
                 continue;
             }
             return true;
@@ -53,13 +55,13 @@ public:
         return false;
     }
 
-    std::pair<int, int> get() const { return {_offsets[_next_index - 1], _offsets[_next_index]}; }
+    std::pair<int, int> get() const { return {_source_offsets[_next_index - 1], _source_offsets[_next_index]}; }
 
     void reset() { _next_index = 0; }
 
 private:
-    const std::span<const uint32_t> _offsets;
-    const uint8_t* _need_sort_per_range;
+    const std::span<const uint32_t> _source_offsets;
+    const std::span<const uint32_t> _key_offsets;
     size_t _next_index = 0;
 };
 
@@ -95,12 +97,14 @@ static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, cons
 }
 
 // Sort a column by permtuation
-template <RangeOrRanges Range>
-class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<Range>> {
+template <RangeOrRanges R>
+class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<R>> {
+    static constexpr bool IS_RANGES = std::is_same_v<R, Ranges>;
+
 public:
     explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, SmallPermutation& permutation,
-                          Tie& tie, Range range_or_ranges, bool build_tie)
-            : ColumnVisitorAdapter<ColumnSorter<Range>>(this),
+                          Tie& tie, R range_or_ranges, bool build_tie)
+            : ColumnVisitorAdapter<ColumnSorter<R>>(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
               _permutation(permutation),
@@ -162,13 +166,16 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        DCHECK_GE(column.size(), _permutation.size());
+        if constexpr (!IS_RANGES) {
+            DCHECK_GE(column.size(), _permutation.size());
+        }
+
         using ItemType = InlinePermuteItem<Slice>;
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
             return lhs.inline_value.compare(rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<Slice>(_permutation, column.get_proxy_data());
+        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -178,14 +185,16 @@ public:
 
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
-        DCHECK_GE(column.size(), _permutation.size());
-        using ItemType = InlinePermuteItem<T>;
+        if constexpr (!IS_RANGES) {
+            DCHECK_GE(column.size(), _permutation.size());
+        }
 
+        using ItemType = InlinePermuteItem<T>;
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
             return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<T>(_permutation, column.get_data());
+        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.get_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -214,7 +223,7 @@ private:
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
-    Range _range_or_ranges;
+    R _range_or_ranges;
     bool _build_tie;
 };
 
@@ -533,7 +542,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<C
     // may be different. See the comment of the declaration of this function for more details.
     // Therefore, adjust values of permutation by the offsets of this column before sorting this column.
     const uint32_t* prev_offsets = src_offsets.data();
-    auto shift_perm = [&perm, &prev_offsets, num_ranges](const uint32_t* new_offsets) {
+    auto shift_perm = [&src_offsets, &perm, &prev_offsets, num_ranges](const uint32_t* new_offsets) {
         if (prev_offsets == new_offsets) {
             return;
         }
@@ -547,7 +556,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<C
             shifted = true;
 
             const uint32_t delta = new_offsets[i] - prev_offsets[i];
-            for (int j = prev_offsets[i]; j < prev_offsets[i + 1]; j++) {
+            for (int j = src_offsets[i]; j < src_offsets[i + 1]; j++) {
                 perm[j].index_in_chunk += delta;
             }
         }
@@ -557,20 +566,14 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<C
         }
     };
 
-    std::vector<uint8_t> need_sort_per_range;
-    raw::stl_vector_resize_uninitialized(&need_sort_per_range, num_ranges);
-    for (size_t i = 0; i < num_ranges; i++) {
-        need_sort_per_range[i] = src_offsets[i] != src_offsets[i + 1];
-    }
-
     for (int col_i = 0; col_i < num_keys; col_i++) {
         Column* column = columns[col_i];
         const bool build_tie = (col_i != (columns.size() - 1));
         shift_perm(offsets_per_key[col_i].data());
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
-                                            Ranges(offsets_per_key[col_i], need_sort_per_range.data()), build_tie));
+                                            Ranges(src_offsets, offsets_per_key[col_i]), build_tie));
     }
-    shift_perm(prev_offsets);
+    shift_perm(src_offsets.data());
 
     return Status::OK();
 }
