@@ -54,12 +54,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
-<<<<<<< HEAD
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
-=======
-import com.starrocks.connector.TableUpdateArbitrator;
->>>>>>> af19cfbcb2 ([BugFix] Use copyOnlyForQuery instead of deepCopy to avoid time costs in mv refresh's collectBaseTableSnapshotInfos (#48256))
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
