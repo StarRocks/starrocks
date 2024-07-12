@@ -133,7 +133,6 @@ OutPut Exchange Id: 06
 table: lineitem, rollup: lineitem
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
 actualRows=0, avgRowSize=24.0
 cardinality: 600000000
 probe runtime filters:
@@ -161,7 +160,6 @@ table: part, rollup: part
 preAggregation: on
 Predicates: [21: P_BRAND, CHAR, false] = 'Brand#35', [24: P_CONTAINER, CHAR, false] = 'JUMBO CASE'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10266,10268,10270,10272,10274,10276,10278,10280,10282,10284
 actualRows=0, avgRowSize=28.0
 cardinality: 20467
 column statistics:

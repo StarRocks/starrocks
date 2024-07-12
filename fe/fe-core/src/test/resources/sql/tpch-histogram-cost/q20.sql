@@ -138,7 +138,6 @@ OutPut Exchange Id: 21
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10187
 actualRows=0, avgRowSize=73.0
 cardinality: 1000000
 probe runtime filters:
@@ -167,7 +166,6 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [10: N_NAME, CHAR, false] = 'ARGENTINA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10261
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -266,7 +264,6 @@ OutPut Exchange Id: 11
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10192,10194,10196,10198,10200,10202,10204,10206,10208,10210
 actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
@@ -295,7 +292,6 @@ table: part, rollup: part
 preAggregation: on
 Predicates: 21: P_NAME LIKE 'sienna%'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10266,10268,10270,10272,10274,10276,10278,10280,10282,10284
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
 column statistics:
@@ -334,7 +330,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [41: L_SHIPDATE, DATE, false] >= '1993-01-01', [41: L_SHIPDATE, DATE, false] < '1994-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
 actualRows=0, avgRowSize=24.0
 cardinality: 90804734
 probe runtime filters:
