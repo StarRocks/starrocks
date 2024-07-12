@@ -564,9 +564,16 @@ public class RestoreJobTest {
         RestoreJob job2 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
                 new BackupJobInfo(), false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
         RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
-                new BackupJobInfo(), false, 3, 100000,
+                jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
         job1.setState(RestoreJob.RestoreJobState.PENDING);
         backupHandler.replayAddJob(job1);
         job2.setState(RestoreJob.RestoreJobState.COMMIT);
