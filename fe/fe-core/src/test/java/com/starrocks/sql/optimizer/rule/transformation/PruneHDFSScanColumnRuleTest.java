@@ -21,6 +21,7 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -76,7 +77,7 @@ public class PruneHDFSScanColumnRuleTest {
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
-                                ConstantOperator.createInt(1))));
+                                ConstantOperator.createInt(1)), TableVersionRange.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -93,7 +94,7 @@ public class PruneHDFSScanColumnRuleTest {
                                                  @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
-                        scanColumnMap, Maps.newHashMap(), -1, null));
+                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -214,7 +215,7 @@ public class PruneHDFSScanColumnRuleTest {
                                                         @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
-                        scanColumnMap, Maps.newHashMap(), -1, null));
+                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);

@@ -44,6 +44,10 @@ public class PredicateSearchKey {
         return tableName;
     }
 
+    public long getSnapshotId() {
+        return snapshotId;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

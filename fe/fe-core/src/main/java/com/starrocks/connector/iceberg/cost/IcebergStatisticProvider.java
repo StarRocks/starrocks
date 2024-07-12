@@ -19,6 +19,7 @@ import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.PredicateSearchKey;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -98,18 +99,18 @@ public class IcebergStatisticProvider {
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         TableVersionRange version) {
         Table nativeTable = icebergTable.getNativeTable();
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         String uuid = icebergTable.getUUID();
-        if (snapshot.isPresent()) {
+        if (version.end().isPresent()) {
             Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
                     .map(Types.NestedField::fieldId).collect(Collectors.toSet());
             Map<Integer, Long> colIdToNdvs = new HashMap<>();
             if (session != null && session.getSessionVariable().enableReadIcebergPuffinNdv()) {
-                colIdToNdvs = readNumDistinctValues(icebergTable, primitiveColumnsFieldIds);
+                colIdToNdvs = readNumDistinctValues(icebergTable, primitiveColumnsFieldIds, version);
                 if (uuidToPartitionFieldIdToValues.containsKey(uuid) && !uuidToPartitionFieldIdToValues.get(uuid).isEmpty()) {
                     HashMultimap<Integer, Object> partitionFieldIdToValue = uuidToPartitionFieldIdToValues.get(uuid);
                     Map<Integer, Long> partitionSourceIdToNdv = new HashMap<>();
@@ -125,7 +126,7 @@ public class IcebergStatisticProvider {
             }
 
             PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
-                    snapshot.get().snapshotId(), predicate);
+                    version.end().get(), predicate);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);
@@ -373,13 +374,14 @@ public class IcebergStatisticProvider {
         }
     }
 
-    public static Map<Integer, Long> readNumDistinctValues(IcebergTable icebergTable, Set<Integer> columnIds) {
+    public static Map<Integer, Long> readNumDistinctValues(IcebergTable icebergTable, Set<Integer> columnIds,
+                                                           TableVersionRange version) {
         Map<Integer, Long> colIdToNdv = new HashMap<>();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
 
         long snapshotId;
-        if (icebergTable.getSnapshot().isPresent()) {
-            snapshotId = icebergTable.getSnapshot().get().snapshotId();
+        if (version.end().isPresent()) {
+            snapshotId = version.end().get();
         } else {
             return colIdToNdv;
         }
