@@ -450,12 +450,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "simpleDefineSql")
     private String simpleDefineSql;
 
-    // record expression table column
+    // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
+    @Deprecated
     @SerializedName(value = "partitionRefTableExprs")
     private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
+    @Deprecated
     private List<Expr> partitionRefTableExprs;
-    // pair<ref base table, partition column>
-    private Optional<Pair<Table, Column>> refBaseTableColumnOpt = Optional.empty();
+    @Deprecated
+    private transient Optional<Pair<Table, Column>> refBaseTableColumnOpt = Optional.empty();
 
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
@@ -475,11 +477,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private Map<ExpressionSerializedObject, ExpressionSerializedObject> serializedPartitionExprMaps;
     private Map<Expr, SlotRef> partitionExprMaps;
     // ref base table to partition expression
-    private Optional<Map<Table, Expr>> refBaseTablePartitionExprsOpt = Optional.empty();
+    private transient Optional<Map<Table, Expr>> refBaseTablePartitionExprsOpt = Optional.empty();
     // ref bae table to partition column slot ref
-    private Optional<Map<Table, SlotRef>> refBaseTablePartitionSlotsOpt = Optional.empty();
+    private transient Optional<Map<Table, SlotRef>> refBaseTablePartitionSlotsOpt = Optional.empty();
     // ref bae table to partition column
-    private Optional<Map<Table, Column>> refBaseTablePartitionColumnsOpt = Optional.empty();
+    private transient Optional<Map<Table, Column>> refBaseTablePartitionColumnsOpt = Optional.empty();
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -1451,6 +1453,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.info("The refBaseTablePartitionExprMap of mv {} is {}", getName(), refBaseTablePartitionExprMap);
             refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
         }
+        Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
         return refBaseTablePartitionExprsOpt.get();
     }
 
@@ -1474,6 +1477,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.info("The refBaseTablePartitionSlotMap of mv {} is {}", getName(), refBaseTablePartitionSlotMap);
             refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
         }
+        Preconditions.checkState(refBaseTablePartitionSlotsOpt.isPresent());
         return refBaseTablePartitionSlotsOpt.get();
     }
 
@@ -1560,7 +1564,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * base table and its partition column.
      * @return : The materialized view's referred base table and its partition column.
      * TODO: Support multi-column partitions later.
-     * TODO: Use getRefBaseTablePartitionColumnMap instead since SR v3.3 has supported multi-tables partition change tracking.
+     * TODO: Use getRefBaseTablePartitionColumns instead since SR v3.3 has supported multi-tables partition change tracking.
      */
     @Deprecated
     public Pair<Table, Column> getRefBaseTablePartitionColumn() {
@@ -1587,6 +1591,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
             }
         }
+        Preconditions.checkState(refBaseTableColumnOpt.isPresent());
         return refBaseTableColumnOpt.get();
     }
 
@@ -1598,6 +1603,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (refBaseTablePartitionColumnsOpt.isEmpty()) {
             refBaseTablePartitionColumnsOpt = Optional.of(getBaseTablePartitionColumnMapImpl());
         }
+        Preconditions.checkState(refBaseTablePartitionColumnsOpt.isPresent());
         return refBaseTablePartitionColumnsOpt.get();
     }
 

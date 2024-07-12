@@ -14,13 +14,13 @@
 package com.starrocks.mv.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Exprs;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -75,6 +75,53 @@ public class MVPartitionExprResolver {
         final List<Expr> eqExprs = Lists.newArrayList();
         public void addEqExprs(Expr expr) {
             eqExprs.add(expr);
+        }
+    }
+
+    static class Exprs {
+        private final List<Expr> exprs;
+
+        public Exprs() {
+            exprs = com.google.api.client.util.Lists.newArrayList();
+        }
+
+        public Exprs(List<Expr> exprs) {
+            this.exprs = exprs;
+        }
+
+        public Exprs(Expr expr) {
+            this.exprs = ImmutableList.of(expr);
+        }
+
+        public static Exprs of(List<Expr> exprs) {
+            return new Exprs(exprs);
+        }
+
+        public static Exprs of(Expr expr) {
+            return new Exprs(expr);
+        }
+
+        public void add(Exprs exprs) {
+            this.exprs.addAll(exprs.exprs);
+        }
+
+        public List<Expr> getExprs() {
+            return exprs;
+        }
+
+        public int size() {
+            if (exprs == null) {
+                return 0;
+            }
+            return exprs.size();
+        }
+
+        public boolean isEmpty() {
+            return size() == 0;
+        }
+
+        public Expr get(int i) {
+            return exprs.get(i);
         }
     }
 
@@ -404,11 +451,6 @@ public class MVPartitionExprResolver {
                     equivalentExprs.stream().anyMatch(e -> MVPartitionExprEqChecker.areEqualExprs(e, t)));
         }
 
-        // A = B => {A, B}
-        // A = B OR C = D => {}
-        // A = B AND C = D => {A, B}, {C, D}
-        // A = B AND A = C => {A, B}, {A, C}
-        // A = B AND (C = D OR E = F) => {A, B}
         private List<Expr> getEquivalentExprs(MVExprContext context, Relation in, Expr expr) {
             List<Expr> result = Lists.newArrayList();
             if (expr == null) {
