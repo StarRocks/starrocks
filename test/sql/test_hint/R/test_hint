@@ -370,7 +370,7 @@ set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- !result
 select @xVar, @yVar, @zVar;
 -- result:
-1       None    1
+1	None	1
 -- !result
 set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- result:
@@ -378,7 +378,7 @@ set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- !result
 select @xVar, @yVar, @zVar;
 -- result:
-1       2        1
+1	2	1
 -- !result
 create table cities (
     city_id int NOT NULL,
@@ -411,11 +411,11 @@ insert into cities(city_id, population, city) values(5, 2000, "chengdu");
 -- !result
 select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
 -- result:
-2000    5
+2000	5
 -- !result
 select @aVarHint, @bVarHint;
 -- result:
-None    None
+None	None
 -- !result
 set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
 -- result:
@@ -423,5 +423,5 @@ set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
 -- !result
 select @secondVar,@thirdVar;
 -- result:
-None    None
+None	None
 -- !result
