@@ -281,5 +281,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.table = table;
             return (B) this;
         }
+
+        public B setTableVersionRange(TableVersionRange tableVersionRange) {
+            builder.tableVersionRange = tableVersionRange;
+            return (B) this;
+        }
     }
 }
