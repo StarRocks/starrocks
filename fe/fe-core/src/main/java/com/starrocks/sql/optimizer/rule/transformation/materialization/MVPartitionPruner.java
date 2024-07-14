@@ -244,7 +244,7 @@ public class MVPartitionPruner {
                     if (currentTable == null) {
                         return null;
                     }
-                    // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+
                     builder.setTable(currentTable);
                     TableVersionRange versionRange = TableVersionRange.withEnd(
                             Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
