@@ -144,6 +144,7 @@ private:
     size_t _num_colocate_partition = 0;
 
     bool _is_broad_cast_in_skew = false;
+    int32_t _skew_shuffle_filter_id = -1;
 
     std::mutex _mutex;
 };

@@ -83,7 +83,7 @@ public class RuntimeFilterDescription {
     private boolean isBroadCastInSkew = false;
 
     // only set when isBroadCastInSkew is true, and the value is the id of shuffle join's corresponding filter id
-    private int skew_shuffle_filter_id;
+    private int skew_shuffle_filter_id = -1;
 
     private RuntimeFilterType type;
 
@@ -603,6 +603,9 @@ public class RuntimeFilterDescription {
         }
         
         t.setIs_borad_cast_join_in_skew(isBroadCastInSkew);
+        if (isBroadCastInSkew) {
+            t.setSkew_shuffle_filter_id(skew_shuffle_filter_id);
+        }
 
         return t;
     }

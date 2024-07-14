@@ -251,6 +251,9 @@ void RuntimeFilterPort::prepare_params(PTransmitRuntimeFilterParams& params, Run
     finst_id->set_lo(state->fragment_instance_id().lo);
     params.set_build_be_number(state->be_number());
     params.set_is_skew_broadcast_join(rf_desc->is_broad_cast_in_skew());
+    if (rf_desc->is_broad_cast_in_skew()) {
+        params.set_skew_shuffle_filter_id(params.skew_shuffle_filter_id());
+    }
 }
 
 void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
@@ -412,8 +415,9 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     DCHECK(params.is_partial());
-    int32_t filter_id = params.filter_id();
-    int32_t be_number = params.build_be_number();
+    // we use skew_shuffle_filter_id, so it will be merged with coressponding shuffle join's partition rf
+    int32_t filter_id = params.skew_shuffle_filter_id();
+    DCHECK(filter_id != -1);
 
     std::vector<TRuntimeFilterProberParams>* target_nodes = nullptr;
     // check if there is no consumer.
@@ -1140,8 +1144,8 @@ void RuntimeFilterWorker::execute() {
                 break;
             }
             RuntimeFilterMerger& merger = it->second;
-            _exec_env->add_rf_event({ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(), "",
-                                     "RECEIVE_SKEW_JOIN_BROADCAST_RF"});
+            _exec_env->add_rf_event({ev.transmit_rf_request.query_id(), ev.transmit_rf_request.skew_shuffle_filter_id(),
+                                     "", "RECEIVE_SKEW_JOIN_BROADCAST_RF"});
             merger.store_skew_broadcast_join_runtime_filter(ev.transmit_rf_request);
             break;
         }
