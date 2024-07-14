@@ -184,10 +184,9 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             }
 
             if (col == "*") {
-                // There should be no jsonpath for this pattern, $.*
-                return Status::InvalidArgument(
-                        fmt::format("extracting * from root-object is not supported, the json path: {}",
-                                    jsonpaths_to_string(jsonpath)));
+                // There shoud return entire json obj for this pattern, $.*
+                tvalue = *reinterpret_cast<simdjson::ondemand::value*>(&obj);
+                break;
             } else {
                 HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
                                       fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i)));
