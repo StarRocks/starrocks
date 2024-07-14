@@ -734,10 +734,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void collectProbeRuntimeFilters(PlanNode root) {
         for (RuntimeFilterDescription description : root.getProbeRuntimeFilters()) {
-            // do not add skew join's broadcast join's probe rf
-            if (description.isBoradCastJoinInSkew()) {
-                continue;
-            }
             probeRuntimeFilters.put(description.getFilterId(), description);
         }
 

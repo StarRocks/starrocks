@@ -408,6 +408,10 @@ public class RuntimeFilterDescription {
         if (onlyLocal) {
             return false;
         }
+        // skew join's broadcast join rf can not be pushed across exchange node
+        if (isBroadCastInSkew) {
+            return false;
+        }
         switch (joinMode) {
             case BROADCAST:
             case PARTITIONED:
