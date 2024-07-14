@@ -268,10 +268,6 @@ public class ExchangeNode extends PlanNode {
         }
         if (isBound && description.canAcceptFilter(this, context)) {
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {
-                // directly return ture, but not add description to exchange's probeRuntimeFilters
-                if (description.isBoradCastJoinInSkew()) {
-                    return true;
-                }
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr,
                         description.inLocalFragmentInstance() ? Lists.newArrayList() : partitionByExprs);
