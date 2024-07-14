@@ -320,6 +320,10 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.is_borad_cast_join_in_skew) {
         _is_broad_cast_in_skew = desc.is_borad_cast_join_in_skew;
     }
+    if (desc.__isset.skew_shuffle_filter_id) {
+        _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
+    }
+
     WithLayoutMixin::init(desc);
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
