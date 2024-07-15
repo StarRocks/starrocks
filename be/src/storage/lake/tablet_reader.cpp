@@ -64,7 +64,7 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
           _rowsets_inited(true),
-          _rowsets(std::move(rowsets)), 
+          _rowsets(std::move(rowsets)),
           _tablet_schema(tablet_schema) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,

@@ -156,7 +156,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer,
+                        _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;

@@ -44,7 +44,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(_tablet_schema);
-    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -139,7 +139,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
+        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
     LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id

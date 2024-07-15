@@ -51,7 +51,7 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
-            // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the 
+            // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the
             // `enable_alter_struct` configuration. Once testing is complete, this configuration will be removed.
             if (config::enable_alter_struct) {
                 if (metadata->rowset_schema_id_size() == 0) {
@@ -80,13 +80,6 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             }
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
         }
-        /*
-        if (alter_meta.has_tablet_schema()) {
-            VLOG(2) << "old schema: " << metadata->schema().DebugString()
-                    << " new schema: " << alter_meta.tablet_schema().DebugString();
-            metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
-        }
-        */
     }
     return Status::OK();
 }
@@ -488,9 +481,9 @@ private:
                 _metadata->mutable_historical_schema()->erase(id);
             }
             auto* rowset_schema_id_fields = _metadata->mutable_rowset_schema_id();
-            rowset_schema_id_fields->erase(rowset_schema_id_fields->begin() + start_idx, rowset_schema_id_fields->begin() + end_idx);
+            rowset_schema_id_fields->erase(rowset_schema_id_fields->begin() + start_idx,
+                                           rowset_schema_id_fields->begin() + end_idx);
         }
-        
 
         // Set new cumulative point
         uint32_t new_cumulative_point = 0;

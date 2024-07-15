@@ -587,26 +587,25 @@ StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<RowsetPtr>& input
         return Status::InternalError("no candidate rowsets to compaction");
     }
     auto metadata = tablet.metadata();
-    if (metadta->rowset_schema_id_size() == 0) {
+    if (metadata->rowset_schema_id_size() == 0) {
         return tablet.get_schema();
     }
     struct Finder {
         int64_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
-    auto input_id = input_rowset[0]->rowset_id();
-    auto iter = std::find_if(metadata->mutable_rowsets()->begin(), _metadata->mutable_rowsets()->end(),
-                             Finder{input_id});
-    if (UNLIKELY(iter == metadata->mutable_rowsets()->end())) {
+    auto input_id = input_rowset[0]->id();
+    auto iter = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
+    if (UNLIKELY(iter == metadata->rowsets().end())) {
         return Status::InternalError(fmt::format("input rowset {} not found", input_id));
     }
-    auto idx = static_cast<uint32_t>(iter - metadata->mutable_rowsets()->begin());
+    auto idx = static_cast<uint32_t>(iter - metadata->rowsets().begin());
     auto schema_id = metadata->rowset_schema_id(idx);
     if (schema_id == -1) {
         return tablet.get_schema();
     }
-    
-    return GlobalTabletSchemaMap::Instance()->emplace((*metadata->mutable_historical_schema())[schema_id]).first;
+
+    return GlobalTabletSchemaMap::Instance()->emplace(metadata->historical_schema().at(schema_id)).first;
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
@@ -615,12 +614,14 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
-    ASSIGN_OR_RETURN(auto tablet_schema = get_output_rowset_schema(input_rowset, tablet)); 
+    ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(input_rowsets, tablet));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema));
+        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                        std::move(tablet_schema));
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema));
+        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                          std::move(tablet_schema));
     }
 }
 
