@@ -130,7 +130,26 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     std::unique_ptr<ColumnConverter> converter;
+=======
+    virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                         int64_t* end_offset, ColumnIOType type, bool active) = 0;
+
+    virtual const tparquet::ColumnChunk* get_chunk_metadata() { return nullptr; }
+
+    virtual const ParquetField* get_column_parquet_field() { return nullptr; }
+
+    virtual StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) {
+        return Status::NotSupported("get_offset_index is not supported");
+    }
+
+    virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
+
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 };
 
 } // namespace starrocks::parquet
