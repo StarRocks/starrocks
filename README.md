@@ -74,7 +74,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="docs/en/assets/architecture_evolution.png">
+    <img src="docs/en/assets/shared-data.png">
    </a>
 </p>
 
