@@ -33,8 +33,6 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/memcmp.h"
-#include "util/runtime_profile.h"
-#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
