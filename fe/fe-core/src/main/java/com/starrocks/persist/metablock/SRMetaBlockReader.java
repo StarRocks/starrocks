@@ -100,7 +100,8 @@ public class SRMetaBlockReader {
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
                     header.getSrMetaBlockID(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
-                LOG.warn("skip {}th json: {}", i, Text.readStringWithChecksum(checkedInputStream));
+                String text = Text.readStringWithChecksum(checkedInputStream);
+                LOG.warn("skip {}th json: {}", i, text.substring(0, Math.min(1000, text.length())));
             }
         }
 
