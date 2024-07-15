@@ -217,18 +217,47 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     fi
     # force sys_log_to_console = true
     echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
-else
-    # redirect all subsequent commands' stdout/stderr into $LOG_FILE
-    exec &>> $LOG_FILE
 fi
 
-echo "using java version $JAVA_VERSION"
-echo $final_java_opt
-echo "start time: $(date), server uptime: $(uptime)"
+echo "using java version $JAVA_VERSION" >> $LOG_FILE
+echo $final_java_opt >> $LOG_FILE
+echo "start time: $(date), server uptime: $(uptime)" >> $LOG_FILE
+
+sys_log_file=$(grep -v ^# $STARROCKS_HOME/conf/fe.conf |grep sys_log_dir)
+if [ -z "$sys_log_dir" ]; then
+    sys_log_file="$STARROCKS_HOME/log/fe.log"
+else
+    sys_log_file="${sys_log_dir}/fe.log"
+fi
+# get the current number of rows in the FE log file
+if [ ! -f $sys_log_file ]; then
+    start_line=1
+else
+    start_line=$(wc -l $sys_log_file)
+fi
+
+check_log() {
+    if tail -n +$start_line $sys_log_file | grep -q "thrift server started with port"; then
+        echo "The frontend process started successfully!"
+        return 0
+    else
+        return 1
+    fi
+}
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null &
+    echo "The frontend process is starting!"
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" &> /dev/null &
+    timeout=30
+    end_time=$((SECONDS + timeout))
+    while [ $SECONDS -lt $end_time ]; do
+        if check_log; then
+            exit 0
+        fi
+        sleep 1
+    done
+    echo "The startup time is more than $timeout seconds, the frontend process may not start successfully!"
 else
     exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
 fi
