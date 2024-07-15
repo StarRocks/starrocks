@@ -105,6 +105,7 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -1520,5 +1521,21 @@ public class IcebergMetadataTest extends TableTestBase {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Unsupported type for table version",
                 () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
+    }
+
+    public void testNullTableUUID() {
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Assert.assertEquals(2, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(4, icebergTable.getUUID().split("\\.").length);
+
+        new MockUp<TableMetadata>() {
+            @Mock
+            public String uuid() {
+                return null;
+            }
+        };
+        Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
     }
 }
