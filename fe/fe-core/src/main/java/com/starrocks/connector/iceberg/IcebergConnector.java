@@ -30,8 +30,8 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.SystemConfigs;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,7 +76,8 @@ public class IcebergConnector implements Connector {
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
-            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
+            props.setProperty(SystemConfigs.WORKER_THREAD_POOL_SIZE.propertyKey(),
+                    String.valueOf(Config.iceberg_worker_num_threads));
         }
 
         long icebergTableCacheTTL = Config.hive_meta_cache_ttl_s;
