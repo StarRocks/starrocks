@@ -52,6 +52,10 @@ public class TableSnapshotInfo {
         return baseTable.getName();
     }
 
+    /**
+     * NOTE: Base table is only copied from the real table if it's an OlapTable or MaterializedView,
+     * otherwise the real table is returned.
+     */
     public Table getBaseTable() {
         return baseTable;
     }
