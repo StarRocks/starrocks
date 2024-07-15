@@ -16,11 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "formats/parquet/metadata.h"
-#include "formats/parquet/schema.h"
 #include "formats/utils.h"
-#include "gen_cpp/Descriptors_types.h"
-#include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
 
