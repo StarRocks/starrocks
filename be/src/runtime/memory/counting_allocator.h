@@ -79,6 +79,14 @@ public:
 
     bool operator!=(const CountingAllocator& rhs) const { return !(*this == rhs); }
 
+    // CountingAllocator doesn't support swap
+    void swap(CountingAllocator& rhs) {}
+
     int64_t* _counter = nullptr;
 };
+template<class T>
+void swap(CountingAllocator<T>& lhs, CountingAllocator<T>& rhs) {
+    lhs.swap(rhs);
+}
+
 } // namespace starrocks

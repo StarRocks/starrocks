@@ -87,8 +87,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         if (old_size == 0) {
             set.load(input);
         } else {
-            int64_t temp = 0;
-            HashSetWithMemoryCounting<T> set_src{CountingAllocator<T>(&temp)};
+            HashSetWithMemoryCounting<T> set_src{CountingAllocator<T>(&memory_usage)};
             set_src.load(input);
             set.merge(set_src);
         }
