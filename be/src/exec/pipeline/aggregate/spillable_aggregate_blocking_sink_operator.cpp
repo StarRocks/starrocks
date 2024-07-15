@@ -135,7 +135,23 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
                     _aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, &use_intermediate_as_output));
             return chunk;
         }
+<<<<<<< HEAD
         RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
+=======
+        if (should_spill_hash_table) {
+            if (!_aggregator->is_ht_eos()) {
+                auto chunk = std::make_shared<Chunk>();
+                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
+                return chunk;
+            }
+            COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+            COUNTER_UPDATE(_aggregator->rows_returned_counter(), _aggregator->hash_map_variant().size());
+            COUNTER_UPDATE(_hash_table_spill_times, 1);
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
+        }
+        _streaming_rows = 0;
+        _streaming_bytes = 0;
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904))
         return Status::EndOfFile("no more data in current aggregator");
     };
 }
