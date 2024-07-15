@@ -354,10 +354,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testInformationFunction() throws Exception {
         String sql = "select connection_id() from tall";
-        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+        assertPlanContains(sql, "<slot 12> : 0");
 
         sql = "select catalog() from tall";
-        assertPlanContains(sql, "<slot 12> : CATALOG()");
+        assertPlanContains(sql, "<slot 12> : 'default_catalog'");
 
         sql = "select database() from tall";
         assertPlanContains(sql, "<slot 12> : 'test'");
@@ -366,13 +366,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : 'test'");
 
         sql = "select user() from tall";
-        assertPlanContains(sql, "<slot 12> : USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@%'");
 
         sql = "select CURRENT_USER from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@\\'%\\''");
 
         sql = "select CURRENT_ROLE from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
+        assertPlanContains(sql, "<slot 12> : 'root'");
     }
 
     @Test
@@ -405,7 +405,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testUtilityFunction() throws Exception {
         String sql = "select current_catalog";
-        assertPlanContains(sql, "<slot 2> : CATALOG()");
+        assertPlanContains(sql, "<slot 2> : 'default_catalog'");
 
         sql = "select current_schema";
         assertPlanContains(sql, "<slot 2> : 'test'");
