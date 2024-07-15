@@ -45,9 +45,9 @@ N-Gram bloom filter 索引相关参数：
 | ------------------ | -------- | ------------------------------------------------------------ |
 | `index_name`       | 是       | 索引的名称。索引名称必须在表内唯一。                         |
 | `column_name`      | 是       | 创建索引的列名。只能指定一个列名。在上面的示例中，索引的列名为 `k2`。 |
-| `gram_num`         | 是       | 索引列的字符串进行分词后的子串长度。在上面的示例中，`gram_num` 是 `4`。 |
+| `gram_num`         | 否       | 索引列的字符串进行分词后的子串长度。默认值为2。 |
 | `bloom_filter_fpp` | 否       | Bloom filter 的错误概率，范围为 0.0001 到 0.05。默认值为 0.05。较小的值提供更好的过滤效果，但会增加更大的存储开销。 |
-| `case_sensitive`   | 否       | 此索引是否区分大小写。默认值为 `case_sensitive`。            |
+| `case_sensitive`   | 否       | 此索引是否区分大小写。默认值为 `true`。            |
 | `COMMENT`          | 否       | 索引的注释。                                                 |
 
 其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
