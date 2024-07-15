@@ -127,10 +127,12 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     }
 }
 
-Status CastStringToArray::prepare(RuntimeState* state, ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, context));
-    if (is_constant()) {
-        ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+Status CastStringToArray::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        if (is_constant()) {
+            ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+        }
     }
     return Status::OK();
 }
