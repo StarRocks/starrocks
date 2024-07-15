@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -115,8 +116,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
-        return normal.listPartitionNames(databaseName, tableName, snapshotId);
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+        return normal.listPartitionNames(databaseName, tableName, version);
     }
 
     @Override
@@ -136,6 +137,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public TableVersionRange getTableVersionRange(Table table) {
+        // TODO: refactor this in time travel patch
+        if (table instanceof IcebergTable) {
+            return normal.getTableVersionRange(table);
+        } else {
+            return TableVersionRange.empty();
+        }
+    }
+
+    @Override
     public boolean tableExists(String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(dbName, tblName);
@@ -147,9 +158,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
-        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+        return normal.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
     }
 
     @Override
@@ -170,13 +181,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
-        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
-        return normal.getPrunedPartitions(table, predicate, limit);
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
+        return normal.getPrunedPartitions(table, predicate, limit, version);
     }
 
     @Override

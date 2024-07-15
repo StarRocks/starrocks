@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.MetadataMgr;
@@ -251,7 +252,7 @@ public class PaimonMetadataTest {
                 result = mockRecordReader;
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1", -1);
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty());
         Assert.assertEquals(2, result.size());
         List<String> expections = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expections);
@@ -279,7 +280,8 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
+        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null,
+                TableVersionRange.empty(), null, requiredNames, -1);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
@@ -408,8 +410,8 @@ public class PaimonMetadataTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                           long snapshotId, ScalarOperator predicate, List<String> fieldNames,
-                                                           long limit) {
+                                                           TableVersionRange versionRange, ScalarOperator predicate,
+                                                           List<String> fieldNames, long limit) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
                         .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))

@@ -28,6 +28,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
@@ -172,7 +173,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         updatePartitionInfo(databaseName, tableName);
         return new ArrayList<>(this.partitionInfos.keySet());
     }
@@ -232,7 +233,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange versionRange, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
@@ -262,7 +263,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange versionRange) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -270,7 +272,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, table, null, -1, predicate, fieldNames, limit);
+                catalogName, table, null, TableVersionRange.empty(), predicate, fieldNames, limit);
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
         long rowCount = getRowCount(splits);

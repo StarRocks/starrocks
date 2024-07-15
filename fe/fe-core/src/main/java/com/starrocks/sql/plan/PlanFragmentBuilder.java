@@ -1374,6 +1374,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
+                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();

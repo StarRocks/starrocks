@@ -40,6 +40,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -535,6 +536,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
+        TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTableVersionRange(node.getTable());
+
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
@@ -575,7 +579,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         catalogName, dbName, node.getTable(), Lists.newArrayList(), true);
             }
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate, tableVersionRange);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);

@@ -45,6 +45,7 @@ import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
@@ -103,7 +104,6 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -755,7 +755,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
-                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
+                icebergTable, null, TableVersionRange.withEnd(Optional.of(snapshotId)), predicate, Lists.newArrayList(), 10);
         IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
         Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
                 .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
@@ -767,7 +767,7 @@ public class IcebergMetadataTest extends TableTestBase {
         predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
         res = metadata.getRemoteFileInfos(
-                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
+                icebergTable, null, TableVersionRange.withEnd(Optional.of(snapshotId)), predicate, Lists.newArrayList(), 10);
         fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
         Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());
         Assert.assertEquals(3, fileDesc.getIcebergScanTasks().get(0).file().recordCount());
@@ -794,7 +794,10 @@ public class IcebergMetadataTest extends TableTestBase {
         OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
         Assert.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
         Assert.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
-        Statistics statistics = metadata.getTableStatistics(context, icebergTable, colRefToColumnMetaMap, null, null, -1);
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
@@ -819,8 +822,11 @@ public class IcebergMetadataTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("k2", Type.INT));
         new ConnectContext().setThreadLocalInfo();
         ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(true);
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableB.currentSnapshot().snapshotId()));
         Statistics statistics = metadata.getTableStatistics(
-                new OptimizerContext(null, null, ConnectContext.get()), icebergTable, colRefToColumnMetaMap, null, null, -1);
+                new OptimizerContext(null, null, ConnectContext.get()),
+                icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
@@ -848,7 +854,9 @@ public class IcebergMetadataTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
         new ConnectContext().setThreadLocalInfo();
 
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1, version);
         Assert.assertEquals(1, partitionKeys.size());
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         IcebergPartitionKey partitionKey =  (IcebergPartitionKey) partitionKeys.get(0);
@@ -858,7 +866,9 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.refresh();
         icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableA, Maps.newHashMap());
-        partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 100);
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 100, versionRange);
         Assert.assertEquals(2, partitionKeys.size());
     }
 
@@ -881,7 +891,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 .build();
         mockedNativeTableI.newAppend().appendFile(tsDataFiles).commit();
         mockedNativeTableI.refresh();
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableI.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1, versionRange);
         Assert.assertTrue(partitionKeys.get(0).getKeys().get(0) instanceof NullLiteral);
     }
 
@@ -895,42 +907,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.refresh();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableA, Maps.newHashMap());
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1, versionRange);
         Assert.assertEquals(1, partitionKeys.size());
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         PartitionKey partitionKey = partitionKeys.get(0);
         Assert.assertEquals("types: [INT]; keys: [0]; ", partitionKey.toString());
-    }
-
-    @Test
-    public void testRefreshTableWithCatalog() {
-        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
-                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db",
-                "table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
-        metadata.refreshTable("sr_db", icebergTable, new ArrayList<>(), false);
-
-        new MockUp<IcebergHiveCatalog>() {
-            @Mock
-            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
-                return mockedNativeTableA;
-            }
-        };
-
-        IcebergTable table = (IcebergTable) metadata.getTable("db", "table");
-        Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
-
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        // test use query level table cache
-        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
-                ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
-
-        metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);
-
     }
 
     @Test
@@ -953,7 +936,10 @@ public class IcebergMetadataTest extends TableTestBase {
         OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory(), ConnectContext.get());
         context.getSessionVariable().setEnableIcebergColumnStatistics(true);
 
-        Statistics statistics = metadata.getTableStatistics(context, icebergTable, colRefToColumnMetaMap, null, null, -1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(context, icebergTable,
+                colRefToColumnMetaMap, null, null, -1, version);
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
     }
 
@@ -977,7 +963,9 @@ public class IcebergMetadataTest extends TableTestBase {
                         .build();
         mockedNativeTableE.newAppend().appendFile(tsDataFiles).commit();
         mockedNativeTableE.refresh();
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableE.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1, version);
         Assert.assertEquals("2023-10-30 03:45:56", partitionKeys.get(0).getKeys().get(0).getStringValue());
     }
 
@@ -1001,7 +989,9 @@ public class IcebergMetadataTest extends TableTestBase {
                         .build();
         mockedNativeTableD.newAppend().appendFile(tsDataFiles).commit();
         mockedNativeTableD.refresh();
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableD.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1, version);
         Assert.assertEquals("438292", partitionKeys.get(0).getKeys().get(0).getStringValue());
     }
 
@@ -1024,7 +1014,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 .build();
         mockedNativeTableF.newAppend().appendFile(tsDataFiles).commit();
         mockedNativeTableF.refresh();
-        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableF.currentSnapshot().snapshotId()));
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1, version);
         Assert.assertEquals("19660", partitionKeys.get(0).getKeys().get(0).getStringValue());
     }
 
@@ -1062,7 +1054,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        List<String> partitionNames = metadata.listPartitionNames("db", "table", -1);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableB.currentSnapshot().snapshotId()));
+        List<String> partitionNames = metadata.listPartitionNames("db", "table", version);
         Assert.assertEquals(2, partitionNames.size());
         Assert.assertTrue(partitionNames.contains("k2=2"));
         Assert.assertTrue(partitionNames.contains("k2=3"));
@@ -1484,4 +1478,18 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
         Assert.assertEquals("xxx", table.getTableLocation());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testVersionRange() {
+        TableVersionRange versionRange = TableVersionRange.empty();
+        Assert.assertTrue(versionRange.isEmpty());
+        Assert.assertTrue(versionRange.start().isEmpty());
+        versionRange = TableVersionRange.withEnd(Optional.of(1L));
+        Assert.assertFalse(versionRange.isEmpty());
+        Assert.assertNotNull(versionRange.toString());
+    }
+}
+>>>>>>> fe67feeaed ([Refactor] add TableVersionRange to connectorMetadata interface (#48298))

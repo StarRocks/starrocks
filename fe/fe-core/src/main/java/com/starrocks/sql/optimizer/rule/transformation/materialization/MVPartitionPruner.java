@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -41,8 +42,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptDistributionPruner;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
+import org.apache.iceberg.Snapshot;
 
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
 
@@ -226,10 +229,10 @@ public class MVPartitionPruner {
                 final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(refScanOperator);
                 // reset original partition predicates to prune partitions/tablets again
                 builder.withOperator(refScanOperator);
-
                 Preconditions.checkState(externalExtraPredicate != null);
                 ScalarOperator finalPredicate = Utils.compoundAnd(refScanOperator.getPredicate(), externalExtraPredicate);
                 builder.setPredicate(finalPredicate);
+
                 if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
                     // refresh iceberg table's metadata
                     Table refBaseTable = refScanOperator.getTable();
@@ -241,8 +244,12 @@ public class MVPartitionPruner {
                     if (currentTable == null) {
                         return null;
                     }
-                    // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+
                     builder.setTable(currentTable);
+                    TableVersionRange versionRange = TableVersionRange.withEnd(
+                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                                    .map(Snapshot::snapshotId));
+                    builder.setTableVersionRange(versionRange);
                 }
                 LogicalScanOperator newScanOperator = builder.build();
                 return OptExpression.create(newScanOperator);
