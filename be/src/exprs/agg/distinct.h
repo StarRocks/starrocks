@@ -53,15 +53,15 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     using SumType = RunTimeCppType<SumLT>;
 
     int64_t update(T key) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         set.insert(key);
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     int64_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         set.emplace_with_hash(hash, key);
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     void prefetch(T key) { set.prefetch(key); }
@@ -82,7 +82,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     int64_t deserialize_and_merge(const uint8_t* src, size_t len) {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         auto old_size = set.size();
         if (old_size == 0) {
             set.load(input);
@@ -91,7 +91,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
             set_src.load(input);
             set.merge(set_src);
         }
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     SumType sum_distinct() const {
@@ -107,6 +107,8 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         return sum;
     }
 
+    inline int64_t mem_usage() const { return memory_usage; }
+
     int64_t memory_usage = 0;
     HashSetWithMemoryCounting<T> set{CountingAllocator<T>(&memory_usage)};
 };
@@ -117,7 +119,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     using KeyType = typename SliceHashSet::key_type;
 
     int64_t update(MemPool* mem_pool, Slice raw_key) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
@@ -125,11 +127,11 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     int64_t update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
@@ -137,7 +139,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
         });
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     int64_t disctint_count() const { return set.size(); }
@@ -163,7 +165,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     }
 
     int64_t deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         const uint8_t* end = src + len;
         while (src < end) {
             uint32_t size = 0;
@@ -181,8 +183,10 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             src += size;
         }
         DCHECK(src == end);
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
+
+    inline int64_t mem_usage() const { return memory_usage; }
 
     int64_t memory_usage = 0;
     SliceHashSetWithMemoryCounting set{CountingAllocator<SliceWithHash>(&memory_usage)};
@@ -199,15 +203,15 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     using MyHashSet = HashSetWithMemoryCounting<T>;
 
     int64_t update(T key) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         set.insert(key);
         return memory_usage - prev_memory;
     }
 
     int64_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         set.emplace_with_hash(hash, key);
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     void prefetch(T key) { set.prefetch(key); }
@@ -231,7 +235,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     }
 
     int64_t deserialize_and_merge(const uint8_t* src, size_t len) {
-        int64_t prev_memory = memory_usage;
+        int64_t prev_memory = mem_usage();
         size_t size = 0;
         memcpy(&size, src, sizeof(size));
         set.rehash(set.size() + size);
@@ -243,7 +247,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
             set.insert(key);
             src += sizeof(T);
         }
-        return memory_usage - prev_memory;
+        return mem_usage() - prev_memory;
     }
 
     SumType sum_distinct() const {
@@ -268,6 +272,8 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 #endif
     }
     // NOLINTEND
+
+    inline int64_t mem_usage() const { return memory_usage; }
 
     int64_t memory_usage = 0;
     MyHashSet set{CountingAllocator<T>(&memory_usage)};
