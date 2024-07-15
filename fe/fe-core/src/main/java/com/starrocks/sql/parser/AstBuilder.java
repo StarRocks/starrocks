@@ -735,6 +735,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnDefs = getColumnDefs(context.columnDesc());
         }
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             return new CreateTemporaryTableStmt(
                     context.IF() != null,
                     false,
@@ -1032,6 +1036,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(
                     context.IF() != null,
                     false,
@@ -1099,6 +1107,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = getProperties(context.properties());
 
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             return new CreateTemporaryTableLikeStmt(context.IF() != null,
                     qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
                     qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
