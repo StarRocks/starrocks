@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 sidebar_position: 2
 toc_max_heading_level: 2
-description: Redpanda with shared-data storage
-keywords: ['Kafka', 'Redpanda', 'shared-data', 'MinIO']
+description: Kafka routine load with shared-data storage
+keywords: ['Routine Load']
 ---
 
-# Loading with Redpanda to StarRocks using shared-data storage
+# Kafka routine load StarRocks using shared-data storage
 
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
