@@ -94,6 +94,7 @@ enum IndexType {
     GIN = 1;
     INDEX_UNKNOWN = 2;
     NGRAMBF = 3;
+    VECTOR = 4;
 }
 
 message TabletIndexPB {

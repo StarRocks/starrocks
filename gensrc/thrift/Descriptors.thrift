@@ -189,7 +189,8 @@ enum THdfsCompression {
 enum TIndexType {
   BITMAP,
   GIN,
-  NGRAMBF
+  NGRAMBF,
+  VECTOR,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -304,8 +305,8 @@ struct TOlapTableIndex {
   4: optional string comment
   5: optional i64 index_id
 
-  // for GIN
-  // critical common properties shared for all type of GIN
+  // for standalone index
+  // critical common properties
   6: optional map<string, string> common_properties
 
   // properties to affect index building

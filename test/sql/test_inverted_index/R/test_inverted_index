@@ -1184,7 +1184,7 @@ SHOW CREATE TABLE t_alter_replicated_storage;
 t_alter_replicated_storage	CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text`) USING GIN("parser" = "english") COMMENT ''
+  INDEX gin_none (`text`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
 ) ENGINE=OLAP 
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1 
@@ -1344,7 +1344,7 @@ SHOW CREATE TABLE t_alter_gin_col_into_other_type;
 t_alter_gin_col_into_other_type	CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(2000) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN("parser" = "english") COMMENT ''
+  INDEX gin_none (`v1`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
 ) ENGINE=OLAP 
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1 

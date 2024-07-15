@@ -14,13 +14,16 @@
 
 package com.starrocks.common.io;
 
-public interface ParamsKey {
-    String defaultValue();
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
 
-    default boolean needDefault() {
-        return false;
+public interface ParamsKey {
+    String name();
+
+    default void check(String value) {
     }
 
-    // auto implemented by Enum.name()
-    String name();
+    default IndexParamItem getIndexParamItem() {
+        return IndexParams.getInstance().getParam(name());
+    }
 }

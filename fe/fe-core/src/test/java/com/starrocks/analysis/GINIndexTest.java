@@ -132,20 +132,6 @@ public class GINIndexTest extends PlanTestBase {
     }
 
     @Test
-    public void testIndexPropertiesWithDefault() {
-        Map<String, String> properties = new HashMap<>();
-        // empty set default
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.size(),
-                Arrays.stream(CommonIndexParamKey.values()).map(CommonIndexParamKey::needDefault).count());
-
-        // set values, so do not set default
-        properties.put(IMP_LIB.name(), "other");
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.get(IMP_LIB.name()), "other");
-    }
-
-    @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "test_index";
