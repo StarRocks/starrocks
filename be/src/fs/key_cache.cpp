@@ -20,9 +20,11 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
+#include "util/defer_op.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -34,18 +36,12 @@ EncryptionKey::EncryptionKey() = default;
 EncryptionKey::EncryptionKey(EncryptionKeyPB pb) : _pb(std::move(pb)) {}
 EncryptionKey::~EncryptionKey() = default;
 
+static const std::string VAULT_KEY_IDENTIFIER = "GLOBAL_VAULT_KEY";
+
 static const std::string& get_identifier_from_pb(const EncryptionKeyPB& pb) {
     switch (pb.type()) {
     case NORMAL_KEY:
         return pb.has_plain_key() ? pb.plain_key() : pb.encrypted_key();
-    }
-    CHECK(false) << fmt::format("get_identifier_from_pb not supported for type:{}", pb.type());
-}
-
-bool is_decrypted(const EncryptionKeyPB& pb) {
-    switch (pb.type()) {
-    case NORMAL_KEY:
-        return pb.has_plain_key();
     }
     CHECK(false) << fmt::format("get_identifier_from_pb not supported for type:{}", pb.type());
 }
@@ -102,6 +98,8 @@ public:
         ASSIGN_OR_RETURN(key->_plain_key, unwrap_key(key->algorithm(), _plain_key, key->_pb.encrypted_key()));
         return Status::OK();
     }
+
+    void set_plain_key(const std::string& plain_key) { _plain_key = plain_key; }
 
     StatusOr<std::string> get_plain_key() const override {
         if (_plain_key.empty()) {
@@ -272,7 +270,9 @@ Status KeyCache::refresh_keys(const std::string& key_meta) {
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
     RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, nkey - 1));
-    LOG(INFO) << "refresh keys, num keys before: " << size_before << " after:" << size();
+    if (size_before != size()) {
+        LOG(INFO) << "refresh keys, num keys before: " << size_before << " after:" << size();
+    }
     return Status::OK();
 }
 

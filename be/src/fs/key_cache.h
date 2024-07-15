@@ -28,8 +28,6 @@ struct FileEncryptionPair {
     std::string encryption_meta;
 };
 
-bool is_decrypted(const EncryptionKeyPB& pb);
-
 class EncryptionKey {
 public:
     static constexpr int64_t INVALID_KEY_ID = 0;
@@ -54,7 +52,7 @@ public:
 
     EncryptionKeyTypePB type() const { return _pb.type(); }
 
-    EncryptionAlgorithmPB algorithm() const { return _pb.algorithm(); }
+    virtual EncryptionAlgorithmPB algorithm() const { return _pb.algorithm(); }
 
     const EncryptionKeyPB& pb() const { return _pb; }
 
