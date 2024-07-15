@@ -60,7 +60,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -207,8 +206,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     @SerializedName(value = "mvs")
     protected Set<MvId> relatedMaterializedViews;
 
-    protected Optional<Long> snapshotId = Optional.empty();
-
     // unique constraints for mv rewrite
     // a table may have multi unique constraints
     protected List<UniqueConstraint> uniqueConstraints;
@@ -267,14 +264,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public Optional<Long> getSnapshotId() {
-        return snapshotId;
-    }
-
-    public void setSnapshotId(Optional<Long> snapshotId) {
-        this.snapshotId = snapshotId;
     }
 
     public String getTableIdentifier() {

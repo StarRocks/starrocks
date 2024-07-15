@@ -340,28 +340,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        return getTable(dbName, tblName, Optional.empty(), Optional.empty());
-    }
-
-    @Override
-    public Table getTable(String dbName, String tblName, Optional<ConnectorTableVersion> startVersion,
-                          Optional<ConnectorTableVersion> endVersion) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
         }
 
         try {
-            if (startVersion.isPresent()) {
-                throw new StarRocksConnectorException("Read table with start version is not supported");
-            }
-
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
-
-            Optional<Long> snapshotId = Optional.empty();
-            if (endVersion.isPresent()) {
-                snapshotId = Optional.of(getSnapshotIdFromVersion(icebergTable, endVersion.get()));
-            }
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
             if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
@@ -370,9 +355,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
-            if (snapshotId.isPresent()) {
-                table.setSnapshotId(snapshotId);
-            }
 
             tables.put(identifier, table);
             return table;
@@ -459,12 +441,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    @Override
-    public TableVersionRange getTableVersionRange(Table table) {
-        IcebergTable icebergTable = (IcebergTable) table;
-        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                .map(Snapshot::snapshotId);
-        return TableVersionRange.withEnd(snapshotId);
+    public TableVersionRange getTableVersionRange(Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isPresent()) {
+            throw new StarRocksConnectorException("Read table with start version is not supported");
+        }
+
+        if (endVersion.isEmpty()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                    .map(Snapshot::snapshotId);
+            return TableVersionRange.withEnd(snapshotId);
+        } else {
+            Long snapshotId = getSnapshotIdFromVersion(((IcebergTable) table).getNativeTable(), endVersion.get());
+            return TableVersionRange.withEnd(Optional.of(snapshotId));
+        }
     }
 
     @Override

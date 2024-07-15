@@ -504,19 +504,6 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Table getTable(String catalogName, String dbName, String tblName,
-                          Optional<ConnectorTableVersion> startVersion, Optional<ConnectorTableVersion> endVersion) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName, startVersion, endVersion))
-                .orElse(null);
-        if (connectorTable != null) {
-            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
-            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
-        }
-        return connectorTable;
-    }
-
-
     public Table getTable(Long databaseId, Long tableId) {
         Database database = localMetastore.getDb(databaseId);
         if (database == null) {
@@ -525,9 +512,11 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public TableVersionRange getTableVersionRange(Table table) {
+    public TableVersionRange getTableVersionRange(Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table))
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table, startVersion, endVersion))
                 .orElse(TableVersionRange.empty().empty());
     }
 
