@@ -341,7 +341,8 @@ public class ConnectProcessor {
                 ctx.setIsLastStmt(i == stmts.size() - 1);
 
                 //Build View SQL without Policy Rewrite
-                new AstTraverser<Void, Void>() {
+                //System functions can only be executed by the leader
+                new AstTraverser<Void, Void>(executor) {
                     @Override
                     public Void visitRelation(Relation relation, Void context) {
                         relation.setNeedRewrittenByPolicy(true);

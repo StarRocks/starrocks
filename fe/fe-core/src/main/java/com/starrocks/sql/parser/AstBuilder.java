@@ -20,68 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NamedArgument;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OdbcScalarFunctionCall;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TaskName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.VarBinaryLiteral;
-import com.starrocks.analysis.VariableExpr;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
@@ -6156,10 +6095,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
         String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
-        NodePosition pos = createPos(context);
-
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
+
+        if (!functionName.startsWith("system$")) {
+            return visitSimpleFunction(fnName, context);
+        } else {
+            return visitSystemFunction(fnName, context);
+        }
+    }
+
+    public ParseNode visitSimpleFunction(FunctionName fnName, StarRocksParser.SimpleFunctionCallContext context) {
+        String functionName = fnName.getFunction();
+        NodePosition pos = createPos(context);
+
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
@@ -6348,6 +6297,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
         return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    public ParseNode visitSystemFunction(FunctionName fnName, StarRocksParser.SimpleFunctionCallContext context) {
+        NodePosition pos = createPos(context);
+        //system functions do not support the db.$system format
+        if (fnName.getDb() != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidSystemFunctionName(String.format("%s.%s",
+                    fnName.getDb(), fnName.getFunction())), pos);
+        }
+
+        SystemFunctionCallExpr systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
+        return SyntaxSugars.parse(systemFunctionCallExpr);
     }
 
     @Override

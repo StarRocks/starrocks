@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
@@ -43,6 +44,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
@@ -367,6 +369,47 @@ public class QueryPlannerTest {
             connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
             Assert.assertTrue(executor.isForwardToLeader() == true);
         }
+    }
+
+    @Test
+    public void testFollowerProxyQueryWithSystemFunction() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FrontendNodeType getFeType() {
+                return FrontendNodeType.FOLLOWER;
+            }
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        String sql = "select system$cbo_stats_show_exclusion()";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor executor = new StmtExecutor(connectContext, statement);
+        new AstTraverser<Void, Void>(executor) {
+            @Override
+            public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Void context) {
+                executor.setIsForwardToLeaderOpt(true);
+                System.out.println("system$cbo_stats_show_exclusion()");
+                return null;
+            }
+        }.visit(statement);
+
+        Assert.assertTrue(executor.isForwardToLeader() == true);
+
+        sql = "select database()";
+        StatementBase statementSelectDb = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor executorSelectDb = new StmtExecutor(connectContext, statementSelectDb);
+        new AstTraverser<Void, Void>(executorSelectDb) {
+            @Override
+            public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Void context) {
+                executorSelectDb.setIsForwardToLeaderOpt(true);
+                return null;
+            }
+        }.visit(statementSelectDb);
+        connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+        Assert.assertTrue(executorSelectDb.isForwardToLeader() == false);
     }
 
     @Test

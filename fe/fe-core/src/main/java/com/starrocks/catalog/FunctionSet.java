@@ -35,6 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -42,16 +44,19 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -515,6 +520,12 @@ public class FunctionSet {
 
     public static final String CURRENT_ROLE = "current_role";
 
+    public static final String CBO_STATS_ADD_EXCLUSION = "system$cbo_stats_add_exclusion";
+
+    public static final String CBO_STATS_REMOVE_EXCLUSION = "system$cbo_stats_remove_exclusion";
+
+    public static final String CBO_STATS_SHOW_EXCLUSION = "system$cbo_stats_show_exclusion";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -566,6 +577,17 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
+
+    private final Map<String , List<Function>> systemFunctions;
+
+    private final Map<Function, GenericFunction> systemFunctionTables;
+
+    private static final Class<?>[] EMPTY_ARRAY = new Class[] {};
+
+    private static final Cache<Class<?>, Constructor<?>> CONSTRUCTOR_CACHE =
+            CacheBuilder.newBuilder().expireAfterAccess(15, TimeUnit.MINUTES)
+                    .concurrencyLevel(64)
+                    .weakKeys().weakValues().build();
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
@@ -730,6 +752,8 @@ public class FunctionSet {
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
+        systemFunctions = Maps.newHashMap();
+        systemFunctionTables = Maps.newHashMap();
     }
 
     /**
@@ -795,6 +819,7 @@ public class FunctionSet {
         TableFunction.initBuiltins(this);
         VectorizedBuiltinFunctions.initBuiltins(this);
         initAggregateBuiltins();
+        SystemFunction.initBuiltins(this);
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
@@ -902,6 +927,30 @@ public class FunctionSet {
         return matchCastFunction(desc, mode, standFns);
     }
 
+    public Function getSystemFunction(Function desc, Function.CompareMode mode) {
+        List<Function> fns = systemFunctions.get(desc.functionName());
+        if (fns == null || fns.isEmpty()) {
+            return null;
+        }
+
+        //system functions do not currently support polymorphism
+        Function func;
+        func = matchStrictFunction(desc, mode, fns);
+        if (func != null) {
+            return func;
+        }
+
+        return matchCastFunction(desc, mode, fns);
+    }
+
+    public GenericFunction getGenericFunction(Function fn) {
+        return systemFunctionTables.get(fn);
+    }
+
+    public Map<Function, GenericFunction> getGenericFunctions() {
+        return systemFunctionTables;
+    }
+
     private void addBuiltInFunction(Function fn) {
         Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
@@ -932,6 +981,30 @@ public class FunctionSet {
      */
     public void addBuiltin(Function fn) {
         addBuiltInFunction(fn);
+    }
+
+    public void addSystemFunctionBuiltin(Class<? extends GenericFunction> genericFunClass, String fnName, boolean varArgs,
+                                         Type retType, Type... args) {
+        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
+        SystemFunction fn = SystemFunction.createSystemFunctionBuiltin(fnName, argsType, varArgs, retType);
+        List<Function> fns = systemFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
+        fns.add(fn);
+
+        GenericFunction genericFunction = newSystemFunctionInstance(genericFunClass);
+        systemFunctionTables.put(fn, genericFunction);
+    }
+
+    public <T> T newSystemFunctionInstance(Class<T> theClass) {
+        try {
+            Constructor<?> constructor = CONSTRUCTOR_CACHE.getIfPresent(theClass);
+            if (constructor == null) {
+                constructor = theClass.getDeclaredConstructor(EMPTY_ARRAY);
+                CONSTRUCTOR_CACHE.put(theClass, constructor);
+            }
+            return (T)constructor.newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // Populate all the aggregate builtins in the globalStateMgr.
@@ -1446,6 +1519,11 @@ public class FunctionSet {
         for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {
             builtinFunctions.addAll(entry.getValue());
         }
+
+        for (Map.Entry<String, List<Function>> entry : systemFunctions.entrySet()) {
+            builtinFunctions.addAll(entry.getValue());
+        }
+
         return builtinFunctions;
     }
 

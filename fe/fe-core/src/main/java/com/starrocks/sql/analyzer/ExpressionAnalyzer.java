@@ -58,6 +58,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
@@ -81,6 +82,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -90,6 +92,7 @@ import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -192,7 +195,7 @@ public class ExpressionAnalyzer {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
-    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
+    private void rewriteHighOrderFunction(Expr expr, AstVisitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
@@ -251,7 +254,7 @@ public class ExpressionAnalyzer {
     }
 
     // only high-order functions can use lambda functions.
-    void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
+    void analyzeHighOrderFunction(AstVisitor visitor, Expr expression, Scope scope) {
         if (!isHighOrderFunction(expression)) {
             String funcName = "";
             if (expression instanceof FunctionCallExpr) {
@@ -354,7 +357,7 @@ public class ExpressionAnalyzer {
         scope.clearLambdaInputs();
     }
 
-    private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
+    private void bottomUpAnalyze(AstVisitor visitor, Expr expression, Scope scope) {
         boolean hasLambdaFunc = false;
         try {
             hasLambdaFunc = expression.hasLambdaFunction(expression);
@@ -1238,6 +1241,37 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Scope scope) {
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+
+            Function fn;
+            String fnName = node.getFnName().getFunction();
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        fnName,
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+
+            GenericFunction genericFunc = Expr.getGenericFunction(fn);
+            if (genericFunc == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        fnName,
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+            node.setFn(fn);
+            node.setType(fn.getReturnType());
+
+            //all check/analyze operations are unified into the init method
+            genericFunc.init(node, session);
+            return null;
+        }
+
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
                 case FunctionSet.TIME_SLICE:
@@ -2068,5 +2102,30 @@ public class ExpressionAnalyzer {
                 new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
+    public static class AnalyzeSystemFunctionVisitor implements AstVisitor<Void, Scope> {
+        private StmtExecutor executor;
+
+        public AnalyzeSystemFunctionVisitor(StmtExecutor executor) {
+            this.executor = executor;
+        }
+
+        @Override
+        public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Scope scope) {
+            executor.setIsForwardToLeaderOpt(true);
+            return null;
+        }
+    }
+
+    public static void analyzeSystemFunctionExpression(Expr expression,
+                                                       StmtExecutor executor, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+        expressionAnalyzer.analyzeSysFunctionExpr(expression, scope, executor);
+    }
+
+    public void analyzeSysFunctionExpr(Expr expression, Scope scope, StmtExecutor executor) {
+        AnalyzeSystemFunctionVisitor visitor = new AnalyzeSystemFunctionVisitor(executor);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
 }
 

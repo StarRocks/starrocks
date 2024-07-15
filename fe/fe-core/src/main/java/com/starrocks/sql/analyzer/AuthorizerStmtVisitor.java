@@ -233,6 +233,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
+        //The system function involves the privilege object, which is checked in the SqlToScalarOperatorTranslator.
+        //for example:select system$cbo_stats_add_exclusion(catalog.db.table, FULL)
         checkSelectTableAction(context, statement, Lists.newArrayList());
         return null;
     }

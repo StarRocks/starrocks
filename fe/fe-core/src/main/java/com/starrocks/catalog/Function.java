@@ -147,6 +147,8 @@ public class Function implements Writable {
     // we could evaluate the function only with the dict content, not all string column data.
     private boolean couldApplyDictOptimize = false;
 
+    private boolean isSystemFunction = false;
+
     private boolean isNullable = true;
 
     private Vector<Pair<String, Expr>> defaultArgExprs;
@@ -416,6 +418,10 @@ public class Function implements Writable {
 
     public boolean isCouldApplyDictOptimize() {
         return couldApplyDictOptimize;
+    }
+
+    public void setIsSystemFunction(boolean isSystemFunction) {
+        this.isSystemFunction = isSystemFunction;
     }
 
     public void setCouldApplyDictOptimize(boolean couldApplyDictOptimize) {

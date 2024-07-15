@@ -19,6 +19,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SystemFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -56,6 +57,8 @@ public class CallOperator extends ScalarOperator {
 
     // Ignore nulls.
     private boolean ignoreNulls = false;
+
+    private boolean isSystemFunction = false;
 
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
@@ -118,6 +121,14 @@ public class CallOperator extends ScalarOperator {
 
     public boolean isRemovedDistinct() {
         return removedDistinct;
+    }
+
+    public boolean isSystemFunction() {
+        return fn != null && fn instanceof SystemFunction;
+    }
+
+    public void setIsSystemFunction(boolean isSystemFunction) {
+        this.isSystemFunction = isSystemFunction;
     }
 
     @Override

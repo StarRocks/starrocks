@@ -1,0 +1,17 @@
+-- name: test_system_function
+create database  test_system_function;
+-- result:
+[]
+-- !result
+select system$cbo_stats_show_exclusion();
+-- result:
+[]
+-- !result
+select test_system_function.system$cbo_stats_show_exclusion();
+-- result:
+E: (1064, "Getting syntax error from line 1, column 7 to line 1, column 60. Detail message: Invalid System function name 'test_system_function.system$cbo_stats_show_exclusion'.")
+-- !result
+select system$cbo_stats_show_exclusion(1);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: No matching system function with signature: system$cbo_stats_show_exclusion(tinyint(4)).')
+-- !result

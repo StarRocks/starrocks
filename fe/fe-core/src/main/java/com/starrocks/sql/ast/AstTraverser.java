@@ -17,9 +17,18 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 public class AstTraverser<R, C> implements AstVisitor<R, C> {
+    public StmtExecutor executor = null;
+
+    public AstTraverser() {}
+
+    public AstTraverser(StmtExecutor executor) {
+        this.executor = executor;
+    }
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 
@@ -119,6 +128,14 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
         if (node.getHaving() != null) {
             visit(node.getHaving());
+        }
+
+        if (executor != null) {
+            for (SelectListItem item : node.getSelectList().getItems()) {
+                if (!item.isStar()) {
+                    ExpressionAnalyzer.analyzeSystemFunctionExpression(item.getExpr(), executor, null);
+                }
+            }
         }
 
         return visit(node.getRelation());
