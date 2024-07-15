@@ -1319,6 +1319,48 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
+    def print_hit_materialized_view(self, query, *expects) -> bool:
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        plan = str(res["result"])
+        for expect in expects:
+            if plan.find(expect) > 0:
+                return True
+        return False
+
+    def assert_equal_result(self, *sqls):
+        if len(sqls) < 2:
+            return
+
+        res_list = []
+        # could be faster if making this loop parallel
+        for sql in sqls:
+            if sql.startswith(TRINO_FLAG):
+                sql = sql[len(TRINO_FLAG):]
+                res = self.trino_execute_sql(sql)
+            elif sql.startswith(SPARK_FLAG):
+                sql = sql[len(SPARK_FLAG):]
+                res = self.spark_execute_sql(sql)
+            elif sql.startswith(HIVE_FLAG):
+                sql = sql[len(HIVE_FLAG):]
+                res = self.hive_execute_sql(sql)
+            else:
+                res = self.execute_sql(sql)
+
+            tools.assert_true(res["status"])
+            res_list.append(res["result"])
+
+        # assert equal result
+        for i in range(1, len(res_list)):
+            tools.assert_equal(res_list[0], res_list[i])
+
     def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
