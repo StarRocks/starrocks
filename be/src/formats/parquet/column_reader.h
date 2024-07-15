@@ -129,7 +129,13 @@ public:
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
+<<<<<<< HEAD
     std::unique_ptr<ColumnConverter> converter;
+=======
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 };
 
 } // namespace starrocks::parquet
