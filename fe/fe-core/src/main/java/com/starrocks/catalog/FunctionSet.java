@@ -1002,6 +1002,8 @@ public class FunctionSet {
                 CONSTRUCTOR_CACHE.put(theClass, constructor);
             }
             return (T)constructor.newInstance();
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException("Constructor not found for: " + theClass.getName(), e);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -2111,7 +2111,9 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Scope scope) {
-            executor.setIsForwardToLeaderOpt(true);
+            if (executor != null) {
+                executor.setIsForwardToLeaderOpt(true);
+            }
             return null;
         }
     }

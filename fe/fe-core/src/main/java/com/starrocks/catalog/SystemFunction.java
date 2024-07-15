@@ -73,17 +73,17 @@ public class SystemFunction extends Function {
 
     @Override
     public TFunction toThrift() {
-        throw new Error("System function cannot be serialized.");
+        throw new UnsupportedOperationException("System function cannot be serialized.");
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
-        throw new Error("System function cannot be serialized.");
+        throw new UnsupportedOperationException("System function cannot be serialized.");
     }
 
     @Override
     public void readFields(DataInput input) throws IOException {
-        throw new Error("System function cannot be serialized.");
+        throw new UnsupportedOperationException("System function cannot be serialized.");
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
