@@ -103,7 +103,11 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Schema;
+<<<<<<< HEAD
 import org.apache.iceberg.Snapshot;
+=======
+import org.apache.iceberg.TableMetadata;
+>>>>>>> b1126649d4 ([BugFix] fix npe on iceberg v1 table when table uuid is null (#48363))
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -1484,4 +1488,72 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
         Assert.assertEquals("xxx", table.getTableLocation());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testVersionRange() {
+        TableVersionRange versionRange = TableVersionRange.empty();
+        Assert.assertTrue(versionRange.isEmpty());
+        Assert.assertTrue(versionRange.start().isEmpty());
+        versionRange = TableVersionRange.withEnd(Optional.of(1L));
+        Assert.assertFalse(versionRange.isEmpty());
+        Assert.assertNotNull(versionRange.toString());
+    }
+
+    @Test
+    public void testGetSnapshotIdFromVersion() {
+        ConstantOperator constantOperator = new ConstantOperator("2023-01-01", VARCHAR);
+        ConnectorTableVersion tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion));
+
+        constantOperator = new ConstantOperator(LocalDateTime.now(), DATE);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion1 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion1));
+
+        constantOperator = new ConstantOperator("2000-01-01 00:00:00", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion2 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion2));
+
+        constantOperator = new ConstantOperator("not_exist", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion3 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Cannot find snapshot with reference name",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion3));
+
+        constantOperator = new ConstantOperator(123, INT);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion4 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported type for table version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
+    }
+
+    public void testNullTableUUID() {
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Assert.assertEquals(2, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(4, icebergTable.getUUID().split("\\.").length);
+
+        new MockUp<TableMetadata>() {
+            @Mock
+            public String uuid() {
+                return null;
+            }
+        };
+        Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
+    }
+}
+>>>>>>> b1126649d4 ([BugFix] fix npe on iceberg v1 table when table uuid is null (#48363))
