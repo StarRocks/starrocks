@@ -11,12 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.sql.analyzer;
+package com.starrocks.mv.analyzer;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -34,10 +36,10 @@ import com.starrocks.sql.ast.ViewRelation;
 import java.util.List;
 
 /**
- * Resolve the expression(eg: partition column expression) through join/sub-query/view/set operator fo find the slot ref
- * which it comes from.
+ * {@code MVPartitionSlotRefResolver} Resolve the expression(eg: partition column expression) through
+ * join/sub-query/view/set operator fo find the slot ref which it comes from.
  */
-public class SlotRefResolver {
+public class MVPartitionSlotRefResolver {
     private  static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new AstVisitor<Expr, Relation>() {
         @Override
         public Expr visit(ParseNode node) {
