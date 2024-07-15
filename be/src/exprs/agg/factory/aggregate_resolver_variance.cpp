@@ -21,6 +21,7 @@ struct StdDispatcher {
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
                     "var_pop", true, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
 
+<<<<<<< HEAD
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
                     "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
@@ -34,6 +35,24 @@ struct StdDispatcher {
                     "stddev_pop", true, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
                     "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<pt, true>());
+=======
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    typename VarianceAggregateFunction<lt, true>::AggNullPred());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "var_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    typename VarianceAggregateFunction<lt, true>::AggNullPred());
+
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "std", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev_pop", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+            resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
+                    "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<lt, true>(),
+                    typename StddevAggregateFunction<lt, true>::AggNullPred());
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904))
         }
     };
 };
@@ -46,12 +65,23 @@ struct CorVarDispatcher {
             resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, VarState>(
                     "covar_pop", true, AggregateFactory::MakeCovarianceAggregateFunction<pt, false>());
 
+<<<<<<< HEAD
             resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, VarState>(
                     "covar_samp", true, AggregateFactory::MakeCovarianceAggregateFunction<pt, true>());
 
             using CorrState = CovarianceCorelationAggregateState<true>;
             resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, CorrState>(
                     "corr", true, AggregateFactory::MakeCorelationAggregateFunction<pt>());
+=======
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, VarState>(
+                    "covar_samp", true, AggregateFactory::MakeCovarianceAggregateFunction<lt, true>(),
+                    typename CorVarianceAggregateFunction<lt, true>::AggNullPred());
+
+            using CorrState = CovarianceCorelationAggregateState<true>;
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_DOUBLE, CorrState>(
+                    "corr", true, AggregateFactory::MakeCorelationAggregateFunction<lt>(),
+                    typename CorelationAggregateFunction<lt>::AggNullPred());
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904))
         }
     }
 };

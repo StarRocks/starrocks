@@ -100,7 +100,21 @@ struct AggFunctionTypes {
     TypeDescriptor serde_type; // for serialize
     std::vector<FunctionContext::TypeDesc> arg_typedescs;
     bool has_nullable_child;
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.h
     bool is_nullable; // agg function result whether is nullable
+=======
+    bool is_nullable; // whether result of agg function is nullable
+    // hold order-by info
+    std::vector<bool> is_asc_order;
+    std::vector<bool> nulls_first;
+
+    bool is_distinct = false;
+    bool is_always_nullable_result = false;
+
+    template <bool UseIntermediateAsOutput>
+    bool is_result_nullable() const;
+    bool use_nullable_fn(bool use_intermediate_as_output) const;
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904)):be/src/exec/aggregator.h
 };
 
 struct ColumnType {
@@ -139,7 +153,49 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.h
 // Component used to process aggregation including bloking aggregate and streaming aggregate
+=======
+struct AggregatorParams {
+    bool needs_finalize;
+    bool has_outer_join_child;
+    int64_t limit;
+    bool enable_pipeline_share_limit;
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode;
+    TupleId intermediate_tuple_id;
+    TupleId output_tuple_id;
+    std::string sql_grouping_keys;
+    std::string sql_aggregate_functions;
+    std::vector<TExpr> conjuncts;
+    std::vector<TExpr> grouping_exprs;
+    std::vector<TExpr> aggregate_functions;
+    std::vector<TExpr> intermediate_aggr_exprs;
+
+    // Incremental MV
+    // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
+    bool is_testing;
+    // Whether input is only append-only or with retract messages.
+    bool is_append_only;
+    // Whether output is generated with retract or without retract messages.
+    bool is_generate_retract;
+    // The agg index of count agg function.
+    int32_t count_agg_idx;
+
+    // aggregate function types
+    // only invalid after inited
+    std::vector<AggFunctionTypes> agg_fn_types;
+    // group by types
+    // only invalid after inited
+    std::vector<ColumnType> group_by_types;
+
+    bool has_nullable_key;
+
+    void init();
+};
+using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
+AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
+
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904)):be/src/exec/aggregator.h
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
@@ -350,7 +406,13 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.h
     Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+=======
+    void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
+    [[nodiscard]] Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
+                                                   bool force_use_intermediate_as_output = false);
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904)):be/src/exec/aggregator.h
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);

@@ -72,30 +72,49 @@ public:
         }
     }
 
+<<<<<<< HEAD
     template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
     void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+=======
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+    void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
+                               AggNullPred null_pred = AggNullPred()) {
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904))
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
-        auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun);
+        auto nullable_agg =
+                AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun, null_pred);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), nullable_agg);
 
         if (is_window) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
-            auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(fun);
+            auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
+                    fun, std::move(null_pred));
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), nullable_agg);
         }
     }
 
+<<<<<<< HEAD
     template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+=======
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr,
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
+                                        AggNullPred null_pred = AggNullPred()) {
+>>>>>>> 023e50ba5e ([BugFix] Fix statistics agg functions to return NULL incorrectly (#47904))
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
-        auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun);
+        auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun, null_pred);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), variadic_agg);
 
         if (is_window) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
-            auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun);
+            auto variadic_agg =
+                    AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun, std::move(null_pred));
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), variadic_agg);
         }
     }
