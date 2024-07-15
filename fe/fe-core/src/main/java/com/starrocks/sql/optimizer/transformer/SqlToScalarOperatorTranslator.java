@@ -728,21 +728,13 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitInformationFunction(InformationFunction node,
-                                                       Context context) {
-            if (node.getFuncType().equalsIgnoreCase("CONNECTION_ID")) {
-                return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                        ConstantOperator.createBigint(node.getIntValue())));
-            }
-
-            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
-                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+        public ScalarOperator visitInformationFunction(InformationFunction node, Context context) {
+            String funcType = node.getFuncType();
+            if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+                return ConstantOperator.createBigint(node.getIntValue());
+            } else {
                 return ConstantOperator.createVarchar(node.getStrValue());
             }
-
-            return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                    ConstantOperator.createVarchar(node.getStrValue()),
-                    ConstantOperator.createBigint(node.getIntValue())));
         }
 
         @Override
