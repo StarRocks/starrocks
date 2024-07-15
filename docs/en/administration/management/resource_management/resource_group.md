@@ -68,7 +68,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `max_cpu_cores`
 
-  The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+  The CPU core threshold for triggering query queue in FE. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues). It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
 - `spill_mem_limit_threshold`
 
