@@ -295,6 +295,59 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     return Status::OK();
 }
 
+Status RowsetWriter::_flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    for (const auto& index : segment_pb.seg_indexes()) {
+        // 1. create segment file
+        auto res = IndexDescriptor::get_index_file_path(index.index_type(), _context.rowset_path_prefix,
+                                                        _context.rowset_id.to_string(), segment_pb.segment_id(),
+                                                        index.index_id());
+        if (!res.ok()) {
+            if (res.status().is_not_supported()) {
+                return Status::OK();
+            } else {
+                return res.status();
+            }
+        }
+
+        auto path = res.value();
+
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path))
+
+        // 2. flush segment file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+        butil::IOBuf index_data;
+        int64_t remaining_bytes = data.cutn(&index_data, index.index_file_size());
+        if (remaining_bytes != index.index_file_size()) {
+            return Status::InternalError(fmt::format("segment index {} file size {} not equal attachment size {}", path,
+                                                     remaining_bytes, index.index_file_size()));
+        }
+        while (remaining_bytes > 0) {
+            auto written_bytes = index_data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
+        }
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("index segment {} write size {} not equal expected size {}",
+                                                     wfile->filename(), index.index_file_size() - remaining_bytes,
+                                                     index.index_file_size()));
+        }
+        RETURN_IF_ERROR(wfile->close());
+
+        // 3. update statistic
+        {
+            std::lock_guard<std::mutex> l(_lock);
+            _num_indexfile++;
+        }
+
+        VLOG(2) << "Flush segment index " << index.index_id() << " to " << path << " size " << index.index_file_size();
+    }
+    return Status::OK();
+}
+
 Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBuf& data) {
     // 1. create delete file
     auto path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.delete_id());
@@ -385,10 +438,13 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
 }
 
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size()) {
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size() +
+                               segment_pb.seg_index_data_size()) {
         return Status::InternalError(fmt::format(
-                "segment size {} + delete file size {} + update file size {} not equal attachment size {}",
-                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(), data.size()));
+                "segment size {} + delete file size {} + update file size {} + seg_index file size {} not equal "
+                "attachment size {}",
+                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(),
+                segment_pb.seg_index_data_size(), data.size()));
     }
 
     if (segment_pb.has_path()) {
@@ -401,6 +457,10 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
 
     if (segment_pb.has_update_path()) {
         RETURN_IF_ERROR(_flush_update_file(segment_pb, data));
+    }
+
+    if (!segment_pb.seg_indexes().empty()) {
+        RETURN_IF_ERROR(_flush_index_files(segment_pb, data));
     }
 
     return Status::OK();
@@ -1058,6 +1118,22 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
+        if (_context.tablet_schema && !_context.tablet_schema->indexes()->empty()) {
+            auto mutable_indexes = seg_info->mutable_seg_indexes();
+            for (const auto& index : *(_context.tablet_schema->indexes())) {
+                if (index.index_type() == VECTOR) {
+                    SegmentIndexPB seg_index_pb;
+                    seg_index_pb.set_index_id(index.index_id());
+                    auto index_path = IndexDescriptor::vector_index_file_path(
+                            _writer_options.segment_file_mark.rowset_path_prefix,
+                            _writer_options.segment_file_mark.rowset_id, (*segment_writer)->segment_id(),
+                            index.index_id());
+                    seg_index_pb.set_index_path(index_path);
+                    seg_index_pb.set_index_type(index.index_type());
+                    mutable_indexes->Add(std::move(seg_index_pb));
+                }
+            }
+        }
     }
 
     (*segment_writer).reset();

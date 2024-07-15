@@ -1399,4 +1399,14 @@ CONF_mString(try_release_resource_before_core_dump, "data_cache");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
 
+// vector index
+// Enable caching index blocks for IVF-family vector indexes
+CONF_mBool(enable_vector_index_block_cache, "true");
+
+// concurrency of building tenann index
+CONF_mInt32(config_tenann_build_concurrency, "8");
+
+// default not to build the empty index
+CONF_mInt32(config_tenann_default_build_threshold, "0");
+
 } // namespace starrocks::config

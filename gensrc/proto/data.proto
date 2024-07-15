@@ -38,6 +38,7 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "tablet_schema.proto";
 
 message PQueryStatistics {
     optional int64 scan_rows = 1;
@@ -88,6 +89,13 @@ message ChunkPB {
     repeated ChunkExtraColumnsMetaPB extra_data_metas = 11; // chunk's extra data meta.
 };
 
+message SegmentIndexPB {
+    optional string index_path = 1;
+    optional int64 index_id = 2;
+    optional int64 index_file_size = 3;
+    optional IndexType index_type = 4;
+}
+
 message SegmentPB {
     optional int64 segment_id = 1;
     optional bytes data = 2;
@@ -111,4 +119,8 @@ message SegmentPB {
     optional string update_path = 17;
     optional int64 update_row_size = 18;
     optional bytes encryption_meta = 19;
+
+    // for index
+    optional int64 seg_index_data_size = 30;
+    repeated SegmentIndexPB seg_indexes = 31;
 };

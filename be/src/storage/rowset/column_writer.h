@@ -72,6 +72,7 @@ struct ColumnWriterOptions {
     bool need_zone_map = false;
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
+    bool need_vector_index = false;
     bool need_inverted_index = false;
     std::unordered_map<IndexType, std::string> standalone_index_file_paths;
     std::unordered_map<IndexType, TabletIndex> tablet_index;
@@ -131,6 +132,8 @@ public:
     virtual Status write_bloom_filter_index() = 0;
 
     virtual Status write_inverted_index() { return Status::OK(); }
+
+    virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
 
     virtual ordinal_t get_next_rowid() const = 0;
 

@@ -21,3 +21,24 @@ ALTER TABLE t_test_vector_table add index index_vector2 (vector2) USING VECTOR (
 ALTER TABLE t_test_vector_table drop index index_vector2;
 
 DROP TABLE t_test_vector_table;
+
+-- name: test_write_vector_index
+CREATE TABLE `t_test_vector_table` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `vector1` ARRAY<FLOAT> NOT NULL COMMENT "",
+  INDEX index_vector1 (`vector1`) USING VECTOR ("metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "512", "index_type" = "hnsw", "dim"="5")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+insert into t_test_vector_table values(1, [1,2,3,4,5]);
+insert into t_test_vector_table values(2, [-1,-2,-3,-4,-5]);
+insert into t_test_vector_table values(3, [0,0,0,0,0]);
+
+DROP TABLE t_test_vector_table;
