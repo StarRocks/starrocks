@@ -84,7 +84,7 @@ public:
 
     int64_t* _counter = nullptr;
 };
-template<class T>
+template <class T>
 void swap(CountingAllocator<T>& lhs, CountingAllocator<T>& rhs) {
     lhs.swap(rhs);
 }
