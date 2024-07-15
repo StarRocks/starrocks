@@ -47,8 +47,11 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
-    // optional temporal clause for external MySQL tables that support this syntax
-    private String temporalClause;
+    // used for mysql external table
+    private String queryPeriodString;
+
+    // used for time travel
+    private QueryPeriod queryPeriod;
 
     private Expr partitionPredicate;
 
@@ -200,12 +203,20 @@ public class TableRelation extends Relation {
         return name.toString();
     }
 
-    public void setTemporalClause(String temporalClause) {
-        this.temporalClause = temporalClause;
+    public String getQueryPeriodString() {
+        return queryPeriodString;
     }
 
-    public String getTemporalClause() {
-        return this.temporalClause;
+    public void setQueryPeriodString(String queryPeriodString) {
+        this.queryPeriodString = queryPeriodString;
+    }
+
+    public QueryPeriod getQueryPeriod() {
+        return queryPeriod;
+    }
+
+    public void setQueryPeriod(QueryPeriod queryPeriod) {
+        this.queryPeriod = queryPeriod;
     }
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {

@@ -38,16 +38,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_ICEBERG_SCAN,
-                table,
-                colRefToColumnMetaMap,
-                columnMetaToColRefMap,
-                limit,
-                predicate, null, TableVersionRange.empty());
-
-        Preconditions.checkState(table instanceof IcebergTable);
-        IcebergTable icebergTable = (IcebergTable) table;
-        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(Column::getName).collect(Collectors.toList()));
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
     }
 
     public LogicalIcebergScanOperator(Table table,

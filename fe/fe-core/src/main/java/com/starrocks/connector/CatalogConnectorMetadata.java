@@ -137,10 +137,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table) {
-        // TODO: refactor this in time travel patch
+    public TableVersionRange getTableVersionRange(Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        // TODO: refactor this in next patch
         if (table instanceof IcebergTable) {
-            return normal.getTableVersionRange(table);
+            return normal.getTableVersionRange(table, startVersion, endVersion);
         } else {
             return TableVersionRange.empty();
         }
