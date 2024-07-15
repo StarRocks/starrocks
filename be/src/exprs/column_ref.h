@@ -48,9 +48,7 @@ public:
 
     std::string debug_string() const override;
 
-    bool use_optimization_impl_for_dictionary_column(ExprContext* context, Chunk* ptr) const override {
-        return true;
-    }
+    bool use_optimization_impl_for_dictionary_column(ExprContext* context, Chunk* ptr) const override { return true; }
 
     // vector query engine
     StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;

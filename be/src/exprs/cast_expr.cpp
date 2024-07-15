@@ -1228,7 +1228,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {                       \
+        StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {                  \
             ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \

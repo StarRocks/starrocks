@@ -231,9 +231,7 @@ public:
         return Status::OK();
     }
 
-    bool check_dictionary_size(size_t max_size) override {
-        return _dict.size() < max_size;
-    }
+    bool check_dictionary_size(size_t max_size) override { return _dict.size() < max_size; }
 
     Status set_data(const Slice& data) override {
         if (data.size > 0) {

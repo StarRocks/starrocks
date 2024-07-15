@@ -105,9 +105,7 @@ public:
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    StatusOr<bool> check_dictionary_size(size_t max_size) override {
-        return _reader->check_dictionary_size(max_size);
-    }
+    StatusOr<bool> check_dictionary_size(size_t max_size) override { return _reader->check_dictionary_size(max_size); }
 
     Status load_dictionary_page() override { return _reader->load_dictionary_page(); }
 

@@ -228,7 +228,8 @@ public:
 
     // TODO: check error in expression and return error [[nodiscard]] Status, instead of return null column
     [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) = 0;
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_with_filter_impl(ExprContext* context, Chunk* ptr, uint8_t* filter);
+    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_with_filter_impl(ExprContext* context, Chunk* ptr,
+                                                                        uint8_t* filter);
 
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }

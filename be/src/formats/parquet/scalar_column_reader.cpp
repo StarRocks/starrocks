@@ -31,10 +31,10 @@ Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter
     if (_dict_check_state == NOT_CHECKED) {
         RETURN_IF_ERROR(_check_dictionary_state());
     }
-    _need_lazy_decode =
-            _dict_filter_ctx != nullptr || (_can_lazy_decode && filter != nullptr &&
-                                            SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO)
-                                        || _dict_check_state == OK;
+    _need_lazy_decode = _dict_filter_ctx != nullptr ||
+                        (_can_lazy_decode && filter != nullptr &&
+                         SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO) ||
+                        _dict_check_state == OK;
     ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     if (_need_lazy_decode) {
         if (_dict_code == nullptr) {
@@ -111,7 +111,8 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
             } else {
                 ColumnPtr& dict_values = dst;
                 dict_values->reserve(src->size());
-                RETURN_IF_ERROR(_reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
+                RETURN_IF_ERROR(
+                        _reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
                 DCHECK_EQ(dict_codes->size(), dict_values->size());
                 if (dict_values->is_nullable()) {
                     auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
