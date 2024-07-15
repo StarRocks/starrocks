@@ -352,12 +352,17 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 allFinished = false;
                 continue;
             }
-            TaskRunStatus status = GlobalStateMgr.getCurrentState().getTaskManager()
-                    .getTaskRunManager().getTaskRunHistory().getTaskByName(rewriteTask.getName());
-            if (status == null) {
+
+            Set<String> taskName = Sets.newHashSet();
+            taskName.add(rewriteTask.getName());
+            List<TaskRunStatus> resStatus = GlobalStateMgr.getCurrentState().getTaskManager()
+                    .getTaskRunManager().getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskName);
+            if (resStatus == null || resStatus.isEmpty()) {
                 allFinished = false;
                 continue;
             }
+            Preconditions.checkState(resStatus.size() == 1);
+            TaskRunStatus status = resStatus.get(0);
 
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
