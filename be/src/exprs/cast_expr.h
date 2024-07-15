@@ -63,6 +63,11 @@ public:
     ~CastStringToArray() override = default;
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+<<<<<<< HEAD
+=======
+    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
+                              FunctionContext::FunctionStateScope scope) override;
+>>>>>>> 0fccff0bcc ([BugFix] fix constant evaluation before expr open (#48196))
 
 private:
     Slice _unquote(Slice slice) const;

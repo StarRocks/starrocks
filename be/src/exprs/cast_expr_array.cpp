@@ -127,6 +127,19 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     }
 }
 
+<<<<<<< HEAD
+=======
+Status CastStringToArray::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        if (is_constant()) {
+            ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> 0fccff0bcc ([BugFix] fix constant evaluation before expr open (#48196))
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
