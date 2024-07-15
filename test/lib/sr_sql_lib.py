@@ -1319,8 +1319,6 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-<<<<<<< HEAD
-=======
     def print_hit_materialized_view(self, query, *expects) -> bool:
         """
         assert mv_name is hit in query
@@ -1363,7 +1361,6 @@ class StarrocksSQLApiLib(object):
         for i in range(1, len(res_list)):
             tools.assert_equal(res_list[0], res_list[i])
 
->>>>>>> b4034435cd ([Enhancement] [Refactor] (Multi Ref Base Table Part1) Enhance materialized view multi ref base table derivation (#47121))
     def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query

@@ -279,13 +279,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(table);
         // test partition related info
         MaterializedView oldMv = (MaterializedView) table;
-<<<<<<< HEAD
         Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
-=======
-        Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
-        Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
-        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
->>>>>>> b4034435cd ([Enhancement] [Refactor] (Multi Ref Base Table Part1) Enhance materialized view multi ref base table derivation (#47121))
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
