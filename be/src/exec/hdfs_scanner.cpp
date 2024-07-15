@@ -24,46 +24,6 @@
 
 namespace starrocks {
 
-class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
-public:
-    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
-            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
-
-    ~CountedSeekableInputStream() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        _stats->bytes_read += size;
-        return _stream->read_at_fully(offset, data, size);
-    }
-
-    StatusOr<std::string_view> peek(int64_t count) override {
-        auto st = _stream->peek(count);
-        return st;
-    }
-
-    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-private:
-    std::shared_ptr<io::SeekableInputStream> _stream;
-    HdfsScanStats* _stats;
-};
-
 bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
     // if there is no conjuncts, then there is no lazy materialization slot.
     // we have to read up all fields.
@@ -124,7 +84,7 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
-    ctx.tuple_desc = _scanner_params.tuple_desc;
+    ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
     ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
@@ -264,21 +224,7 @@ Status HdfsScanner::open_random_access_file() {
     return Status::OK();
 }
 
-void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
-    const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
-    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
-
-    RuntimeProfile::Counter* delete_build_timer =
-            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
-    RuntimeProfile::Counter* delete_file_build_filter_timer =
-            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildFilterTime", TUnit::TIME_NS, ICEBERG_TIMER);
-    RuntimeProfile::Counter* delete_file_per_scan_counter =
-            ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
-
-    COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
-    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
-    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
-}
+void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {}
 
 int64_t HdfsScanner::estimated_mem_usage() const {
     if (_scanner_ctx.estimated_mem_usage_per_split_task != 0) {

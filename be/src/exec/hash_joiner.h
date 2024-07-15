@@ -205,7 +205,7 @@ public:
 
     [[nodiscard]] Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
 
-    [[nodiscard]] Status build_ht(RuntimeState* state);
+    [[nodiscard]] Status build_ht(RuntimeState* state, bool mor_mode = false);
     // probe phase
     [[nodiscard]] Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
