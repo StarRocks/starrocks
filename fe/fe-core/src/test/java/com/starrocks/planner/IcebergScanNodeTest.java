@@ -41,6 +41,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
@@ -79,6 +80,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         mockedNativeTableC.newRowDelta().addRows(FILE_B_1).addDeletes(FILE_C_1).commit();
         mockedNativeTableC.refresh();
 
+        scanNode.setSnapshotId(Optional.of(mockedNativeTableC.currentSnapshot().snapshotId()));
         scanNode.setupScanRangeLocations(descTable);
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
@@ -108,8 +110,9 @@ public class IcebergScanNodeTest extends TableTestBase {
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete
         mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).addDeletes(FILE_A2_DELETES).commit();
-        mockedNativeTableC.refresh();
+        mockedNativeTableA.refresh();
 
+        scanNode.setSnapshotId(Optional.of(mockedNativeTableA.currentSnapshot().snapshotId()));
         scanNode.setupScanRangeLocations(descTable);
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);

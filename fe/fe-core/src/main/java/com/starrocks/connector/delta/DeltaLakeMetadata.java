@@ -31,6 +31,7 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -108,19 +109,19 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator operator,
+                                                   TableVersionRange versionRange, ScalarOperator operator,
                                                    List<String> fieldNames, long limit) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, operator);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, versionRange.end().get(), operator);
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, operator, fieldNames);
 
@@ -138,7 +139,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange versionRange) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getDbName();
