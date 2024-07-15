@@ -122,7 +122,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
-        Map<Table, Expr> tableToExprMap = mv.getTableToPartitionExprMap();
+        Map<Table, Expr> tableToExprMap = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
                 .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvRangePartitionMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
@@ -147,7 +147,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
         // here we should convert date into '%Y%m%d' format
         Expr partitionExpr = mv.getPartitionExpr();
-        Pair<Table, Column> partitionTableAndColumn = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumn();
         boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
         if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                 && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {

@@ -146,7 +146,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         List<Expr> sourceTablePartitionList = Lists.newArrayList();
         List<Column> partitionCols = refBaseTable.getPartitionColumns();
-        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (partitionTableAndColumn == null || !partitionTableAndColumn.containsKey(refBaseTable)) {
             return null;
         }

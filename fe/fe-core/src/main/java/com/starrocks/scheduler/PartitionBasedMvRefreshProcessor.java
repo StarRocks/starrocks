@@ -318,6 +318,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
         long startRefreshTs = System.currentTimeMillis();
 
+        // log mv basic info, it may throw exception if mv is invalid since base table has dropped
+        try {
+            LOG.info("Do mv refresh, mv:{}, refBaseTablePartitionExprMap:{}," +
+                            "refBaseTablePartitionSlotMap:{}, refBaseTablePartitionColumnMap:{}," +
+                            "refBaseTablePartitionColumn:{}, baseTableInfos:{}", materializedView.getName(),
+                    materializedView.getRefBaseTablePartitionExprs(), materializedView.getRefBaseTablePartitionSlots(),
+                    materializedView.getRefBaseTablePartitionColumns(), materializedView.getRefBaseTablePartitionColumn(),
+                    MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()));
+        } catch (Throwable e) {
+            LOG.warn("Log mv basic info failed:", e);
+        }
+
         // refresh materialized view
         RefreshJobStatus result = doRefreshMaterializedViewWithRetry(context, mvEntity);
 
@@ -349,9 +361,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                 IMaterializedViewMetricsEntity mvEntity) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
-        LOG.info("start to refresh mv:{} with retry times:{}, try lock failure retry times:{}",
-                materializedView.getName(), maxRefreshMaterializedViewRetryNum,
-                Config.max_mv_refresh_try_lock_failure_retry_times);
+        LOG.info("Start to refresh mv:{} with retry times:{}, try lock failure retry times:{}",
+                materializedView.getName(), maxRefreshMaterializedViewRetryNum);
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -1253,7 +1264,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (!(mvPartitionInfo.isRangePartition())) {
                         return false;
                     }
-                    Pair<Table, Column> partitionTableAndColumn = materializedView.getDirectTableAndPartitionColumn();
+                    Pair<Table, Column> partitionTableAndColumn = materializedView.getRefBaseTablePartitionColumn();
                     Column partitionColumn = partitionTableAndColumn.second;
                     // TODO: need to consider(non ref-base table's change)
                     // For Non-partition based base table, it's not necessary to check the partition changed.

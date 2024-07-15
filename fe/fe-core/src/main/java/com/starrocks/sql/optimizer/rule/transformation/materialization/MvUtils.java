@@ -52,7 +52,9 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -1459,5 +1461,44 @@ public class MvUtils {
             return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
         return map;
+    }
+
+    /**
+     * Get the mv partition expr by partition expr maps and table.
+     * @param partitionExprMaps partition expr maps of the specific mv
+     * @param table the base table to find the specific partition expr
+     * @return the mv partition expr if found, otherwise empty
+     */
+    public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
+        if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
+            return Optional.empty();
+        }
+        return partitionExprMaps.entrySet().stream()
+                .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
+                .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
+                .findFirst();
+    }
+
+    /**
+     * Get the column by slot ref from table's columns
+     * @param columns base table's columns
+     * @param slotRef the base table's partition slot ref to find
+     * @return the column if found, otherwise empty
+     */
+    public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
+        return columns.stream()
+                .filter(col -> SRStringUtils.areColumnNamesEqual(slotRef.getColumnName(), col.getName())).findFirst();
+    }
+
+    /**
+     * Format the base table infos to readable string.
+     * @param baseTableInfos: input base table infos
+     * @return formatted string
+     */
+    public static String formatBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
+        if (baseTableInfos == null) {
+            return "";
+        }
+        return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 }
