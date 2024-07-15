@@ -284,7 +284,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
                     copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
                 }
-                THeartbeatResult result = ThriftRPCRequestExecutor.call(
+                THeartbeatResult result = ThriftRPCRequestExecutor.callNoRetry(
                         ThriftConnectionPool.beHeartbeatPool,
                         beAddr,
                         client -> client.heartbeat(copiedMasterInfo));
@@ -412,7 +412,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             try {
                 TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
                         clientId);
-                TBrokerOperationStatus status = ThriftRPCRequestExecutor.call(
+                TBrokerOperationStatus status = ThriftRPCRequestExecutor.callNoRetry(
                         ThriftConnectionPool.brokerHeartbeatPool,
                         new TNetworkAddress(broker.ip, broker.port),
                         client -> client.ping(request));

@@ -30,11 +30,11 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -774,14 +774,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         Assert.assertTrue(plan.contains("partitions=3/7"));
     }
 
-    @NotNull
-    private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(materializedViewName));
-        refreshMVRange(materializedView.getName(), start, end, false);
-        return materializedView;
-    }
-
     @Test
     public void testHivePartitionPruneNonRefBaseTable1() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
@@ -834,17 +826,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
+            PlanTestBase.assertContains(plan, "TABLE: part_tbl1\n" +
                     "     PARTITION PREDICATES: 4: par_date >= '2020-01-05', 4: par_date < '2020-01-06'\n" +
-                    "     partitions=1/5"));
-            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
+                    "     partitions=1/5");
+            PlanTestBase.assertContains(plan, "     TABLE: part_tbl2\n" +
                     "     PARTITION PREDICATES: 8: par_date >= '2020-01-05', 8: par_date < '2020-01-06'\n" +
-                    "     partitions=0/4"));
+                    "     partitions=0/4");
         }
 
         // run 3
         {
-            // TODO: If update non-ref base table, all materialized view's partitions need to be refreshed.
             MockedHiveMetadata mockedHiveMetadata =
                     (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                             getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -856,12 +847,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
-                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-01', 4: par_date < '2020-01-06'\n" +
-                    "     partitions=5/5"));
-            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
-                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-01', 8: par_date < '2020-01-06'\n" +
-                    "     partitions=5/5"));
+            PlanTestBase.assertContains(plan, "     TABLE: part_tbl1\n" +
+                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-05', 4: par_date < '2020-01-06'\n" +
+                    "     partitions=1/5");
+            PlanTestBase.assertContains(plan, "     TABLE: part_tbl2\n" +
+                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-05', 8: par_date < '2020-01-06'\n" +
+                    "     partitions=1/5");
         }
 
         // run 4
@@ -877,7 +868,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertTrue(execPlan == null);
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(execPlan != null);
         }
 
         // run 5

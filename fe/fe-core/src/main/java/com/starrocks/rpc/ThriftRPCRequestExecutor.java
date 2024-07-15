@@ -37,7 +37,7 @@ public class ThriftRPCRequestExecutor {
             callNoRetry(ThriftConnectionPool<SERVER_CLIENT> genericPool,
                 TNetworkAddress address,
                 MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
-        return call(genericPool, address, genericPool.getDefaultTimeoutMs(), 0, callable);
+        return call(genericPool, address, genericPool.getDefaultTimeoutMs(), 1, callable);
     }
 
     public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
@@ -51,7 +51,7 @@ public class ThriftRPCRequestExecutor {
     public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
             call(ThriftConnectionPool<SERVER_CLIENT> genericPool,
             TNetworkAddress address,
-            int timeoutMs, int retryTimes,
+            int timeoutMs, int tryTimes,
             MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
         SERVER_CLIENT client;
         try {
@@ -62,19 +62,19 @@ public class ThriftRPCRequestExecutor {
 
         boolean isConnValid = false;
         try {
-            for (int i = 0; i < retryTimes; i++) {
+            for (int i = 0; i < tryTimes; i++) {
                 try {
                     RESULT t = callable.apply(client);
                     isConnValid = true;
                     return t;
                 } catch (TTransportException te) {
-                    // The frontendPool may return a broken conn,
-                    // because there is no validation of the conn in the frontendPool.
-                    // In this case we should reopen the conn and retry the rpc call,
+                    // The connection pool may return a broken conn,
+                    // because there is no validation of the connection in the connection pool.
+                    // In this case we should reopen the connection and retry the rpc call,
                     // but we do not retry for the timeout exception, because it may be a network timeout
                     // or the target server may be running slow.
                     isConnValid = genericPool.reopen(client, timeoutMs);
-                    if (i == retryTimes - 1 ||
+                    if (i == tryTimes - 1 ||
                             !isConnValid ||
                             (te.getCause() instanceof SocketTimeoutException)) {
                         LOG.warn("Call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
@@ -92,7 +92,7 @@ public class ThriftRPCRequestExecutor {
             }
         }
 
-        throw new TException("Call frontend thrift rpc failed");
+        throw new TException("Call thrift rpc failed");
     }
 
     @FunctionalInterface

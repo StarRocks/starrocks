@@ -143,8 +143,7 @@ public class KillQueryHandleTest {
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to java.net.ConnectException: Connection refused",
-                ctx.getState().getErrorMessage());
+        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"));
 
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }

@@ -461,9 +461,10 @@ public class SparkEtlJobHandlerTest {
             }
         };
 
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic = Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
             thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.callNoRetry(Mockito.any(), Mockito.any(), Mockito.any()))
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(response);
 
             BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());

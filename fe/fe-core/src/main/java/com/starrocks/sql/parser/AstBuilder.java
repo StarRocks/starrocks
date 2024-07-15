@@ -307,6 +307,7 @@ import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -4996,13 +4997,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tableRelation.setAlias(new TableName(null, identifier.getValue()));
         }
 
-        if (context.temporalClause() != null) {
-            StringBuilder sb = new StringBuilder();
-            for (ParseTree child : context.temporalClause().children) {
-                sb.append(child.getText());
-                sb.append(" ");
+        if (context.queryPeriod() != null) {
+            tableRelation.setQueryPeriodString(buildQueryPeriodString(context.queryPeriod()));
+            QueryPeriod queryPeriod = (QueryPeriod) visit(context.queryPeriod());
+            if (queryPeriod != null) {
+                tableRelation.setQueryPeriod(queryPeriod);
             }
-            tableRelation.setTemporalClause(sb.toString());
         }
 
         if (context.BEFORE() != null) {
@@ -5016,6 +5016,40 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return tableRelation;
+    }
+
+    @Override
+    public ParseNode visitQueryPeriod(StarRocksParser.QueryPeriodContext context) {
+        if (context.periodType() == null || context.end == null) {
+            return null;
+        }
+
+        QueryPeriod.PeriodType type = getPeriodType((Token) context.periodType().getChild(0).getPayload());
+        Expr end = (Expr) visit(context.end);
+        return new QueryPeriod(type, end);
+    }
+
+    private QueryPeriod.PeriodType getPeriodType(Token token) {
+        switch (token.getType()) {
+            case StarRocksLexer.TIMESTAMP :
+            case StarRocksLexer.SYSTEM_TIME:
+                return QueryPeriod.PeriodType.TIMESTAMP;
+            case StarRocksLexer.VERSION :
+                return QueryPeriod.PeriodType.VERSION;
+            default:
+                throw new ParsingException("Unsupported query period type: " + token.getText());
+        }
+    }
+
+
+    // only used for mysql external table
+    private String buildQueryPeriodString(StarRocksParser.QueryPeriodContext context) {
+        StringBuilder sb = new StringBuilder();
+        for (ParseTree child : context.children) {
+            sb.append(child.getText());
+            sb.append(" ");
+        }
+        return sb.toString();
     }
 
     @Override

@@ -96,7 +96,7 @@ public class BrokerUtil {
         try {
             TBrokerListPathRequest request = new TBrokerListPathRequest(
                     TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
-            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.listPath(request));
@@ -180,7 +180,7 @@ public class BrokerUtil {
             // get file size
             TBrokerListPathRequest request = new TBrokerListPathRequest(
                     TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
-            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.listPath(request));
@@ -203,7 +203,7 @@ public class BrokerUtil {
                     FrontendOptions.getLocalHostAddress(), Config.rpc_port);
             TBrokerOpenReaderRequest tOpenReaderRequest = new TBrokerOpenReaderRequest(
                     TBrokerVersion.VERSION_ONE, path, 0, clientId, brokerDesc.getProperties());
-            TBrokerOpenReaderResponse tOpenReaderResponse = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerOpenReaderResponse tOpenReaderResponse = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.openReader(tOpenReaderRequest));
@@ -217,7 +217,7 @@ public class BrokerUtil {
             // read
             TBrokerPReadRequest tPReadRequest = new TBrokerPReadRequest(
                     TBrokerVersion.VERSION_ONE, fd, 0, fileSize);
-            TBrokerReadResponse tReadResponse = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerReadResponse tReadResponse = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.pread(tPReadRequest));
@@ -238,7 +238,7 @@ public class BrokerUtil {
                 try {
                     TBrokerCloseReaderRequest tCloseReaderRequest = new TBrokerCloseReaderRequest(
                             TBrokerVersion.VERSION_ONE, fd);
-                    tOperationStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    tOperationStatus = ThriftRPCRequestExecutor.call(
                             ThriftConnectionPool.brokerPool,
                             address,
                             client -> client.closeReader(tCloseReaderRequest));
@@ -321,7 +321,7 @@ public class BrokerUtil {
         try {
             TBrokerDeletePathRequest tDeletePathRequest = new TBrokerDeletePathRequest(
                     TBrokerVersion.VERSION_ONE, path, brokerDesc.getProperties());
-            TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.deletePath(tDeletePathRequest));
@@ -340,7 +340,7 @@ public class BrokerUtil {
         try {
             TBrokerCheckPathExistRequest req = new TBrokerCheckPathExistRequest(TBrokerVersion.VERSION_ONE,
                     remotePath, brokerDesc.getProperties());
-            TBrokerCheckPathExistResponse rep = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerCheckPathExistResponse rep = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.checkPathExist(req));
@@ -365,7 +365,7 @@ public class BrokerUtil {
         try {
             TBrokerRenamePathRequest req = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE, origFilePath,
                     destFilePath, brokerDesc.getProperties());
-            TBrokerOperationStatus rep = ThriftRPCRequestExecutor.callNoRetry(
+            TBrokerOperationStatus rep = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
                     client -> client.renamePath(req));
@@ -411,7 +411,7 @@ public class BrokerUtil {
                         TBrokerVersion.VERSION_ONE, brokerFilePath, TBrokerOpenMode.APPEND,
                         clientId, brokerDesc.getProperties());
 
-                TBrokerOpenWriterResponse tOpenWriterResponse = ThriftRPCRequestExecutor.callNoRetry(
+                TBrokerOpenWriterResponse tOpenWriterResponse = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.brokerPool,
                         address,
                         client -> client.openWriter(tOpenWriterRequest));
@@ -441,7 +441,7 @@ public class BrokerUtil {
                 TBrokerPWriteRequest tPWriteRequest = new TBrokerPWriteRequest(
                         TBrokerVersion.VERSION_ONE, fd, currentOffset, byteBuffer);
 
-                TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.callNoRetry(
+                TBrokerOperationStatus tOperationStatus = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.brokerPool,
                         address,
                         client -> client.pwrite(tPWriteRequest));
@@ -465,7 +465,7 @@ public class BrokerUtil {
                 try {
                     TBrokerCloseWriterRequest tCloseWriterRequest = new TBrokerCloseWriterRequest(
                             TBrokerVersion.VERSION_ONE, fd);
-                    tOperationStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    tOperationStatus = ThriftRPCRequestExecutor.call(
                             ThriftConnectionPool.brokerPool,
                             address,
                             client -> client.closeWriter(tCloseWriterRequest));

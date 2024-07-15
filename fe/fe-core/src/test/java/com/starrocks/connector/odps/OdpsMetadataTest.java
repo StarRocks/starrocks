@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.sql.ast.PartitionValue;
@@ -109,7 +110,7 @@ public class OdpsMetadataTest extends MockedBase {
 
     @Test
     public void testListPartitionNames() {
-        List<String> partitionNames = odpsMetadata.listPartitionNames("project", "tableName", -1);
+        List<String> partitionNames = odpsMetadata.listPartitionNames("project", "tableName", TableVersionRange.empty());
         Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
     }
 
@@ -127,7 +128,7 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testGetPartitions() {
         Table table = odpsMetadata.getTable("db", "tbl");
-        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", -1);
+        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", TableVersionRange.empty());
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
         Assert.assertEquals(1, partitions.size());
         PartitionInfo partitionInfo = partitions.get(0);
@@ -155,7 +156,7 @@ public class OdpsMetadataTest extends MockedBase {
                 PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
                         odpsTable.getPartitionColumns());
         List<RemoteFileInfo> remoteFileInfos =
-                odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), -1, null,
+                odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), TableVersionRange.empty(), null,
                         odpsTable.getPartitionColumnNames(), -1, mockTableReadSessionBuilder);
         Assert.assertEquals(1, remoteFileInfos.size());
     }

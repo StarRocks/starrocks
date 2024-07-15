@@ -27,6 +27,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
@@ -91,7 +92,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, long snapshotId) {
+    public List<String> listPartitionNames(String dbName, String tblName, TableVersionRange version) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -134,7 +135,7 @@ public class HudiMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange version, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
@@ -155,7 +156,8 @@ public class HudiMetadata implements ConnectorMetadata {
             }
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), Optional.of(hmsTbl.getTableLocation()));
+        return fileOps.getRemoteFiles(partitions.build(),
+                RemoteFileOperations.Options.toUseHudiTableLocation(hmsTbl.getTableLocation()));
     }
 
     @Override
@@ -163,7 +165,7 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit) {
+                                         ScalarOperator predicate, long limit, TableVersionRange version) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {

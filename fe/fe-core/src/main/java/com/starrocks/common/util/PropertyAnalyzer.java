@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
@@ -1051,49 +1052,33 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
-            String uniqueConstraintStr = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
-            if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
+            String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
+            if (Strings.isNullOrEmpty(constraintDescs)) {
                 return uniqueConstraints;
             }
-            uniqueConstraints = UniqueConstraint.parse(table.getCatalogName(), db.getFullName(), table.getName(),
-                    uniqueConstraintStr);
-            if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
-                throw new SemanticException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
-            }
 
-            for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
+            String[] constraintArray = constraintDescs.split(";");
+            for (String constraintDesc : constraintArray) {
+                if (Strings.isNullOrEmpty(constraintDesc)) {
+                    continue;
+                }
+                Pair<TableName, List<String>> parseResult = UniqueConstraint.parseUniqueConstraintDesc(
+                        table.getCatalogName(), db.getFullName(), table.getName(), constraintDesc);
+                TableName tableName = parseResult.first;
+                List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
-                    String catalogName = uniqueConstraint.getCatalogName() != null ? uniqueConstraint.getCatalogName()
-                            : InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                    String dbName = uniqueConstraint.getDbName() != null ? uniqueConstraint.getDbName()
-                            : db.getFullName();
-                    if (uniqueConstraint.getTableName() == null) {
-                        throw new SemanticException("must set table name for unique constraint in materialized view");
-                    }
-                    String tableName = uniqueConstraint.getTableName();
-                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName,
-                            dbName, tableName);
+                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
-                        throw new SemanticException(
-                                String.format("table: %s.%s.%s does not exist", catalogName, dbName, tableName));
+                        throw new SemanticException(String.format("table: %s does not exist", tableName));
                     }
-                    boolean columnExist = uniqueConstraint.getUniqueColumns().stream()
-                            .allMatch(uniqueConstraintTable::containColumn);
-                    if (!columnExist) {
-                        throw new SemanticException(
-                                String.format("some columns of:%s do not exist in table:%s.%s.%s",
-                                        uniqueConstraint.getUniqueColumns(), catalogName, dbName, tableName));
-                    }
-                    analyzedUniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName,
-                            uniqueConstraint.getUniqueColumns()));
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(uniqueConstraintTable, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
                 } else {
-                    boolean columnExist = uniqueConstraint.getUniqueColumns().stream().allMatch(table::containColumn);
-                    if (!columnExist) {
-                        throw new SemanticException(
-                                String.format("some columns of:%s do not exist in table:%s",
-                                        uniqueConstraint.getUniqueColumns(), table.getName()));
-                    }
-                    analyzedUniqueConstraints.add(uniqueConstraint);
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(table, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
                 }
             }
             properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -1159,7 +1144,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                            uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+                            uniqueConstraint -> SRStringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
@@ -1227,11 +1212,11 @@ public class PropertyAnalyzer {
                 String targetTablePath = foreignKeyMatcher.group(6);
                 String targetColumns = foreignKeyMatcher.group(8);
                 // case insensitive
-                List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
+                List<String> childColumnNames = Arrays.stream(sourceColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
-                List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
+                List<String> parentColumnNames = Arrays.stream(targetColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
-                if (childColumns.size() != parentColumns.size()) {
+                if (childColumnNames.size() != parentColumnNames.size()) {
                     throw new SemanticException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
@@ -1240,36 +1225,25 @@ public class PropertyAnalyzer {
                         foreignKeyConstraintDesc, db);
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
-                if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
-                    throw new SemanticException(String.format("some columns of:%s do not exist in parent table:%s",
-                            parentColumns, parentTable.getName()));
-                }
-
+                List<ColumnId> parentColumnIds = MetaUtils.getColumnIdsByColumnNames(parentTable, parentColumnNames);
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
                 if (analyzedTable.isMaterializedView()) {
                     childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
                             db);
                     childTable = childTablePair.second;
-                    if (!childColumns.stream().allMatch(childTable::containColumn)) {
-                        throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
-                                childColumns, childTable.getName()));
-                    }
                 } else {
                     if (!analyzedTable.isNativeTable()) {
                         throw new SemanticException("do not support add foreign key on external table");
                     }
-                    if (!childColumns.stream().allMatch(analyzedTable::containColumn)) {
-                        throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
-                                childColumns, analyzedTable.getName()));
-                    }
                 }
+                List<ColumnId> childColumnIds = MetaUtils.getColumnIdsByColumnNames(childTable, childColumnNames);
 
-                analyzeForeignKeyUniqueConstraint(parentTable, parentColumns, analyzedTable);
+                analyzeForeignKeyUniqueConstraint(parentTable, parentColumnNames, analyzedTable);
 
-                List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
-                        parentColumns.stream(), Pair::create).collect(Collectors.toList());
-                for (Pair<String, String> pair : columnRefPairs) {
+                List<Pair<ColumnId, ColumnId>> columnRefPairs = Streams.zip(childColumnIds.stream(),
+                        parentColumnIds.stream(), Pair::create).collect(Collectors.toList());
+                for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
                     Column childColumn = childTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);
                     if (!childColumn.getType().equals(parentColumn.getType())) {

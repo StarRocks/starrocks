@@ -209,9 +209,10 @@ public class BrokerUtilTest {
             }
         };
 
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic = Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
             thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.callNoRetry(Mockito.any(), Mockito.any(), Mockito.any()))
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(
                             listResponse, openReaderResponse, readResponse, status);
 
@@ -255,9 +256,10 @@ public class BrokerUtilTest {
             }
         };
 
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic = Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
             thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.callNoRetry(Mockito.any(), Mockito.any(), Mockito.any()))
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(openWriterResponse, status);
 
             BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
@@ -296,9 +298,10 @@ public class BrokerUtilTest {
             }
         };
 
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic = Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
             thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.callNoRetry(Mockito.any(), Mockito.any(), Mockito.any()))
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(status);
 
             BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());

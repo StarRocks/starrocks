@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -62,9 +63,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import org.apache.iceberg.Snapshot;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 // used in SPJG mv union rewrite
@@ -86,7 +89,7 @@ public class OptExpressionDuplicator {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        Pair<Table, Column> partitionInfo = materializationContext.getMv().getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionInfo = materializationContext.getMv().getRefBaseTablePartitionColumn();
         this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
         this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
         this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
@@ -243,8 +246,12 @@ public class OptExpressionDuplicator {
                         if (currentTable == null) {
                             return null;
                         }
-                        // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+                        
                         scanBuilder.setTable(currentTable);
+                        TableVersionRange versionRange = TableVersionRange.withEnd(
+                                Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                                        .map(Snapshot::snapshotId));
+                        scanBuilder.setTableVersionRange(versionRange);
                     }
                     ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
                     if (isResetSelectedPartitions) {

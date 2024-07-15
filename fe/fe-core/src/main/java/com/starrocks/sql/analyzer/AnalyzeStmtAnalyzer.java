@@ -316,7 +316,6 @@ public class AnalyzeStmtAnalyzer {
                                             OptimizerConfig.defaultConfig()),
                                     tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
                     totalRows = tableStats.getOutputRowCount();
-
                 }
                 double sampleRows = totalRows *
                         Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));

@@ -41,7 +41,6 @@ import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -55,7 +54,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -68,11 +66,6 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
-    private Optional<Snapshot> snapshot = Optional.empty();
-    private static final String JSON_KEY_ICEBERG_DB = "database";
-    private static final String JSON_KEY_ICEBERG_TABLE = "table";
-    private static final String JSON_KEY_RESOURCE_NAME = "resource";
-    private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
     private static final String PARQUET_FORMAT = "parquet";
 
     private String catalogName;
@@ -124,15 +117,6 @@ public class IcebergTable extends Table {
 
     public String getRemoteTableName() {
         return remoteTableName;
-    }
-
-    public Optional<Snapshot> getSnapshot() {
-        if (snapshot.isPresent()) {
-            return snapshot;
-        } else {
-            snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
-            return snapshot;
-        }
     }
 
     @Override
@@ -220,10 +204,6 @@ public class IcebergTable extends Table {
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
         return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
-    }
-
-    public void resetSnapshot() {
-        snapshot = Optional.empty();
     }
 
     public boolean isV2Format() {
@@ -388,6 +368,11 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
+    public boolean isTemporal() {
         return true;
     }
 

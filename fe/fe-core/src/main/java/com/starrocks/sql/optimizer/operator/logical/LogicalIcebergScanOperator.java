@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -37,16 +38,25 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
+
+    public LogicalIcebergScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      long limit,
+                                      ScalarOperator predicate,
+                                      TableVersionRange versionRange) {
         super(OperatorType.LOGICAL_ICEBERG_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
-                predicate, null);
+                predicate, null, versionRange);
 
         Preconditions.checkState(table instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) table;
-        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(x -> x.getName()).collect(Collectors.toList()));
+        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(Column::getName).collect(Collectors.toList()));
     }
 
     private LogicalIcebergScanOperator() {
