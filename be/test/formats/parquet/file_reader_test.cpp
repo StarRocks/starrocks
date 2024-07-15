@@ -1527,10 +1527,24 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
+<<<<<<< HEAD
     EXPECT_TRUE(!status.ok());
     if (!status.ok()) {
         std::cout << status.get_error_msg() << std::endl;
     }
+=======
+    EXPECT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1024, chunk->num_rows());
+    EXPECT_EQ("[0, NULL]", chunk->debug_row(0));
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 }
 
 TEST_F(FileReaderTest, TestReadStructNull) {
@@ -2196,8 +2210,16 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
+<<<<<<< HEAD
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
+=======
+    // Illegal parquet files, will treat illegal column as null
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
@@ -2207,6 +2229,7 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     chunk->check_or_die();
 
+<<<<<<< HEAD
     EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
     EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
     EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
@@ -2224,6 +2247,11 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     }
 
     EXPECT_EQ(3, total_row_nums);
+=======
+    EXPECT_EQ("['hello', NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 }
 
 TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {

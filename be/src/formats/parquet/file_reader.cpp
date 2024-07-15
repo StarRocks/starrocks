@@ -29,6 +29,11 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/memcmp.h"
+<<<<<<< HEAD
+=======
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -37,7 +42,81 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        io::SharedBufferedInputStream* sb_stream)
         : _chunk_size(chunk_size), _file(file), _file_size(file_size), _sb_stream(sb_stream) {}
 
+<<<<<<< HEAD
 FileReader::~FileReader() = default;
+=======
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->file_metadata = file_metadata;
+        return ctx;
+    }
+};
+
+static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
+static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
+    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+    int64_t offset = _get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
+}
+
+static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    // following computation is not correct. `total_compressed_size` means compressed size of all columns
+    // but between columns there could be holes, which means end offset inaccurate.
+    // if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+    //     return row_group.file_offset + row_group.total_compressed_size;
+    // }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return _get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+                       io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
+        : _chunk_size(chunk_size),
+          _file(file),
+          _file_size(file_size),
+          _file_mtime(file_mtime),
+          _sb_stream(sb_stream),
+          _need_skip_rowids(_need_skip_rowids) {}
+
+FileReader::~FileReader() = default;
+
+std::string FileReader::_build_metacache_key() {
+    auto& filename = _file->filename();
+    std::string metacache_key;
+    metacache_key.resize(14);
+    char* data = metacache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (_file_mtime > 0) {
+        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = _file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return metacache_key;
+}
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
@@ -53,15 +132,33 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     }
 
     // set existed SlotDescriptor in this parquet file
+<<<<<<< HEAD
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
     _scanner_ctx->set_columns_from_file(names);
+=======
+    std::unordered_set<std::string> existed_column_names;
+    _meta_helper = _build_meta_helper();
+    _prepare_read_columns(existed_column_names);
+    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
         return Status::OK();
     }
+<<<<<<< HEAD
     _prepare_read_columns();
+=======
+
+    RETURN_IF_ERROR(_build_split_tasks());
+    if (_scanner_ctx->split_tasks.size() > 0) {
+        _scanner_ctx->has_split_tasks = true;
+        _is_file_filtered = true;
+        return Status::OK();
+    }
+
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
@@ -424,9 +521,16 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
            type == tparquet::Type::type::INT96;
 }
 
+<<<<<<< HEAD
 void FileReader::_prepare_read_columns() {
     _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
                                        _is_only_partition_scan);
+=======
+void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
+                                       existed_column_names);
+    _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {

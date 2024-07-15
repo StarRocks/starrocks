@@ -85,7 +85,44 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
+<<<<<<< HEAD
     std::unique_ptr<ColumnConverter> converter;
+=======
+    virtual Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered,
+                                                      const std::vector<std::string>& sub_field_path,
+                                                      const size_t& layer) {
+        return Status::OK();
+    }
+
+    virtual void set_can_lazy_decode(bool can_lazy_decode) {}
+
+    virtual Status filter_dict_column(const ColumnPtr& column, Filter* filter,
+                                      const std::vector<std::string>& sub_field_path, const size_t& layer) {
+        return Status::OK();
+    }
+
+    virtual Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+        dst->swap_column(*src);
+        return Status::OK();
+    }
+
+    virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                         int64_t* end_offset, ColumnIOType type, bool active) = 0;
+
+    virtual const tparquet::ColumnChunk* get_chunk_metadata() { return nullptr; }
+
+    virtual const ParquetField* get_column_parquet_field() { return nullptr; }
+
+    virtual StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) {
+        return Status::NotSupported("get_offset_index is not supported");
+    }
+
+    virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
+
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 };
 
 } // namespace starrocks::parquet
