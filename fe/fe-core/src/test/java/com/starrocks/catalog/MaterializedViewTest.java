@@ -279,7 +279,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(table);
         // test partition related info
         MaterializedView oldMv = (MaterializedView) table;
-        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
