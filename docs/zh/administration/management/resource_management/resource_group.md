@@ -40,7 +40,7 @@ displayed_sidebar: "Chinese"
   
 - `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
 
-- `max_cpu_cores`：在 FE 进行对查询进行排队的阈值，详见 [查询队列 - 资源组粒度的资源阈值](./query_queues.md#资源组粒度的资源阈值)。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
+- `max_cpu_cores`：查询触发 FE 实行查询队列的 CPU 核数阈值，详见 [查询队列 - 资源组粒度的资源阈值](./query_queues.md#资源组粒度的资源阈值)。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
 
 - `spill_mem_limit_threshold`: 当前资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
   
