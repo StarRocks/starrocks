@@ -68,12 +68,8 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `max_cpu_cores`
 
-  The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+  The threshold for queuing queries in the FE. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues). It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
-  > **NOTE**
-  >
-  > Currently, `max_cpu_cores` can only be used to specify the threshold that triggers query queue on the FE side. It cannot limit the CPU usage of a query on the BE side. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues).
-  
 - `spill_mem_limit_threshold`
 
   The memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results. The valid range is (0, 1). The default value is 1, indicating the threshold does not take effect. This parameter was introduced in v3.1.7.
