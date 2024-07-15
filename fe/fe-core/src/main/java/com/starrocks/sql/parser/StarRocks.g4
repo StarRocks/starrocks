@@ -1092,6 +1092,8 @@ alterClause
     | dropFieldClause
     | createOrReplaceBranchClause
     | createOrReplaceTagClause
+    | dropBranchClause
+    | dropTagClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -1277,6 +1279,14 @@ createOrReplaceTagClause
 createOrReplaceBranchClause
     : (CREATE OR)? REPLACE BRANCH identifier branchOptions
     | CREATE BRANCH (IF NOT EXISTS)? identifier branchOptions
+    ;
+
+dropBranchClause
+    : DROP BRANCH (IF EXISTS)? identifier
+    ;
+
+dropTagClause
+    : DROP TAG (IF EXISTS)? identifier
     ;
 
 tagOptions
