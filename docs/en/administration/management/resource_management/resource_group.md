@@ -72,7 +72,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > **NOTE**
   >
-  > Currently, `max_cpu_cores` is only used to specify the threshold that triggers query queue on the FE side. It cannot limit the CPU usage of a query on the BE side. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues).
+  > Currently, `max_cpu_cores` can only be used to specify the threshold that triggers query queue on the FE side. It cannot limit the CPU usage of a query on the BE side. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues).
   
 - `spill_mem_limit_threshold`
 
