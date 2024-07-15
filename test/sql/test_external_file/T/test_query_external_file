@@ -92,5 +92,9 @@ select * from data_float_double where c1 = 999;
 
 select * from data_float_double where c2 = 999;
 
+select * from data_float_double where c1 in (999, 9999, 99999) order by c1;
+
+select * from data_float_double where c2 in (999, 9999, 99999) order by c2;
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 

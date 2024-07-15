@@ -149,6 +149,18 @@ select * from data_float_double where c2 = 999;
 -- result:
 999	999.0	999.0
 -- !result
+select * from data_float_double where c1 in (999, 9999, 99999) order by c1;
+-- result:
+999	999.0	999.0
+9999	9999.0	9999.0
+99999	99999.0	99999.0
+-- !result
+select * from data_float_double where c2 in (999, 9999, 99999) order by c2;
+-- result:
+999	999.0	999.0
+9999	9999.0	9999.0
+99999	99999.0	99999.0
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
