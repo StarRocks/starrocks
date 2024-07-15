@@ -34,10 +34,14 @@
 
 package com.starrocks.persist.gson;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils.HiddenAnnotationExclusionStrategy;
@@ -46,6 +50,8 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -54,6 +60,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Map;
 
 /*
@@ -295,5 +302,25 @@ public class GsonDerivedClassSerializationTest {
         Assert.assertEquals(3, classA.flag);
         Assert.assertEquals("C", classA.tagA);
         Assert.assertEquals(null, classA.postTagA);
+    }
+
+    @Test
+    public void testDeserializeExpressionRangePartitionInfoV2() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        ExpressionRangePartitionInfoV2 rangePartitionInfoV2 = new ExpressionRangePartitionInfoV2(Lists.newArrayList(),
+                Lists.newArrayList(new Column("col", Type.STRING)));
+        rangePartitionInfoV2.write(dataOutputStream);
+        ExpressionRangePartitionInfoV2 deserializedInfo =
+                (ExpressionRangePartitionInfoV2) ExpressionRangePartitionInfoV2.read(new DataInputStream(
+                        new ByteArrayInputStream(outputStream.toByteArray())));
+        try {
+            Class<?> clazz = deserializedInfo.getClass().getSuperclass().getSuperclass();
+            Field field = clazz.getDeclaredField("idToTabletType");
+            field.setAccessible(true);
+            Assert.assertNotNull(field.get(deserializedInfo));
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
     }
 }
