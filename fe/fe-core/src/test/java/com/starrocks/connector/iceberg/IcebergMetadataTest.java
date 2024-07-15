@@ -38,9 +38,11 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.PointerType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
@@ -137,6 +139,7 @@ import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
+import static com.starrocks.catalog.Type.VARCHAR;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -1479,5 +1482,43 @@ public class IcebergMetadataTest extends TableTestBase {
         versionRange = TableVersionRange.withEnd(Optional.of(1L));
         Assert.assertFalse(versionRange.isEmpty());
         Assert.assertNotNull(versionRange.toString());
+    }
+
+    @Test
+    public void testGetSnapshotIdFromVersion() {
+        ConstantOperator constantOperator = new ConstantOperator("2023-01-01", VARCHAR);
+        ConnectorTableVersion tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion));
+
+        constantOperator = new ConstantOperator(LocalDateTime.now(), DATE);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion1 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion1));
+
+        constantOperator = new ConstantOperator("2000-01-01 00:00:00", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion2 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion2));
+
+        constantOperator = new ConstantOperator("not_exist", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion3 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Cannot find snapshot with reference name",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion3));
+
+        constantOperator = new ConstantOperator(123, INT);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion4 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported type for table version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
     }
 }

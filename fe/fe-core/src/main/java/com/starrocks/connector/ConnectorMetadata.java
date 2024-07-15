@@ -124,8 +124,9 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    // TODO: add connector table version params in the next patch
-    default TableVersionRange getTableVersionRange(Table table) {
+    default TableVersionRange getTableVersionRange(Table table,
+                                                   Optional<ConnectorTableVersion> startVersion,
+                                                   Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();
     }
 
