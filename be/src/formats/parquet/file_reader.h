@@ -60,7 +60,7 @@ private:
     // parse footer of parquet file
     Status _parse_footer();
 
-    void _prepare_read_columns();
+    void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
     // init row group readers.
     Status _init_group_readers();

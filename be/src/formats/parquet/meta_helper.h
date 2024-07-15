@@ -14,6 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+
+#include <ostream>
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -28,15 +34,17 @@ namespace starrocks::parquet {
 
 class MetaHelper {
 public:
+    MetaHelper(FileMetaData* file_metadata, bool case_sensitive)
+            : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
-    virtual void set_existed_column_names(std::unordered_set<std::string>* names) const = 0;
 
     virtual void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                                  const tparquet::RowGroup& row_group,
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      std::unordered_set<std::string>& existed_column_names) const = 0;
 
     virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
 
@@ -72,34 +80,50 @@ protected:
         return column;
     }
 
+    FileMetaData* _file_metadata = nullptr;
     bool _case_sensitive = false;
+<<<<<<< HEAD
     std::shared_ptr<FileMetaData> _file_metadata;
+=======
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
+<<<<<<< HEAD
     ParquetMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive) {
         _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
     }
+=======
+    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) : MetaHelper(file_metadata, case_sensitive) {}
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
     ~ParquetMetaHelper() override = default;
 
-    void set_existed_column_names(std::unordered_set<std::string>* names) const override;
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
+
+private:
+    bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
 class IcebergMetaHelper : public MetaHelper {
 public:
+<<<<<<< HEAD
     IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
                       const TIcebergSchema* t_iceberg_schema) {
         _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
+=======
+    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema)
+            : MetaHelper(file_metadata, case_sensitive) {
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
         _init_field_mapping();
@@ -107,16 +131,17 @@ public:
 
     ~IcebergMetaHelper() override = default;
 
-    void set_existed_column_names(std::unordered_set<std::string>* names) const override;
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 
 private:
     void _init_field_mapping();
+    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema) const;
     const TIcebergSchema* _t_iceberg_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;

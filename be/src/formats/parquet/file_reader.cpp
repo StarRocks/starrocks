@@ -29,6 +29,11 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/memcmp.h"
+<<<<<<< HEAD
+=======
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -42,6 +47,32 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
           _need_skip_rowids(_need_skip_rowids) {}
 
 FileReader::~FileReader() = default;
+<<<<<<< HEAD
+=======
+
+std::string FileReader::_build_metacache_key() {
+    auto& filename = _file->filename();
+    std::string metacache_key;
+    metacache_key.resize(14);
+    char* data = metacache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (_file_mtime > 0) {
+        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = _file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return metacache_key;
+}
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
@@ -57,15 +88,33 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     }
 
     // set existed SlotDescriptor in this parquet file
+<<<<<<< HEAD
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
     _scanner_ctx->update_materialized_columns(names);
+=======
+    std::unordered_set<std::string> existed_column_names;
+    _meta_helper = _build_meta_helper();
+    _prepare_read_columns(existed_column_names);
+    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
         return Status::OK();
     }
+<<<<<<< HEAD
     _prepare_read_columns();
+=======
+
+    RETURN_IF_ERROR(_build_split_tasks());
+    if (_scanner_ctx->split_tasks.size() > 0) {
+        _scanner_ctx->has_split_tasks = true;
+        _is_file_filtered = true;
+        return Status::OK();
+    }
+
+>>>>>>> 2bfb72cc60 ([BugFix] Fix can't read struct with empty subfield in parquet (#48151))
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
@@ -425,8 +474,9 @@ bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& colu
     return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
-void FileReader::_prepare_read_columns() {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols);
+void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
+                                       existed_column_names);
     _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
 }
 
