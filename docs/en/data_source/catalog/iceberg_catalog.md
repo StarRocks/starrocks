@@ -7,6 +7,10 @@ import TabItem from '@theme/TabItem';
 
 # Iceberg catalog
 
+:::tip
+Try it in this [hands-on tutorial](../../quick_start/iceberg.md)
+:::
+
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.
