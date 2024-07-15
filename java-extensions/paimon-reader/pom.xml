@@ -110,7 +110,17 @@
                     <artifactId>derby</artifactId>
                     <groupId>org.apache.derby</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>jetty-client</artifactId>
+                    <groupId>org.eclipse.jetty</groupId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-client</artifactId>
+            <version>9.4.47.v20220610</version>
         </dependency>
 
         <dependency>
