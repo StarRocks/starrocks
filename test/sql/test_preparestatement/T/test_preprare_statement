@@ -19,6 +19,8 @@ insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021
 PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
 PREPARE stmt2 FROM 'select * from prepare_stmt order by k1';
 PREPARE stmt3 FROM select * from prepare_stmt order by k1;
+PREPARE cte_stmt_1 FROM with cte as (select * from prepare_stmt where k1 = ?) select * from cte where v9 = ?;
+PREPARE cte_stmt_2 FROM  select *, ? from (with cte as (select * from prepare_stmt where k1 = ?) select * from cte) t where v9 = ?;
 
 set @i = 1;
 set @i2 = 2;
@@ -34,9 +36,14 @@ execute stmt1 using @i3, @i2;
 
 execute stmt2;
 
+execute cte_stmt_1 using @i, @t;
+execute cte_stmt_2 using @i3, @i, @t;
+
 drop prepare stmt1;
 deallocate prepare stmt2; -- deallocate is alias
 drop prepare stmt3;
+drop prepare cte_stmt_1;
+drop prepare cte_stmt_2;
 
 DROP TABLE prepare_stmt FORCE;
 
