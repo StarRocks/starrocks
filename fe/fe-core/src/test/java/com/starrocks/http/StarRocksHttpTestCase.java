@@ -449,6 +449,43 @@ public abstract class StarRocksHttpTestCase {
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
+        setUpWithGlobalStateMgr(globalStateMgr);
+    }
+
+    public void setUpWithCatalog() throws Exception {
+        GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
+        setUpWithGlobalStateMgr(globalStateMgr);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SchemaChangeHandler getSchemaChangeHandler() {
+                return new SchemaChangeHandler();
+            }
+
+            @Mock
+            MaterializedViewHandler getRollupHandler() {
+                return new MaterializedViewHandler();
+            }
+
+            @Mock
+            GlobalTransactionMgr getGlobalTransactionMgr() {
+                new MockUp<GlobalTransactionMgr>() {
+                    @Mock
+                    TransactionStatus getLabelState(long dbId, String label) {
+                        if (label == "a") {
+                            return TransactionStatus.PREPARED;
+                        } else {
+                            return TransactionStatus.PREPARE;
+                        }
+                    }
+                };
+
+                return new GlobalTransactionMgr(null);
+            }
+        };
+    }
+
+    private void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) throws Exception {
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         NodeMgr nodeMgr = new NodeMgr();
@@ -505,6 +542,7 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
+<<<<<<< HEAD
     public void setUpWithCatalog() {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
@@ -571,6 +609,8 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
+=======
+>>>>>>> 6ff7b78d07 ([UT] Fix unstable FE UT QueryDumpActionTest (#48413))
     @After
     public void tearDown() {
     }
