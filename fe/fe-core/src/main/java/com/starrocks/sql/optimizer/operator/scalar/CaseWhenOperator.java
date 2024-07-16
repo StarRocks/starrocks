@@ -82,6 +82,7 @@ public class CaseWhenOperator extends CallOperator {
      */
     public void removeElseClause() {
         Preconditions.checkState(hasElse);
+        hasElse = false;
         arguments.remove(arguments.size() - 1);
     }
 
@@ -89,6 +90,12 @@ public class CaseWhenOperator extends CallOperator {
     public void setElseClause(ScalarOperator elseClause) {
         Preconditions.checkState(hasElse);
         arguments.set(arguments.size() - 1, elseClause);
+    }
+
+    public void addElseClause(ScalarOperator elseClause) {
+        Preconditions.checkState(!hasElse);
+        hasElse = true;
+        arguments.add(elseClause);
     }
 
     // must after call hasCase

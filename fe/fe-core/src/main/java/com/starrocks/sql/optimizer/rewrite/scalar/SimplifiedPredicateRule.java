@@ -171,23 +171,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             }
         }
 
-        // If the operator has constant WHEN TRUE, the following WHEN/ELSE is meaningless
-        // E.g. CASE WHEN random() > 1 THEN 1 WHEN TRUE THEN 2 ELSE 10 END
-        // ---> CASE WHEN random() > 1 THEN 1 ELSE 2 END
-        for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
-            if (operator.getWhenClause(i).isConstantTrue()) {
-                for (int j = i + 1; j < operator.getWhenClauseSize(); j++) {
-                    removeArgumentsSet.add(2 * j + whenStart);
-                    removeArgumentsSet.add(2 * j + whenStart + 1);
-                }
-                if (operator.hasElse()) {
-                    operator.removeElseClause();
-                }
-                operator.setElseClause(operator.getThenClause(i));
-                break;
-            }
-        }
-
         for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
             if (operator.getWhenClause(i).isConstantRef()) {
                 ConstantOperator when = (ConstantOperator) operator.getWhenClause(i);
@@ -204,6 +187,24 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 }
             }
         }
+
+        // If the operator has constant WHEN TRUE, the following WHEN/ELSE is meaningless
+        // E.g. CASE WHEN random() > 1 THEN 1 WHEN TRUE THEN 2 ELSE 10 END
+        // ---> CASE WHEN random() > 1 THEN 1 ELSE 2 END
+        for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
+            if (operator.getWhenClause(i).isConstantTrue()) {
+                for (int j = i; j < operator.getWhenClauseSize(); j++) {
+                    removeArgumentsSet.add(2 * j + whenStart);
+                    removeArgumentsSet.add(2 * j + whenStart + 1);
+                }
+                if (operator.hasElse()) {
+                    operator.removeElseClause();
+                }
+                operator.addElseClause(operator.getThenClause(i));
+                break;
+            }
+        }
+
         operator.removeArguments(removeArgumentsSet);
 
         // 4. if when isn't constant, return direct
