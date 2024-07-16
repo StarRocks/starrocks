@@ -24,7 +24,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -665,6 +664,7 @@ public class MaterializedViewAnalyzer {
                         statement.getPartitionExpDesc().getPos());
             }
 
+            // set partition-ref into statement
             if (expressionPartitionDesc.isFunction()) {
                 // e.g. partition by date_trunc('month', dt)
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
@@ -855,24 +855,12 @@ public class MaterializedViewAnalyzer {
         // if mv is partitioned, mv will be refreshed by partition.
         // if mv has window functions, it should also be partitioned by and the partition by columns
         // should contain the partition column of mv
-        private void checkWindowFunctions(
-                CreateMaterializedViewStatement statement,
-                Map<Column, Expr> columnExprMap) {
+        private void checkWindowFunctions(CreateMaterializedViewStatement statement, Map<Column, Expr> columnExprMap) {
             SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
             // should analyze the partition expr to get type info
             PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
-            // FIXME: Only consider query statement's output list for now, consider subquery or cte relation later.
-            for (Expr columnExpr : columnExprMap.values()) {
-                if (columnExpr instanceof AnalyticExpr) {
-                    AnalyticExpr analyticExpr = columnExpr.cast();
-                    if (analyticExpr.getPartitionExprs() == null
-                            || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
-                        throw new SemanticException("window function %s ’s partition expressions" +
-                                " should contain the partition column %s of materialized view",
-                                analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
-                    }
-                }
-            }
+
+            MVPartitionSlotRefResolver.checkWindowFunction(statement, statement.getPartitionRefTableExpr());
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
