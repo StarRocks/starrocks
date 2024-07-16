@@ -610,6 +610,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             fields.add(field);
         }
+        if (fields.isEmpty()) {
+            throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
+                                   "], can not drop any more.");
+        }
         oriFieldType.updateFields(fields);
 
         // update the modifyColumn int index schema.

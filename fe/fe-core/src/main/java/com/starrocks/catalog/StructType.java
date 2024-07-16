@@ -362,5 +362,14 @@ public class StructType extends Type {
         }
         return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
     }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
+    }
 }
 

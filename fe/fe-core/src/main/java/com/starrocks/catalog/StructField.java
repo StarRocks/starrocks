@@ -149,6 +149,10 @@ public class StructField {
     public StructField clone() {
         return new StructField(name, fieldId, type.clone(), comment);
     }
+
+    public int getMaxUniqueId() {
+        return Math.max(fieldId, type.getMaxUniqueId());
+    }
 }
 
 

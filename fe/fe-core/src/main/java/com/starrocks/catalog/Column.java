@@ -843,6 +843,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.uniqueId;
     }
 
+    // return max unique id of all fields
+    public int getMaxUniqueId() {
+        return Math.max(this.uniqueId, type.getMaxUniqueId());
+    }
+
     public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
