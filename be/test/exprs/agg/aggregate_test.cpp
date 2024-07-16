@@ -215,6 +215,8 @@ ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) 
 template <typename T, typename TResult>
 void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                        TResult update_result2, TResult merge_result) {
+    int64_t mem_usage = 0;
+    ctx->set_mem_usage_counter(&mem_usage);
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
     auto result_column = ResultColumn::create();
 
@@ -1049,12 +1051,15 @@ TEST_F(AggregateTest, test_sum_distinct) {
 }
 
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
+    int64_t mem_usage;
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
         auto* ctx =
                 FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
                                                      UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 523776, 2499500, 3023276);
     }
@@ -1064,6 +1069,8 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
         auto* ctx =
                 FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
                                                      UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 523776, 2499500, 3023276);
     }
@@ -1073,6 +1080,8 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
         auto* ctx =
                 FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
                                                      UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 523776, 2499500, 3023276);
     }
