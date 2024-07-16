@@ -3,6 +3,7 @@
 #include "plain_text_builder.h"
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
@@ -31,8 +32,13 @@ Status PlainTextBuilder::init() {
     _converters.reserve(_output_expr_ctxs.size());
     for (auto* ctx : _output_expr_ctxs) {
         const auto& type = ctx->root()->type();
-        auto conv = vectorized::csv::get_converter(type, ctx->root()->is_nullable());
-
+        // in some cases, the nullable property between the column in the chunk and _output_expr_ctxs
+        // may not be consistent.
+        // for example: order by limit + left outer join
+        // select t1.k1, t1.k2, count(distinct t1.k3) as k33 from t1 left join t2 on t1.k1 = t2.k1
+        // group by t1.k1,t1.k2 order by k33
+        // so we use nullable converter, and process whether the column is nullable in the nullable converter.
+        auto conv = vectorized::csv::get_converter(type, true);
         if (conv == nullptr) {
             return Status::InternalError("No CSV converter for type " + type.debug_string());
         }
@@ -52,15 +58,22 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
         auto err = strings::Substitute("Unmatched number of columns expected=$0 real=$1", _converters.size(), num_cols);
         return Status::InternalError(err);
     }
-    std::vector<const vectorized::Column*> columns_raw_ptr;
-    columns_raw_ptr.reserve(num_cols);
+
+    vectorized::Columns columns;
+    columns.reserve(num_cols);
     for (int i = 0; i < num_cols; i++) {
         auto root = _output_expr_ctxs[i]->root();
         if (!root->is_slotref()) {
             return Status::InternalError("Not slot ref column");
         }
+
         auto column_ref = ((vectorized::ColumnRef*)root);
-        columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
+        auto col = chunk->get_column_by_slot_id(column_ref->slot_id());
+        if (col == nullptr) {
+            return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
+        }
+        col = vectorized::ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
+        columns.emplace_back(col);
     }
 
     const std::string& row_delimiter = _options.line_terminated_by;
@@ -70,7 +83,7 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     auto* os = _output_stream.get();
     for (size_t row = 0; row < num_rows; row++) {
         for (size_t col = 0; col < num_cols; col++) {
-            auto col_ptr = columns_raw_ptr[col];
+            auto& col_ptr = columns[col];
             RETURN_IF_ERROR(_converters[col]->write_string(os, *col_ptr, row, opts));
             RETURN_IF_ERROR(os->write((col == num_cols - 1) ? row_delimiter : column_delimiter));
         }
