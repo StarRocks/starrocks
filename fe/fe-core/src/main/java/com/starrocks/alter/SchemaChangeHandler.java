@@ -1912,11 +1912,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
-                /*
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
                 }
-                */
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
                 }
@@ -1926,11 +1924,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
-                /*
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Drop field for struct column not support shared-data mode so far");
                 }
-                */
                 if (!fastSchemaEvolution) {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");
                 }

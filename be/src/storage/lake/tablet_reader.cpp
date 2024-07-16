@@ -63,9 +63,9 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
-          _rowsets(std::move(rowsets)),
-          _tablet_schema(tablet_schema) {}
+          _rowsets(std::move(rowsets)) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
@@ -73,12 +73,12 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
-          _mask_buffer(mask_buffer),
-          _tablet_schema(tablet_schema) {
+          _mask_buffer(mask_buffer) {
     DCHECK(_mask_buffer);
 }
 

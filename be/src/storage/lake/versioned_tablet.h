@@ -67,6 +67,12 @@ public:
     RowsetList get_rowsets() const;
 
     // `segment_max_rows` is used in vertical writer
+    // create a tablet writer with given `tablet_schema`
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer_with_schema(WriterType type, int64_t txn_id,
+                                                                   uint32_t max_rows_per_segment,
+                                                                   ThreadPool* flush_pool, bool is_compaction,
+                                                                   std::shared_ptr<const TabletSchema> tablet_schema);
+
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr, bool is_compaction = false);

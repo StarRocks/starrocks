@@ -432,6 +432,12 @@ private:
             }
         }
 
+        auto output_rowset_schema_id = -1;
+        if (_metadata->rowset_schema_id_size() != 0) {
+            auto idx = static_cast<uint32_t>(pre_input_pos - _metadata->mutable_rowsets()->begin());
+            output_rowset_schema_id = _metadata->rowset_schema_id(idx);
+        }
+        LOG(INFO) << "output_rowset_schema_id: " << output_rowset_schema_id;
         const auto end_input_pos = pre_input_pos + 1;
 
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
@@ -456,13 +462,14 @@ private:
         if (_metadata->rowset_schema_id_size() != 0) {
             int32_t start_idx = has_output_rowset ? first_idx + 1 : first_idx;
             int32_t end_idx = first_idx + op_compaction.input_rowsets_size();
+
+            std::set<int64_t> erase_id;
+            for (auto idx = first_idx; idx < end_idx; idx++) {
+                erase_id.insert(_metadata->rowset_schema_id(idx));
+            }
             // update input rowset schema id
             if (has_output_rowset && op_compaction.input_rowsets_size() > 1) {
-                _metadata->set_rowset_schema_id(first_idx, -1);
-            }
-            std::set<int64_t> erase_id;
-            for (auto idx = start_idx; idx < end_idx; idx++) {
-                erase_id.insert(_metadata->rowset_schema_id(idx));
+                _metadata->set_rowset_schema_id(first_idx, output_rowset_schema_id);
             }
 
             for (auto idx = 0; idx < start_idx && !erase_id.empty(); idx++) {

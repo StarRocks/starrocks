@@ -38,7 +38,7 @@ public:
 public:
     TExprNode expr_node;
 };
-/*
+
 TEST_F(LikeTest, startConstPatternLike) {
     auto context = FunctionContext::create_test_context();
     std::unique_ptr<FunctionContext> ctx(context);
@@ -694,5 +694,5 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(0, ngram_set.size());
 }
-*/
+
 } // namespace starrocks

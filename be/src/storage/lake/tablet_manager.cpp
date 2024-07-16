@@ -579,22 +579,22 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
 }
 
-StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<RowsetPtr>& input_rowset, VersionedTablet& tablet) {
-    if (input_rowset.size() > 1) {
-        return tablet.get_schema();
-    }
-    if (input_rowset.size() <= 0) {
-        return Status::InternalError("no candidate rowsets to compaction");
-    }
-    auto metadata = tablet.metadata();
-    if (metadata->rowset_schema_id_size() == 0) {
+// If one rowset has much segments, we may use a lot of memory if we compaction all segments once a time.
+// So we will support a part of segments in one rowset to do compaction in the future.
+// To keep the consistence of all segments in one rowset, we will use the last rowset tablet schema as the
+// output rowset schema. This is because the last rowset may only have part of the segment merged.
+StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<RowsetPtr>& input_rowset,
+                                                                  VersionedTablet& tablet) {
+    const auto& metadata = tablet.metadata();
+    if (metadata->rowset_schema_id_size() == 0 || input_rowset.size() <= 0) {
         return tablet.get_schema();
     }
     struct Finder {
         int64_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
-    auto input_id = input_rowset[0]->id();
+
+    auto input_id = input_rowset[input_rowset.size() - 1]->id();
     auto iter = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
     if (UNLIKELY(iter == metadata->rowsets().end())) {
         return Status::InternalError(fmt::format("input rowset {} not found", input_id));

@@ -220,12 +220,15 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     };
     // get input rowset index
     std::set<uint32_t> input_rowset_index;
+    int32_t last_input_rowset_index = 0;
     for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
         auto input_id = op_compaction.input_rowsets(i);
         auto it = std::find_if(_tablet_meta->mutable_rowsets()->begin(), _tablet_meta->mutable_rowsets()->end(),
                                RowsetFinder{input_id});
         if (it != _tablet_meta->mutable_rowsets()->end()) {
-            input_rowset_index.insert(static_cast<uint32_t>(it - _tablet_meta->mutable_rowsets()->begin()));
+            auto idx = static_cast<uint32_t>(it - _tablet_meta->mutable_rowsets()->begin());
+            input_rowset_index.insert(idx);
+            last_input_rowset_index = idx;
         }
     }
 
@@ -236,7 +239,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         auto search_it = std::find_if(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end(),
                                       Finder{it->id()});
         if (search_it != op_compaction.input_rowsets().end()) {
-            LOG(INFO) << "find input rowset and remove it";
             // find it
             delete_delvec_sid_range.emplace_back(it->id(), it->id() + it->segments_size() - 1);
             // Collect del files.
@@ -297,8 +299,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
     // update rowset schema id
     if (_tablet_meta->rowset_schema_id_size() > 0) {
-        auto output_rowset_schema_id =
-                (input_rowset_index.size() == 1) ? _tablet_meta->rowset_schema_id(*input_rowset_index.begin()) : -1;
+        auto output_rowset_schema_id = _tablet_meta->rowset_schema_id(last_input_rowset_index);
         std::set<int64_t> erase_id;
         std::vector<int64_t> schema_ids;
         for (int32_t i = 0; i < _tablet_meta->rowset_schema_id_size(); i++) {
@@ -320,8 +321,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             _tablet_meta->add_rowset_schema_id(id);
         }
         if (has_output_rowset) {
-            // TODO(zhangqiang)
-            // only one rowset, set schema id as origin schema id
             _tablet_meta->add_rowset_schema_id(output_rowset_schema_id);
             erase_id.erase(output_rowset_schema_id);
         }

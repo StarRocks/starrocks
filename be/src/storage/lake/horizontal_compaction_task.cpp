@@ -33,7 +33,6 @@ namespace starrocks::lake {
 Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    //auto tablet_schema = _tablet.get_schema();
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
@@ -54,7 +53,9 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/))
+    ASSIGN_OR_RETURN(auto writer,
+                     _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
+                                                    _tablet_schema /** output rowset schema**/))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
