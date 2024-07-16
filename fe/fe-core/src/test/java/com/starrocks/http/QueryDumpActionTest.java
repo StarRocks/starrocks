@@ -16,19 +16,30 @@ package com.starrocks.http;
 
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import okhttp3.HttpUrl;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.awaitility.Awaitility;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class QueryDumpActionTest extends StarRocksHttpTestCase {
+    @Before
+    @Override
+    public void setUp() {
+        setUpWithCatalog();
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME) != null);
+    }
 
     @Override
     protected void doSetUp() {
@@ -38,10 +49,8 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testSuccess() throws Exception {
-        setUpWithCatalog();
-
         try (Response response = postQueryDump(DB_NAME, true, "select * from testTbl")) {
-            assertThat(response.isSuccessful()).isTrue();
+            assertThat(response.isSuccessful()).describedAs(response.toString()).isTrue();
             String body = response.body().string();
             assertThat(body)
                     .contains("\"statement\":\"SELECT *\\nFROM db_mock_000.tbl_mock_001\"")
@@ -76,8 +85,6 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testInvalidQuery() throws Exception {
-        setUpWithCatalog();
-
         try (Response response = postQueryDump(DB_NAME, false, "")) {
             String body = response.body().string();
             assertThat(response.code()).isEqualTo(HttpResponseStatus.BAD_REQUEST.code());
@@ -93,8 +100,6 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testInvalidDatabase() throws Exception {
-        setUpWithCatalog();
-
         try (Response response = postQueryDump("default_catalog.no_db", false, "select * from testTbl")) {
             String body = response.body().string();
             assertThat(response.code()).isEqualTo(HttpResponseStatus.NOT_FOUND.code());
