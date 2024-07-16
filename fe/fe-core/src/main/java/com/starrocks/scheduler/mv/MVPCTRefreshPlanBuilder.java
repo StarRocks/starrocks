@@ -74,8 +74,13 @@ public class MVPCTRefreshPlanBuilder {
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
                                                 Map<String, Set<String>> refTableRefreshPartitions,
                                                 ConnectContext ctx) throws AnalysisException {
-        // analyze the insert stmt
         Analyzer.analyze(insertStmt, ctx);
+        InsertStmt newInsertStmt = buildInsertPlan(insertStmt, refTableRefreshPartitions);
+        return newInsertStmt;
+    }
+
+    private InsertStmt buildInsertPlan(InsertStmt insertStmt,
+                                       Map<String, Set<String>> refTableRefreshPartitions) throws AnalysisException {
         // if the refTableRefreshPartitions is empty(not partitioned mv), no need to generate partition predicate
         if (refTableRefreshPartitions.isEmpty()) {
             LOG.info("There is no ref table partitions to refresh, skip to generate partition predicates");
@@ -174,7 +179,7 @@ public class MVPCTRefreshPlanBuilder {
         }
         if (extraPartitionPredicates.isEmpty()) {
             doIfNoPushDownPredicates(numOfPushDownIntoTables, refTableRefreshPartitions);
-            LOG.info("Generate partition predicate empty, mv:{}, numOfPushDownIntoTables:{}",
+            LOG.info("Generate partition extra predicates empty, mv:{}, numOfPushDownIntoTables:{}",
                     mv.getName(), numOfPushDownIntoTables);
             return insertStmt;
         }
@@ -222,7 +227,7 @@ public class MVPCTRefreshPlanBuilder {
             return false;
         }
         // external table doesn't support query with partitionNames
-        LOG.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
+        LOG.info("Optimize materialized view {} refresh task, push down partition names into table " +
                         "relation {}, filtered partition names:{} ",
                 mv.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
         tableRelation.setPartitionNames(
@@ -364,7 +369,7 @@ public class MVPCTRefreshPlanBuilder {
             return;
         }
         LOG.warn("Cannot generate partition predicate for mv refresh {} and there " +
-                "are no predicate push down tables, refBaseTableSize:{}, numOfPushDownIntoTables:{}", mv.getName(),
+                        "are no predicate push down tables, refBaseTableSize:{}, numOfPushDownIntoTables:{}", mv.getName(),
                 refBaseTableSize, numOfPushDownIntoTables);
         if (isEnableInsertStrict) {
             throw new AnalysisException(String.format("Cannot generate partition predicate for mv refresh %s",

@@ -185,8 +185,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public void processTaskRun(TaskRunContext context) {
         // register tracers
         Tracers.register(context.getCtx());
+        QueryDebugOptions queryDebugOptions = context.getCtx().getSessionVariable().getQueryDebugOptions();
         // init to collect the base timer for refresh profile
-        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, true, false);
+        Tracers.Mode mvRefreshTraceMode = queryDebugOptions.getMvRefreshTraceMode();
+        Tracers.Module mvRefreshTraceModule = queryDebugOptions.getMvRefreshTraceModule();
+        Tracers.init(mvRefreshTraceMode, mvRefreshTraceModule, true, false);
 
         IMaterializedViewMetricsEntity mvEntity = null;
         ConnectContext connectContext = context.getCtx();
@@ -223,7 +226,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 runtimeProfile = new RuntimeProfile();
                 Tracers.toRuntimeProfile(runtimeProfile);
             }
-
+            LOG.info("Refresh mv {} trace logs: {}", materializedView.getName(), Tracers.getTrace(mvRefreshTraceMode));
             Tracers.close();
             postProcess();
         }

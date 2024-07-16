@@ -1,4 +1,7 @@
 -- name: test_mv_refresh_with_time_slice
+ADMIN SET FRONTEND CONFIG("enable_mv_refresh_insert_strict"="false");
+-- result:
+-- !result
 CREATE TABLE `t1` (
   `id` int(11) NOT NULL,
   `dt` date NOT NULL
@@ -21,6 +24,10 @@ INSERT INTO t1 VALUES
 -- !result
 CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1) 
 REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'ALL'}"
+)
 AS SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 GROUP BY dt1;
 -- result:
 -- !result
@@ -72,5 +79,8 @@ drop materialized view mv1;
 -- result:
 -- !result
 drop materialized view mv2;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_mv_refresh_insert_strict"="true");
 -- result:
 -- !result
