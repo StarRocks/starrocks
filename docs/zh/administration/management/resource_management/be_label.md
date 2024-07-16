@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 使用标签管理 BE 节点
 
-自 3.2.8 版本起，StarRocks 支持使用标签对 BE 节点进行分组。您在建表或创建物化视图时可以通过指定和 BE 节点相同标签来使数据副本分布到指定的标签所包含的 BE 节点上。数据副本在相同标签的节点下会均匀分布，该特性可以提高数据高可用性和隔离资源性。
+自 3.2.8 版本起，StarRocks 支持使用标签对 BE 节点进行分组。您在建表或创建异步物化视图时可以通过指定和 BE 节点相同标签来使数据副本分布到指定的标签所对应的 BE 节点上。数据副本在相同标签的节点下会均匀分布，该特性可以提高数据高可用和资源隔离性能。
 
 ## 使用方式
 
@@ -33,14 +33,14 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 :::note
 
-- 表所指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为表添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为表指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为表指定的标签必须已经存在，否则会报错 `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
 
 :::
 
 #### 建表时
 
-建表时指定表的数据分布在 rack 1 和 rack 2，可以通过设置表属性 `"labels.location"`的值来指定数据分布的标签：
+建表时指定表的数据分布在 rack 1 和 rack 2，可以通过设置表属性 `"labels.location"` 的值来指定数据分布的标签：
 
 ```SQL
 CREATE TABLE example_table (
@@ -87,8 +87,8 @@ ALTER TABLE example_table1
 
 :::note
 
-- 物化视图所指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为物化视图添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为物化视图指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为物化视图指定的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
 
 :::
 
