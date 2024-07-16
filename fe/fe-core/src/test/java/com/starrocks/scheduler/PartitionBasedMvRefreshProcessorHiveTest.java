@@ -834,9 +834,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                     "'2020-01-06'\n" +
                     "     partitions=1/5");
             PlanTestBase.assertContains(plan, "     TABLE: part_tbl2\n" +
-                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-05', 8: par_date < '2020-01-06', " +
-                    "8: par_date IS NOT NULL\n" +
-                    "     partitions=0/4");
+                    "     PARTITION PREDICATES: 8: par_date IS NOT NULL\n" +
+                    "     partitions=4/4");
         }
 
         // run 3
