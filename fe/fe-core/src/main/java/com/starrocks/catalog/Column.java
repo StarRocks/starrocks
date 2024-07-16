@@ -803,16 +803,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.uniqueId;
     }
 
-<<<<<<< HEAD
     public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<String> bfColumns) {
-=======
-    // return max unique id of all fields
-    public int getMaxUniqueId() {
-        return Math.max(this.uniqueId, type.getMaxUniqueId());
-    }
-
-    public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns) {
->>>>>>> 12adbd4aec ([BugFix] Fix some issue of add/drop field for struct column (#48126))
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
                 List<String> columns = index.getColumns();
@@ -824,5 +815,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (bfColumns != null && bfColumns.contains(this.name)) {
             tColumn.setIs_bloom_filter_column(true);
         }
+    }
+
+    // return max unique id of all fields
+    public int getMaxUniqueId() {
+        return Math.max(this.uniqueId, type.getMaxUniqueId());
     }
 }

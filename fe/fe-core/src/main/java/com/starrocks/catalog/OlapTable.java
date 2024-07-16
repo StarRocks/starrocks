@@ -594,16 +594,12 @@ public class OlapTable extends Table {
             }
         }
         fullSchema = newFullSchema;
-<<<<<<< HEAD
-=======
-        updateSchemaIndex();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
             maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
->>>>>>> 12adbd4aec ([BugFix] Fix some issue of add/drop field for struct column (#48126))
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 
