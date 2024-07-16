@@ -21,11 +21,21 @@ INSERT INTO t1 VALUES
 -- !result
 CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1) 
 REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.enable_insert_strict" = "false",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
 AS SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 GROUP BY dt1;
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month", dt1) 
 REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.enable_insert_strict" = "false",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
 AS SELECT dt as dt1, sum(id) FROM t1 GROUP BY dt1;
 -- result:
 -- !result
