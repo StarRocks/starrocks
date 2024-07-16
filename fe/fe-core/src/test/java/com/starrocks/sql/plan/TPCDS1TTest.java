@@ -617,7 +617,6 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testPartitionTopNStatistics() throws Exception {
         String plan = getCostExplain("select * from (select i_category, i_brand,\n" +
                 "        cc_name,\n" +
@@ -643,7 +642,9 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "  |  order by: [13, VARCHAR, true] ASC, [63, INT, true] ASC, [65, INT, true] ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 10");
-=======
+    }
+
+    @Test
     public void testQuery67() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
         String plan = getFragmentPlan(Q67);
@@ -664,6 +665,5 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 26\n" +
                 "    RANDOM");
->>>>>>> 2d100a51b1 ([Enhancement] push down aggregate on grouping-set (#46007))
     }
 }
