@@ -525,6 +525,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     private void handleMVRepair(Database db, LakeTable table) {
+        if (table.getRelatedMaterializedViews().isEmpty()) {
+            return;
+        }
+
         List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
 
         Locker locker = new Locker();

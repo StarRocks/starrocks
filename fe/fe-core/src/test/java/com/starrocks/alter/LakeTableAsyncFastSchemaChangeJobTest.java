@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -57,7 +58,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return (LakeTable) db.getTable(createTableStmt.getTableName());
+        LakeTable table = (LakeTable) db.getTable(createTableStmt.getTableName());
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+        return table;
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
