@@ -343,7 +343,8 @@ public class MaterializedViewPlus {
 
     public List<String> getForeignKeys() {
         return getForeignKeyConstraints().stream()
-                .map(fk -> ForeignKeyConstraint.getShowCreateTableConstraintDesc(Collections.singletonList(fk.second)))
+                .map(fk ->
+                        ForeignKeyConstraint.getShowCreateTableConstraintDesc(mv, Collections.singletonList(fk.second)))
                 .collect(Collectors.toList());
     }
 
@@ -356,7 +357,7 @@ public class MaterializedViewPlus {
         if (fkConstraints.isEmpty()) {
             return TieredMap.genesis();
         } else {
-            String value = ForeignKeyConstraint.getShowCreateTableConstraintDesc(fkConstraints);
+            String value = ForeignKeyConstraint.getShowCreateTableConstraintDesc(mv, fkConstraints);
             return TieredMap.<String, String>newGenesisTier()
                     .put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, value)
                     .build();
