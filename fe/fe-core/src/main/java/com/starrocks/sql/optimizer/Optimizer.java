@@ -515,7 +515,7 @@ public class Optimizer {
                 !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
             skewJoinOptimize(tree, rootTaskContext);
         }
-        //
+
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
@@ -865,7 +865,8 @@ public class Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
 
         if (rootTaskContext.getOptimizerContext().getSessionVariable()
-                .isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
+                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
+                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
 

@@ -53,8 +53,22 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/* rewrite the tree top down
+ * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
+ *        shuffle join                           union
+ *       /         \     --->            /                   \
+ *  exchange    exchange           shuffle join        broadcast join
+ *     |            |                   /       \           /       \
+ *   child1      child2           exchange  exchange  ex(random)  ex(broadcast)
+ *                                   |            \      /          /
+ *                                   |             \   /          /
+ *                                   |             / \          /
+ *                                   |           /    \        /
+ *                                   |         /       \     /
+ *                                  child1            child2
+ */
 public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
-    private static AtomicInteger uniqueSplitId;
+    private AtomicInteger uniqueSplitId;
 
     private SkewShuffleJoinEliminationVisitor handler = null;
 
@@ -65,6 +79,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         handler = new SkewShuffleJoinEliminationVisitor(taskContext.getOptimizerContext().getColumnRefFactory());
+        // root's parentRequireEmpty = true
         return root.getOp().accept(handler, root, true);
     }
 
@@ -102,6 +117,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, requireEmptyForChild);
             }
 
+            // right now only support shuffle join
             if (!isShuffleJoin(opt)) {
                 return visitChild(opt, requireEmptyForChild);
             }
@@ -114,11 +130,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             OptExpression leftExchangeOptExp = opt.inputAt(0);
             PhysicalDistributionOperator leftExchangeOp = (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
-            OptExpression leftChildOfExchangeOptExp = opt.inputAt(0).inputAt(0);
 
             OptExpression rightExchangeOptExp = opt.inputAt(1);
             PhysicalDistributionOperator rightExchangeOp = (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
-            OptExpression rightChildOfExchangeOptExp = opt.inputAt(1).inputAt(0);
 
             PhysicalSplitProduceOperator leftSplitProduceOperator =
                     new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
@@ -255,8 +269,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setCost(opt.getCost()).build();
 
             OptExpression rightChildOfMerge = newBroadcastJoin;
-            // we need add exchange node to make broadcast join's output can be same as shuffle join's output
             if (!parentRequireEmpty) {
+                // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
                 OptExpression exchangeOptExpForBroadcastJoin =
                         OptExpression.builder().setOp(rightExchangeOp)
                                 .setInputs(Collections.singletonList(newBroadcastJoin))
@@ -264,8 +278,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                                 .setStatistics(newBroadcastJoin.getStatistics())
                                 .setCost(newBroadcastJoin.getCost()).build();
                 rightChildOfMerge = exchangeOptExpForBroadcastJoin;
-                //  PhysicalDistributionOperator broadcastExchangeToMergeOp = new PhysicalDistributionOperator(DistributionSpec.createHashDistributionSpec(
-                //  new HashDistributionDesc(List.of(), HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
             }
 
             OptExpression mergeOptExp =
@@ -288,10 +300,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
+            // if hit once, we give up rewriting the following subtree
             return cteAnchorOptExp2;
-
-            // temp
-            //            return visitChild(opt, requireEmptyForChild);
         }
 
         @Override
@@ -303,7 +313,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
         private boolean isShuffleJoin(OptExpression opt) {
             PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) opt.getOp();
-            // right now only support shuffle join
             if (!isExchangeWithDistributionType(opt.getInputs().get(0).getOp(),
                     DistributionSpec.DistributionType.SHUFFLE) ||
                     !isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
