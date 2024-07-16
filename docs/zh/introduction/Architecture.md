@@ -81,9 +81,4 @@ StarRocks 存算分离集群将数据存储与计算分离，使两方都能够�
 
 ## 实践学习
 
-<<<<<<< HEAD
-- 使用 MinIO 进行对象存储，尝试 [shared-data](../quick_start/shared-data.md)。
-=======
 - 使用 MinIO 进行对象存储，尝试 [存算分离集群](../quick_start/shared-data.md)。
-- Kubernetes 用户可以使用 [Helm 快速开始](../quick_start/helm.md) 部署包含三个 FE 和三个 BE 的存算一体集群。
->>>>>>> c1031e035a ([Doc] Revise Arch and Helm QuickStart (#48426))
