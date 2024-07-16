@@ -474,12 +474,6 @@ public class MvPartitionCompensator {
                 return null;
             }
         }
-<<<<<<< HEAD
-        if (inArgs.size() == 1) {
-            return ConstantOperator.TRUE;
-        } else {
-            return new InPredicateOperator(false, inArgs);
-=======
         return convertPartitionKeysToListPredicate(partitionColRef, keys);
     }
 
@@ -490,7 +484,6 @@ public class MvPartitionCompensator {
             LiteralExpr literalExpr = partitionKey.getKeys().get(0);
             ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
             values.add(upperBound);
->>>>>>> 426454d128 ([Feature] List Partition For AMV(Part 3): Support nullable partition columns for list partition table/materialized view (#47797))
         }
         return MvUtils.convertToInPredicate(partitionColRef, values);
     }

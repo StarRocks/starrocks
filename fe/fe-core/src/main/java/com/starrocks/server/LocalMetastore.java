@@ -3059,13 +3059,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // create partition info
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
-<<<<<<< HEAD
-        if (partitionInfo instanceof ListPartitionInfo && ((ListPartitionInfo) partitionInfo).getPartitionColumns()
-                .stream().anyMatch(Column::isAllowNull)) {
-            throw new DdlException("List partition columns must not be nullable in Materialized view for now.");
-        }
-=======
->>>>>>> 426454d128 ([Feature] List Partition For AMV(Part 3): Support nullable partition columns for list partition table/materialized view (#47797))
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
