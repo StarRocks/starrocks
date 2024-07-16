@@ -34,11 +34,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import org.apache.commons.collections4.CollectionUtils;
@@ -149,7 +152,6 @@ public class MVPCTRefreshPlanBuilder {
                 if (hasGenerateNonPushDownPredicates) {
                     continue;
                 }
-                hasGenerateNonPushDownPredicates = true;
                 // Use the mv's partition info ref column to generate incremental partition predicates rather than ref base
                 // table's slot ref since ref base table's partition column may be aliased in the query relation.
                 String mvPartitionInfoRefColName = getMVPartitionInfoRefColumnName();
@@ -166,6 +168,7 @@ public class MVPCTRefreshPlanBuilder {
                             "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRef);
                     continue;
                 }
+                hasGenerateNonPushDownPredicates = true;
                 extraPartitionPredicates.add(partitionPredicate);
             }
         }
@@ -183,10 +186,18 @@ public class MVPCTRefreshPlanBuilder {
             LOG.info("Optimize materialized view {} refresh task, generate insert stmt final " +
                     "predicate(select relation):{} ", mv.getName(), finalPredicate.toSql());
         } else {
-            // TODO: support to generate partition predicate for other query relation types
+            // support to generate partition predicate for other query relation types
             LOG.warn("MV Refresh cannot push down partition predicate since " +
                     "the query relation is not select relation, mv:{}", mv.getName());
-            doIfNoPushDownPredicates(numOfPushDownIntoTables, refTableRefreshPartitions);
+            List<SelectListItem> items = queryRelation.getOutputExpression().stream()
+                    .map(x -> new SelectListItem(x, null)).collect(Collectors.toList());
+            SelectList selectList = new SelectList(items, false);
+            SelectRelation selectRelation = new SelectRelation(selectList, queryRelation,
+                    Expr.compoundAnd(extraPartitionPredicates), null, null);
+            selectRelation.setWhereClause(Expr.compoundAnd(extraPartitionPredicates));
+            QueryStatement newQueryStatement = new QueryStatement(selectRelation);
+            insertStmt.setQueryStatement(newQueryStatement);
+            new QueryAnalyzer(mvContext.getCtx()).analyze(newQueryStatement);
         }
         return insertStmt;
     }

@@ -264,7 +264,8 @@ public class OptExpressionDuplicator {
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (mvRefBaseTableColumns.containsKey(table)) {
                     Column partitionColumn = mvRefBaseTableColumns.get(table);
-                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
+                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
+                            newColumnMetaToColRefMap.containsKey(partitionColumn)) {
                         ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
                         columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
                     }

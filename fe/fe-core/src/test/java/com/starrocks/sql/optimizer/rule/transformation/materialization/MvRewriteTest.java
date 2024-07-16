@@ -230,7 +230,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " SELECT emps_par.deptno as deptno1, depts.deptno as deptno2, emps_par.empid, emps_par.name" +
                     " from emps_par join depts" +
                     " on emps_par.deptno = depts.deptno");
-            Config.enable_mv_refresh_insert_strict = false;
             createAndRefreshMv("create materialized view join_mv_2" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
@@ -242,8 +241,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " partition by deptno1" +
                     " as " +
                     " SELECT deptno1, deptno2, empid, name from view1");
-            // TODO: fixme later.
-            Config.enable_mv_refresh_insert_strict = true;
             {
                 String query = "SELECT deptno1, deptno2, empid, name from view1";
                 String plan = getFragmentPlan(query);
