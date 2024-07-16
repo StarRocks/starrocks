@@ -138,17 +138,17 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     fs::remove_all(cache_dir).ok();
 }
 
-TEST_F(BlockCacheHitRateCounter, hit_rate) {
+TEST_F(BlockCacheTest, hit_rate) {
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
-    ASSERT_TRUE(0, counter->hit_rate());
-    ASSERT_TRUE(0, counter->hit_rate_last_minute());
+    ASSERT_EQ(0, counter->hit_rate());
+    ASSERT_EQ(0, counter->hit_rate_last_minute());
     counter->update(3, 10);
-    ASSERT_TRUE(3, counter->get_hit_bytes());
-    ASSERT_TRUE(10, counter->get_miss_bytes());
-    ASSERT_TRUE(3, counter->get_hit_bytes_last_minute());
-    ASSERT_TRUE(10, counter->get_miss_bytes_last_minute());
-    ASSERT_TRUE(0.23, counter->hit_rate());
-    ASSERT_TRUE(0.23, counter->hit_rate_last_minute());
+    ASSERT_EQ(3, counter->get_hit_bytes());
+    ASSERT_EQ(10, counter->get_miss_bytes());
+    ASSERT_EQ(3, counter->get_hit_bytes_last_minute());
+    ASSERT_EQ(10, counter->get_miss_bytes_last_minute());
+    ASSERT_EQ(0.23, counter->hit_rate());
+    ASSERT_EQ(0.23, counter->hit_rate_last_minute());
 }
 
 #ifdef WITH_STARCACHE
