@@ -369,8 +369,8 @@ public class HiveMetadataTest {
         tSinkCommitInfo.setStaging_dir(stagingDir);
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setHive_file_info(fileInfo);
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList());
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(), null);
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test
@@ -415,7 +415,7 @@ public class HiveMetadataTest {
         };
 
         AnalyzeTestUtil.init();
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
 
         new MockUp<HiveMetastoreOperations>() {
             @Mock
@@ -423,7 +423,7 @@ public class HiveMetadataTest {
                 throw new StarRocksConnectorException("add partition failed");
             }
         };
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test(expected = StarRocksConnectorException.class)
@@ -451,7 +451,7 @@ public class HiveMetadataTest {
             }
         };
 
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
 
         new MockUp<HiveMetastoreOperations>() {
             @Mock
@@ -460,7 +460,7 @@ public class HiveMetadataTest {
                 throw new StarRocksConnectorException("ERROR");
             }
         };
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test
@@ -483,7 +483,7 @@ public class HiveMetadataTest {
         };
 
         AnalyzeTestUtil.init();
-        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test
@@ -512,7 +512,7 @@ public class HiveMetadataTest {
         };
 
         AnalyzeTestUtil.init();
-        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test
@@ -535,7 +535,7 @@ public class HiveMetadataTest {
         };
 
         AnalyzeTestUtil.init();
-        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo));
+        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
     @Test

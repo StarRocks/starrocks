@@ -1357,7 +1357,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) writeBranch? partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -3037,6 +3037,10 @@ decimalType
 
 qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
+    ;
+
+writeBranch
+    : FOR? VERSION AS OF identifier
     ;
 
 identifier
