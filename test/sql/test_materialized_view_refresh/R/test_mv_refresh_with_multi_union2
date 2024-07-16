@@ -332,23 +332,23 @@ select count(1) from test_mv3;
 -- !result
 select count(1) from test_mv4;
 -- result:
-6
+10
 -- !result
 select count(1) from test_mv5;
 -- result:
-6
+10
 -- !result
 select count(1) from test_mv6;
 -- result:
-64
+72
 -- !result
 select count(1) from test_mv7;
 -- result:
-64
+72
 -- !result
 select count(1) from test_mv8;
 -- result:
-6
+10
 -- !result
 select dt from test_mv1 group by dt order by 1;
 -- result:
@@ -392,6 +392,10 @@ select dt from test_mv4 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
 2024-04-10
 -- !result
 select dt from test_mv5 group by dt order by 1;
@@ -401,6 +405,10 @@ select dt from test_mv5 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
 2024-04-10
 -- !result
 select dt from test_mv6 group by dt order by 1;
@@ -436,6 +444,10 @@ select dt from test_mv8 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
 2024-04-10
 -- !result
 INSERT INTO u1 (id,dt) VALUES (1,'2024-03-10');
@@ -478,23 +490,23 @@ select count(1) from test_mv3;
 -- !result
 select count(1) from test_mv4;
 -- result:
-6
+11
 -- !result
 select count(1) from test_mv5;
 -- result:
-6
+11
 -- !result
 select count(1) from test_mv6;
 -- result:
-72
+82
 -- !result
 select count(1) from test_mv7;
 -- result:
-72
+82
 -- !result
 select count(1) from test_mv8;
 -- result:
-6
+11
 -- !result
 select dt from test_mv1 group by dt order by 1;
 -- result:
@@ -539,6 +551,11 @@ select dt from test_mv4 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-03-19
 2024-04-10
 -- !result
 select dt from test_mv5 group by dt order by 1;
@@ -548,6 +565,11 @@ select dt from test_mv5 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-03-19
 2024-04-10
 -- !result
 select dt from test_mv6 group by dt order by 1;
@@ -585,6 +607,11 @@ select dt from test_mv8 group by dt order by 1;
 2024-03-12
 2024-03-13
 2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-03-19
 2024-04-10
 -- !result
 drop materialized view test_mv1;

@@ -84,6 +84,20 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """set up"""
         super().setUp()
         self.connect_starrocks()
+        self._init_global_configs()
+
+    def _init_global_configs(self):
+        ''''
+        Configs that are not ready for production but it can be used for testing.
+        '''
+        default_configs = [
+            "'enable_mv_refresh_insert_strict' = 'true'",
+        ]
+
+        for config in default_configs:
+            sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
+            print(sql)
+            self.execute_sql(sql)
 
     def tearDown(self):
         """tear down"""

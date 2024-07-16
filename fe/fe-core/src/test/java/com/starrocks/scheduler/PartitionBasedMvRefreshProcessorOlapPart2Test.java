@@ -60,11 +60,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-    }
-
     @Test
     public void testMVRefreshWithTheSameTables1() {
         starRocksAssert.withMTables(List.of(
