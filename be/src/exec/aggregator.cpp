@@ -493,6 +493,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
+        _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
     }
 
     // save TFunction object
@@ -553,6 +554,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
         _release_agg_memory();
     }
     _mem_pool->free_all();
+    _agg_state_mem_usage = 0;
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
