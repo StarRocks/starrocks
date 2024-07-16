@@ -254,7 +254,7 @@ public class MVPCTRefreshPlanBuilder {
         } else if (mvPartitionInfo.getType() == PartitionType.LIST) {
             Map<String, List<List<String>>> baseListPartitionMap = mvContext.getRefBaseTableListPartitionMap();
             Type partitionType = mvContext.getRefBaseTablePartitionColumn().getType();
-            List<LiteralExpr> sourceTablePartitionList = Lists.newArrayList();
+            List<Expr> sourceTablePartitionList = Lists.newArrayList();
             for (String tablePartitionName : tablePartitionNames) {
                 List<List<String>> values = baseListPartitionMap.get(tablePartitionName);
                 for (List<String> value : values) {
