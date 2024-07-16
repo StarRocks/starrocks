@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <bvar/bvar.h>
+
 #include <atomic>
 
 #include "block_cache/disk_space_monitor.h"
@@ -21,6 +23,26 @@
 #include "common/status.h"
 
 namespace starrocks {
+
+class BlockCacheHitRateCounter {
+public:
+    static BlockCacheHitRateCounter* instance();
+    ~BlockCacheHitRateCounter() = default;
+    void update(uint64_t hit_bytes, uint64_t miss_bytes);
+    double hit_rate() const;
+    double hit_rate_last_minute() const;
+    ssize_t get_hit_bytes() const;
+    ssize_t get_miss_bytes() const;
+    ssize_t get_hit_bytes_last_minute() const;
+    ssize_t get_miss_bytes_last_minute() const;
+
+private:
+    static double hit_rate_calculate(ssize_t hit_bytes, ssize_t miss_bytes);
+    bvar::Adder<ssize_t> _hit_bytes;
+    bvar::Adder<ssize_t> _miss_bytes;
+    bvar::Window<bvar::Adder<ssize_t>> _hit_bytes_last_minute{&_hit_bytes, 60};
+    bvar::Window<bvar::Adder<ssize_t>> _miss_bytes_last_minute{&_miss_bytes, 60};
+};
 
 class BlockCache {
 public:

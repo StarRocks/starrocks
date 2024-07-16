@@ -32,6 +32,7 @@ namespace starrocks {
 const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
+const static std::string ACTION_APP_STAT = "app_stat";
 const static std::string ACTION_INVALIDATE_ALL = "invalidate_all";
 
 std::string cache_status_str(const DataCacheStatus& status) {
@@ -58,7 +59,7 @@ bool DataCacheAction::_check_request(HttpRequest* req) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return false;
     }
-    if (req->param(ACTION_KEY) != ACTION_STAT) {
+    if (req->param(ACTION_KEY) != ACTION_STAT && req->param(ACTION_KEY) != ACTION_APP_STAT) {
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found");
         return false;
     }
@@ -75,8 +76,10 @@ void DataCacheAction::handle(HttpRequest* req) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
     } else if (block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
-    } else {
+    } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req, block_cache);
+    } else {
+        _handle_app_stat(req);
     }
 }
 
@@ -169,6 +172,23 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
         root.AddMember("current_writing_count", rapidjson::Value(metrics.detail_l2->current_writing_count), allocator);
         root.AddMember("current_removing_count", rapidjson::Value(metrics.detail_l2->current_removing_count),
                        allocator);
+#endif
+    });
+}
+
+void DataCacheAction::_handle_app_stat(HttpRequest* req) {
+    _handle(req, [=](rapidjson::Document& root) {
+#ifdef WITH_STARCACHE
+        auto& allocator = root.GetAllocator();
+        BlockCacheHitRateCounter* hit_rate_counter = BlockCacheHitRateCounter::instance();
+        root.AddMember("hit_bytes", rapidjson::Value(hit_rate_counter->get_hit_bytes()), allocator);
+        root.AddMember("miss_bytes", rapidjson::Value(hit_rate_counter->get_miss_bytes()), allocator);
+        root.AddMember("hit_rate", rapidjson::Value(hit_rate_counter->hit_rate()), allocator);
+        root.AddMember("hit_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_hit_bytes_last_minute()),
+                       allocator);
+        root.AddMember("miss_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_miss_bytes_last_minute()),
+                       allocator);
+        root.AddMember("hit_rate_last_minute", rapidjson::Value(hit_rate_counter->hit_rate_last_minute()), allocator);
 #endif
     });
 }

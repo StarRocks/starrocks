@@ -378,6 +378,8 @@ void HdfsScanner::update_counter() {
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
             _runtime_state->update_num_datacache_count(1);
         }
+
+        BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
