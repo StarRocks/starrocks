@@ -32,18 +32,13 @@ Status PlainTextBuilder::init() {
     _converters.reserve(_output_expr_ctxs.size());
     for (auto* ctx : _output_expr_ctxs) {
         const auto& type = ctx->root()->type();
-<<<<<<< HEAD
-        auto conv = vectorized::csv::get_converter(type, ctx->root()->is_nullable());
-
-=======
         // in some cases, the nullable property between the column in the chunk and _output_expr_ctxs
         // may not be consistent.
         // for example: order by limit + left outer join
         // select t1.k1, t1.k2, count(distinct t1.k3) as k33 from t1 left join t2 on t1.k1 = t2.k1
         // group by t1.k1,t1.k2 order by k33
         // so we use nullable converter, and process whether the column is nullable in the nullable converter.
-        auto conv = csv::get_converter(type, true);
->>>>>>> 498c39a71f ([BugFix] Fix csv converter and chunk column inconsistent in select into outfile (#48052))
+        auto conv = vectorized::csv::get_converter(type, true);
         if (conv == nullptr) {
             return Status::InternalError("No CSV converter for type " + type.debug_string());
         }
@@ -63,30 +58,22 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
         auto err = strings::Substitute("Unmatched number of columns expected=$0 real=$1", _converters.size(), num_cols);
         return Status::InternalError(err);
     }
-<<<<<<< HEAD
-    std::vector<const vectorized::Column*> columns_raw_ptr;
-    columns_raw_ptr.reserve(num_cols);
-=======
-    Columns columns;
+
+    vectorized::Columns columns;
     columns.reserve(num_cols);
->>>>>>> 498c39a71f ([BugFix] Fix csv converter and chunk column inconsistent in select into outfile (#48052))
     for (int i = 0; i < num_cols; i++) {
         auto root = _output_expr_ctxs[i]->root();
         if (!root->is_slotref()) {
             return Status::InternalError("Not slot ref column");
         }
-<<<<<<< HEAD
+
         auto column_ref = ((vectorized::ColumnRef*)root);
-        columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
-=======
-        auto column_ref = ((ColumnRef*)root);
         auto col = chunk->get_column_by_slot_id(column_ref->slot_id());
         if (col == nullptr) {
             return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
         }
-        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
+        col = vectorized::ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
         columns.emplace_back(col);
->>>>>>> 498c39a71f ([BugFix] Fix csv converter and chunk column inconsistent in select into outfile (#48052))
     }
 
     const std::string& row_delimiter = _options.line_terminated_by;

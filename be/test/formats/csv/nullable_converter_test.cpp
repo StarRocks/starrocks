@@ -101,9 +101,6 @@ TEST_F(NullableConverterTest, test_write_string_nullable_column) {
     ASSERT_EQ("\\N10null10", buff.as_string());
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::vectorized::csv
-=======
 // NOLINTNEXTLINE
 TEST_F(NullableConverterTest, test_write_string_not_nullable_column) {
     auto conv = csv::get_converter(_type, true);
@@ -120,5 +117,4 @@ TEST_F(NullableConverterTest, test_write_string_not_nullable_column) {
     ASSERT_EQ("110110", buff.as_string());
 }
 
-} // namespace starrocks::csv
->>>>>>> 498c39a71f ([BugFix] Fix csv converter and chunk column inconsistent in select into outfile (#48052))
+} // namespace starrocks::vectorized::csv
