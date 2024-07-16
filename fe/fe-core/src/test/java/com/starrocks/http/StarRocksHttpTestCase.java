@@ -450,6 +450,43 @@ public abstract class StarRocksHttpTestCase {
     @Before
     public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
+        setUpWithGlobalStateMgr(globalStateMgr);
+    }
+
+    public void setUpWithCatalog() throws Exception {
+        GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
+        setUpWithGlobalStateMgr(globalStateMgr);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SchemaChangeHandler getSchemaChangeHandler() {
+                return new SchemaChangeHandler();
+            }
+
+            @Mock
+            MaterializedViewHandler getRollupHandler() {
+                return new MaterializedViewHandler();
+            }
+
+            @Mock
+            GlobalTransactionMgr getGlobalTransactionMgr() {
+                new MockUp<GlobalTransactionMgr>() {
+                    @Mock
+                    TransactionStatus getLabelState(long dbId, String label) {
+                        if (label == "a") {
+                            return TransactionStatus.PREPARED;
+                        } else {
+                            return TransactionStatus.PREPARE;
+                        }
+                    }
+                };
+
+                return new GlobalTransactionMgr(null);
+            }
+        };
+    }
+
+    private void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) throws Exception {
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         NodeMgr nodeMgr = new NodeMgr();
@@ -491,72 +528,6 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.isSafeMode();
                 minTimes = 0;
                 result = true;
-            }
-        };
-
-        new Expectations(nodeMgr) {
-            {
-                nodeMgr.getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
-            }
-        };
-
-        assignBackends();
-        doSetUp();
-    }
-
-    public void setUpWithCatalog() throws Exception {
-        GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
-        SystemInfoService systemInfoService = new SystemInfoService();
-        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-        NodeMgr nodeMgr = new NodeMgr();
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            SchemaChangeHandler getSchemaChangeHandler() {
-                return new SchemaChangeHandler();
-            }
-
-            @Mock
-            MaterializedViewHandler getRollupHandler() {
-                return new MaterializedViewHandler();
-            }
-
-            @Mock
-            GlobalTransactionMgr getGlobalTransactionMgr() {
-                new MockUp<GlobalTransactionMgr>() {
-                    @Mock
-                    TransactionStatus getLabelState(long dbId, String label) {
-                        if (label == "a") {
-                            return TransactionStatus.PREPARED;
-                        } else {
-                            return TransactionStatus.PREPARE;
-                        }
-                    }
-                };
-
-                return new GlobalTransactionMgr(null);
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getNodeMgr();
-                minTimes = 0;
-                result = nodeMgr;
-
-                globalStateMgr.getTabletInvertedIndex();
-                minTimes = 0;
-                result = tabletInvertedIndex;
             }
         };
 
