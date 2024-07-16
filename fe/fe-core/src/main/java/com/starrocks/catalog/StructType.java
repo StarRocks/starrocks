@@ -350,5 +350,29 @@ public class StructType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "struct<...>";
+        }
+        ArrayList<String> fieldsSql = Lists.newArrayList();
+        for (StructField f : fields) {
+            fieldsSql.add(f.toTypeString(depth + 1));
+        }
+        return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
+    }
+>>>>>>> 12adbd4aec ([BugFix] Fix some issue of add/drop field for struct column (#48126))
 }
 
