@@ -474,18 +474,11 @@ public class MvPartitionCompensator {
                 return null;
             }
         }
-        return convertPartitionKeysToListPredicate(partitionColRef, keys);
-    }
-
-    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
-                                                                     Collection<PartitionKey> partitionRanges) {
-        List<ScalarOperator> values = Lists.newArrayList();
-        for (PartitionKey partitionKey : partitionRanges) {
-            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
-            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-            values.add(upperBound);
+        if (inArgs.size() == 1) {
+            return ConstantOperator.TRUE;
+        } else {
+            return new InPredicateOperator(false, inArgs);
         }
-        return MvUtils.convertToInPredicate(partitionColRef, values);
     }
 
     private static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,

@@ -262,8 +262,7 @@ public class MVPCTRefreshPlanBuilder {
                     sourceTablePartitionList.add(partitionValue);
                 }
             }
-            List<Expr> partitionPredicates = MvUtils.convertList(outputPartitionSlot, sourceTablePartitionList);
-            return Expr.compoundOr(partitionPredicates);
+            return MvUtils.convertToInPredicate(outputPartitionSlot, sourceTablePartitionList);
         } else {
             LOG.warn("Generate partition predicate failed: " +
                     "partition slot {} is not supported yet: {}", partitionSlot, mvPartitionInfo);
