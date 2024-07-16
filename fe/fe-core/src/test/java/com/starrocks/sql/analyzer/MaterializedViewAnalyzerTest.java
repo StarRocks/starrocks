@@ -373,9 +373,10 @@ public class MaterializedViewAnalyzerTest {
                     "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
                     "  FROM t1_event";
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
-                    "should contain the partition column sequence_timestamp of materialized view.");
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) of" +
+                    " materialized view.");
 
-            // Not supported
+            // Not supported: with subquery
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
                     "REFRESH ASYNC \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
@@ -390,7 +391,60 @@ public class MaterializedViewAnalyzerTest {
                     "  FROM t1_event) t\n" +
                     "ORDER BY sequence_timestamp;\n";
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
-                    "should contain the partition column sequence_timestamp of materialized view.");
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+
+            // Not supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
         }
     }
 
