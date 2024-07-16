@@ -1,0 +1,31 @@
+-- name: test_select_into_outfile_csv_inconsistent_converter_and_column
+create table t1 (k1 int, k2 int, k3 int) distributed by hash(k1) buckets 1;
+-- result:
+-- !result
+insert into t1 values(1,1,1), (2,2,2), (2,2,3), (3,3,4), (3,3,5), (3,3,6);
+-- result:
+-- !result
+
+create table t2 (k1 int, k2 int, k3 int) distributed by hash(k1) buckets 1;
+-- result:
+-- !result
+insert into t2 values(1,1,1), (2,2,2), (2,2,3), (3,3,4), (3,3,5), (3,3,6);
+-- result:
+-- !result
+
+select t1.k1, t1.k2, count(distinct t1.k3) as k33 from t1 left join t2 on t1.k1 = t2.k1 group by t1.k1,t1.k2 order by k33 into outfile "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/" format as csv;
+-- result:
+-- !result
+shell: ossutil64 cat oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/0.csv | head -3
+-- result:
+0
+1	1	1
+2	2	2
+3	3	3
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
