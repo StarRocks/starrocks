@@ -76,7 +76,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.catalog.MvJoinFilter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -137,6 +136,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.mv.analyzer.MVPartitionExprResolver;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
@@ -3245,12 +3245,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.addPartition(partition);
             } else {
                 Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
-                Map<Expr, SlotRef> partitionExprMaps = MvJoinFilter.getPartitionJoinMap(partitionExpr, stmt.getQueryStatement());
-                partitionExpr = stmt.getPartitionRefTableExpr();
-                if (!partitionExprMaps.containsKey(partitionExpr)) {
-                    LOG.warn("Failed to get partition expr from multiple base tables: " + stmt.getOrigStmt());
-                    partitionExprMaps.put(partitionExpr, MaterializedView.getMvPartitionSlotRef(partitionExpr));
-                }
+                Map<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(partitionExpr,
+                        stmt.getQueryStatement(), stmt.getBaseTableInfos());
+                LOG.info("Generate mv {} partition exprs: {}", mvName, partitionExprMaps);
                 materializedView.setPartitionExprMaps(partitionExprMaps);
             }
 

@@ -219,7 +219,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                                                        Map<Table, Map<String, PListCell>> basePartitionMaps,
                                                        Map<String, PListCell> allBasePartitionItems,
                                                        Map<Table, List<Integer>> tableRefIdxes) {
-        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         try {
             for (Map.Entry<Table, Column> e1 : partitionTableAndColumn.entrySet()) {
                 Table refBaseTable = e1.getKey();

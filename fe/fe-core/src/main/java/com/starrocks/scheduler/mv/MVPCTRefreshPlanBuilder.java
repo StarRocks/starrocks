@@ -104,7 +104,7 @@ public class MVPCTRefreshPlanBuilder {
                         new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
             }
 
-            Pair<Table, Column> refBaseTableAndCol = mv.getDirectTableAndPartitionColumn();
+            Pair<Table, Column> refBaseTableAndCol = mv.getRefBaseTablePartitionColumn();
             if (refBaseTableAndCol == null || !refBaseTableAndCol.first.equals(table)) {
                 continue;
             }

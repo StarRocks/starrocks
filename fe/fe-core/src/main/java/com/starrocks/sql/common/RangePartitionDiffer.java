@@ -225,7 +225,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             MaterializedView mv,
             Expr mvPartitionExpr,
             Map<Table, Map<String, Set<String>>> extBTMVPartitionNameMap) {
-        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (partitionTableAndColumn.isEmpty()) {
             return Maps.newHashMap();
         }
@@ -284,9 +284,8 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                             continue;
                         }
                     }
-                    addRanges.merge(add.getValue(), add.getKey(), (o, n) -> {
-                        return String.format("%s_%s_%s", INTERSECTED_PARTITION_PREFIX, o, n);
-                    });
+                    addRanges.merge(add.getValue(), add.getKey(), (o, n) ->
+                            String.format("%s_%s_%s", INTERSECTED_PARTITION_PREFIX, o, n));
                 }
             }
         }
@@ -337,7 +336,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                                                                      Range<PartitionKey> rangeToInclude,
                                                                      boolean isQueryRewrite) {
         Expr mvPartitionExpr = mv.getPartitionExpr();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         Preconditions.checkArgument(!refBaseTableAndColumns.isEmpty());
 
         // get the materialized view's partition range map

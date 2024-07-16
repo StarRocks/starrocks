@@ -270,7 +270,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         }
 
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumn();
         if (partitionTableAndColumns == null) {
             logMVRewrite("MV's not partitioned, failed to get partition keys: {}", mv.getName());
             return MVCompensation.createUnkownState(sessionVariable);

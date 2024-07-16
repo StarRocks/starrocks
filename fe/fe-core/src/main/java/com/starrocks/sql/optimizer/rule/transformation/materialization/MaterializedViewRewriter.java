@@ -41,7 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.StringUtils;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -1213,7 +1213,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (materializedView.hasUniqueConstraints()) {
             mvUniqueConstraints = materializedView.getUniqueConstraints().stream().filter(
-                           uniqueConstraint -> StringUtils.areTableNamesEqual(table, uniqueConstraint.getTableName()))
+                           uniqueConstraint -> SRStringUtils.areTableNamesEqual(table, uniqueConstraint.getTableName()))
                    .collect(Collectors.toList());
         }
 

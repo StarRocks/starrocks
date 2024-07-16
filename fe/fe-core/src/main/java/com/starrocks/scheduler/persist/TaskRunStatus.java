@@ -24,6 +24,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
@@ -135,6 +136,11 @@ public class TaskRunStatus implements Writable {
     }
 
     public String getStartTaskRunId() {
+        // NOTE: startTaskRunId may not be set since it's initialized in TaskRun#executeTaskRun
+        // But properties must contain START_TASK_RUN_ID first.
+        if (properties != null && properties.containsKey(TaskRun.START_TASK_RUN_ID)) {
+            return properties.get(TaskRun.START_TASK_RUN_ID);
+        }
         return startTaskRunId;
     }
 

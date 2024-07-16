@@ -70,7 +70,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -765,12 +764,6 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static List<Pair<Expr, Relation[]>> collectAllJoinPredicatesRelations(StatementBase statementBase) {
-        List<Pair<Expr, Relation[]>> joinPredicates = Lists.newArrayList();
-        new AnalyzerUtils.JoinPredicateRelationCollector(joinPredicates).visit(statementBase);
-        return joinPredicates;
-    }
-
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -1036,30 +1029,6 @@ public class AnalyzerUtils {
                 return null;
             }
             allTableAndViewRelations.put(node.getName(), node);
-            return null;
-        }
-    }
-
-    private static class JoinPredicateRelationCollector extends TableCollector {
-        private final List<Pair<Expr, Relation[]>> joinPredicates;
-
-        public JoinPredicateRelationCollector(List<Pair<Expr, Relation[]>> joinPredicates) {
-            super(null);
-            this.joinPredicates = joinPredicates;
-        }
-        @Override
-        public Void visitJoin(JoinRelation node, Void context) {
-            Relation[] relations = new Relation[2];
-            relations[0] = node.getLeft();
-            relations[1] = node.getRight();
-            joinPredicates.add(Pair.create(node.getOnPredicate(), relations));
-            visit(node.getLeft());
-            visit(node.getRight());
-            return null;
-        }
-
-        @Override
-        public Void visitTable(TableRelation node, Void context) {
             return null;
         }
     }

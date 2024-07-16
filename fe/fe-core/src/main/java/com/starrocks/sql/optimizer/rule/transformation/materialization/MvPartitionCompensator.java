@@ -146,7 +146,7 @@ public class MvPartitionCompensator {
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumn();
         if (partitionTableAndColumns == null) {
             logMVRewrite(mvContext, "MV's partition table and columns is null, unknown state");
             return MVCompensation.createUnkownState(sessionVariable);
@@ -384,7 +384,7 @@ public class MvPartitionCompensator {
                                                          MVCompensation mvCompensation,
                                                          OptExpression mvQueryPlan) {
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
@@ -663,7 +663,7 @@ public class MvPartitionCompensator {
 
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
@@ -843,7 +843,7 @@ public class MvPartitionCompensator {
             MaterializedView mv,
             OptExpression mvPlan,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
