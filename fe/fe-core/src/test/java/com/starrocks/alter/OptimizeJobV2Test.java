@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -178,8 +179,18 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        for (OptimizeTask optimizeTask : optimizeTasks) {
-            optimizeTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        for (int i = 0; i < optimizeTasks.size(); ++i) {
+            OptimizeTask optimizeTask = optimizeTasks.get(i);
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                        .getTaskRunScheduler().removeRunningTask(optimizeTask.getId());
+            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                        .getTaskRunScheduler().removePendingTask(optimizeTask);
+            TaskRunStatus taskRunStatus = new TaskRunStatus();
+            taskRunStatus.setTaskName(optimizeTask.getName());
+            taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
+            taskRunStatus.setDbName(db.getFullName());
+            GlobalStateMgr.getCurrentState().getTaskManager()
+                        .getTaskRunManager().getTaskRunHistory().addHistory(taskRunStatus);
         }
         optimizeJob.runRunningJob();
 
