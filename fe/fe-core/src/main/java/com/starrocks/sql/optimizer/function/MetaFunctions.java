@@ -387,7 +387,7 @@ public class MetaFunctions {
         }
     }
 
-    private static ConstantOperator deserializeBigint(List<TResultBatch> batches) {
+    private static ConstantOperator deserializeLookupResult(List<TResultBatch> batches) {
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
                 ByteBuf copied = Unpooled.copiedBuffer(buffer);
@@ -421,10 +421,9 @@ public class MetaFunctions {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
         String sql = String.format("select cast(dict_mapping('%s', '%s', '%s') as string)",
                 tableNameValue.toString(), lookupKey.getVarchar(), returnColumn.getVarchar());
-        ConnectContext ctx = ConnectContext.get();
         try {
             List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
-            return deserializeBigint(result);
+            return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";
             Throwable root = ExceptionUtils.getRootCause(e);
