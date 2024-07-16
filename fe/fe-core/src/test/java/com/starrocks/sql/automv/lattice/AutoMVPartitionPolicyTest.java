@@ -105,7 +105,7 @@ public class AutoMVPartitionPolicyTest {
     @Test
     public void testPartitionByDateTruncFromConjunctsUsingDateColumn() {
         String q0 = "select UserId, sum(M0) from hits_daily where " +
-                "date_trunc('month', EventDate) > '2024-01-01' group by UserId";
+                "date_trunc('month', EventDate) >= '2024-01-01' group by UserId";
         Object[][] testCases = new Object[][] {
                 {q0, TimeGranule.Unit.DAY,
                         new String[] {
