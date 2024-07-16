@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Add labels on BEs
 
-Since v3.2.8, StarRocks supports adding labels on BEs. If you specify labels at table creation, identical replicas are evenly distributed across different labels, and also evenly distributed within the BEs of the same label. This feature can enhance data high availability and isolate resource.
+Since v3.2.8, StarRocks supports adding labels on BEs. When creating a table or an asynchronous materialized view, you can specify the label of a certain group of BE nodes. This ensures that data replicas are distributed only on the BE nodes associated with that label. Data replicas will be evenly distributed among nodes with the same label, enhancing data high availability and resource isolation.
 
 ## Usage
 
@@ -25,7 +25,7 @@ After adding labels, you can execute `SHOW BACKENDS;` and view the labels of BEs
 
 If you need to modify the labels of BEs, you can execute `ALTER SYSTEM MODIFY BACKEND "172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`.
 
-### Add labels on tables
+### Use labels to specify table data distribution on BE nodes
 
 If you need to specify the locations to which a table's data is distributed, for example, distributing a table's data across two racks, rack1 and rack2, you can add labels to the table.
 
@@ -33,14 +33,14 @@ After labels are added, all the replicas of the same tablet in the table are dis
 
 :::note
 
-- The total number of BEs in the labels where the table resides must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
-- The labels added to the table must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
+- The total number of BE nodes associated with the labels must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
+- The label to be associated with a table must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
 
 :::
 
 #### At table creation
 
-If you want to distribute the table's data across rack 1 and rack 2 at table creation, you can execute the following statement:
+You can use the property `"labels.location"` to distribute the table's data across rack 1 and rack 2 at table creation:
 
 ```SQL
 CREATE TABLE example_table (
@@ -77,7 +77,7 @@ ALTER TABLE example_table1
 
 :::
 
-### Add labels on asynchronous materialized views
+### Use labels to specify materialized view data distribution on BE nodes
 
 If you need to specify the locations to which an asynchronous materialized view's data is distributed, for example, distributing data across two racks, rack1 and rack2, you can add labels to the materialized view.
 
@@ -85,8 +85,8 @@ After labels are added, all the replicas of the same tablet in the materialized 
 
 :::note
 
-- The total number of BEs in the labels where the materialized view resides must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
-- The labels added to the materialized view must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
+- The total number of BE nodes associated with the labels must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
+- The labels to be associated with the materialized view must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
 
 :::
 
