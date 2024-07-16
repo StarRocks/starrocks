@@ -344,10 +344,11 @@ public class QueryRuntimeProfile {
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
-        long maxQueryCumulativeCpuTime = 0;
+        long sumQueryCumulativeCpuTime = 0;
+        long sumQuerySpillBytes = 0;
+        long sumQueryPeakMemoryBytes = 0;
         long maxQueryPeakMemoryUsage = 0;
         long maxQueryExecutionWallTime = 0;
-        long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
@@ -378,13 +379,14 @@ public class QueryRuntimeProfile {
                 // Get query level peak memory usage, cpu cost, wall time
                 Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
                 if (toBeRemove != null) {
-                    maxQueryCumulativeCpuTime = Math.max(maxQueryCumulativeCpuTime, toBeRemove.getValue());
+                    sumQueryCumulativeCpuTime += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QueryCumulativeCpuTime");
 
                 toBeRemove = instanceProfile.getCounter("QueryPeakMemoryUsage");
                 if (toBeRemove != null) {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
+                    sumQueryPeakMemoryBytes += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
 
@@ -396,7 +398,7 @@ public class QueryRuntimeProfile {
 
                 toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
                 if (toBeRemove != null) {
-                    maxQuerySpillBytes = Math.max(maxQuerySpillBytes, toBeRemove.getValue());
+                    sumQuerySpillBytes += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QuerySpillBytes");
             }
@@ -520,13 +522,15 @@ public class QueryRuntimeProfile {
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
-        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
+        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
+        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsagePerNode", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter sumQueryPeakMemoryUsage = newQueryProfile.addCounter("QuerySumMemoryUsage", TUnit.BYTES, null);
+        sumQueryPeakMemoryUsage.setValue(sumQueryPeakMemoryBytes);
         Counter queryExecutionWallTime = newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
         queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
-        querySpillBytes.setValue(maxQuerySpillBytes);
+        querySpillBytes.setValue(sumQuerySpillBytes);
 
         if (execPlan != null) {
             newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
