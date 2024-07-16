@@ -151,6 +151,7 @@ bool MemLimitedChunkQueue::can_push() {
 }
 
 StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
+    TEST_SYNC_POINT("MemLimitedChunkQueue::pop::before_pop");
     DCHECK(consumer_index <= _consumer_number);
     RETURN_IF_ERROR(_get_io_task_status());
     std::unique_lock l(_mutex);
@@ -174,6 +175,8 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
             "accumulated_bytes[{}], used_count[{}]",
             consumer_index, (void*)(iter->get_block()), cell->accumulated_rows, cell->accumulated_bytes,
             cell->used_count);
+    iter->get_block()->pending_read_requests--;
+    DCHECK(iter->get_block()->pending_read_requests >= 0);
     auto result = cell->chunk;
 
     _update_progress(iter);
@@ -206,6 +209,8 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
     if (iter->has_next()) {
         auto next_iter = iter->next();
         if (next_iter.block->in_mem) {
+            next_iter.block->pending_read_requests++;
+            TEST_SYNC_POINT("MemLimitedChunkQueue::can_pop::return_true::1");
             return true;
         }
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::can_pop::before_submit_load_task", next_iter.block);
@@ -219,6 +224,7 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
         }
         return false;
     } else if (_opened_sink_number == 0) {
+        TEST_SYNC_POINT("MemLimitedChunkQueue::can_pop::return_true::2");
         return true;
     }
 
@@ -346,10 +352,15 @@ Status MemLimitedChunkQueue::_flush() {
         }
         block = _next_flush_block;
         DCHECK(block != nullptr) << "block can't be null";
+        TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::flush::after_find_block_to_flush", block);
         if (block->next == nullptr) {
             return Status::OK();
         }
         if (block->block != nullptr) {
+            return Status::OK();
+        }
+        // if this block is about to be read, we should not flush it
+        if (block->pending_read_requests > 0) {
             return Status::OK();
         }
     }
@@ -430,7 +441,7 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
         auto defer = DeferOp([&]() {
-            _has_flush_io_task = false;
+            _has_flush_io_task.store(false);
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
         });
 

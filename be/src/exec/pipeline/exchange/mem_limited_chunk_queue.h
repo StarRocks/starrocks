@@ -35,6 +35,10 @@ private:
         std::vector<Cell> cells;
         bool in_mem = true;
         std::atomic_bool has_load_task = false;
+        // The number of requests pending to be read.
+        // there may be a flush task between can_pop and pop,
+        // we should prevent the block that is about to be read from being flushed.
+        std::atomic_int pending_read_requests = 0;
         size_t memory_usage = 0;
         Block* next = nullptr;
         // spillable block, only used when spill happens

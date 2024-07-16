@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
 
-#include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
@@ -154,6 +155,7 @@ TEST_F(MemLimitedChunkQueueTest, test_push_pop_without_spill) {
     size_t expected_head_acc_bytes = 0;
     for (size_t i = 0; i < 100; i++) {
         for (int32_t consumer_idx = 0; consumer_idx < consumer_number; consumer_idx++) {
+            ASSERT_TRUE(queue.can_pop(consumer_idx));
             ASSIGN_OR_ABORT(auto chunk, queue.pop(consumer_idx));
             ASSERT_EQ(chunk->num_rows(), 4096);
             if (consumer_idx < consumer_number - 1) {
@@ -282,14 +284,16 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
 
     ASSERT_OK(queue.push(builder.get_next()));
 
-    int32_t submitted_flush_tasks = 0, finished_flush_task = 0;
+    std::atomic_int submitted_flush_tasks = 0, finished_flush_task = 0;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_flush_task", [&](void* arg) {
         LOG(INFO) << "before execute flush task";
         ASSERT_EQ(queue._has_flush_io_task, true);
         submitted_flush_tasks++;
         // before execute flush task, consumer consume some data
+        ASSERT_TRUE(queue.can_pop(0));
         ASSERT_OK(queue.pop(0));
+        ASSERT_TRUE(queue.can_pop(0));
         ASSERT_OK(queue.pop(0));
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_calculate_max_serialize_size", [&](void* arg) {
@@ -325,6 +329,7 @@ TEST_F(MemLimitedChunkQueueTest, test_flush_with_pop) {
         ASSERT_EQ(queue._has_flush_io_task, true);
         submitted_flush_tasks++;
         // before execute flush task, consumer consume some data
+        ASSERT_TRUE(queue.can_pop(0));
         ASSERT_OK(queue.pop(0));
     });
     SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_calculate_max_serialize_size", [&](void* arg) {
@@ -379,9 +384,8 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         wait_flush_task_done(queue);
         int32_t submitted_load_tasks = 0;
         SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task", [&](void* arg) {
-            submitted_load_tasks++;
-        });
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task",
+                                              [&](void* arg) { submitted_load_tasks++; });
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearAllCallBacks();
             SyncPoint::GetInstance()->DisableProcessing();
@@ -500,6 +504,55 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
             }
             ASSERT_OK(queue.pop(1));
         }
+    }
+}
+
+TEST_F(MemLimitedChunkQueueTest, test_concurrent_load_flush) {
+    {
+        // timeline: can_pop -> flush -> pop
+        // in this case, flush won't flush the block that is about to read
+        MemLimitedChunkQueue::Options options;
+        options.block_size = 1024 * 32;
+        options.memory_limit = 1024 * 32;
+        options.max_unconsumed_bytes = INT64_MAX;
+        options.block_manager = dummy_block_mgr.get();
+        int32_t consumer_number = 2;
+        MemLimitedChunkQueue queue(&dummy_runtime_state, consumer_number, options);
+        ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
+        // set opened consumer number
+        for (int32_t i = 0; i < consumer_number; i++) {
+            queue.open_consumer(i);
+        }
+        queue.open_producer();
+        // 32k per chunk,
+        AutoIncChunkBuilder builder;
+
+        ASSERT_OK(queue.push(builder.get_next()));
+        SyncPoint::GetInstance()->EnableProcessing();
+        SyncPoint::GetInstance()->LoadDependency(
+                {{"MemLimitedChunkQueue::can_pop::return_true::1", "MemLimitedChunkQueue::before_execute_flush_task"}});
+        SyncPoint::GetInstance()->LoadDependency(
+                {{"MemLimitedChunkQueue::after_execute_flush_task", "MemLimitedChunkQueue::pop::before_pop"}});
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::flush::after_find_block_to_flush", [&](void* arg) {
+            MemLimitedChunkQueue::Block* block = (MemLimitedChunkQueue::Block*)arg;
+            // this block is about to be read, won't be flushed
+            ASSERT_GT(block->pending_read_requests, 0);
+        });
+        int32_t flushed_blocks = 0;
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_flush_block",
+                                              [&](void* arg) { flushed_blocks++; });
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearAllCallBacks();
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        // after can pop, trigger a flush task
+        ASSERT_OK(queue.push(builder.get_next()));
+        ASSERT_FALSE(queue.can_push());
+
+        ASSERT_TRUE(queue.can_pop(0));
+        ASSERT_OK(queue.pop(0));
+        // no block is flushed
+        ASSERT_EQ(flushed_blocks, 0);
     }
 }
 
