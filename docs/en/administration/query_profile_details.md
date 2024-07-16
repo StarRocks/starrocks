@@ -96,9 +96,13 @@ Description: Cumulative allocated memory across all compute nodes.
 
 Description: Cumulative deallocated memory across all compute nodes.
 
-##### QueryPeakMemoryUsage
+##### QueryPeakMemoryUsagePerNode
 
 Description: Maximum peak memory across all compute nodes.
+
+##### QuerySumMemoryUsage
+
+Description: Summary of peak memory across all compute nodes.
 
 ##### QueryExecutionWallTime
 
