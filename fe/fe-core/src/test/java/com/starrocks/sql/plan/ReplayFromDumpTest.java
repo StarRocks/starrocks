@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.CTEProperty;
@@ -165,7 +166,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"));
     }
-
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -934,5 +934,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         int end = ss.indexOf("]", start);
         long count = Long.parseLong(ss.substring(start, end));
         Assert.assertTrue(ss, count < 10000);
+    }
+
+    @Test
+    public void testQueryTimeout() {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
     }
 }
