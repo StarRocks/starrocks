@@ -337,6 +337,15 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         int progress = 0;
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+
+        // prepare for the history task info
+        Set<String> taskNames = Sets.newHashSet();
+        for (OptimizeTask rewriteTask : rewriteTasks) {
+            taskNames.add(rewriteTask.getName());
+        }
+        List<TaskRunStatus> resStatus = GlobalStateMgr.getCurrentState().getTaskManager()
+                    .getTaskRunManager().getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames);
+
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
@@ -352,12 +361,19 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 allFinished = false;
                 continue;
             }
-            TaskRunStatus status = GlobalStateMgr.getCurrentState().getTaskManager()
-                    .getTaskRunManager().getTaskRunHistory().getTaskByName(rewriteTask.getName());
-            if (status == null) {
+
+            if (resStatus == null || resStatus.isEmpty()) {
                 allFinished = false;
                 continue;
             }
+            List<TaskRunStatus> filteredTask = resStatus.stream()
+                                .filter(x -> rewriteTask.getName().equals(x.getTaskName())).collect(Collectors.toList());
+            if (filteredTask.isEmpty()) {
+                allFinished = false;
+                continue;
+            }
+            Preconditions.checkState(filteredTask.size() == 1);
+            TaskRunStatus status = filteredTask.get(0);
 
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
