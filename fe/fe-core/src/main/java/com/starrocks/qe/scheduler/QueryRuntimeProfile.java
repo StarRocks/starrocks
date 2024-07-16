@@ -396,6 +396,7 @@ public class QueryRuntimeProfile {
         long maxQueryCumulativeCpuTime = 0;
         long maxQueryPeakMemoryUsage = 0;
         long maxQueryExecutionWallTime = 0;
+        long maxQueryScanBytes = 0;
         long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
@@ -442,6 +443,12 @@ public class QueryRuntimeProfile {
                     maxQueryExecutionWallTime = Math.max(maxQueryExecutionWallTime, toBeRemove.getValue());
                 }
                 instanceProfile.removeCounter("QueryExecutionWallTime");
+
+                toBeRemove = instanceProfile.getCounter("QueryScanBytes");
+                if (toBeRemove != null) {
+                    maxQueryScanBytes = Math.max(maxQueryScanBytes, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QueryScanBytes");
 
                 toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
                 if (toBeRemove != null) {
@@ -572,6 +579,8 @@ public class QueryRuntimeProfile {
         queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter queryScanBytes = newQueryProfile.addCounter("QueryScanBytes", TUnit.BYTES, null);
+        queryScanBytes.setValue(maxQueryScanBytes);
         Counter queryExecutionWallTime = newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
         queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);

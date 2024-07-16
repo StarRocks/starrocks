@@ -299,6 +299,10 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 "QueryCumulativeCpuTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
         query_cumulative_cpu->set(query_ctx->cpu_cost());
+        auto* query_scan_bytes = profile->add_counter(
+                "QueryScanBytes", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_scan_bytes->set(query_ctx->get_scan_bytes());
         auto* query_spill_bytes = profile->add_counter(
                 "QuerySpillBytes", TUnit::BYTES,
                 RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
