@@ -141,6 +141,22 @@ public class PlanTestNoneDBBase {
             sb.append(sorted);
             sb.append("])");
             return sb.toString();
+        } else if (predicate.contains("PREDICATES: ") && predicate.contains(" IN ")) {
+            // normalize in predicate values' order
+            String[] splitArray = predicate.split(" IN ");
+            if (splitArray.length != 2) {
+                return predicate;
+            }
+            String first = splitArray[0];
+            String second = splitArray[1];
+            String predicates = second.substring(1, second.length() - 1);
+            String sorted = Arrays.stream(predicates.split(", ")).sorted().collect(Collectors.joining(","));
+            StringBuilder sb = new StringBuilder();
+            sb.append(first);
+            sb.append(" IN (");
+            sb.append(sorted);
+            sb.append(")");
+            return sb.toString();
         } else {
             return predicate;
         }

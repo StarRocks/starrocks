@@ -1,0 +1,44 @@
+-- name: test_mv_refresh_list_partitions_with_nullable
+
+CREATE TABLE t3 (
+      id BIGINT,
+      province VARCHAR(64),
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+DUPLICATE KEY(id)
+PARTITION BY LIST (province, dt) (
+     PARTITION p1 VALUES IN (("beijing", "2024-01-01"))  ,
+     PARTITION p2 VALUES IN (("guangdong", "2024-01-01")), 
+     PARTITION p3 VALUES IN (("beijing", "2024-01-02"))  ,
+     PARTITION p4 VALUES IN (("guangdong", "2024-01-02")),
+     PARTITION p5 VALUES IN ((NULL, NULL)) 
+)
+DISTRIBUTED BY RANDOM;
+INSERT INTO t3 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, NULL, NULL);
+
+CREATE TABLE t4 (
+      id BIGINT,
+      province VARCHAR(64),
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+DUPLICATE KEY(id)
+PARTITION BY (province) 
+DISTRIBUTED BY RANDOM BUCKETS 1;
+INSERT INTO t4 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, 21, '2024-01-03');
+
+CREATE TABLE t5 (
+      id BIGINT,
+      province VARCHAR(64),
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+DUPLICATE KEY(id)
+PARTITION BY (province, dt) 
+DISTRIBUTED BY RANDOM;
+INSERT INTO t5 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, NULL, NULL);
+
+drop table t3;
+drop table t4;
+drop table t5;
