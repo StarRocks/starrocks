@@ -262,6 +262,19 @@ public class NodeMgr {
 
         Storage storage = new Storage(this.imageDir);
 
+        // prepare starmgr dir
+        if (RunMode.isSharedDataMode()) {
+            String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+            File dir = new File(subDir);
+            if (!dir.exists()) { // subDir might not exist
+                LOG.info("create image dir for star mgr, {}.", dir.getAbsolutePath());
+                if (!dir.mkdir()) {
+                    LOG.error("create image dir for star mgr failed! exit now.");
+                    System.exit(-1);
+                }
+            }
+        }
+
         // if helper node is point to self, or there is ROLE and VERSION file in local.
         // get the node type from local
         if (isMyself() || (roleFile.exists() && versionFile.exists())) {
@@ -451,16 +464,6 @@ public class NodeMgr {
             }
             getNewImageOnStartup(rightHelperNode, "");
             if (RunMode.isSharedDataMode()) { // get star mgr image
-                // subdir might not exist
-                String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
-                File dir = new File(subDir);
-                if (!dir.exists()) { // subDir might not exist
-                    LOG.info("create image dir for {}.", dir.getAbsolutePath());
-                    if (!dir.mkdir()) {
-                        LOG.error("create image dir for star mgr failed! exit now.");
-                        System.exit(-1);
-                    }
-                }
                 getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
             }
         }
