@@ -158,7 +158,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
 Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset,
                                                   const std::string& topic, StreamLoadContext* ctx) {
-    DCHECK(_k_consumer);
+    DCHECK(_k_consumer && !_k_consumer->closed());
     // create TopicPartitions
     std::stringstream ss;
     std::vector<RdKafka::TopicPartition*> topic_partitions;
@@ -191,6 +191,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
 }
 
 Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
     LOG(INFO) << "start kafka consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
@@ -294,6 +295,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
                                                std::vector<int64_t>* latest_offsets, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
@@ -322,6 +324,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 }
 
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
@@ -344,6 +347,10 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
+        if (_k_event_cb.get_error_msg().empty()) {
+            // some authentication errors event can only be triggered when the consumer is closed.
+            _k_consumer->close();
+        }
         std::stringstream ss;
         ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
@@ -400,14 +407,35 @@ Status KafkaDataConsumer::cancel(StreamLoadContext* ctx) {
 Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
+    DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
     _k_event_cb.reset_error_msg();
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
     RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
+=======
+// The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+    DCHECK(!_k_consumer->closed());
+    std::vector<RdKafka::TopicPartition*> topic_partitions;
+    // delete TopicPartition finally
+    auto tp_deleter = [&topic_partitions]() {
+        std::for_each(topic_partitions.begin(), topic_partitions.end(),
+                      [](RdKafka::TopicPartition* tp1) { delete tp1; });
+    };
+    DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
+
+    for (auto& offset : offsets) {
+        RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(topic, offset.first, offset.second + 1);
+        topic_partitions.push_back(tp1);
+    }
+
+    RdKafka::ErrorCode err = _k_consumer->commitSync(topic_partitions);
+>>>>>>> f17f645c33 ([Enhancement] Improve kafka authentication error message (#47649))
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to commit kafka offset : " << RdKafka::err2str(err);
