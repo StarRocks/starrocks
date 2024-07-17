@@ -199,6 +199,7 @@ public class ShowExecutorTest {
 
         // mock table
         OlapTable table = new OlapTable();
+        table.setId(10001);
         new Expectations(table) {
             {
                 table.getName();

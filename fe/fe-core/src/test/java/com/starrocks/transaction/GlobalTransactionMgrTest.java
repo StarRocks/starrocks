@@ -878,7 +878,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testPublishVersionTimeout()
-            throws UserException {
+            throws UserException, LockTimeoutException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
@@ -911,7 +911,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
-            throws UserException {
+            throws UserException, LockTimeoutException {
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         TransactionState transactionState = new TransactionState();
@@ -921,7 +921,7 @@ public class GlobalTransactionMgrTest {
 
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
-                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+                .retryCommitOnRateLimitExceeded(db, 1001L, Collections.emptyList(), Collections.emptyList(), null, 10L);
         Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
                 Collections.emptyList(), Collections.emptyList(), 10L, null));
     }

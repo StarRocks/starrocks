@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -98,7 +98,7 @@ public class TestLockInterface {
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock1() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock1() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
 
@@ -238,7 +238,7 @@ public class TestLockInterface {
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock2() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock2() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
         long rid2 = 2L;
@@ -260,7 +260,7 @@ public class TestLockInterface {
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock3() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock3() throws LockException {
         long rid = 1L;
         long rid2 = 2L;
         long rid3 = 3L;

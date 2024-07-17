@@ -52,11 +52,14 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
@@ -387,9 +390,14 @@ public class OlapDeleteJob extends DeleteJob {
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
-                getTabletFailInfos(), timeoutMs,
-                new InsertTxnCommitAttachment());
+        try {
+            return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
+                    getTabletFailInfos(), timeoutMs,
+                    new InsertTxnCommitAttachment());
+        } catch (LockTimeoutException e) {
+            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            return false;
+        }
     }
 
     @Override

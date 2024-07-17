@@ -336,7 +336,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                @NotNull List<TabletFailInfo> tabletFailInfos,
                                                long timeoutMillis) throws UserException {
-        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
+        try {
+            return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
+        } catch (LockTimeoutException e) {
+            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -360,7 +365,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
                                                @NotNull List<TabletFailInfo> tabletFailInfos,
                                                long timeoutMillis,
-                                               @Nullable TxnCommitAttachment txnCommitAttachment) throws UserException {
+                                               @Nullable TxnCommitAttachment txnCommitAttachment)
+            throws UserException, LockTimeoutException {
         long dueTime = timeoutMillis != 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
         VisibleStateWaiter waiter = retryCommitOnRateLimitExceeded(db, transactionId, tabletCommitInfos,
                 tabletFailInfos, txnCommitAttachment, timeoutMillis);
@@ -390,7 +396,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment txnCommitAttachment,
-            long timeoutMs) throws UserException {
+            long timeoutMs) throws UserException, LockTimeoutException {
         long startTime = System.currentTimeMillis();
         while (true) {
             try {
@@ -427,7 +433,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException, LockTimeoutException {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
@@ -855,6 +861,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("Txn", (long) getFinishedTransactionNum(),
-                               "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
+                "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
     }
 }

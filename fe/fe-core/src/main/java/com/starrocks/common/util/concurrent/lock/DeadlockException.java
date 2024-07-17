@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
-public class DeadlockException extends IllegalLockStateException {
+public class DeadlockException extends LockException {
     public DeadlockException(String msg) {
         super(msg);
     }
