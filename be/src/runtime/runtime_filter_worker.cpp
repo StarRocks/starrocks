@@ -297,12 +297,12 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     }
 }
 
-void RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(JoinRuntimeFilter* out) {
+Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(JoinRuntimeFilter* out) {
     DCHECK(skew_broadcast_rf_material != nullptr);
     DCHECK(skew_broadcast_rf_material->key_column != nullptr);
     // add boradcast's hash table's key column into out's _hash_partition_bf's every element(Instance and driver side)
     // because we can't know which element should be used when insert one row(need partition columns and partition exprs)
-    RuntimeFilterHelper::fill_runtime_bloom_filter(
+    return RuntimeFilterHelper::fill_runtime_bloom_filter(
             skew_broadcast_rf_material->key_column, skew_broadcast_rf_material->build_type, out,
             kHashJoinKeyColumnOffset, skew_broadcast_rf_material->eq_null, false);
 }
@@ -530,7 +530,11 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     // at this point, every rf instance is stored in _hash_partition_bf, so it's the best time to merge skew boradcast's rf
     if (status->is_skew_join) {
         DCHECK(status->skew_broadcast_rf_material != nullptr);
-        status->_merge_skew_broadcast_runtime_filter(out);
+        Status res = status->_merge_skew_broadcast_runtime_filter(out);
+        if (!res.ok()) {
+            VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter failed";
+            return;
+        }
     }
 
     // if well enough, then we send it out.

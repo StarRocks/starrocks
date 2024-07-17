@@ -125,18 +125,18 @@ size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcas
 size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(const ColumnPtr& column, bool eq_null,
                                                                              uint8_t* data) {
     size_t offset = 0;
-#define JRF_COPY_FIELD(field)                     \
+#define JRF_COPY_FIELD_TO(field)                  \
     memcpy(data + offset, &field, sizeof(field)); \
     offset += sizeof(field);
     // put version at the head.
-    JRF_COPY_FIELD(RF_VERSION_V2);
-    JRF_COPY_FIELD(eq_null);
+    JRF_COPY_FIELD_TO(RF_VERSION_V2);
+    JRF_COPY_FIELD_TO(eq_null);
     size_t num_rows = column->size();
-    JRF_COPY_FIELD(num_rows);
+    JRF_COPY_FIELD_TO(num_rows);
     bool is_nullable = column->is_nullable();
-    JRF_COPY_FIELD(is_nullable)
+    JRF_COPY_FIELD_TO(is_nullable)
     bool is_const = column->is_constant();
-    JRF_COPY_FIELD(is_const);
+    JRF_COPY_FIELD_TO(is_const);
 
     uint8_t* cur = data + offset;
     cur = serde::ColumnArraySerde::serialize(*column, cur);
@@ -154,13 +154,13 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(Obje
     SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
     size_t offset = 0;
 
-#define JRF_COPY_FIELD(field)                     \
+#define JRF_COPY_FIELD_FROM(field)                \
     memcpy(&field, data + offset, sizeof(field)); \
     offset += sizeof(field);
 
     // read version first.
     uint8_t version = 0;
-    JRF_COPY_FIELD(version);
+    JRF_COPY_FIELD_FROM(version);
     if (version != RF_VERSION_V2) {
         LOG(WARNING) << "unrecognized version:" << version;
         return 0;
@@ -168,17 +168,17 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(Obje
 
     // read eq_null
     bool eq_null;
-    JRF_COPY_FIELD(eq_null);
+    JRF_COPY_FIELD_FROM(eq_null);
 
     // read key column [num_rows,is_null, is_const,type,column_data]
     size_t num_rows = 0;
-    JRF_COPY_FIELD(num_rows);
+    JRF_COPY_FIELD_FROM(num_rows);
 
     bool is_null;
-    JRF_COPY_FIELD(is_null);
+    JRF_COPY_FIELD_FROM(is_null);
 
     bool is_const;
-    JRF_COPY_FIELD(is_const);
+    JRF_COPY_FIELD_FROM(is_const);
 
     TypeDescriptor type_descriptor = TypeDescriptor::from_protobuf(ptype);
 

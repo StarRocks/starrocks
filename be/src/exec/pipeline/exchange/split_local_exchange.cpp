@@ -156,5 +156,4 @@ void SplitLocalExchanger::close_sink_operator() {
     _opened_sink_number--;
 }
 
-
 } // namespace starrocks::pipeline

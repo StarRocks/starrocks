@@ -95,7 +95,7 @@ public:
               recv_last_filter_ts(other.recv_last_filter_ts),
               broadcast_filter_ts(other.broadcast_filter_ts) {}
     // merge skew_broadcast_rf_material into out's _hash_partition_bf
-    void _merge_skew_broadcast_runtime_filter(JoinRuntimeFilter* out);
+    Status _merge_skew_broadcast_runtime_filter(JoinRuntimeFilter* out);
     // which be number send this rf.
     std::unordered_set<int32_t> arrives;
     // how many partitioned rf we expect
