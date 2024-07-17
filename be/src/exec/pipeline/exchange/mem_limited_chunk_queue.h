@@ -153,12 +153,13 @@ private:
         if (status.ok() || _io_task_status.load() != nullptr) {
             return;
         }
-        std::shared_ptr<Status> old_status;
-        auto new_status = std::make_shared<Status>(status);
-        _io_task_status.compare_exchange_strong(old_status, new_status);
+        Status* old_status = nullptr;
+        if (_io_task_status.compare_exchange_strong(old_status, &_status)) {
+            _status = status;
+        }
     }
     Status _get_io_task_status() const {
-        auto status = _io_task_status.load();
+        auto* status = _io_task_status.load();
         return status == nullptr ? Status::OK() : *status;
     }
 
@@ -201,7 +202,9 @@ public:
 
     Options _opts;
 
-    std::atomic<std::shared_ptr<Status>> _io_task_status;
+    // @TODO we can use atomic shared_ptr directly after upgrading compiler
+    std::atomic<Status*> _io_task_status = nullptr;
+    Status _status;
 
     std::atomic_bool _has_flush_io_task = false;
     std::queue<Block*> _loaded_blocks;
