@@ -238,7 +238,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setInputs(List.of(leftSplitConsumerOptExpForShuffleJoin, rightSplitConsumerOptExpForShuffleJoin))
                     .setLogicalProperty(opt.getLogicalProperty())
                     .setStatistics(opt.getStatistics())
-                    .getCompatibleTypeForBetweenAndInsetRequiredProperties(opt.getRequiredProperties())
+                    .setRequiredProperties(opt.getRequiredProperties())
                     .setCost(opt.getCost()).build();
 
             OptExpression leftSplitConsumerOptExpForBroadcastJoin = OptExpression.builder()

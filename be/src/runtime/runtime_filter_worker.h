@@ -234,7 +234,7 @@ private:
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
-                                      int64_t rpc_http_min_size, std::string msg);
+                                      int64_t rpc_http_min_size, const std::string& msg);
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
