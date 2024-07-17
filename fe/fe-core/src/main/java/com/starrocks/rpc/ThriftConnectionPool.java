@@ -35,7 +35,7 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.lang.reflect.Constructor;
 
-public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient> {
+public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServiceClient> {
     private static final Logger LOG = LogManager.getLogger(ThriftConnectionPool.class);
 
     static GenericKeyedObjectPoolConfig heartbeatConfig = new GenericKeyedObjectPoolConfig();
@@ -82,9 +82,9 @@ public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient
     public static ThriftConnectionPool<TFileBrokerService.Client> brokerPool =
             new ThriftConnectionPool<>("TFileBrokerService", brokerPoolConfig, Config.broker_client_timeout_ms);
 
-    private final GenericKeyedObjectPool<TNetworkAddress, VALUE> pool;
+    private final GenericKeyedObjectPool<TNetworkAddress, SERVER_CLIENT> pool;
     private final String className;
-    private int defaultTimeoutMs;
+    private final int defaultTimeoutMs;
 
     public ThriftConnectionPool(String className, GenericKeyedObjectPoolConfig config, int defaultTimeoutMs) {
         this.className = "com.starrocks.thrift." + className + "$Client";
@@ -96,7 +96,7 @@ public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient
         return defaultTimeoutMs;
     }
 
-    public boolean reopen(VALUE object, int timeoutMs) {
+    public boolean reopen(SERVER_CLIENT object, int timeoutMs) {
         boolean ok = true;
         object.getOutputProtocol().getTransport().close();
         try {
@@ -115,29 +115,29 @@ public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient
         pool.clear(addr);
     }
 
-    public boolean peak(VALUE object) {
+    public boolean peak(SERVER_CLIENT object) {
         return object.getOutputProtocol().getTransport().peek();
     }
 
-    public VALUE borrowObject(TNetworkAddress address) throws Exception {
+    public SERVER_CLIENT borrowObject(TNetworkAddress address) throws Exception {
         return pool.borrowObject(address);
     }
 
-    public VALUE borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
-        VALUE value = pool.borrowObject(address);
-        TSocket socket = (TSocket) (value.getOutputProtocol().getTransport());
+    public SERVER_CLIENT borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+        SERVER_CLIENT serverClient = pool.borrowObject(address);
+        TSocket socket = (TSocket) (serverClient.getOutputProtocol().getTransport());
         socket.setTimeout(timeoutMs);
-        return value;
+        return serverClient;
     }
 
-    public void returnObject(TNetworkAddress address, VALUE object) {
+    public void returnObject(TNetworkAddress address, SERVER_CLIENT object) {
         if (address == null || object == null) {
             return;
         }
         pool.returnObject(address, object);
     }
 
-    public void invalidateObject(TNetworkAddress address, VALUE object) {
+    public void invalidateObject(TNetworkAddress address, SERVER_CLIENT object) {
         if (address == null || object == null) {
             return;
         }
@@ -148,16 +148,16 @@ public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient
         }
     }
 
-    private class ThriftClientFactory extends BaseKeyedPooledObjectFactory<TNetworkAddress, VALUE> {
+    private class ThriftClientFactory extends BaseKeyedPooledObjectFactory<TNetworkAddress, SERVER_CLIENT> {
 
         private Object newInstance(String className, TProtocol protocol) throws Exception {
-            Class newoneClass = Class.forName(className);
-            Constructor cons = newoneClass.getConstructor(TProtocol.class);
+            Class<?> c = Class.forName(className);
+            Constructor<?> cons = c.getConstructor(TProtocol.class);
             return cons.newInstance(protocol);
         }
 
         @Override
-        public VALUE create(TNetworkAddress key) throws Exception {
+        public SERVER_CLIENT create(TNetworkAddress key) throws Exception {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("before create socket hostname={} key.port={} timeoutMs={}",
                         key.hostname, key.port, defaultTimeoutMs);
@@ -165,24 +165,23 @@ public class ThriftConnectionPool<VALUE extends org.apache.thrift.TServiceClient
             TTransport transport = new TSocket(key.hostname, key.port, defaultTimeoutMs);
             transport.open();
             TProtocol protocol = new TBinaryProtocol(transport);
-            VALUE client = (VALUE) newInstance(className, protocol);
-            return client;
+            return (SERVER_CLIENT) newInstance(className, protocol);
         }
 
         @Override
-        public PooledObject<VALUE> wrap(VALUE client) {
-            return new DefaultPooledObject<VALUE>(client);
+        public PooledObject<SERVER_CLIENT> wrap(SERVER_CLIENT client) {
+            return new DefaultPooledObject<>(client);
         }
 
         @Override
-        public boolean validateObject(TNetworkAddress key, PooledObject<VALUE> p) {
+        public boolean validateObject(TNetworkAddress key, PooledObject<SERVER_CLIENT> p) {
             boolean isOpen = p.getObject().getOutputProtocol().getTransport().isOpen();
             LOG.debug("isOpen={}", isOpen);
             return isOpen;
         }
 
         @Override
-        public void destroyObject(TNetworkAddress key, PooledObject<VALUE> p) {
+        public void destroyObject(TNetworkAddress key, PooledObject<SERVER_CLIENT> p) {
             // InputProtocol and OutputProtocol have the same reference in OurCondition
             if (p.getObject().getOutputProtocol().getTransport().isOpen()) {
                 p.getObject().getOutputProtocol().getTransport().close();
