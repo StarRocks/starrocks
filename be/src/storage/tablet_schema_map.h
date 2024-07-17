@@ -60,6 +60,8 @@ public:
     // [thread-safe]
     void erase(SchemaId id);
 
+    TabletSchemaPtr get(SchemaId id);
+
     // Checks if there is an element with unique id equivalent to id in the container.
     //
     // Returns true if there is such an element, otherwise false.

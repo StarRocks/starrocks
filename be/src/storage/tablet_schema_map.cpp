@@ -180,6 +180,20 @@ void TabletSchemaMap::erase(SchemaId id) {
     }
 }
 
+TabletSchemaPtr TabletSchemaMap::get(SchemaId id) {
+    MapShard* shard = get_shard(id);
+    TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr;
+    {
+        std::lock_guard l(shard->mtx);
+        auto iter = shard->map.find(id);
+        if (iter != shard->map.end()) {
+            result = it->second.tablet_schema.lock();
+        }
+    }
+    return result;
+}
+
 bool TabletSchemaMap::contains(SchemaId id) const {
     const MapShard* shard = get_shard(id);
     std::lock_guard l(shard->mtx);
