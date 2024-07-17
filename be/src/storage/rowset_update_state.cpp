@@ -315,13 +315,8 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                                 const std::vector<uint32_t>& update_column_ids,
                                                                 const TabletSchemaCSPtr& tablet_schema) {
-<<<<<<< HEAD
-    if (_partial_update_value_column_ids.empty()) {
-=======
     CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_value_columns");
-    if (!_partial_update_value_column_inited) {
-        _partial_update_value_column_inited = true;
->>>>>>> c6c2941a89 ([Enhancement] Add memory check during pk apply (#47889))
+    if (_partial_update_value_column_ids.empty()) {
         // need to init
         for (uint32_t cid : update_column_ids) {
             if (cid >= tablet_schema->num_key_columns()) {

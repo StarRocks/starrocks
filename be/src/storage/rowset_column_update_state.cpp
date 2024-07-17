@@ -225,13 +225,8 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
     CHECK_MEM_LIMIT("RowsetColumnUpdateState::_resolve_conflict");
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
-<<<<<<< HEAD
-    _upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0);
-    index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids));
-=======
     TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0));
     RETURN_IF_ERROR(index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids)));
->>>>>>> c6c2941a89 ([Enhancement] Add memory check during pk apply (#47889))
     int64_t t_read_index = MonotonicMillis();
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
         TRY_CATCH_BAD_ALLOC({
