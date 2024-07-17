@@ -5094,12 +5094,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
     }
-<<<<<<< HEAD
-=======
 
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
         // TODO
     }
->>>>>>> 465e77982f ([Enhancement] Add mv repair handler interface (#48365))
 }
