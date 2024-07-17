@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 
+#include <boost/stacktrace.hpp>
 #include <exception>
 #include <set>
 #include <unordered_map>
@@ -450,6 +451,7 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
+        LOG(WARNING) << boost::stacktrace::stacktrace();
         auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
