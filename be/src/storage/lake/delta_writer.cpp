@@ -441,6 +441,10 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     }
 
     // handle partial update
+<<<<<<< HEAD
+=======
+    bool skip_pk_preload = config::skip_lake_pk_preload;
+>>>>>>> c6c2941a89 ([Enhancement] Add memory check during pk apply (#47889))
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update) {
