@@ -1337,7 +1337,21 @@ CONF_mBool(brpc_socket_keepalive, "false");
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
+<<<<<<< HEAD
 CONF_mBool(enable_pk_strict_memcheck, "false");
+=======
+// python envs config
+// create time worker timeout
+CONF_mInt32(create_child_worker_timeout_ms, "1000");
+// config ENV PYTHONPATH
+CONF_Strings(python_envs, "");
+// report python worker STDERR to client
+CONF_Bool(report_python_worker_error, "true");
+CONF_Bool(python_worker_reuse, "true");
+CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
+CONF_mBool(skip_lake_pk_preload, "false");
+>>>>>>> c6c2941a89 ([Enhancement] Add memory check during pk apply (#47889))
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 } // namespace starrocks::config
