@@ -439,6 +439,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private transient Optional<Map<Table, SlotRef>> refBaseTablePartitionSlotsOpt = Optional.empty();
     // ref bae table to partition column
     private transient Optional<Map<Table, Column>> refBaseTablePartitionColumnsOpt = Optional.empty();
+    // cache table to base table info's mapping to refresh table
+    private transient Map<Table, BaseTableInfo> tableToBaseTableInfoCache = Maps.newHashMap();
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -1389,13 +1391,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.info("Base table {} contains no partition expr, skip", table.getName());
                     continue;
                 }
+                tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionExprMap.put(table, mvPartitionExpr.get().getExpr());
             }
             LOG.info("The refBaseTablePartitionExprMap of mv {} is {}", getName(), refBaseTablePartitionExprMap);
             refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
+            return refBaseTablePartitionExprMap;
+        } else {
+            Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
+            return refBaseTablePartitionExprsOpt.map(this::refreshBaseTable).get();
         }
-        Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
-        return refBaseTablePartitionExprsOpt.get();
     }
 
     /**
@@ -1413,13 +1418,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.info("Base table {} contains no partition expr, skip", table.getName());
                     continue;
                 }
+                tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionSlotMap.put(table, mvPartitionExpr.get().getSlotRef());
             }
             LOG.info("The refBaseTablePartitionSlotMap of mv {} is {}", getName(), refBaseTablePartitionSlotMap);
             refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
+            return refBaseTablePartitionSlotMap;
+        } else {
+            Preconditions.checkState(refBaseTablePartitionSlotsOpt.isPresent());
+            return refBaseTablePartitionSlotsOpt.map(this::refreshBaseTable).get();
         }
-        Preconditions.checkState(refBaseTablePartitionSlotsOpt.isPresent());
-        return refBaseTablePartitionSlotsOpt.get();
     }
 
     /**
@@ -1542,10 +1550,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public Map<Table, Column> getRefBaseTablePartitionColumns() {
         if (refBaseTablePartitionColumnsOpt.isEmpty()) {
-            refBaseTablePartitionColumnsOpt = Optional.of(getBaseTablePartitionColumnMapImpl());
+            Map<Table, Column> result = getBaseTablePartitionColumnMapImpl();
+            refBaseTablePartitionColumnsOpt = Optional.of(result);
+            return result;
+        } else {
+            Preconditions.checkState(refBaseTablePartitionColumnsOpt.isPresent());
+            return refBaseTablePartitionColumnsOpt.map(this::refreshBaseTable).get();
         }
-        Preconditions.checkState(refBaseTablePartitionColumnsOpt.isPresent());
-        return refBaseTablePartitionColumnsOpt.get();
+    }
+
+    /**
+     * Since the table is cached in the Optional, needs to refresh it again for each query.
+     * TODO: optimize cases which not care table's refresh-ness.
+     */
+    private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
+        Map<Table, K> result = Maps.newHashMap();
+        for (Map.Entry<Table, K> e : cached.entrySet()) {
+            Preconditions.checkState(tableToBaseTableInfoCache.containsKey(e.getKey()));
+            Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(e.getKey()));
+            result.put(refreshedTable, e.getValue());
+        }
+        return result;
     }
 
     private Map<Table, Column> getBaseTablePartitionColumnMapImpl() {
@@ -1575,6 +1600,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         table.getName(), baseTablePartitionSlotMap);
                 continue;
             }
+            tableToBaseTableInfoCache.put(table, baseTableInfo);
             result.put(table, partitionColumnOpt.get());
         }
         if (result.isEmpty()) {
