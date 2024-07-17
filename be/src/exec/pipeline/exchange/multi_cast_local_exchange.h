@@ -52,6 +52,8 @@ class MultiCastLocalExchanger {
 public:
     virtual ~MultiCastLocalExchanger() = default;
     virtual Status init_metrics(RuntimeProfile* profile) = 0;
+    virtual Status prepare(RuntimeState* state) {}
+    virtual void close(RuntimeState* state) {}
 
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
     virtual bool can_push_chunk() const = 0;
