@@ -3289,6 +3289,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean emr_serverless_warehouse_mapping_metrics_enable = true;
 
+    @ConfField(mutable = true)
+    public static boolean emr_serverless_allow_get_metrics_without_auth = false;
+
     /**
      * Enable auto create tablet when creating table and add partition
      **/
