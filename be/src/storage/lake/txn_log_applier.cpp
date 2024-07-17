@@ -437,7 +437,6 @@ private:
             auto idx = static_cast<uint32_t>(pre_input_pos - _metadata->mutable_rowsets()->begin());
             output_rowset_schema_id = _metadata->rowset_schema_id(idx);
         }
-        LOG(INFO) << "output_rowset_schema_id: " << output_rowset_schema_id;
         const auto end_input_pos = pre_input_pos + 1;
 
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
