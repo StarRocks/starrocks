@@ -184,6 +184,7 @@ public:
 private:
     std::string _brokers;
     std::string _topic;
+    std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
 
     size_t _non_eof_partition_count = 0;
