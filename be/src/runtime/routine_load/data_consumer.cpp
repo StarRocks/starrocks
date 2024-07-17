@@ -443,7 +443,7 @@ Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) 
     RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+        ss << "failed to commit kafka offset, topic: " << _topic << ", group id: " << _group_id
            << ", err: " << RdKafka::err2str(err);
         return Status::InternalError(ss.str());
     }
