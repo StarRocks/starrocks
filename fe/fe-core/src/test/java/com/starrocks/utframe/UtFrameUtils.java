@@ -1309,6 +1309,10 @@ public class UtFrameUtils {
             }
         };
 
+        mockDML();
+    }
+
+    public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}

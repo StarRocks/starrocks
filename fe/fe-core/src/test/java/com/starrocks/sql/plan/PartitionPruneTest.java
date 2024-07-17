@@ -16,6 +16,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -202,6 +203,7 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGeneratedColumnPrune() throws Exception {
         // c2
         starRocksAssert.query("select count(*) from t_gen_col where c2 = 1 ")
@@ -254,5 +256,27 @@ public class PartitionPruneTest extends PlanTestBase {
         // non-monotonic function
         starRocksAssert.query("select count(*) from t_gen_col_1 where c1 = '2024-01-01' ")
                 .explainContains("partitions=2/2");
+    }
+
+    @Test
+    public void testMinMaxPrune() throws Exception {
+        UtFrameUtils.mockDML();
+        // single-item list partition
+        starRocksAssert.withTable("create table t1_list " +
+                "(c1 int, c2 int) " +
+                "partition by (c1)" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t1_list add partition p4 values in ('4')");
+        starRocksAssert.ddl("alter table t1_list add partition p3 values in ('3')");
+        starRocksAssert.ddl("alter table t1_list add partition p2 values in ('2')");
+        starRocksAssert.ddl("alter table t1_list add partition p1 values in ('1')");
+        starRocksAssert.getCtx().executeSql("insert into t1_list values(1, 1), (2, 2), (3, 3), (4, 4)");
+
+        starRocksAssert.query("select min(c1) from t1_list").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t1_list").explainContains("partitions=1/5");
+
+        // multi-item list partition
+
+        // expression partition
     }
 }

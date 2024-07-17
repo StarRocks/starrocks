@@ -1518,6 +1518,10 @@ public class OlapTable extends Table {
         return idToPartition.values();
     }
 
+    public List<Partition> getNonEmptyPartitions() {
+        return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
+    }
+
     public int getNumberOfPartitions() {
         return idToPartition.size();
     }

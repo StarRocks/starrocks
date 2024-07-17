@@ -34,7 +34,8 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
-import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -99,6 +100,38 @@ public class ListPartitionInfo extends PartitionInfo {
         this.deprecatedColumns = new ArrayList<>();
         this.partitionColumnIds = new ArrayList<>();
         this.idToIsTempPartition = new HashMap<>();
+    }
+
+    /**
+     * Represent a partition cell, which can be single-column or multiple-columns
+     */
+    public static class ListPartitionCell {
+        public static final ListPartitionCell EMPTY = new ListPartitionCell();
+
+        private List<LiteralExpr> singleColumnValues;
+        private List<List<LiteralExpr>> multiColumnValues;
+
+        public static ListPartitionCell single(List<LiteralExpr> values) {
+            ListPartitionCell res = new ListPartitionCell();
+            res.singleColumnValues = values;
+            return res;
+        }
+
+        public static ListPartitionCell multi(List<List<LiteralExpr>> multi) {
+            ListPartitionCell res = new ListPartitionCell();
+            res.multiColumnValues = multi;
+            return res;
+        }
+    }
+
+    public ListPartitionCell getPartitionListExpr(long partitionId) {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return ListPartitionCell.single(idToLiteralExprValues.get(partitionId));
+        } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
+            return ListPartitionCell.multi(idToMultiLiteralExprValues.get(partitionId));
+        } else {
+            return ListPartitionCell.EMPTY;
+        }
     }
 
     public void setValues(long partitionId, List<String> values) {
@@ -495,6 +528,35 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
         idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public List<Long> getSortedPartitions() {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .sorted((x, y) -> compareList(x.getValue(), y.getValue()))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
+            throw new NotImplementedException("todo");
+        } else {
+            return Lists.newArrayList();
+        }
+    }
+
+    /**
+     * Compare based on the max/min value in the list
+     */
+    private static int compareList(List<LiteralExpr> lhs, List<LiteralExpr> rhs) {
+        Optional<LiteralExpr> lhsMin = lhs.stream().min(LiteralExpr::compareTo);
+        Optional<LiteralExpr> rhsMin = rhs.stream().min(LiteralExpr::compareTo);
+        if (lhsMin.isEmpty()) {
+            return -1;
+        } else if (rhsMin.isEmpty()) {
+            return 1;
+        } else {
+            return lhsMin.get().compareTo(rhsMin.get());
+        }
     }
 
     @Override
