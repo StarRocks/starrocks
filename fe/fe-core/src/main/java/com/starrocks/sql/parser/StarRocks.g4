@@ -2503,7 +2503,7 @@ showRecommendationsStatement
     ;
 
 alterTunespaceClause
-    : APPEND queryStatement
+    : APPEND (queryName=string)? queryStatement
     | POPULATE (AS queryStatement |FROM (DATABASE database=qualifiedName|TUNESPACE srcTunespace=qualifiedName))
     | DELETE WHERE (where=expression)
     ;

@@ -159,9 +159,10 @@ public class AutoMVSSBTest {
 
     @Test
     public void testFlatQ13() {
+        String name = "Q1.3";
         Optional<Pair<String, String>> optNameAndQuery = TestUtil.getSsbLineorderFlatQueryList()
                 .stream()
-                .filter(p -> p.first.equals("Q1.3"))
+                .filter(p -> p.first.equals(name))
                 .findFirst();
         Assert.assertTrue(optNameAndQuery.isPresent());
         String query = optNameAndQuery.get().second;
@@ -171,7 +172,7 @@ public class AutoMVSSBTest {
         Map<String, FQTable> fqTableMap = fqTablesAndSubPlans.first;
         List<OptExpression> subPlans = fqTablesAndSubPlans.second;
         Assert.assertFalse(subPlans.isEmpty());
-        PlanPieceInfo pieceInfo = PlanPieceInfo.from(options, subPlans.get(0), false, fqTableMap);
+        PlanPieceInfo pieceInfo = PlanPieceInfo.from(options, name, subPlans.get(0), false, fqTableMap);
         System.out.println(pieceInfo.getQuery());
         Assert.assertTrue(pieceInfo.getQuery().contains("SELECT\n" +
                 "  (1) AS _ca0003\n" +

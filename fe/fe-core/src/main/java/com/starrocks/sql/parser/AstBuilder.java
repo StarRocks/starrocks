@@ -7508,8 +7508,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAlterTunespaceStatement(StarRocksParser.AlterTunespaceStatementContext ctx) {
         TableName tableName = qualifiedNameToTableName(getQualifiedName(ctx.qualifiedName()));
         if (ctx.alterTunespaceClause().APPEND() != null) {
+            String queryName = Optional.ofNullable(ctx.alterTunespaceClause().queryName)
+                    .map(strCtx -> (StringLiteral) visit(strCtx))
+                    .map(StringLiteral::getStringValue)
+                    .orElse("");
             QueryStatement queryStatement = (QueryStatement) visit(ctx.alterTunespaceClause().queryStatement());
-            return new AlterTunespaceStmt(tableName, new AlterTunespaceClause.AppendClause(queryStatement));
+            return new AlterTunespaceStmt(tableName, new AlterTunespaceClause.AppendClause(queryName, queryStatement));
         } else {
             if (ctx.alterTunespaceClause().AS() != null) {
                 QueryStatement queryStatement = (QueryStatement) visit(ctx.alterTunespaceClause().queryStatement());

@@ -154,7 +154,7 @@ public abstract class PlanPiecePattern {
         return subPlans;
     }
 
-    private static Optional<OptExpression> getAggRoot(OptExpression root) {
+    public static Optional<OptExpression> getAggRoot(OptExpression root) {
         OptExpression newRoot = root;
         while (true) {
             OperatorType opType = newRoot.getOp().getOpType();

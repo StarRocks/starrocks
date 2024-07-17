@@ -40,6 +40,7 @@ public class ShowRecommendationsStmt extends ShowStmt {
     private static final String BENEFIT = "Benefit";
     private static final String NUM_QUERIES_ACCELERATED = "NumQueriesAccelerated";
     private static final String TOTAL_BENEFIT = "TotalBenefit";
+    private static final String ACCELERATED_QUERIES = "AcceleratedQueries";
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
             .addColumn(new Column(ID, Type.INT))
             .addColumn(new Column(MV_NAME, Type.STRING))
@@ -55,6 +56,7 @@ public class ShowRecommendationsStmt extends ShowStmt {
             .addColumn(new Column(BENEFIT, Type.DOUBLE))
             .addColumn(new Column(NUM_QUERIES_ACCELERATED, Type.INT))
             .addColumn(new Column(TOTAL_BENEFIT, Type.DOUBLE))
+            .addColumn(new Column(ACCELERATED_QUERIES, Type.STRING))
             .build();
     private TableName tableName;
     private long limit = -1;

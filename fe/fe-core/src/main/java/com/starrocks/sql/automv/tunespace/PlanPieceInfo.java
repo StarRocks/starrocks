@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -102,23 +103,25 @@ public class PlanPieceInfo {
         return TablePlus.of(table, PlanPieceInfo.class, getColumns(), replicationNum);
     }
 
-    public static PlanPieceInfo from(AutoMVOptions options, OptExpression subPlan, boolean enableTrace,
+    public static PlanPieceInfo from(AutoMVOptions options, String name, OptExpression subPlan, boolean enableTrace,
                                      Map<String, FQTable> fqTableMap) {
         ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
-        PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap);
+        PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(name, subPlan, idConverter, fqTableMap);
         PrettyPrinter traceLog = enableTrace ? new PrettyPrinter() : null;
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, traceLog);
         PlanPieceInfo planPieceInfo = PlanPieceInfo.from(planPiece, policy, fqTableMap);
         if (traceLog != null) {
             System.out.println(traceLog.getResult());
         }
+        planPieceInfo.getTraits().setName(name);
         return planPieceInfo;
     }
 
     public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, OptExpression entirePlan,
                                              Map<String, FQTable> fqTableMap) {
         ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
-        PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(entirePlan, idConverter, fqTableMap);
+        PlanPiece planPiece =
+                PlanPieceBuilder.createPlanPiece(mvPlus.getMv().getName(), entirePlan, idConverter, fqTableMap);
         return PlanPieceInfo.fromLegacyMV(mvPlus, planPiece, fqTableMap);
     }
 
@@ -184,6 +187,7 @@ public class PlanPieceInfo {
         PlanPieceInfo pieceInfo = from(originalQuery, query, piece, fqTableMap);
         PieceTraits traits = pieceInfo.getTraits();
         traits.setLegacyMV(LegacyMVInfo.from(mvPlus));
+        traits.setName(mvPlus.getMv().getName());
         return pieceInfo;
     }
 
@@ -254,6 +258,22 @@ public class PlanPieceInfo {
 
     public void setTraits(String traitsJson) {
         this.traits = new Gson().fromJson(traitsJson, PieceTraits.class);
+    }
+
+    private String getDefaultName() {
+        return "id#" + id;
+    }
+
+    public String getName() {
+        return Optional.ofNullable(traits)
+                .map(PieceTraits::getName)
+                .map(name -> {
+                    if (name.isEmpty()) {
+                        return getDefaultName();
+                    } else {
+                        return name;
+                    }
+                }).orElseGet(this::getDefaultName);
     }
 
     public enum Category {

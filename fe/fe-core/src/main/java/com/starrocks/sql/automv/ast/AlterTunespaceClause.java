@@ -24,10 +24,20 @@ import java.util.Collections;
 
 public abstract class AlterTunespaceClause {
     public static final class AppendClause extends AlterTunespaceClause {
+        private String queryName;
         private QueryStatementPlus queryStatement;
 
-        public AppendClause(QueryStatement queryStatement) {
+        public AppendClause(String queryName, QueryStatement queryStatement) {
+            this.queryName = queryName;
             this.queryStatement = QueryStatementPlus.of(queryStatement, Collections.emptyMap());
+        }
+
+        public String getQueryName() {
+            return queryName;
+        }
+
+        public void setQueryName(String queryName) {
+            this.queryName = queryName;
         }
 
         public QueryStatementPlus getQueryStatement() {

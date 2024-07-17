@@ -16,10 +16,8 @@ package com.starrocks.sql.automv.generator;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
@@ -27,14 +25,14 @@ import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
-import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
-import com.starrocks.sql.automv.qe.QueryStatementPlus;
 import com.starrocks.sql.automv.qe.RboOptimizer;
+import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.util.Util;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -44,6 +42,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public class GeneratorTest {
@@ -63,38 +62,6 @@ public class GeneratorTest {
     @BeforeClass
     public static void setUp() throws Exception {
         getStarRocksAssert();
-    }
-
-    //TODO(by satanson): should be removed after all PRs merged
-    @Deprecated
-    private static Map<String, String> getMaterializedViews(ConnectContext ctx, String sql) {
-        QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
-        QueryStatement queryStmt = stmt.getQueryStatement();
-        Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
-        Map<String, String> mvMap = Maps.newHashMap();
-        List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
-        for (OptExpression subPlan : subPlans) {
-            ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
-            Optional<AggregatePiece> optPlanPiece =
-                    PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap).cast(AggregatePiece.class);
-            Preconditions.checkArgument(optPlanPiece.isPresent());
-            AggregatePiece planPiece = optPlanPiece.get();
-
-            PlanPieceNormalizer.normalize(planPiece);
-            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
-            MVGenerateContext mvGenerateContext = MVGenerateContext.builder()
-                    .setMvNameGenerator(query -> MVName.generateFromQuery(query).toString())
-                    .setNextId(idConverter::nextId)
-                    .setOptions(options)
-                    .build();
-            planPiece = AggregatePolicies.defaultPolicies(options).convert(planPiece).orElse(planPiece);
-            planPiece = AggregatePolicies.applyRollupOrPerfectMatch(planPiece);
-            Optional<QueryGenerateResult> optResult = AggregateMVGenerator.generate(planPiece, mvGenerateContext);
-            Assert.assertTrue(optResult.isPresent());
-            QueryGenerateResult result = optResult.get();
-            mvMap.put(result.getMvName(), result.getSubquery().getResult());
-        }
-        return mvMap;
     }
 
     @Test
@@ -125,8 +92,10 @@ public class GeneratorTest {
             Map<String, FQTable> fqTableMap = fQTableMapAndSubPlans.first;
             PrettyPrinter traceLog = new PrettyPrinter();
             AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+            Supplier<String> nameGenerator = Util.nextStringGenerator(p.first + ".part.", "");
             for (OptExpression subPlan : subPlans) {
-                PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap);
+                PlanPiece planPiece =
+                        PlanPieceBuilder.createPlanPiece(nameGenerator.get(), subPlan, idConverter, fqTableMap);
                 AggregatePiece aggPiece = planPiece.mustCast(AggregatePiece.class);
                 AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, traceLog);
                 aggPiece = policy.convert(aggPiece).orElse(aggPiece);
@@ -136,7 +105,7 @@ public class GeneratorTest {
                 String query = QueryGenerator.generate(aggPiece, queryGenerateContext).getSubquery().getResult();
 
                 //TODO(by satanson): should be removed after all PRs merged
-                Map<String, String> mvs = getMaterializedViews(ctx, query);
+                Map<String, String> mvs = AutoMVUtil.getMaterializedViews(ctx, query);
                 mvList.addAll(mvs.values());
             }
         }
@@ -162,10 +131,10 @@ public class GeneratorTest {
                 "  )\n" +
                 "group by\n" +
                 "  i_brand";
-        Map<String, String> mvs = getMaterializedViews(getStarRocksAssert().getCtx(), q0);
+        Map<String, String> mvs = AutoMVUtil.getMaterializedViews(getStarRocksAssert().getCtx(), q0);
         Assert.assertEquals(1, mvs.size());
         String mv = mvs.values().iterator().next();
-        String expectMv = "CREATE MATERIALIZED VIEW _mv_20240523T200111_094c498c29bd6f97f89a6e03f92463a0d1d03f4c (\n" +
+        String expectMv = "CREATE MATERIALIZED VIEW _mv (\n" +
                 "  i_brand\n" +
                 "  , _ca0004\n" +
                 ")\n" +
@@ -175,8 +144,10 @@ public class GeneratorTest {
                 "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
                 "  \"replicated_storage\" = \"true\",\n" +
+                "  \"session.enable_spill\" = \"true\",\n" +
                 "  \"storage_medium\" = \"HDD\",\n" +
-                "  \"replication_num\" = \"1\"\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"session.query_mem_limit\" = \"12884901888\"\n" +
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +

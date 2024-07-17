@@ -43,6 +43,7 @@ public class DistributionPolicy {
             bucketNum = 1;
         }
         if (!bucketColumns.isEmpty()) {
+            bucketColumns = bucketColumns.subList(0, Math.min(6, bucketColumns.size()));
             printer.add("DISTRIBUTED BY HASH").spaces(1).add("(")
                     .addItems(", ", bucketColumns).add(")")
                     .add(" BUCKETS ").add(bucketNum)

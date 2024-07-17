@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.pieces;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 
 import java.util.List;
@@ -24,10 +25,10 @@ public class PlanPieceBuildContext {
     private final PieceCommonState commonState;
     private final List<PlanPiece> dependPieces;
 
-    private PlanPieceBuildContext(ColumnRefToIdConverter idConverter, Map<String, FQTable> fqTableMap,
+    private PlanPieceBuildContext(ColumnRefToIdConverter idConverter, String name, Map<String, FQTable> fqTableMap,
                                   List<PlanPiece> pieces) {
-        this.commonState =
-                new PieceCommonState(Objects.requireNonNull(idConverter), Objects.requireNonNull(fqTableMap));
+        this.commonState = new PieceCommonState(Objects.requireNonNull(idConverter), ImmutableSet.of(name),
+                Objects.requireNonNull(fqTableMap));
         this.dependPieces = Objects.requireNonNull(pieces);
     }
 
@@ -38,9 +39,10 @@ public class PlanPieceBuildContext {
     }
 
     public static PlanPieceBuildContext of(ColumnRefToIdConverter idConverter,
+                                           String name,
                                            Map<String, FQTable> fqTableMap,
                                            List<PlanPiece> pieces) {
-        return new PlanPieceBuildContext(idConverter, fqTableMap, pieces);
+        return new PlanPieceBuildContext(idConverter, name, fqTableMap, pieces);
     }
 
     PlanPieceBuildContext newContextWithPieces(List<PlanPiece> pieces) {

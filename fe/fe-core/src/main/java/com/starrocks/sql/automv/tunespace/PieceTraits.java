@@ -20,10 +20,9 @@ import java.util.List;
 import java.util.Map;
 
 public class PieceTraits {
-    // baseTable info
-
     // use version to prevent
     private long version;
+    private String name;
     // dimensions and metrics
     private int numDimensions;
     private int numRollupDimensions;
@@ -38,10 +37,16 @@ public class PieceTraits {
     // hoistedConjuncts;
     private int numHoistedConjuncts;
     private List<String> hoistedConjuncts;
-
     private LegacyMVInfo legacyMV;
-
     private Map<String, TableInfo> tables;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
 
     public long getVersion() {
         return version;

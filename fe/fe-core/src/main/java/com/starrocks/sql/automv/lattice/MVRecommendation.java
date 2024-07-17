@@ -17,12 +17,14 @@ package com.starrocks.sql.automv.lattice;
 import com.google.api.client.util.Lists;
 import com.starrocks.sql.automv.estimation.CardEstimateState;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
+import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class MVRecommendation implements Comparable<MVRecommendation> {
 
@@ -115,6 +117,7 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
         TieredList<String> cardEstimateList = cardEstimateListBuilder.build();
 
         TieredList.Builder<String> nodeInfoListBuilder = TieredList.<String>newGenesisTier();
+
         if (latticeNode != null) {
             nodeInfoListBuilder.add("" + latticeNode.getCard().getRowCount());
             nodeInfoListBuilder.add("" + latticeNode.getCard().getCardinality());
@@ -137,7 +140,22 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
             rowBuilder.add("" + idAssigner.get());
             rowBuilder.add(queryGenerateResult.getMvName());
             rowBuilder.add(queryGenerateResult.getSubquery().getResult());
-            List<String> row = rowBuilder.build().concat(cardEstimateList).concat(nodeInfoList);
+
+            List<PrettyPrinter> orderedCoveredQueries = queryGenerateResult.getCoveredQueries()
+                    .stream()
+                    .sorted()
+                    .map(PrettyPrinter::escapedDoubleQuoted)
+                    .collect(Collectors.toList());
+
+            String coveredQueries = new PrettyPrinter()
+                    .add("[").addSuperSteps(", ", orderedCoveredQueries)
+                    .add("]")
+                    .getResult();
+
+            List<String> row = rowBuilder.build()
+                    .concat(cardEstimateList)
+                    .concat(nodeInfoList)
+                    .concatOne(coveredQueries);
             rowList.add(row);
         }
         return rowList;

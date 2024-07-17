@@ -2043,3 +2043,20 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"], "show schema change task error")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
+
+    def check_automv_merge_recommend(self, ts, expects):
+        """
+        assert MVs are merged
+        """
+        sql = "show recommendations from %s" % (ts)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+        tools.assert_true(res["status"])
+        accelerated_queries_list=list(map(lambda t:t[14],res["result"]))
+        print("AcceleratedQueries list=%s" % (accelerated_queries_list))
+        names=expects.split(",")
+        names.sort();
+        expect_queries="[%s]" % (", ".join(['"%s"' % (e) for e in names]))
+        tools.assert_true(len(accelerated_queries_list) > 0, "The number of AcceleratedQueries list should not be empty")
+        tools.assert_true(any(map(lambda qs: qs == expect_queries, accelerated_queries_list)), "At least one of AcceleratedQueries should be %s" % (expect_queries))

@@ -779,7 +779,8 @@ public class AutoMVTPCDSTest {
     public void testAppendStmt() throws Exception {
         ConnectContext ctx = getStarRocksAssert().getCtx();
         TablePlus table = PlanPieceInfo.getTable("_tunespace_", 1, 1);
-        String sql = TestUtil.getTPCDSQuery("query01");
+        String name = "query01";
+        String sql = TestUtil.getTPCDSQuery(name);
         getStarRocksAssert().withTable(table.getCreateTableSql());
         try {
             QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
@@ -790,7 +791,7 @@ public class AutoMVTPCDSTest {
 
             AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
             List<PlanPieceInfo> pieceInfos = subPlans.stream()
-                    .map(subPlan -> PlanPieceInfo.from(options, subPlan, false, fqTableMap))
+                    .map(subPlan -> PlanPieceInfo.from(options, name, subPlan, false, fqTableMap))
                     .collect(Collectors.toList());
             String insertSql = table.getInsertSql(pieceInfos);
             StatementBase insertStmt = RboOptimizer.parseAndAnalyze(ctx, insertSql);
@@ -807,7 +808,8 @@ public class AutoMVTPCDSTest {
     @Test
     public void testParseRowFormat() throws Exception {
         ConnectContext ctx = getStarRocksAssert().getCtx();
-        String sql = TestUtil.getTPCDSQuery("query01");
+        String name = "query01";
+        String sql = TestUtil.getTPCDSQuery(name);
         QueryStatementPlus queryStmtPlus = RboOptimizer.getQueryStatement(ctx, sql);
         QueryStatement queryStmt = queryStmtPlus.getQueryStatement();
         Map<String, FQTable> fqTableMap = queryStmtPlus.getFqTableMap();
@@ -815,7 +817,7 @@ public class AutoMVTPCDSTest {
         OptExpression subPlan = subPlans.get(0);
         ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
         Optional<AggregatePiece> optPlanPiece =
-                PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap).cast(AggregatePiece.class);
+                PlanPieceBuilder.createPlanPiece(name, subPlan, idConverter, fqTableMap).cast(AggregatePiece.class);
         Preconditions.checkArgument(optPlanPiece.isPresent());
         AggregatePiece planPiece = optPlanPiece.get();
         PrettyPrinter traceLog = new PrettyPrinter();

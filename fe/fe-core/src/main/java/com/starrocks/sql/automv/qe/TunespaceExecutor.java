@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
@@ -112,12 +113,28 @@ public class TunespaceExecutor {
 
         private ShowResultSet handleAppendClause(String fqTableName, AlterTunespaceClause.AppendClause appendClause,
                                                  ConnectContext context) {
+            String queryName = appendClause.getQueryName();
             QueryStatement queryStmt = appendClause.getQueryStatement().getQueryStatement();
             Map<String, FQTable> fqTableMap = appendClause.getQueryStatement().getFqTableMap();
-            List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, context, PlanPiecePattern.getSPJG());
+            OptExpression logicalPlan = RboOptimizer.getLogicalPlan(queryStmt, context);
+            List<OptExpression> subPlans = PlanPiecePattern.extract(logicalPlan, PlanPiecePattern.getSPJG());
+            Optional<OptExpression> optAggRoot = PlanPiecePattern.getAggRoot(logicalPlan);
+            boolean matchEntire = optAggRoot
+                    .map(aggRoot -> subPlans.size() == 1 && subPlans.get(0) == aggRoot)
+                    .orElse(false);
+
+            Supplier<String> nameGenerator = matchEntire ?
+                    () -> queryName :
+                    Util.nextStringGenerator(queryName + ".part.", "");
+
+            List<Pair<String, OptExpression>> namedSubPlans = subPlans.stream()
+                    .map(subPlan -> Pair.create(nameGenerator.get(), subPlan))
+                    .collect(Collectors.toList());
+
             AutoMVOptions options = AutoMVOptions.of(context.getSessionVariable());
-            List<PlanPieceInfo> pieceInfos = subPlans.stream()
-                    .map(subPlan -> PlanPieceInfo.from(options, subPlan, false, fqTableMap))
+            List<PlanPieceInfo> pieceInfos = namedSubPlans.stream()
+                    .map(namedSubPlan -> PlanPieceInfo.from(options, namedSubPlan.first, namedSubPlan.second, false,
+                            fqTableMap))
                     .collect(Collectors.toList());
             if (pieceInfos.isEmpty()) {
                 return null;
@@ -212,8 +229,9 @@ public class TunespaceExecutor {
 
             AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
 
-            List<PlanPiece> pieces = pieceInfos.stream().map(PlanPieceInfo::getQuery)
-                    .flatMap(query -> RboOptimizer.getPlanPieces(query, context).stream())
+            List<PlanPiece> pieces = pieceInfos.stream()
+                    .map(pieceInfo -> Pair.create(pieceInfo.getName(), pieceInfo.getQuery()))
+                    .flatMap(p -> RboOptimizer.getPlanPieces(p.first, p.second, context).stream())
                     .map(aggPiece -> aggPiece.mustCast(AggregatePiece.class))
                     .map(aggPiece -> policy.convert(aggPiece).orElse(aggPiece))
                     .collect(Collectors.toList());

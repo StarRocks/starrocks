@@ -18,13 +18,18 @@ import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class PieceCommonState {
     private final ColumnRefToIdConverter idConverter;
     private final Map<String, FQTable> fqTableMap;
 
-    public PieceCommonState(ColumnRefToIdConverter idConverter, Map<String, FQTable> fqTableMap) {
+    private final Set<String> coveredQueries;
+
+    public PieceCommonState(ColumnRefToIdConverter idConverter, Set<String> coveredQueries,
+                            Map<String, FQTable> fqTableMap) {
         this.idConverter = Objects.requireNonNull(idConverter);
+        this.coveredQueries = Objects.requireNonNull(coveredQueries);
         this.fqTableMap = Objects.requireNonNull(fqTableMap);
     }
 
@@ -34,5 +39,9 @@ public class PieceCommonState {
 
     public Map<String, FQTable> getFqTableMap() {
         return Objects.requireNonNull(fqTableMap);
+    }
+
+    public Set<String> getCoveredQueries() {
+        return coveredQueries;
     }
 }

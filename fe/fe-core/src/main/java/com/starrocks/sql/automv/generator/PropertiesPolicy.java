@@ -49,7 +49,8 @@ public class PropertiesPolicy {
         return defaultReplicationNum;
     }
 
-    public static PrettyPrinter getProperties(AggregatePiece aggPiece, Map<Integer, ColumnAlias> columAliases) {
+    public static PrettyPrinter getProperties(AggregatePiece aggPiece, Map<Integer, ColumnAlias> columAliases,
+                                              boolean isPartitioned) {
         List<TablePiece> tablePieces = PlanPiece.collect(aggPiece, TablePiece.class);
         List<Table> cloudTables = tablePieces.stream()
                 .map(tablePiece -> tablePiece.getTable().getTable())
@@ -81,6 +82,11 @@ public class PropertiesPolicy {
 
         if (hasExternalTables) {
             propItems.put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "CHECKED");
+        }
+        propItems.put("session.enable_spill", "true");
+        propItems.put("session.query_mem_limit", "12884901888");
+        if (isPartitioned) {
+            propItems.put("partition_refresh_number", "1");
         }
 
         List<PrettyPrinter> items = propItems.entrySet().stream()

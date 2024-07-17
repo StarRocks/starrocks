@@ -57,9 +57,11 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
     private PlanPieceBuilder() {
     }
 
-    public static PlanPiece createPlanPiece(OptExpression optExpression, ColumnRefToIdConverter idConverter,
+    public static PlanPiece createPlanPiece(String name, OptExpression optExpression,
+                                            ColumnRefToIdConverter idConverter,
                                             Map<String, FQTable> fqTableMap) {
-        PlanPieceBuildContext context = PlanPieceBuildContext.of(idConverter, fqTableMap, Collections.emptyList());
+        PlanPieceBuildContext context =
+                PlanPieceBuildContext.of(idConverter, name, fqTableMap, Collections.emptyList());
         return PlanPieceBuilder.INSTANCE.build(optExpression, context);
     }
 

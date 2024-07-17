@@ -19,14 +19,13 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.automv.options.AutoMVOptions;
-import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.policies.EliminateSemiAntiJoinPolicy;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
 import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.qe.TableInfo;
 import com.starrocks.sql.automv.qe.TypePlus;
+import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.utframe.StarRocksAssert;
@@ -60,23 +59,6 @@ public class PlanPieceTest {
         getStarRocksAssert();
     }
 
-    // TODO(by satanson): should removed after all PRs merged
-    @Deprecated
-    private static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx,
-                                                                List<Pair<String, String>> queryList,
-                                                                java.util.function.Predicate<String> filter) {
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
-        AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
-        return queryList.stream()
-                .filter(p -> filter.test(p.first))
-                .flatMap(p -> RboOptimizer.getPlanPieces(p.second, ctx).stream()
-                        .map(piece -> piece.mustCast(AggregatePiece.class))
-                        .map(piece -> policy.convert(piece).orElse(piece))
-                        .map(AggregatePolicies::applyRollupOrPerfectMatch)
-                        .map(piece -> Pair.create(p.first, piece)))
-                .collect(Collectors.toList());
-    }
-
     @Test
     public void testCategorizePieces() {
         ConnectContext ctx = getStarRocksAssert().getCtx();
@@ -86,7 +68,7 @@ public class PlanPieceTest {
                 .stream()
                 .filter(p -> !excludeQuerySet.contains(p.first))
                 .collect(Collectors.toList());
-        List<Pair<String, AggregatePiece>> pieces = getPieces(ctx, queryList, name -> true);
+        List<Pair<String, AggregatePiece>> pieces = AutoMVUtil.getPieces(ctx, queryList, name -> true);
         Assert.assertEquals(pieces.size(), 198);
         System.out.println("pieceSize=" + pieces.size());
         pieces.forEach(p -> p.second.assignPieceIds());

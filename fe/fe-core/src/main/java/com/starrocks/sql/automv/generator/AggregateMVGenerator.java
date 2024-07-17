@@ -76,12 +76,13 @@ public class AggregateMVGenerator {
         // MV expert should specify one. in future (since AutoMV-L3 stage), a sophisticated refresh
         // policy will be developed.
         mvSchema.add("REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
-        mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases));
+        mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases, optPartitionExpr.isPresent()));
         mvSchema.add("AS").newLine();
         mvSchema.addSuperStep(result.getSubquery());
         QueryGenerateResult mvResult = result.updateSubquery(mvSchema)
                 .setMvName(mvName)
-                .setTraceLog(result.getTraceLog().orElse(null));
+                .setTraceLog(result.getTraceLog().orElse(null))
+                .setCoveredQueries(aggPiece.getCommonState().getCoveredQueries());
         return Optional.of(mvResult);
     }
 }

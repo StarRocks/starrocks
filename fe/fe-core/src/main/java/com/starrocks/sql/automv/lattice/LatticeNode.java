@@ -17,6 +17,7 @@ package com.starrocks.sql.automv.lattice;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
@@ -85,12 +86,22 @@ public class LatticeNode {
         TieredMap<Integer, GenericColumn> metrics = mergeMetrics(idConverter, normToOpMap, pieces);
         TieredList<Op> hoistConjuncts = mergeHoistConjuncts(normToOpMap, pieces);
         TieredList<Op> nonHoistConjuncts = mergeNonHoistConjuncts(normToOpMap, pieces);
+        Set<String> mergedCoveredQueries = pieces.stream()
+                .flatMap(piece -> piece.getCommonState().getCoveredQueries().stream())
+                .collect(ImmutableSet.toImmutableSet());
+
+        PieceCommonState newCommonState = new PieceCommonState(
+                firstAggPiece.getCommonState().getIdConverter(),
+                mergedCoveredQueries,
+                firstAggPiece.getCommonState().getFqTableMap());
+
         AggregatePiece newAggPiece = firstAggPiece.builder()
                 .mustCast(AggregatePiece.Builder.class)
                 .setMetrics(metrics)
                 .setHoistConjuncts(hoistConjuncts)
                 .setNonHoistConjuncts(nonHoistConjuncts)
-                .build();
+                .setCommonState(newCommonState)
+                .build().cast();
         TieredMap<Integer, GenericColumn> norms = firstAggPiece.getColumns().entrySet()
                 .stream()
                 .collect(TieredMap.toMap(Map.Entry::getKey, e -> e.getValue().getNorm()));
@@ -240,6 +251,7 @@ public class LatticeNode {
 
         PieceCommonState commonState = new PieceCommonState(
                 initIdConverter.duplicate(),
+                ImmutableSet.of(),
                 initFlatTable.getCommonState().getFqTableMap());
 
         PlanPiece realFlatTable = initFlatTable.builder()
@@ -280,7 +292,10 @@ public class LatticeNode {
                     .map(conjuncts -> OpUtil.subst(conjuncts, idToOp))
                     .collect(Collectors.toList());
 
-            PieceCommonState pieceCommonState = new PieceCommonState(idConverter, commonState.getFqTableMap());
+            PieceCommonState pieceCommonState =
+                    new PieceCommonState(idConverter, piece.getCommonState().getCoveredQueries(),
+                            commonState.getFqTableMap());
+
             PlanPiece newFlatTable = realFlatTable.builder()
                     .setConjuncts(conjunctsList.get(0))
                     .setCommonState(pieceCommonState)

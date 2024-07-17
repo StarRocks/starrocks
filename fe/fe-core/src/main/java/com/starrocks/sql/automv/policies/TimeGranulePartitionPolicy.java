@@ -137,7 +137,8 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
                 OpUtil.opToColumn(coarseTimeGranule.getOp(), newIdConverter::nextId);
 
         PieceCommonState newCommonState =
-                new PieceCommonState(newIdConverter, aggPiece.getCommonState().getFqTableMap());
+                new PieceCommonState(newIdConverter, aggPiece.getCommonState().getCoveredQueries(),
+                        aggPiece.getCommonState().getFqTableMap());
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
                 .setDimensions(aggPiece.getDimensions().newTier()
                         .put(partitionByColumn.first, partitionByColumn.second)

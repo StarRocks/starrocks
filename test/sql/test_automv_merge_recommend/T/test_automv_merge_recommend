@@ -1,0 +1,156 @@
+-- name: test_automv_merge_recommend_with_specified_names
+
+function: prepare_data("ssb", "db_${uuid0}")
+
+create tunespace ts0;
+
+alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
+from lineorder join dates on lo_orderdate = d_datekey
+where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
+
+
+alter tunespace ts0 append "Q1.2" select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_yearmonthnum = 199401
+and lo_discount between 4 and 6
+and lo_quantity between 26 and 35;
+
+
+alter tunespace ts0 append "Q1.3" select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_weeknuminyear = 6 and d_year = 1994
+and lo_discount between 5 and 7
+and lo_quantity between 26 and 35;
+
+function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
+
+-- name: test_automv_merge_recommend_with_default_names
+
+function: prepare_data("ssb", "db_${uuid0}")
+
+create tunespace ts0;
+
+alter tunespace ts0 append  select sum(lo_revenue) as revenue
+from lineorder join dates on lo_orderdate = d_datekey
+where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
+
+
+alter tunespace ts0 append  select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_yearmonthnum = 199401
+and lo_discount between 4 and 6
+and lo_quantity between 26 and 35;
+
+
+alter tunespace ts0 append select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_weeknuminyear = 6 and d_year = 1994
+and lo_discount between 5 and 7
+and lo_quantity between 26 and 35;
+shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
+function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
+
+-- name: test_automv_merge_recommend_with_legacy_mv
+
+function: prepare_data("ssb", "db_${uuid0}")
+
+CREATE MATERIALIZED VIEW _mv_947cbb72498e2d35811884752afda5734ac8024e (
+  lo_quantity
+  , lo_discount
+  , d_yearmonthnum
+  , _ca0003
+)
+COMMENT "MV recommended by AutoMV"
+DISTRIBUTED BY HASH (lo_quantity, lo_discount, d_yearmonthnum) BUCKETS 64
+ORDER BY (lo_quantity, lo_discount, d_yearmonthnum)
+REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+PROPERTIES (
+  "replicated_storage" = "true",
+  "storage_medium" = "HDD",
+  "replication_num" = "1"
+)
+AS
+SELECT
+  _ta0000.lo_quantity
+  ,_ta0000.lo_discount
+  ,_ta0000.d_yearmonthnum
+  ,(sum(_ta0000.lo_revenue)) AS _ca0003
+FROM
+  (
+    SELECT
+      `dates`.d_yearmonthnum
+      ,`lineorder`.lo_quantity
+      ,`lineorder`.lo_discount
+      ,`lineorder`.lo_revenue
+    FROM
+      `lineorder`
+      INNER JOIN
+      `dates`
+      ON (`lineorder`.lo_orderdate = `dates`.d_datekey)
+  ) _ta0000
+GROUP BY
+  _ta0000.lo_quantity
+  ,_ta0000.lo_discount
+  ,_ta0000.d_yearmonthnum;
+
+REFRESH MATERIALIZED VIEW _mv_947cbb72498e2d35811884752afda5734ac8024e  WITH SYNC MODE;
+
+create tunespace ts0;
+
+alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
+from lineorder join dates on lo_orderdate = d_datekey
+where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
+
+
+alter tunespace ts0 append "Q1.2" select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_yearmonthnum = 199401
+and lo_discount between 4 and 6
+and lo_quantity between 26 and 35;
+
+
+alter tunespace ts0 append "Q1.3" select sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_weeknuminyear = 6 and d_year = 1994
+and lo_discount between 5 and 7
+and lo_quantity between 26 and 35;
+
+alter tunespace ts0 populate from database ${db[0]};
+set automv_card_rowcount_ratio_hwm = 1.0;
+select id, traits->'name' as name from ts0 order by name;
+function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d35811884752afda5734ac8024e")
+
+-- name: test_automv_merge_recommend_extract_multi_parts
+
+function: prepare_data("ssb", "db_${uuid0}")
+
+create tunespace ts0;
+
+alter tunespace ts0 append "query" 
+select "Q1.1" as label, sum(lo_revenue) as revenue
+from lineorder join dates on lo_orderdate = d_datekey
+where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25
+union all
+select "Q1.2" as label, sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_yearmonthnum = 199401
+and lo_discount between 4 and 6
+and lo_quantity between 26 and 35
+union all
+select "Q1.3" as label, sum(lo_revenue) as revenue
+from lineorder
+join dates on lo_orderdate = d_datekey
+where d_weeknuminyear = 6 and d_year = 1994
+and lo_discount between 5 and 7
+and lo_quantity between 26 and 35;
+
+set automv_card_rowcount_ratio_hwm = 1.0;
+select id, traits->'name' as name from ts0 order by name;
+function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.part.2")

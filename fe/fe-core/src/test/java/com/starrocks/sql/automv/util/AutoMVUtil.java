@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.util;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -66,6 +67,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -74,14 +76,21 @@ public class AutoMVUtil {
 
     private static List<PlanPieceInfo> getPlanPlanInfosFromQueryList(ConnectContext ctx,
                                                                      List<Pair<String, String>> queryList) {
-        return queryList.stream()
-                .map(p -> p.second)
-                .flatMap(query -> RboOptimizer.getPlanPieces(query, ctx).stream())
-                .map(planPiece -> {
-                    AggregatePolicy policy =
-                            AggregatePolicies.defaultPolicies(AutoMVOptions.of(ctx.getSessionVariable()));
-                    return PlanPieceInfo.from(planPiece, policy, planPiece.getCommonState().getFqTableMap());
-                }).collect(Collectors.toList());
+        List<PlanPieceInfo> allPieceInfoList = Lists.newArrayList();
+        for (Pair<String, String> namedQuery : queryList) {
+            String name = namedQuery.first;
+            String query = namedQuery.second;
+            Supplier<String> nameGenerator = Util.nextStringGenerator(name + ".part.", "");
+            List<PlanPieceInfo> pieceInfoList = RboOptimizer.getPlanPieces(query, ctx).stream().map(piece -> {
+                AggregatePolicy policy =
+                        AggregatePolicies.defaultPolicies(AutoMVOptions.of(ctx.getSessionVariable()));
+                PlanPieceInfo pieceInfo = PlanPieceInfo.from(piece, policy, piece.getCommonState().getFqTableMap());
+                pieceInfo.getTraits().setName(nameGenerator.get());
+                return pieceInfo;
+            }).collect(Collectors.toList());
+            allPieceInfoList.addAll(pieceInfoList);
+        }
+        return allPieceInfoList;
     }
 
     public static void mockUpCustomizedQueryExecutor(List<Pair<String, String>> queryList) {
@@ -246,10 +255,12 @@ public class AutoMVUtil {
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
         Map<String, String> mvMap = Maps.newHashMap();
         List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
+        Supplier<String> nameGenerator = Util.nextStringGenerator("Q.part.", "");
         for (OptExpression subPlan : subPlans) {
             ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
             Optional<AggregatePiece> optPlanPiece =
-                    PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap).cast(AggregatePiece.class);
+                    PlanPieceBuilder.createPlanPiece(nameGenerator.get(), subPlan, idConverter, fqTableMap)
+                            .cast(AggregatePiece.class);
             Preconditions.checkArgument(optPlanPiece.isPresent());
             AggregatePiece planPiece = optPlanPiece.get();
 

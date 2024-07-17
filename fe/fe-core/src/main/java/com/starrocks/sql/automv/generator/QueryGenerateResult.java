@@ -23,6 +23,7 @@ import com.starrocks.sql.automv.util.TieredMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 public class QueryGenerateResult {
@@ -33,7 +34,7 @@ public class QueryGenerateResult {
     private transient String mvName;
     private transient List<Pair<Integer, GenericColumn>> orderedDimensions;
     private transient List<Pair<Integer, GenericColumn>> orderedColumns;
-
+    private transient Set<String> coveredQueries;
     private transient PrettyPrinter traceLog;
 
     private QueryGenerateResult(PrettyPrinter subQuery, @Nullable String tableAlias,
@@ -46,6 +47,15 @@ public class QueryGenerateResult {
     public static QueryGenerateResult of(PrettyPrinter subQuery, String tableAlias,
                                          TieredMap<Integer, ColumnAlias> columnAliases) {
         return new QueryGenerateResult(subQuery, tableAlias, columnAliases);
+    }
+
+    public Set<String> getCoveredQueries() {
+        return Objects.requireNonNull(coveredQueries);
+    }
+
+    public QueryGenerateResult setCoveredQueries(Set<String> coveredQueries) {
+        this.coveredQueries = Objects.requireNonNull(coveredQueries);
+        return this;
     }
 
     public PrettyPrinter getSubquery() {

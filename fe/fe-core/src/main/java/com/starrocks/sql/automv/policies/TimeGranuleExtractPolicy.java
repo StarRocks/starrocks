@@ -85,8 +85,11 @@ public class TimeGranuleExtractPolicy extends AggregatePolicy.SimplePolicy {
                 .stream()
                 .filter(e -> rollupDimensionIds.contains(e.getKey()))
                 .collect(TieredMap.toMap());
+
         PieceCommonState newCommonState =
-                new PieceCommonState(newIdConverter, aggPiece.getCommonState().getFqTableMap());
+                new PieceCommonState(newIdConverter, aggPiece.getCommonState().getCoveredQueries(),
+                        aggPiece.getCommonState().getFqTableMap());
+
         PlanPiece newFlatTable = aggPiece.getFlatTable().builder()
                 .setConjuncts(newConjuncts)
                 .setColumns(newColumns)

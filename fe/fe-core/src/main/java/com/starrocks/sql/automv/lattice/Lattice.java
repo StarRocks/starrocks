@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
@@ -263,7 +264,12 @@ public class Lattice {
                 LatticeNode.mergeMetrics(idConverter, flatTableNormToOpMap, aggPieces);
         TieredList<Op> hoistConjuncts = LatticeNode.mergeHoistConjuncts(flatTableNormToOpMap, aggPieces);
         TieredList<Op> nonHoistConjuncts = LatticeNode.mergeNonHoistConjuncts(flatTableNormToOpMap, aggPieces);
-        PieceCommonState commonState = new PieceCommonState(idConverter, flatTable.getCommonState().getFqTableMap());
+        Set<String> mergedCoveredQueries = aggPieces
+                .stream()
+                .flatMap(piece -> piece.getCommonState().getCoveredQueries().stream())
+                .collect(ImmutableSet.toImmutableSet());
+        PieceCommonState commonState =
+                new PieceCommonState(idConverter, mergedCoveredQueries, flatTable.getCommonState().getFqTableMap());
         AggregatePiece aggPiece = AggregatePiece.newBuilder()
                 .setFlatTable(flatTable)
                 .setDimensions(dimensions)
