@@ -1075,12 +1075,12 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 
 void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                                        PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
-                                                       int64_t rpc_http_min_size, std::string msg) {
+                                                       int64_t rpc_http_min_size, const std::string& msg) {
     RuntimeFilterRpcClosures rpc_closures;
     rpc_closures.reserve(transmit_addrs.size());
     BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     for (const auto& addr : transmit_addrs) {
-        _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, "SEND_PART_RF_RPC"});
+        _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, msg});
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
         closure->ref();

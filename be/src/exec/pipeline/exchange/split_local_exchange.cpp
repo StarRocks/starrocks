@@ -27,11 +27,13 @@ void SplitLocalExchanger::close(RuntimeState* state) {
     Expr::close(_split_expr_ctxs, state);
 }
 
-Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile) override {
+Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile) {
     _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
             "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
             "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
+    return Status::OK();
 }
 
 Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) {
@@ -95,9 +97,9 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
 
     std::unique_lock l(_mutex);
     DCHECK(cur_chunk->num_rows());
-    _buffer[0].emplace(std::move(cur_chunk));
     _current_accumulated_row_size += cur_chunk_size;
     _current_memory_usage += cur_chunk->memory_usage();
+    _buffer[0].emplace(std::move(cur_chunk));
     return Status::OK();
 }
 
