@@ -377,7 +377,7 @@ public class MetaFunctions {
         return getQueryDump(query, ConstantOperator.createBoolean(false));
     }
 
-    private static class LookupRecord {
+    public static class LookupRecord {
 
         @SerializedName("data")
         public List<String> data;
@@ -415,7 +415,7 @@ public class MetaFunctions {
             argTypes = {VARCHAR, VARCHAR, VARCHAR},
             returnType = VARCHAR,
             isMetaFunction = true)
-    public static ConstantOperator lookup_string(ConstantOperator tableName,
+    public static ConstantOperator lookupString(ConstantOperator tableName,
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
