@@ -51,8 +51,6 @@ private:
 
     size_t _current_accumulated_row_size = 0;
     size_t _current_memory_usage = 0;
-    // the max row size of one chunk, usally 4096
-    size_t _chunk_size;
 
     int32_t _opened_sink_number = 0;
     int32_t _opened_source_number = 0;
@@ -63,6 +61,9 @@ private:
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
+
+    // the max row size of one chunk, usally 4096
+    size_t _chunk_size;
 
     mutable std::mutex _mutex;
 };
