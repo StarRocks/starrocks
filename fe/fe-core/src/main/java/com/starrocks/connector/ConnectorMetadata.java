@@ -279,7 +279,7 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support dropping temporary tables");
     }
 
-    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 

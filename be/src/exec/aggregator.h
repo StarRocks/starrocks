@@ -292,12 +292,13 @@ public:
     bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
-            return hash_set_memory_usage();
+            return hash_set_memory_usage() + agg_state_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
-            return hash_map_memory_usage();
+            return hash_map_memory_usage() + agg_state_memory_usage();
         } else {
             return 0;
         }
@@ -501,6 +502,7 @@ protected:
     SpillProcessChannelPtr _spill_channel;
     bool _is_opened = false;
     bool _is_prepared = false;
+    int64_t _agg_state_mem_usage = 0;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);

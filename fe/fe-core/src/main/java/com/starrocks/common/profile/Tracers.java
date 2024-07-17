@@ -254,4 +254,21 @@ public class Tracers {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.allTracer[1].toRuntimeProfile(profile);
     }
+
+    public static String getTrace(Mode mode) {
+        switch (mode) {
+            case TIMER:
+                return Tracers.printScopeTimer();
+            case VARS:
+                return Tracers.printVars();
+            case TIMING:
+                return Tracers.printTiming();
+            case LOGS:
+                return Tracers.printLogs();
+            case REASON:
+                return Tracers.printReasons();
+            default:
+                return "";
+        }
+    }
 }
