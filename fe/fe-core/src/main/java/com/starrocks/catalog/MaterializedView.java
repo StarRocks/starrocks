@@ -840,6 +840,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.refBaseTablePartitionExprsOpt = this.refBaseTablePartitionExprsOpt;
         mv.refBaseTablePartitionSlotsOpt = this.refBaseTablePartitionSlotsOpt;
         mv.refBaseTablePartitionColumnsOpt = this.refBaseTablePartitionColumnsOpt;
+        mv.tableToBaseTableInfoCache = this.tableToBaseTableInfoCache;
     }
 
     @Override
