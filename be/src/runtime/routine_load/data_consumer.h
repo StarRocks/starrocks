@@ -149,7 +149,10 @@ public:
     ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
         if (_k_consumer) {
-            _k_consumer->close();
+            // consumer may be already closed when get partition meta failed
+            if (!_k_consumer->closed()) {
+                _k_consumer->close();
+            }
             delete _k_consumer;
             _k_consumer = nullptr;
         }
