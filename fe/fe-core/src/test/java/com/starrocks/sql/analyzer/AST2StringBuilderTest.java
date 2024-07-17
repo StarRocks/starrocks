@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.SetStmt;
@@ -122,13 +123,9 @@ public class AST2StringBuilderTest {
                 sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         Assert.assertEquals(1, statementBase.size());
         SetStmt originStmt = (SetStmt) statementBase.get(0);
+        originStmt.setOrigStmt(new OriginStatement(sql, 0));
         Analyzer.analyze(originStmt, AnalyzeTestUtil.getConnectContext());
-        Assert.assertEquals("SET SESSION `time_zone` = 'Asia/Shanghai',SESSION `allow_default_partition` = TRUE," +
-                "@`var1` = cast (1 as tinyint(4))," +
-                "@`var2` = cast ('2020-01-01' as date)," +
-                "@`var3` = cast ('foo' as varchar)," +
-                "@`var4` = cast (1.23 as decimal(3, 2))," +
-                "@`select` = cast (7 as int(11))", AstToStringBuilder.toString(originStmt));
+        Assert.assertEquals(sql, AstToStringBuilder.toString(originStmt) + ";");
 
         statementBase = SqlParser.parse(
                 AstToStringBuilder.toString(originStmt), AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());

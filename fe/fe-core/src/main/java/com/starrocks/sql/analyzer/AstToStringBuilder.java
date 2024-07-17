@@ -122,20 +122,15 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
-import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.storagevolume.StorageVolume;
@@ -304,51 +299,19 @@ public class AstToStringBuilder {
 
         // --------------------------------------------Set Statement -------------------------------------------------------
 
+        /**
+         * No more AstToStirng operations on SetStmt, use the original SQL directly.
+         * reasons：The analyzeUserVariable method of SetStmtAnalyzer has been refactored
+         * so that the calculation of user variables is placed in the SetExecutor.
+         *
+         * */
         @Override
         public String visitSetStatement(SetStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("SET ");
-
-            List<String> setVarList = new ArrayList<>();
-            for (SetListItem setVar : stmt.getSetListItems()) {
-                if (setVar instanceof SystemVariable) {
-                    SystemVariable systemVariable = (SystemVariable) setVar;
-                    String setVarSql = "";
-                    if (systemVariable.getType() != null) {
-                        setVarSql += systemVariable.getType().toString() + " ";
-                    }
-                    setVarSql += "`" + systemVariable.getVariable() + "`";
-                    setVarSql += " = ";
-                    setVarSql += visit(systemVariable.getResolvedExpression());
-
-                    setVarList.add(setVarSql);
-                } else if (setVar instanceof UserVariable) {
-                    UserVariable userVariable = (UserVariable) setVar;
-                    String setVarSql = "";
-                    setVarSql += "@";
-                    setVarSql += "`" + userVariable.getVariable() + "`";
-                    setVarSql += " = ";
-
-                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
-                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
-                    setVarList.add(setVarSql);
-                } else if (setVar instanceof SetPassVar) {
-                    SetPassVar setPassVar = (SetPassVar) setVar;
-                    UserIdentity userIdentity = setPassVar.getUserIdent();
-                    String setPassSql = "";
-                    if (userIdentity == null) {
-                        setPassSql += "PASSWORD";
-                    } else {
-                        setPassSql += "PASSWORD FOR " + userIdentity;
-                    }
-                    setPassSql += " = PASSWORD('***')";
-                    setVarList.add(setPassSql);
-                }
-            }
-
-            return sb.append(Joiner.on(",").join(setVarList)).toString();
+            String origSqls = stmt.getOrigStmt().getOrigStmt();
+            int index = stmt.getOrigStmt().getIdx();
+            String[] sqlArray = origSqls.split(";");
+            return sqlArray[index];
         }
-
         @Override
         public String visitSetUserPropertyStatement(SetUserPropertyStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
