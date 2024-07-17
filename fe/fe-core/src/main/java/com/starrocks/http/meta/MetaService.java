@@ -330,7 +330,7 @@ public class MetaService {
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
             try {
-                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+                host = URLDecoder.decode(host, StandardCharsets.UTF_8.toString());
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
