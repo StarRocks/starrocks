@@ -190,23 +190,12 @@ public:
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 // return ordered array[col0']
 struct ArrayAggAggregateStateV2 {
-    int64_t update(const Column& column, size_t index, size_t offset, size_t count) {
-        // int64_t prev_memory = data_columns[index]->container_memory_usage();
-        // int64_t prev_memory = memory_usage[index];
+    void update(const Column& column, size_t index, size_t offset, size_t count) {
         data_columns[index]->append(column, offset, count);
-        // memory_usage[index] = data_columns[index]->container_memory_usage();
-        // return memory_usage[index] - prev_memory;
-        return 0;
-        // return data_columns[index]->container_memory_usage() - prev_memory;
     }
-    int64_t update_nulls(size_t index, size_t count) {
-        // int64_t prev_memory = data_columns[index]->container_memory_usage();
-        // int64_t prev_memory = memory_usage[index];
+
+    void update_nulls(size_t index, size_t count) {
         data_columns[index]->append_nulls(count);
-        // memory_usage[index] = data_columns[index]->container_memory_usage();
-        // return memory_usage[index] - prev_memory;
-        return 0;
-        // return data_columns[index]->container_memory_usage() - prev_memory;
     }
 
     bool check_overflow(FunctionContext* ctx) const {
@@ -243,7 +232,6 @@ struct ArrayAggAggregateStateV2 {
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
     Columns data_columns;
-    std::vector<int64_t> memory_usage;
 };
 
 class ArrayAggAggregateFunctionV2
@@ -254,7 +242,6 @@ public:
         auto* state = new (ptr) ArrayAggAggregateStateV2;
         for (auto i = 0; i < num; ++i) {
             state->data_columns.emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
-            state->memory_usage.emplace_back(0);
         }
         DCHECK(state->data_columns.size() == ctx->get_is_asc_order().size() + 1);
     }
