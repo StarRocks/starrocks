@@ -141,6 +141,8 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
 TEST_F(BlockCacheTest, app_hit_rate) {
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
     EXPECT_EQ(0, counter->hit_rate());
+    EXPECT_EQ(0, counter->get_hit_bytes_last_minute());
+    EXPECT_EQ(0, counter->get_miss_bytes_last_minute());
     EXPECT_EQ(0, counter->hit_rate_last_minute());
 
     counter->update(3, 10);

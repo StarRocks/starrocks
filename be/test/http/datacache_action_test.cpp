@@ -100,6 +100,27 @@ TEST_F(DataCacheActionTest, stat_success) {
     _env._block_cache = nullptr;
 }
 
+TEST_F(DataCacheActionTest, app_stat_success) {
+    auto cache = BlockCache::instance();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache).ok());
+    _env._block_cache = cache;
+
+    DataCacheAction action(&_env);
+
+    HttpRequest request(_evhttp_req);
+    request._method = HttpMethod::GET;
+    request._params.emplace("action", "app_stat");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    std::cout << doc["hit_bytes"].GetInt64();
+
+    _env._block_cache = nullptr;
+}
+
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     DataCacheAction action(&_env);
 
