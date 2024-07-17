@@ -44,6 +44,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/utils.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -118,7 +119,10 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
-        } else if (!_mem_tracker->limit_exceeded() || config::enable_new_load_on_memory_limit_exceeded) {
+        } else if (!is_tracker_hit_hard_limit(_mem_tracker, config::load_process_max_memory_limit_percent,
+                                              config::load_process_max_memory_hard_limit_percent) ||
+                   config::enable_new_load_on_memory_limit_exceeded) {
+            // When loading memory usage is larger than hard limit, we will reject new loading task.
             int64_t mem_limit_in_req = request.has_load_mem_limit() ? request.load_mem_limit() : -1;
             int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
 

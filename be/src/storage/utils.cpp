@@ -54,6 +54,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/errno.h"
 #include "util/string_parser.hpp"
@@ -388,6 +389,11 @@ std::string parent_name(const std::string& fullpath) {
 std::string file_name(const std::string& fullpath) {
     std::filesystem::path path(fullpath);
     return path.filename().string();
+}
+
+bool is_tracker_hit_hard_limit(MemTracker* tracker, int soft_limit_percent, int hard_limit_percent) {
+    int64_t limit_ratio = std::max(hard_limit_percent * 100 / soft_limit_percent, 100);
+    return tracker->limit_exceeded_by_ratio(limit_ratio);
 }
 
 } // namespace starrocks
