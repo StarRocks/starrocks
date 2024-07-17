@@ -246,6 +246,14 @@ FieldPtr Schema::get_field_by_name(const std::string& name) const {
     return idx == -1 ? nullptr : _fields[idx];
 }
 
+void Schema::set_field_by_name(FieldPtr field, const std::string& name) {
+    size_t idx = get_field_index_by_name(name);
+    if (idx == -1) {
+        return;
+    }
+    _fields[idx] = std::move(field);
+}
+
 void Schema::_build_index_map(const Fields& fields) {
     _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
     for (size_t i = 0; i < fields.size(); i++) {
