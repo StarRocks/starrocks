@@ -494,6 +494,10 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
 }
 
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+    if (config::enable_pk_strict_memcheck) {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+        SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(mem_tracker());
+    }
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
         return Status::OK();
