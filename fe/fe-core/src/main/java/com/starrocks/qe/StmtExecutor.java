@@ -808,7 +808,9 @@ public class StmtExecutor {
                         SetStmtAnalyzer.calcuteUserVariable(entry.getValue());
                         if (entry.getValue().getEvaluatedExpression() == null) {
                             try {
-                                context.setQueryId(UUIDUtil.genUUID());
+                                final UUID uuid = UUIDUtil.genUUID();
+                                context.setQueryId(uuid);
+                                context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                                 entry.getValue().deriveUserVariableExpressionResult(context);
                             } finally {
                                 context.setQueryId(queryId);
