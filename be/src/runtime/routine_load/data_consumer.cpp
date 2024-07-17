@@ -158,7 +158,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
 Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset,
                                                   const std::string& topic, StreamLoadContext* ctx) {
-    DCHECK(_k_consumer);
+    DCHECK(_k_consumer && !_k_consumer->closed());
     // create TopicPartitions
     std::stringstream ss;
     std::vector<RdKafka::TopicPartition*> topic_partitions;
@@ -191,6 +191,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
 }
 
 Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
     LOG(INFO) << "start kafka consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
@@ -294,6 +295,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
                                                std::vector<int64_t>* latest_offsets, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
@@ -322,6 +324,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 }
 
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
@@ -344,6 +347,10 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
+        if (_k_event_cb.get_error_msg().empty()) {
+            // some authentication errors event can only be triggered when the consumer is closed.
+            _k_consumer->close();
+        }
         std::stringstream ss;
         ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
@@ -400,6 +407,7 @@ Status KafkaDataConsumer::cancel(StreamLoadContext* ctx) {
 Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
+    DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
     _k_event_cb.reset_error_msg();
@@ -407,6 +415,7 @@ Status KafkaDataConsumer::reset() {
 }
 
 Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
+    DCHECK(!_k_consumer->closed());
     RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
