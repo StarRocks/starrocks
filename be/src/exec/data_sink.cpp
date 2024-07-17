@@ -381,7 +381,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         auto* upstream = prev_operators.back().get();
         auto* upstream_source = context->source_operator(prev_operators);
         size_t upstream_plan_node_id = upstream->plan_node_id();
-        OpFactoryPtr sink_op = std::make_shared<SplitLocalExchangeSinkOperatorFactory>(
+        OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), upstream_plan_node_id, split_local_exchanger);
         prev_operators.emplace_back(sink_op);
         context->add_pipeline(std::move(prev_operators));
@@ -394,7 +394,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             auto& t_stream_sink = t_split_stream_sink.sinks[i];
 
             // source op
-            auto source_op = std::make_shared<SplitLocalExchangeSourceOperatorFactory>(
+            auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), upstream_plan_node_id, i, split_local_exchanger);
             context->inherit_upstream_source_properties(source_op.get(), upstream_source);
 
