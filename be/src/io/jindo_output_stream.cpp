@@ -36,13 +36,9 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
     jdo_freeHandleCtx(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_write";
-        return Status::IOError("");
     }
-    // 128MB
-    if (size > 134217728) {
-        RETURN_IF_ERROR(flush());
-    }
-    return Status::OK();
+
+    return status;
 }
 
 Status JindoOutputStream::flush() {
@@ -52,9 +48,8 @@ Status JindoOutputStream::flush() {
     jdo_freeHandleCtx(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_flush";
-        return Status::IOError("");
     }
-    return Status::OK();
+    return status;
 }
 
 Status JindoOutputStream::close() {
@@ -64,9 +59,8 @@ Status JindoOutputStream::close() {
     jdo_freeHandleCtx(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_close";
-        return Status::IOError("");
     }
-    return Status::OK();
+    return status;
 }
 
 } // namespace starrocks::io
