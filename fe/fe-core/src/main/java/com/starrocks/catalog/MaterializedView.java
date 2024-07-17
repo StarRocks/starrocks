@@ -1537,13 +1537,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     for (BaseTableInfo baseTableInfo : baseTableInfos) {
                         Table table = MvUtils.getTableChecked(baseTableInfo);
                         if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
-                            refBaseTableColumnOpt = Optional.of(Pair.create(table, table.getColumn(partitionSlotRef.getColumnName())));
+                            refBaseTableColumnOpt =
+                                    Optional.of(Pair.create(table, table.getColumn(partitionSlotRef.getColumnName())));
                             break;
                         }
                     }
                     if (refBaseTableColumnOpt.isEmpty()) {
                         String baseTableNames = baseTableInfos.stream()
-                                .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getName()).collect(Collectors.joining(","));
+                                .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getName())
+                                .collect(Collectors.joining(","));
                         throw new RuntimeException(
                                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
                     }
