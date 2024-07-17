@@ -344,7 +344,7 @@ public class AstToStringBuilder {
                     setPassSql += " = PASSWORD('***')";
                     setVarList.add(setPassSql);
                 }
-        }
+            }
 
             return sb.append(Joiner.on(",").join(setVarList)).toString();
         }
