@@ -180,15 +180,14 @@ void TabletSchemaMap::erase(SchemaId id) {
     }
 }
 
-TabletSchemaPtr TabletSchemaMap::get(SchemaId id) {
+TabletSchemaMap::TabletSchemaPtr TabletSchemaMap::get(SchemaId id) {
     MapShard* shard = get_shard(id);
     TabletSchemaPtr result = nullptr;
-    TabletSchemaPtr ptr = nullptr;
     {
         std::lock_guard l(shard->mtx);
         auto iter = shard->map.find(id);
         if (iter != shard->map.end()) {
-            result = it->second.tablet_schema.lock();
+            result = iter->second.tablet_schema.lock();
         }
     }
     return result;

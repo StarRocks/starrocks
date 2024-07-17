@@ -49,7 +49,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
 
-    if (_parent->_olap_scan_node.__isset_schema_id) {
+    if (_parent->_olap_scan_node.__isset.schema_id) {
         _tablet_schema = GlobalTabletSchemaMap::Instance()->get(_parent->_olap_scan_node.schema_id);
     }
     if (_tablet_schema == nullptr) {
