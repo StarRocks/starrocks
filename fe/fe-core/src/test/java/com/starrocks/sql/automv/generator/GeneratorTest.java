@@ -146,8 +146,7 @@ public class GeneratorTest {
                 "  \"replicated_storage\" = \"true\",\n" +
                 "  \"session.enable_spill\" = \"true\",\n" +
                 "  \"storage_medium\" = \"HDD\",\n" +
-                "  \"replication_num\" = \"1\",\n" +
-                "  \"session.query_mem_limit\" = \"12884901888\"\n" +
+                "  \"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +

@@ -84,7 +84,6 @@ public class PropertiesPolicy {
             propItems.put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "CHECKED");
         }
         propItems.put("session.enable_spill", "true");
-        propItems.put("session.query_mem_limit", "12884901888");
         if (isPartitioned) {
             propItems.put("partition_refresh_number", "1");
         }
