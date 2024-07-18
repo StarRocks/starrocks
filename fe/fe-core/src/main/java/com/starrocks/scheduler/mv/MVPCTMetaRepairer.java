@@ -179,6 +179,8 @@ public class MVPCTMetaRepairer {
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             baseTableInfos.remove(oldBaseTableInfo);
             baseTableInfos.add(newBaseTableInfo);
+            // reset mv's state after repair
+            mv.resetMetadataCache();
 
             ConnectorTableInfo connectorTableInfo = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()
                     .getConnectorTableInfo(oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
