@@ -448,57 +448,46 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    /*
-      if dbFullName is null, result = all of routine load job in all of db
-      else if jobName is null, result =  all of routine load job in dbFullName
-
-      if includeHistory is false, filter not running job in result
-      else return all of result
+    /**
+     * use dbFullName and jobName to filter routine load jobs.
+     * if includeHistory is false, filter not running job in result else return all of result.
      */
     public List<RoutineLoadJob> getJob(String dbFullName, String jobName, boolean includeHistory)
             throws MetaNotFoundException {
+        List<RoutineLoadJob> result = Lists.newArrayList();
         readLock();
         try {
-            // return all of routine load job
-            List<RoutineLoadJob> result;
-            RESULT:
-            {
-                if (dbFullName == null) {
-                    result = new ArrayList<>(idToRoutineLoadJob.values());
-                    sortRoutineLoadJob(result);
-                    break RESULT;
-                }
-
+            if (dbFullName == null && jobName == null) {
+                result.addAll(idToRoutineLoadJob.values());
+                sortRoutineLoadJob(result);
+            } else if (dbFullName == null && jobName != null) {
+                result = idToRoutineLoadJob.values().stream().filter(entity -> entity.getName().equals(jobName))
+                        .collect(Collectors.toList());
+                sortRoutineLoadJob(result);
+            } else {
                 long dbId = 0L;
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
                 dbId = database.getId();
-                if (!dbToNameToRoutineLoadJob.containsKey(dbId)) {
-                    result = new ArrayList<>();
-                    break RESULT;
-                }
-                if (jobName == null) {
-                    result = Lists.newArrayList();
-                    for (List<RoutineLoadJob> nameToRoutineLoadJob : dbToNameToRoutineLoadJob.get(dbId).values()) {
-                        List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(nameToRoutineLoadJob);
+
+                Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob =
+                        dbToNameToRoutineLoadJob.getOrDefault(dbId, Maps.newHashMap());
+                if (jobName != null) {
+                    result.addAll(nameToRoutineLoadJob.getOrDefault(jobName, Lists.newArrayList()));
+                    sortRoutineLoadJob(result);
+                } else {
+                    for (List<RoutineLoadJob> jobs : nameToRoutineLoadJob.values()) {
+                        List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(jobs);
                         sortRoutineLoadJob(routineLoadJobList);
                         result.addAll(routineLoadJobList);
                     }
-                    break RESULT;
                 }
-                if (dbToNameToRoutineLoadJob.get(dbId).containsKey(jobName)) {
-                    result = new ArrayList<>(dbToNameToRoutineLoadJob.get(dbId).get(jobName));
-                    sortRoutineLoadJob(result);
-                    break RESULT;
-                }
-                return null;
             }
 
             if (!includeHistory) {
-                result = result.stream().filter(entity -> !entity.getState().isFinalState())
-                        .collect(Collectors.toList());
+                result = result.stream().filter(entity -> !entity.isFinal()).collect(Collectors.toList());
             }
             return result;
         } finally {
