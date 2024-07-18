@@ -16,10 +16,6 @@ VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
 
 ## Examples
 
-:::tip
-This example uses the Local Climatological Data(LCD) dataset featured in the [StarRocks Basics](../../../quick_start/shared-nothing.md) Quick Start. You can load the data and try the example yourself.
-:::
-
 Given this data:
 
 ```SQL
