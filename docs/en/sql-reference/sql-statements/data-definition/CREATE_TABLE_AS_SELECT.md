@@ -16,7 +16,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 - Synchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
   ```SQL
-  CREATE TABLE [IF NOT EXISTS] [database.]table_name
+  CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
   [column_name1 [, column_name2, ...]]
   [index_definition1 [, index_definition2, ...]]
   [key_desc]
@@ -49,6 +49,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
+| TEMPORARY         | No           | Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table). Currently, StarRocks does not support creating temporary tables with asynchronous tasks by using SUBMIT TASK. |
 | column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
 | index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../table_design/indexes/Bitmap_index.md). |
 | key_desc          | No           | The syntax is `key_type ( <col_name1> [, <col_name2> , ...])`.<br />**Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
