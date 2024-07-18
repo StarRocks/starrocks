@@ -131,8 +131,7 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
         bool use_intermediate_as_output = true;
         if (!_aggregator->is_ht_eos()) {
             auto chunk = std::make_shared<Chunk>();
-            RETURN_IF_ERROR(
-                    _aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, &use_intermediate_as_output));
+            RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
             return chunk;
         }
         RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
