@@ -525,8 +525,13 @@ void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNode
             ++iter;
             continue;
         }
+<<<<<<< HEAD:be/src/exprs/vectorized/runtime_filter_bank.cpp
         if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().count(target_plan_node_id) &&
                                            state->shuffle_hash_bucket_rf_ids().count(desc->filter_id()))) {
+=======
+        if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+                                           state->non_broadcast_rf_ids().contains(desc->filter_id()))) {
+>>>>>>> 0b068a37b4 ([BugFix] Make Broadcast Join generate deterministic GRF (#48496)):be/src/exprs/runtime_filter_bank.cpp
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());
