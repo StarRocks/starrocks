@@ -312,4 +312,45 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/plan/ComplexTypePrunePlanTest.java
+=======
+
+    @Test
+    public void testSubfieldNoCopy() throws Exception {
+        String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
+        assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
+                "c3.d[false]", "c2.a[false]", "c1.a[false]");
+        // we don't support non-copy for this expr now
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+        // test common project expr
+        sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
+        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
+    }
+
+    @Test
+    public void testSubfieldNeedCopyForOverlap() throws Exception {
+        String sql = "select c3.c.a, c3.c from test";
+        assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
+        sql = "select c1.b, c1.b[1] from test";
+        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
+        sql = "select c1.b[1].a, c1.b from test";
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
+    }
+
+    @Test
+    public void testSemiTypeCountDistinct() throws Exception {
+        String sql = "select count(distinct row(1, 2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(row(1, 2) IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct [1,2,3])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST([1,2,3] IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct map{'a': 1})";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
+>>>>>>> ae37767df1 ([Enhancement] support count distinct on constant semi-type (#48273)):fe/fe-core/src/test/java/com/starrocks/sql/plan/StructTypePlanTest.java
 }
