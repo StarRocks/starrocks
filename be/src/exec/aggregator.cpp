@@ -163,8 +163,7 @@ void AggregatorParams::init() {
 
             const bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
-            agg_fn_types[i].is_always_nullable_result =
-                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
+            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.count(fn.name.function_name);
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&

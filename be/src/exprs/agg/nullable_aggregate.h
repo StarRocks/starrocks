@@ -74,12 +74,6 @@ struct NullableAggregateFunctionState
     T _nested_state;
 };
 
-template <typename F, typename State>
-concept IsAggNullPred = requires(F f, State arg) {
-    { f(arg) }
-    ->std::convertible_to<bool>;
-};
-
 template <typename State>
 struct AggNonNullPred {
     constexpr bool operator()(const State&) const { return false; }
@@ -95,7 +89,7 @@ struct AggNonNullPred {
 // If all the rows are NULL or `AggNullPred` returns true, we will return NULL.
 // The State must be NullableAggregateFunctionState
 template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+          typename AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
     using NestedState = typename State::NestedState;
     static constexpr bool is_result_always_nullable = !std::is_same_v<AggNullPred, AggNonNullPred<NestedState>>;
@@ -300,7 +294,7 @@ protected:
 };
 
 template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+          typename AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionUnary final
         : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull,
                                                AggNullPred> {
@@ -792,8 +786,7 @@ public:
     }
 };
 
-template <typename State,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+template <typename State, typename AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
         : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
 public:

@@ -131,7 +131,7 @@ public:
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
-              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+              typename AggNullPred = AggNonNullPred<StateType>>
     void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                AggNullPred null_pred = AggNullPred()) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -148,8 +148,7 @@ public:
     }
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
-              typename SpecificAggFunctionPtr = AggregateFunctionPtr,
-              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr, typename AggNullPred = AggNonNullPred<StateType>>
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                         AggNullPred null_pred = AggNullPred()) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
