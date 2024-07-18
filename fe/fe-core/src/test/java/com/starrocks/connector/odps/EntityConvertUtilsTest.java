@@ -256,7 +256,7 @@ public class EntityConvertUtilsTest {
         assertEquals(expect, result);
 
         IsNullPredicateOperator nullPred =
-                new IsNullPredicateOperator(true, new ColumnRefOperator(0, Type.BIGINT, "col", false));
+                new IsNullPredicateOperator(false, new ColumnRefOperator(0, Type.BIGINT, "col", false));
         Predicate result2 = EntityConvertUtils.convertPredicate(nullPred, new HashSet<>());
         Predicate expect2 = UnaryPredicate.isNull(Attribute.of("col"));
         assertEquals(result2, expect2);
