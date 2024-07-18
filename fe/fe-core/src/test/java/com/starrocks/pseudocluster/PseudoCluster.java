@@ -31,7 +31,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -41,6 +40,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -417,8 +417,8 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
-        ClientPool.beHeartbeatPool = cluster.heartBeatPool;
-        ClientPool.backendPool = cluster.backendThriftPool;
+        ThriftConnectionPool.beHeartbeatPool = cluster.heartBeatPool;
+        ThriftConnectionPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 
         GlobalStateMgr.getCurrentState().setStarOSAgent(new PseudoStarOSAgent());

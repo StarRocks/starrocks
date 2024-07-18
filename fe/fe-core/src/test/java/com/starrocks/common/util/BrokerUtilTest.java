@@ -40,28 +40,20 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.GenericPool;
 import com.starrocks.common.UserException;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TBrokerCloseReaderRequest;
-import com.starrocks.thrift.TBrokerCloseWriterRequest;
-import com.starrocks.thrift.TBrokerDeletePathRequest;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
-import com.starrocks.thrift.TBrokerListPathRequest;
 import com.starrocks.thrift.TBrokerListResponse;
-import com.starrocks.thrift.TBrokerOpenReaderRequest;
 import com.starrocks.thrift.TBrokerOpenReaderResponse;
-import com.starrocks.thrift.TBrokerOpenWriterRequest;
 import com.starrocks.thrift.TBrokerOpenWriterResponse;
 import com.starrocks.thrift.TBrokerOperationStatus;
 import com.starrocks.thrift.TBrokerOperationStatusCode;
-import com.starrocks.thrift.TBrokerPReadRequest;
-import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerReadResponse;
 import com.starrocks.thrift.TFileBrokerService;
 import com.starrocks.thrift.TNetworkAddress;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
@@ -69,6 +61,8 @@ import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -198,7 +192,7 @@ public class BrokerUtilTest {
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
             public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
@@ -215,28 +209,22 @@ public class BrokerUtilTest {
             }
         };
 
-        new Expectations() {
-            {
-                globalStateMgr.getBrokerMgr();
-                result = brokerMgr;
-                brokerMgr.getBroker(anyString, anyString);
-                result = fsBroker;
-                client.listPath((TBrokerListPathRequest) any);
-                result = listResponse;
-                client.openReader((TBrokerOpenReaderRequest) any);
-                result = openReaderResponse;
-                client.pread((TBrokerPReadRequest) any);
-                result = readResponse;
-                times = 1;
-                client.closeReader((TBrokerCloseReaderRequest) any);
-                result = status;
-            }
-        };
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(
+                            listResponse, openReaderResponse, readResponse, status);
 
-        BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
-        byte[] data = BrokerUtil.readFile(filePath, brokerDesc);
-        String readStr = new String(data, StandardCharsets.UTF_8);
-        Assert.assertEquals(dppResultStr, readStr);
+            BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
+            try {
+                byte[] data = BrokerUtil.readFile(filePath, brokerDesc);
+                String readStr = new String(data, StandardCharsets.UTF_8);
+                Assert.assertEquals(dppResultStr, readStr);
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
+            }
+        }
     }
 
     @Test
@@ -251,7 +239,7 @@ public class BrokerUtilTest {
         openWriterResponse.fd = new TBrokerFD(1, 2);
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
             public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
@@ -268,29 +256,20 @@ public class BrokerUtilTest {
             }
         };
 
-        new Expectations() {
-            {
-                globalStateMgr.getBrokerMgr();
-                result = brokerMgr;
-                brokerMgr.getBroker(anyString, anyString);
-                result = fsBroker;
-                client.openWriter((TBrokerOpenWriterRequest) any);
-                result = openWriterResponse;
-                client.pwrite((TBrokerPWriteRequest) any);
-                result = status;
-                times = 1;
-                client.closeWriter((TBrokerCloseWriterRequest) any);
-                result = status;
-            }
-        };
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(openWriterResponse, status);
 
-        BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
-        byte[] configs = "{'label': 'label0'}".getBytes(StandardCharsets.UTF_8);
-        String destFilePath = "hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/configs/jobconfig.json";
-        try {
-            BrokerUtil.writeFile(configs, destFilePath, brokerDesc);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
+            byte[] configs = "{'label': 'label0'}".getBytes(StandardCharsets.UTF_8);
+            String destFilePath = "hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/configs/jobconfig.json";
+            try {
+                BrokerUtil.writeFile(configs, destFilePath, brokerDesc);
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
+            }
         }
     }
 
@@ -302,7 +281,7 @@ public class BrokerUtilTest {
         status.statusCode = TBrokerOperationStatusCode.OK;
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
             public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
@@ -319,23 +298,20 @@ public class BrokerUtilTest {
             }
         };
 
-        new Expectations() {
-            {
-                globalStateMgr.getBrokerMgr();
-                result = brokerMgr;
-                brokerMgr.getBroker(anyString, anyString);
-                result = fsBroker;
-                client.deletePath((TBrokerDeletePathRequest) any);
-                result = status;
-                times = 1;
-            }
-        };
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                     Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(status);
 
-        try {
             BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
-            BrokerUtil.deletePath("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9", brokerDesc);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            byte[] configs = "{'label': 'label0'}".getBytes(StandardCharsets.UTF_8);
+            String destFilePath = "hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/configs/jobconfig.json";
+            try {
+                BrokerUtil.deletePath("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9", brokerDesc);
+            } catch (Exception e) {
+                Assert.fail(e.getMessage());
+            }
         }
     }
 }
