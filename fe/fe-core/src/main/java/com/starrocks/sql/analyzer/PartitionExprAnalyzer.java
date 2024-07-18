@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PartitionExprAnalyzer {
 
