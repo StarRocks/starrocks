@@ -56,7 +56,7 @@ public class LockManager {
      */
 
     public void lock(long rid, Locker locker, LockType lockType, long timeout)
-            throws LockInterruptException, LockTimeoutException, DeadlockException {
+            throws LockInterruptException, LockTimeoutException, DeadlockException, NotSupportLockException {
 
         final long startTime = System.currentTimeMillis();
         locker.setLockRequestTimeMs(startTime);
@@ -262,7 +262,7 @@ public class LockManager {
         }
     }
 
-    public void release(long rid, Locker locker, LockType lockType) {
+    public void release(long rid, Locker locker, LockType lockType) throws NotSupportLockException {
         Set<Locker> newOwners;
 
         int lockTableIdx = getLockTableIndex(rid);

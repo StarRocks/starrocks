@@ -97,7 +97,11 @@ public class Locker {
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
-        lockManager.release(rid, this, lockType);
+        try {
+            lockManager.release(rid, this, lockType);
+        } catch (IllegalLockStateException e) {
+            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        }
     }
 
     // --------------- Database locking API ---------------
@@ -211,6 +215,7 @@ public class Locker {
 
     /**
      * Try to lock databases in ascending order of id.
+     *
      * @return: true if all databases are locked successfully, false otherwise.
      */
     public boolean tryLockDatabases(List<Database> dbs, LockType lockType, long timeout, TimeUnit unit) {
@@ -368,8 +373,9 @@ public class Locker {
 
     /**
      * Lock database and table with intensive db lock.
+     *
      * @param database database for intensive db lock
-     * @param table table to be locked
+     * @param table    table to be locked
      * @param lockType lock type
      * @return true if database exits, false otherwise
      */
@@ -415,8 +421,9 @@ public class Locker {
 
     /**
      * Lock table with intensive db lock.
+     *
      * @param database db for intensive db lock
-     * @param tableId table to be locked
+     * @param tableId  table to be locked
      * @param lockType lock type
      */
     public void lockTableWithIntensiveDbLock(Database database, Long tableId, LockType lockType) {
@@ -440,6 +447,7 @@ public class Locker {
 
     /**
      * Try lock database and table with intensive db lock.
+     *
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(Database db, Table table, LockType lockType, long timeout, TimeUnit unit) {
@@ -448,6 +456,7 @@ public class Locker {
 
     /**
      * Try lock database and table id with intensive db lock.
+     *
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(Database db, Long tableId, LockType lockType, long timeout, TimeUnit unit) {
@@ -467,6 +476,7 @@ public class Locker {
 
     /**
      * Try lock database and tables with intensive db lock.
+     *
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(LockParams lockParams, LockType lockType, long timeout, TimeUnit unit) {
