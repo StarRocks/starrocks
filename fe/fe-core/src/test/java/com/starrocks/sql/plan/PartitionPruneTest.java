@@ -45,6 +45,21 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "\"replication_num\" = \"1\",\n"
                 + "\"in_memory\" = \"false\"\n"
                 + ");");
+
+        starRocksAssert.withTable("CREATE TABLE t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202401 VALUES IN (('1', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202402 VALUES IN (('1', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202403 VALUES IN (('1', '2024-03-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202401 VALUES IN (('2', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
     }
 
     @Test
@@ -172,5 +187,24 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    @Test
+    public void testGeneratedColumnPrune() throws Exception {
+        // c2
+        starRocksAssert.query("select * from t_gen_col where c2 = 1 ")
+                .explainContains("partitions=3/7");
+
+        // c1
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-02-01' ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select * from t_gen_col where c1 < '2024-02-01' ")
+                .explainContains("partitions=2/7");
+
+        // c1 & c2
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' and c2 = 1 ")
+                .explainContains("partitions=1/7");
     }
 }
