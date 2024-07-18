@@ -61,14 +61,16 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
             // no row is filtered, just push the cur_chunk
             std::unique_lock l(_mutex);
             DCHECK(cur_chunk->num_rows());
-            _buffer[i].emplace(std::move(cur_chunk));
             _current_accumulated_row_size += cur_chunk_size;
             _current_memory_usage += cur_chunk->memory_usage();
+            _buffer[i].emplace(std::move(cur_chunk));
             return Status::OK();
         }
         // split current chunk into two chunks by expr[i]
-        std::vector<uint32_t> new_chunk_row_indexes(new_chunk_size);
-        std::vector<uint32_t> cur_chunk_row_indexes(cur_chunk_size - new_chunk_size);
+        std::vector<uint32_t> new_chunk_row_indexes;
+        new_chunk_row_indexes.reserve(new_chunk_size);
+        std::vector<uint32_t> cur_chunk_row_indexes;
+        cur_chunk_row_indexes.reserve(cur_chunk_size - new_chunk_size);
 
         for (size_t idx = 0; idx < cur_chunk_size; idx++) {
             if (chunk_filter[idx]) {
@@ -88,8 +90,9 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
         l.unlock();
 
         // cur_chunk =  cur_chunk - newChunk
-        cur_chunk = cur_chunk->clone_empty_with_slot(cur_chunk_size - new_chunk_size);
-        cur_chunk->append_selective(*cur_chunk, cur_chunk_row_indexes.data(), 0, cur_chunk_size - new_chunk_size);
+        auto temp_chunk = cur_chunk->clone_empty_with_slot(cur_chunk_size - new_chunk_size);
+        temp_chunk->append_selective(*cur_chunk, cur_chunk_row_indexes.data(), 0, cur_chunk_size - new_chunk_size);
+        cur_chunk = std::move(temp_chunk);
 
         cur_chunk_size = cur_chunk->num_rows();
         DCHECK_EQ(cur_chunk_size + new_chunk_size, original_chunk_size);
