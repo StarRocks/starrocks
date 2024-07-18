@@ -1391,26 +1391,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public Map<Table, Expr> getRefBaseTablePartitionExprs() {
         if (refBaseTablePartitionExprsOpt.isEmpty()) {
-            synchronized (this) {
-                if (refBaseTablePartitionExprsOpt.isEmpty()) {
-                    Map<Table, Expr> refBaseTablePartitionExprMap = Maps.newHashMap();
-                    for (BaseTableInfo tableInfo : baseTableInfos) {
-                        Table table = MvUtils.getTableChecked(tableInfo);
-                        Optional<MVPartitionExpr> mvPartitionExpr = MvUtils.getMvPartitionExpr(partitionExprMaps, table);
-                        if (mvPartitionExpr.isEmpty()) {
-                            LOG.info("Base table {} contains no partition expr, skip", table.getName());
-                            continue;
-                        }
-                        tableToBaseTableInfoCache.put(table, tableInfo);
-                        refBaseTablePartitionExprMap.put(table, mvPartitionExpr.get().getExpr());
-                    }
-                    LOG.info("The refBaseTablePartitionExprMap of mv {} is {}", getName(), refBaseTablePartitionExprMap);
-                    refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
-                    return refBaseTablePartitionExprMap;
+            Map<Table, Expr> refBaseTablePartitionExprMap = Maps.newHashMap();
+            for (BaseTableInfo tableInfo : baseTableInfos) {
+                Table table = MvUtils.getTableChecked(tableInfo);
+                Optional<MVPartitionExpr> mvPartitionExpr = MvUtils.getMvPartitionExpr(partitionExprMaps, table);
+                if (mvPartitionExpr.isEmpty()) {
+                    LOG.info("Base table {} contains no partition expr, skip", table.getName());
+                    continue;
                 }
-<<<<<<< HEAD
-            }
-=======
                 tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionExprMap.put(table, mvPartitionExpr.get().getExpr());
             }
@@ -1421,7 +1409,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return refBaseTablePartitionExprMap;
                 }
             }
->>>>>>> d2db82995d ([BugFix] [UT] Ensure to refresh base table for cached mv partition mappings (#48507))
         }
         Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
         return refBaseTablePartitionExprsOpt.map(this::refreshBaseTable).get();
@@ -1434,26 +1421,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public Map<Table, SlotRef> getRefBaseTablePartitionSlots() {
         if (refBaseTablePartitionSlotsOpt.isEmpty()) {
-            synchronized (this) {
-                if (refBaseTablePartitionSlotsOpt.isEmpty()) {
-                    Map<Table, SlotRef> refBaseTablePartitionSlotMap = new HashMap<>();
-                    for (BaseTableInfo tableInfo : baseTableInfos) {
-                        Table table = MvUtils.getTableChecked(tableInfo);
-                        Optional<MVPartitionExpr> mvPartitionExpr = MvUtils.getMvPartitionExpr(partitionExprMaps, table);
-                        if (mvPartitionExpr.isEmpty()) {
-                            LOG.info("Base table {} contains no partition expr, skip", table.getName());
-                            continue;
-                        }
-                        tableToBaseTableInfoCache.put(table, tableInfo);
-                        refBaseTablePartitionSlotMap.put(table, mvPartitionExpr.get().getSlotRef());
-                    }
-                    LOG.info("The refBaseTablePartitionSlotMap of mv {} is {}", getName(), refBaseTablePartitionSlotMap);
-                    refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
-                    return refBaseTablePartitionSlotMap;
+            Map<Table, SlotRef> refBaseTablePartitionSlotMap = new HashMap<>();
+            for (BaseTableInfo tableInfo : baseTableInfos) {
+                Table table = MvUtils.getTableChecked(tableInfo);
+                Optional<MVPartitionExpr> mvPartitionExpr = MvUtils.getMvPartitionExpr(partitionExprMaps, table);
+                if (mvPartitionExpr.isEmpty()) {
+                    LOG.info("Base table {} contains no partition expr, skip", table.getName());
+                    continue;
                 }
-<<<<<<< HEAD
-            }
-=======
                 tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionSlotMap.put(table, mvPartitionExpr.get().getSlotRef());
             }
@@ -1464,7 +1439,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return refBaseTablePartitionSlotMap;
                 }
             }
->>>>>>> d2db82995d ([BugFix] [UT] Ensure to refresh base table for cached mv partition mappings (#48507))
         }
         Preconditions.checkState(refBaseTablePartitionSlotsOpt.isPresent());
         return refBaseTablePartitionSlotsOpt.map(this::refreshBaseTable).get();
@@ -1561,36 +1535,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return null;
         }
         if (refBaseTableColumnOpt.isEmpty()) {
-<<<<<<< HEAD
-            synchronized (this) {
-                if (refBaseTableColumnOpt.isEmpty()) {
-                    Expr partitionExpr = getPartitionRefTableExprs().get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    partitionExpr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    SlotRef partitionSlotRef = slotRefs.get(0);
-                    for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                        Table table = MvUtils.getTableChecked(baseTableInfo);
-                        if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
-                            refBaseTableColumnOpt =
-                                    Optional.of(Pair.create(table, table.getColumn(partitionSlotRef.getColumnName())));
-                            break;
-                        }
-                    }
-                    if (refBaseTableColumnOpt.isEmpty()) {
-                        String baseTableNames = baseTableInfos.stream()
-                                .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getName())
-                                .collect(Collectors.joining(","));
-                        throw new RuntimeException(
-                                String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
-                    }
-=======
             Pair<Table, Column> refBaseTableColumn = getRefBaseTablePartitionColumnImpl();
             synchronized (this) {
                 if (refBaseTableColumnOpt.isEmpty()) {
                     refBaseTableColumnOpt = Optional.of(refBaseTableColumn);
                     return refBaseTableColumn;
->>>>>>> d2db82995d ([BugFix] [UT] Ensure to refresh base table for cached mv partition mappings (#48507))
                 }
             }
         }
@@ -1623,15 +1572,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public Map<Table, Column> getRefBaseTablePartitionColumns() {
         if (refBaseTablePartitionColumnsOpt.isEmpty()) {
-<<<<<<< HEAD
-            synchronized (this) {
-                if (refBaseTablePartitionColumnsOpt.isEmpty()) {
-                    Map<Table, Column> result = getBaseTablePartitionColumnMapImpl();
-=======
             Map<Table, Column> result = getBaseTablePartitionColumnMapImpl();
             synchronized (this) {
                 if (refBaseTablePartitionColumnsOpt.isEmpty()) {
->>>>>>> d2db82995d ([BugFix] [UT] Ensure to refresh base table for cached mv partition mappings (#48507))
                     refBaseTablePartitionColumnsOpt = Optional.of(result);
                     return result;
                 }

@@ -791,7 +791,7 @@ PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (
 SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt 
 UNION ALL
-SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) t order by 1, 2;
+SELECT  str2date(dt, '%Y-%m-%d'), sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) t order by 1, 2;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
