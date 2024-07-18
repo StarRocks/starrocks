@@ -24,6 +24,12 @@ Release date: July 11, 2024
 - Hive tables now support the `skip.header.line.count` property. [#47001](https://github.com/StarRocks/starrocks/pull/47001)
 - JDBC Catalog supports more data types. [#47618](https://github.com/StarRocks/starrocks/pull/47618)
 
+### Behavior Changes
+
+- Changed the value inheritance order of the `JAVA_OPTS` parameters. If versions other than JDK_9 or JDK_11 are used, users need to configure `JAVA_OPTS` directly. [#47495](https://github.com/StarRocks/starrocks/pull/47495)
+- When users create a non-partitioned table without specifying the bucket number, the minimum bucket number the system sets for the table is `16` (instead of `2` based on the formula `2*BE or CN count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- When users create a partitioned table without specifying the bucket number, if the number of partitions exceeds 5, the rule for setting the bucket count is changed to `max(2*BE or CN count, bucket number calculated based on the largest historical partition data volume)`. The previous rule was to calculate the bucket number based on the largest historical partition data volume. [#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
 ### Bug Fixes
 
 Fixed the following issues:

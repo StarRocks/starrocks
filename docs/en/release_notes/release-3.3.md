@@ -117,7 +117,7 @@ Release date: June 21, 2024
 #### Table Creation and Data Distribution
 
 - Users must specify Distribution Key when creating a colocate table using CTAS. [#45537](https://github.com/StarRocks/starrocks/pull/45537)
-- When users create a non-partitioned table without specifying bucket number, the minimum bucket number the system set for the table is `16` (instead of `2` based on the formula `2*BE count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- When users create a non-partitioned table without specifying the bucket number, the minimum bucket number the system sets for the table is `16` (instead of `2` based on the formula `2*BE or CN count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
 
 #### Loading and Unloading
 
