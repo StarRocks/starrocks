@@ -391,6 +391,7 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
             LOG(WARNING) << "failed to find column in schema: " << root;
             continue;
         }
+        // field maybe modified, so we need to deep copy
         auto new_field = std::make_shared<Field>(*field);
         schema->set_field_by_name(new_field, root);
         RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
@@ -422,8 +423,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
             _tablet_schema =
                     TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
         } else {
-            // struct column prune will modify fields, so deep copy a new schema
-            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema());
+            _tablet_schema = _tablet->tablet_schema();
         }
     }
 
