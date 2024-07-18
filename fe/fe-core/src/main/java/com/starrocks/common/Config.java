@@ -98,6 +98,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean sys_log_to_console = false;
 
+    @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
+    public static String sys_log_format = "plaintext";
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
