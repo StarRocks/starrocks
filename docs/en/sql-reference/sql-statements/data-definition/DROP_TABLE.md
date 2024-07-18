@@ -11,13 +11,14 @@ This statement is used to delete a table.
 ## Syntax
 
 ```sql
-DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
+DROP [TEMPORARY] TABLE [IF EXISTS] [db_name.]table_name [FORCE]
 ```
 
 Note:
 
 - After a table is dropped, you can use the [RECOVER](../data-definition/backup_restore/RECOVER.md) statement to restore the table within a specified period (1 day by default).
 - If DROP Table FORCE is executed, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally, this operation is not recommended.
+- Once dropped, temporary tables cannot be restored using RECOVER.
 
 ## Examples
 

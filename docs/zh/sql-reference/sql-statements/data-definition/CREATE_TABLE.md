@@ -15,7 +15,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```sql
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition2, ...]])
 [ENGINE = [olap|mysql|elasticsearch|hive|iceberg|hudi|jdbc]]
@@ -501,6 +501,14 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键，自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
 
 排序键的更多说明，请参见[排序键和前缀索引](../../../table_design/indexes/Prefix_index_sort_key.md)。
+
+### TEMPORARY
+
+创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。
+
+:::note
+创建临时表时，必须将 `ENGINE` 设置为 `olap`。
+:::
 
 ### PROPERTIES
 
