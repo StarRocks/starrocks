@@ -20,11 +20,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -419,8 +422,22 @@ public class MetaFunctions {
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        String sql = String.format("select cast(dict_mapping('%s', '%s', '%s') as string)",
-                tableNameValue.toString(), lookupKey.getVarchar(), returnColumn.getVarchar());
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
+        if (!(maybeTable.get() instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
+        }
+        OlapTable table = (OlapTable) maybeTable.get();
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be PRIMARY_KEY");
+        }
+        if (table.getKeysNum() > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "too many key columns");
+        }
+        Column keyColumn = table.getKeyColumns().get(0);
+
+        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
+                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
         try {
             List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
             return deserializeLookupResult(result);
@@ -439,5 +456,4 @@ public class MetaFunctions {
             }
         }
     }
-
 }
