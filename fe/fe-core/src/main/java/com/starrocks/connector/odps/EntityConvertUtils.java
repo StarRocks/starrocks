@@ -128,7 +128,14 @@ public class EntityConvertUtils {
      * @return MaxCompute Predicate
      */
     public static Predicate convertPredicate(ScalarOperator predicate, Set<String> partitionColumns) {
-        if (predicate instanceof BinaryPredicateOperator) {
+        if (predicate instanceof ColumnRefOperator) {
+            if (partitionColumns.contains(((ColumnRefOperator) predicate).getName())) {
+                return Predicate.NO_PREDICATE;
+            }
+            return Attribute.of(((ColumnRefOperator) predicate).getName());
+        } else if (predicate instanceof ConstantOperator) {
+            return Constant.of(predicate.toString());
+        } else if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
 
             Predicate leftChild = convertPredicate(binaryPredicateOperator.getChild(0), partitionColumns);
@@ -141,13 +148,6 @@ public class EntityConvertUtils {
             return new RawPredicate(leftChild +
                     binaryPredicateOperator.getBinaryType().toString() +
                     rightChild);
-        } else if (predicate instanceof ColumnRefOperator) {
-            if (partitionColumns.contains(((ColumnRefOperator) predicate).getName())) {
-                return Predicate.NO_PREDICATE;
-            }
-            return Attribute.of(((ColumnRefOperator) predicate).getName());
-        } else if (predicate instanceof ConstantOperator) {
-            return Constant.of(predicate.toString());
         } else if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicate compoundPredicate;
             switch (((CompoundPredicateOperator) predicate).getCompoundType()) {
