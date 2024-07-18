@@ -568,54 +568,23 @@ public class RestoreJobTest {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        jobInfo = new BackupJobInfo();
-        jobInfo.backupTime = System.currentTimeMillis();
-        jobInfo.dbId = db.getId();
-        jobInfo.dbName = db.getFullName();
-        jobInfo.success = true;
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
-        OlapTable tbl1 = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
-                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
-                expectedRestoreTbl.getDefaultDistributionInfo());
-        tbl1.setColocateGroup("test_group");
+        new Expectations() {
+            {
+                try {
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                            .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+                } catch (Exception e) {
+                }
+                result = true;
+            }
+        };
+        expectedRestoreTbl.setColocateGroup("test_group");
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
-        OlapTable tbl2 = new OlapTable(expectedRestoreTbl.getId() + 1, expectedRestoreTbl.getName() + "x",
-                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
-                expectedRestoreTbl.getDefaultDistributionInfo());
-        tbl1.setColocateGroup("test_group");
-
-        OlapTable tbl3 = new OlapTable(expectedRestoreTbl.getId() + 2, expectedRestoreTbl.getName() + "xx",
-                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
-                expectedRestoreTbl.getDefaultDistributionInfo());
-        tbl1.setColocateGroup("");
-
-        BackupTableInfo tblInfo1 = new BackupTableInfo();
-        tblInfo1.id = tbl1.getId();
-        tblInfo1.name = tbl1.getName();
-        jobInfo.tables.put(tblInfo1.name, tblInfo1);
-
-    
-        BackupTableInfo tblInfo2 = new BackupTableInfo();
-        tblInfo2.id = tbl2.getId();
-        tblInfo2.name = tbl2.getName();
-        jobInfo.tables.put(tblInfo2.name, tblInfo2);
-
-        BackupTableInfo tblInfo3 = new BackupTableInfo();
-        tblInfo3.id = tbl3.getId();
-        tblInfo3.name = tbl3.getName();
-        jobInfo.tables.put(tblInfo3.name, tblInfo3);
-
-        List<Table> tbls = Lists.newArrayList();
-        tbls.add(tbl1);
-        tbls.add(tbl2);
-        tbls.add(tbl3);
-        backupMeta = new BackupMeta(tbls);
-
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-        job.setRepo(repo);
-        job.run();
+        Config.enable_colocate_restore = false;
     }
 }
 
