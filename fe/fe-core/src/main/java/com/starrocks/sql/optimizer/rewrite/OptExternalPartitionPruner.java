@@ -403,7 +403,7 @@ public class OptExternalPartitionPruner {
         if (table instanceof HiveMetaStoreTable) {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
-                            scanOperatorPredicates.getPartitionConjuncts(), null);
+                            scanOperatorPredicates.getPartitionConjuncts(), null, operator);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();

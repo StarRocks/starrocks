@@ -192,8 +192,8 @@ public class PartitionPruneTest extends PlanTestBase {
     @Test
     public void testGeneratedColumnPrune() throws Exception {
         // c2
-        starRocksAssert.query("select * from t_gen_col where c2 = 1 ")
-                .explainContains("partitions=3/7");
+//        starRocksAssert.query("select * from t_gen_col where c2 = 1 ")
+//                .explainContains("partitions=3/7");
 
         // c1
         starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' ")

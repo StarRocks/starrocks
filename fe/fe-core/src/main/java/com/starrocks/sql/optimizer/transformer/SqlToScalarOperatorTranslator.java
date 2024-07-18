@@ -199,6 +199,11 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
+    public static ScalarOperator translateWithSlotRef(Expr expr, Map<SlotRef, ColumnRefOperator> mapping) {
+        ReplaceSlotVisitor visitor = new ReplaceSlotVisitor(mapping);
+        return visitor.visit(expr, new Context());
+    }
+
     private static final class Context {
 
         public final boolean hasSubquery;
@@ -866,6 +871,32 @@ public final class SqlToScalarOperatorTranslator {
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
                     node.getDictionaryTxnId(), node.getKeySize());
             return op;
+        }
+    }
+
+    /**
+     * Replace the SlotRef
+     */
+    static class ReplaceSlotVisitor extends Visitor {
+
+        private final Map<SlotRef, ColumnRefOperator> mapping;
+        private final Map<String, ColumnRefOperator> nameMapping;
+
+        public ReplaceSlotVisitor(Map<SlotRef, ColumnRefOperator> mapping) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.mapping = mapping;
+            this.nameMapping = mapping.entrySet().stream().map(x -> Map.entry(x.getKey().getColumnName(), x.getValue()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                return nameMapping.get(node.getColumnName());
+            }
+            throw unsupportedException("unknown slot: " + node.toSql());
         }
     }
 
