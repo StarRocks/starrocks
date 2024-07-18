@@ -78,7 +78,6 @@ public class SSLChannelImp implements SSLChannel {
                 return readLen;
             }
 
-            peerAppData.clear();
             // the net data may be cached from handshake stage
             int bytesRead;
             if (haveCachedPeerNetData) {
@@ -94,15 +93,17 @@ public class SSLChannelImp implements SSLChannel {
                     SSLEngineResult result = sslEngine.unwrap(peerNetData, peerAppData);
                     switch (result.getStatus()) {
                         case OK:
+                            if (peerNetData.hasRemaining()) {
+                                peerNetData.compact();
+                                peerNetData.flip();
+                                haveCachedPeerNetData = true;
+                            } else {
+                                haveCachedPeerNetData = false;
+                            }
                             peerAppData.flip();
                             readLen += readFromAppData(dstBuf);
                             if (dstBuf.remaining() <= 0) {
                                 return readLen;
-                            }
-                            peerAppData.clear();
-                            if (peerNetData.hasRemaining()) {
-                                peerNetData.compact();
-                                peerNetData.flip();
                             }
                             break;
                         case BUFFER_OVERFLOW:
@@ -144,6 +145,7 @@ public class SSLChannelImp implements SSLChannel {
         } else {
             haveCachedPeerAppData = false;
             dstBuf.put(peerAppData);
+            peerAppData.clear();
         }
         return readLen;
     }
