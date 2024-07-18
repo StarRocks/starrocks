@@ -123,9 +123,14 @@ public class TunespaceExecutor {
                     .map(aggRoot -> subPlans.size() == 1 && subPlans.get(0) == aggRoot)
                     .orElse(false);
 
-            Supplier<String> nameGenerator = matchEntire ?
-                    () -> queryName :
-                    Util.nextStringGenerator(queryName + ".part.", "");
+            if (queryName == null || queryName.isBlank() || queryName.isEmpty()) {
+                queryName = "";
+            }
+
+            String qName = queryName;
+            Supplier<String> nameGenerator = matchEntire || qName.equals("") ?
+                            () -> qName :
+                            Util.nextStringGenerator(qName + ".part.", "");
 
             List<Pair<String, OptExpression>> namedSubPlans = subPlans.stream()
                     .map(subPlan -> Pair.create(nameGenerator.get(), subPlan))
