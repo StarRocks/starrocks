@@ -119,7 +119,8 @@ public class EntityConvertUtils {
 
     /**
      * convert StarRocks predicate operator to MaxCompute predicate
-     * Note that the predicates of the partition column have been filtered in advance at the optimizer layer and should not be pushed down to the storage layer.
+     * Note that the predicates of the partition column have been filtered in advance at the optimizer layer
+     * and should not be pushed down to the storage layer.
      * Therefore, this method will delete all the predicates of the partition column.
      *
      * @param predicate        StarRocks predicate operator
