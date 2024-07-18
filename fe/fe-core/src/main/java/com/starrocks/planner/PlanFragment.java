@@ -703,20 +703,91 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return numOlapScanNodes;
     }
 
+<<<<<<< HEAD
     private RoaringBitmap collectShuffleHashBucketRfIds(PlanNode root) {
+=======
+    public boolean isUnionFragment() {
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(planRoot);
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                dq.addAll(nd.getChildren());
+            }
+        }
+        return false;
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+    /**
+     * Returns the leftmost node of the fragment.
+     */
+    public PlanNode getLeftMostNode() {
+        PlanNode node = planRoot;
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
+
+    public void reset() {
+        // Do nothing.
+    }
+
+    public void disablePhysicalPropertyOptimize() {
+        colocateExecGroups.clear();
+        forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
+    }
+
+    private void forEachNode(PlanNode root, Consumer<PlanNode> consumer) {
+        consumer.accept(root);
+        for (PlanNode child : root.getChildren()) {
+            forEachNode(child, consumer);
+        }
+    }
+
+    private RoaringBitmap collectNonBroadcastRfIds(PlanNode root) {
+>>>>>>> 0b068a37b4 ([BugFix] Make Broadcast Join generate deterministic GRF (#48496))
         RoaringBitmap filterIds = root.getChildren().stream()
                 .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
-                .map(this::collectShuffleHashBucketRfIds)
+                .map(this::collectNonBroadcastRfIds)
                 .reduce(RoaringBitmap.bitmapOf(), (a, b) -> RoaringBitmap.or(a, b));
         if (root instanceof HashJoinNode) {
             HashJoinNode joinNode = (HashJoinNode) root;
-            if (joinNode.getDistrMode().equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+            if (!joinNode.isBroadcast()) {
                 joinNode.getBuildRuntimeFilters().forEach(rf -> filterIds.add(rf.getFilterId()));
             }
         }
         return filterIds;
     }
 
+    /**
+     * In the same fragment, collect all nodes of the right subtree of BroadcastJoinNode that will build global RFs
+     * For example, the following plan will add 3 and 4 to {@code localRightOffsprings}.
+     * <pre>{@code
+     *       Broadcast Join#1
+     *        /        \
+     *      Node#2  ProjectNode#3
+     *                 |
+     *          ExchangeSourceNode#4
+     * }</pre>
+     */
     private RoaringBitmap collectLocalRightOffspringsOfBroadcastJoin(PlanNode root,
                                                                      RoaringBitmap localRightOffsprings) {
         List<RoaringBitmap> localOffspringsPerChild = root.getChildren().stream()
@@ -755,10 +826,12 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void removeRfOnRightOffspringsOfBroadcastJoin() {
         RoaringBitmap localRightOffsprings = RoaringBitmap.bitmapOf();
         collectLocalRightOffspringsOfBroadcastJoin(getPlanRoot(), localRightOffsprings);
-        RoaringBitmap filterIds = collectShuffleHashBucketRfIds(getPlanRoot());
+
+        RoaringBitmap filterIds = collectNonBroadcastRfIds(getPlanRoot());
         if (localRightOffsprings.isEmpty() || filterIds.isEmpty()) {
             return;
         }
+
         removeRfOfRightOffspring(getPlanRoot(), localRightOffsprings, filterIds);
     }
 }

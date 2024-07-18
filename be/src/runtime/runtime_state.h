@@ -381,11 +381,40 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+<<<<<<< HEAD
     void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
         this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+=======
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
 
-    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+    bool is_jit_enabled() const;
+
+    bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
+
+    void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
+
+    // CompilableExprType
+    // arithmetic -> 2, except /, %
+    // cast -> 4
+    // case -> 8
+    // cmp -> 16
+    // logical -> 32
+    // div -> 64
+    // mod -> 128
+    bool can_jit_expr(const int jit_label) {
+        return (_query_options.jit_level == 1) || ((_query_options.jit_level & jit_label));
+    }
+
+    std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
+
+    void set_non_broadcast_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_non_broadcast_rf_ids = std::move(filter_ids);
+>>>>>>> 0b068a37b4 ([BugFix] Make Broadcast Join generate deterministic GRF (#48496))
+    }
+
+    const std::unordered_set<int32_t>& non_broadcast_rf_ids() const { return this->_non_broadcast_rf_ids; }
 
     void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
         this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
@@ -516,7 +545,7 @@ private:
 
     bool _enable_pipeline_engine = false;
 
-    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    std::unordered_set<int32_t> _non_broadcast_rf_ids;
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 };
 
