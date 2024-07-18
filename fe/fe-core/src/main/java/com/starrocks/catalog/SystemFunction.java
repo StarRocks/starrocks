@@ -72,6 +72,11 @@ public class SystemFunction extends Function {
     }
 
     @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
+
+    @Override
     public TFunction toThrift() {
         throw new UnsupportedOperationException("System function cannot be serialized.");
     }
