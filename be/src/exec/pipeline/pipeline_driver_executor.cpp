@@ -366,11 +366,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             << ", is_done=" << done;
 }
 
-void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) {
-    // It should be guaranteed that the done flag must be set to true in any cases.
-    // Set done flag to true after it has been submit, so it won't need to wait for report finish.
-    // It's important when handle high concurrent data ingestion.
-    DeferOp defer([&]() { *done = true; });
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
     auto query_statistics = query_ctx->final_query_statistic();
 
     TReportAuditStatisticsParams params;
