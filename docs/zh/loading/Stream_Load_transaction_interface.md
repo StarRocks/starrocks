@@ -80,7 +80,7 @@ Stream Load 事务接口具有如下优势：
 ## 注意事项
 
 - 使用 Stream Load 事务接口导入数据的过程中，注意 `/api/transaction/begin`、`/api/transaction/load`、`/api/transaction/prepare` 接口报错后，事务将失败并自动回滚。
-- 在调用 `/api/transaction/begin` 接口开启事务时，您可以选择指定或者不指定标签 (Label)。如果您不指定标签，StarRocks 会自动为事务生成一个标签。其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
+- 在调用 `/api/transaction/begin` 接口开启事务时，您必须指定标签 (Label)，其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
 - 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签已开启的事务失败并回滚。
 - StarRocks支持导入的 CSV 格式数据默认的列分隔符是 `\t`，默认的行分隔符是 `\n`。如果源数据文件中的列分隔符和行分隔符不是 `\t` 和 `\n`，则在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"` 和 `"row_delimiter: <row_delimiter>"` 指定行分隔符和列分隔符。
 
