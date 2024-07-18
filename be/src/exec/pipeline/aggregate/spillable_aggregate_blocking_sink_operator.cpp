@@ -128,7 +128,6 @@ Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* s
 
 std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_build_spill_task(RuntimeState* state) {
     return [this, state]() -> StatusOr<ChunkPtr> {
-        bool use_intermediate_as_output = true;
         if (!_aggregator->is_ht_eos()) {
             auto chunk = std::make_shared<Chunk>();
             RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
