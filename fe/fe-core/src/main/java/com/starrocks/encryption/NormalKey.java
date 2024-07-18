@@ -16,10 +16,6 @@ package com.starrocks.encryption;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
-import org.apache.parquet.crypto.AesGcmDecryptor;
-import org.apache.parquet.crypto.AesGcmEncryptor;
-import org.apache.parquet.crypto.AesMode;
-import org.apache.parquet.crypto.ModuleCipherFactory;
 
 import java.util.Base64;
 
@@ -117,25 +113,11 @@ public class NormalKey extends EncryptionKey {
     }
 
     public byte[] wrapKey(EncryptionAlgorithmPB algorithm, byte[] plainKey) {
-        switch (algorithm) {
-            case AES_128:
-                AesGcmEncryptor keyEncryptor =
-                        (AesGcmEncryptor) ModuleCipherFactory.getEncryptor(AesMode.GCM, this.plainKey);
-                return keyEncryptor.encrypt(false, plainKey, null);
-            default:
-                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
-        }
+        return EncryptionUtil.wrapKey(this.plainKey, algorithm, plainKey);
     }
 
     public byte[] unwrapKey(EncryptionAlgorithmPB algorithm, byte[] encryptedKey) {
-        switch (algorithm) {
-            case AES_128:
-                AesGcmDecryptor keyDecryptor =
-                        (AesGcmDecryptor) ModuleCipherFactory.getDecryptor(AesMode.GCM, this.plainKey);
-                return keyDecryptor.decrypt(encryptedKey, 0, encryptedKey.length, null);
-            default:
-                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
-        }
+        return EncryptionUtil.unwrapKey(this.plainKey, algorithm, encryptedKey);
     }
 
     @Override
