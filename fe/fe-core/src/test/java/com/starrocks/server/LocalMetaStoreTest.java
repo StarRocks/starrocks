@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -33,6 +34,8 @@ import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -44,6 +47,7 @@ import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -258,4 +262,52 @@ public class LocalMetaStoreTest {
             Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
+
+    @Test
+    public void testRenameColumnException() throws Exception {
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        try {
+            Table table = new HiveTable();
+            localMetastore.renameColumn(null, table, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+        }
+
+        Database db = localMetastore.getDb("test");
+        Table table = db.getTable("t1");
+        try {
+            localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
+        }
+
+        try {
+            OlapTable olapTable = new OlapTable();
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            localMetastore.renameColumn(db, olapTable, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
+        }
+
+        try {
+            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k4", "k5");
+            localMetastore.renameColumn(db, table, columnRenameClause);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
+        }
+
+        try {
+            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k3", "k2");
+            localMetastore.renameColumn(db, table, columnRenameClause);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
+        }
+    }
+
 }
