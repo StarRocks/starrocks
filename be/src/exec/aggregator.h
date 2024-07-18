@@ -136,6 +136,11 @@ struct AggFunctionTypes {
     std::vector<bool> nulls_first;
 
     bool is_distinct = false;
+    bool is_always_nullable_result = false;
+
+    template <bool UseIntermediateAsOutput>
+    bool is_result_nullable() const;
+    bool use_nullable_fn(bool use_intermediate_as_output) const;
 };
 
 struct ColumnType {
@@ -239,8 +244,6 @@ struct AggregatorParams {
     bool has_nullable_key;
 
     void init();
-
-    ChunkUniquePtr create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc);
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
@@ -504,7 +507,8 @@ public:
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output = nullptr);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
