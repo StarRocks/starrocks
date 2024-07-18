@@ -420,7 +420,6 @@ public class RoutineLoadManagerTest {
     public void testGetJob(@Injectable RoutineLoadJob routineLoadJob1,
                            @Injectable RoutineLoadJob routineLoadJob2,
                            @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
-
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -447,6 +446,144 @@ public class RoutineLoadManagerTest {
         Assert.assertEquals(routineLoadJob2, result.get(0));
         Assert.assertEquals(routineLoadJob1, result.get(1));
         Assert.assertEquals(routineLoadJob3, result.get(2));
+    }
+
+    @Test
+    public void testGetJobByJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                    @Injectable RoutineLoadJob routineLoadJob2,
+                                    @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newHashMap();
+        idToRoutineLoadJob.put(1L, routineLoadJob1);
+        idToRoutineLoadJob.put(2L, routineLoadJob2);
+        idToRoutineLoadJob.put(3L, routineLoadJob3);
+        Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob(null, "aaa", false);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+    }
+
+    @Test
+    public void testGetJobByDb(@Injectable RoutineLoadJob routineLoadJob1,
+                               @Injectable RoutineLoadJob routineLoadJob2,
+                               @Injectable RoutineLoadJob routineLoadJob3,
+                               @Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", null, true);
+
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
+        Assert.assertEquals(routineLoadJob3, result.get(2));
+    }
+
+    @Test
+    public void testGetJobByDbAndJobName(@Injectable RoutineLoadJob routineLoadJob1,
+                                         @Injectable RoutineLoadJob routineLoadJob2,
+                                         @Injectable RoutineLoadJob routineLoadJob3,
+                                         @Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked Database database) throws MetaNotFoundException {
+        new Expectations() {
+            {
+                routineLoadJob1.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob1.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob2.isFinal();
+                minTimes = 0;
+                result = false;
+                routineLoadJob2.getName();
+                minTimes = 0;
+                result = "aaa";
+                routineLoadJob3.isFinal();
+                minTimes = 0;
+                result = true;
+                routineLoadJob3.getName();
+                minTimes = 0;
+                result = "bbb";
+                globalStateMgr.getDb("db1");
+                minTimes = 0;
+                result = database;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
+        nameToRoutineLoadJob.put("aaa", Lists.newArrayList(routineLoadJob1, routineLoadJob2));
+        nameToRoutineLoadJob.put("bbb", Lists.newArrayList(routineLoadJob3));
+        dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
+        Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "aaa", true);
+
+        Assert.assertEquals(2, result.size());
+        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assert.assertEquals(routineLoadJob1, result.get(1));
     }
 
     @Test
