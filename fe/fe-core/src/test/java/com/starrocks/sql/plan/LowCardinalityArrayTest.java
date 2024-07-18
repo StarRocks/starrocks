@@ -261,15 +261,15 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
                 "\n" +
                 "  5:Decode\n" +
-                "  |  <dict id 19> : <string id 6>"));
+                "  |  <dict id 23> : <string id 6>"));
     }
 
     @Test
@@ -559,8 +559,8 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     public void testArrayIfNullString() throws Exception {
         String sql = "select ifnull(a1[1], a2[1]), a1, a2 from s2 order by v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "ifnull(DictDecode(8: a1, [<place-holder>], 8: a1[1]), " +
-                "DictDecode(9: a2, [<place-holder>], 9: a2[1]))");
+        assertContains(plan, "ifnull(DictDecode(10: a1, [<place-holder>], 10: a1[1]), " +
+                "DictDecode(11: a2, [<place-holder>], 11: a2[1]))");
     }
 
     @Test
@@ -657,30 +657,30 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
                 "\n" +
                 "  5:Decode\n" +
-                "  |  <dict id 19> : <string id 6>"));
+                "  |  <dict id 23> : <string id 6>"));
 
         sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
                 "\n" +
                 "  5:Decode\n" +
-                "  |  <dict id 19> : <string id 6>"));
+                "  |  <dict id 23> : <string id 6>"));
     }
 
     @Test
