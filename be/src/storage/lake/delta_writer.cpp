@@ -342,12 +342,10 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
             is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
-                                      config::load_process_max_memory_limit_percent,
-                                      config::load_process_max_memory_hard_limit_percent)) {
+                                      config::load_process_max_memory_hard_limit_ratio)) {
             return Status::MemoryLimitExceeded(
                     "memory limit exceeded, please reduce load frequency or increase config "
-                    "`load_process_max_memory_limit_percent` or `load_process_max_memory_limit_bytes` "
-                    "or add more BE nodes");
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
         }
         RETURN_IF_ERROR(reset_memtable());
     }

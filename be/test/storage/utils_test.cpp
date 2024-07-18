@@ -47,12 +47,14 @@ TEST_F(TestUtils, test_valid_decimal) {
 TEST_F(TestUtils, test_is_tracker_hit_hard_limit) {
     std::unique_ptr<MemTracker> tracker = std::make_unique<MemTracker>(1000, "test", nullptr);
     tracker->consume(2000);
-    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 30));
-    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 40));
-    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 50));
-    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 60));
-    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 65));
-    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 70));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 0.1));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 1.1));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 1.5));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 1.7));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 30, 2));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 2.5));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 3));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 30, 4));
 }
 
 } // namespace starrocks

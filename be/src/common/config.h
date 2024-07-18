@@ -518,9 +518,19 @@ CONF_mInt64(write_buffer_size, "104857600");
 CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Double(query_pool_spill_mem_limit_threshold, "1.0");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
-CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-// It's hard limit for loading, when this limit is hit, new loading task will be rejected.
-CONF_mInt32(load_process_max_memory_hard_limit_percent, "60"); // 60%
+// It's is a soft limit, when this limit is hit,
+// memtable in delta writer will be flush to reduce memory cost.
+// Load memory beyond this limit is allowed.
+CONF_Int32(load_process_max_memory_limit_percent, "30"); // 30%
+// It's hard limit ratio, when this limit is hit, new loading task will be rejected.
+// we can caculate and got the hard limit percent.
+// E.g.
+//  load_process_max_memory_limit_percent is 30%,
+//  load_process_max_memory_hard_limit_ratio is 2.
+//  then hard limit percent is 30% * 2 = 60%.
+//  And when hard limit percent is larger than process limit percent,
+//  use process limit percent as hard limit percent.
+CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
 CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");

@@ -164,7 +164,7 @@ bool valid_bool(const std::string& value_str);
 std::string parent_name(const std::string& fullpath);
 std::string file_name(const std::string& fullpath);
 
-bool is_tracker_hit_hard_limit(MemTracker* tracker, int soft_limit_percent, int hard_limit_percent);
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
 
 // Util used to get string name of thrift enum item
 #define EnumToString(enum_type, index, out)                   \

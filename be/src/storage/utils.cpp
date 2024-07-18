@@ -391,9 +391,10 @@ std::string file_name(const std::string& fullpath) {
     return path.filename().string();
 }
 
-bool is_tracker_hit_hard_limit(MemTracker* tracker, int soft_limit_percent, int hard_limit_percent) {
-    int64_t limit_ratio = std::max(hard_limit_percent * 100 / soft_limit_percent, 100);
-    return tracker->limit_exceeded_by_ratio(limit_ratio);
+bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
+    hard_limit_ratio = std::max(hard_limit_ratio, 1.0);
+    return tracker->limit_exceeded_by_ratio((int64_t)(hard_limit_ratio * 100)) ||
+           (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
 }
 
 } // namespace starrocks
