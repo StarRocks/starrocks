@@ -14,6 +14,7 @@
 package com.starrocks.encryption;
 
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
@@ -29,6 +30,7 @@ import org.junit.Test;
 public class KeyMgrTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
+        MetricRepo.init();
         UtFrameUtils.setUpForPersistTest();
     }
 

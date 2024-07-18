@@ -18,6 +18,7 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -92,7 +93,10 @@ public class KeyMgr {
         EncryptionKey kek = masterKey.generateKey();
         kek.id = idToKey.lastKey() + 1;
         addKey(kek);
-        LOG.info("generate new KEK " + kek);
+        if (MetricRepo.hasInit) {
+            MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+        }
+        LOG.info(String.format("generate new KEK %s, total: %d", kek.toString(), idToKey.size()));
         return kek;
     }
 
@@ -149,6 +153,9 @@ public class KeyMgr {
             if (lastKEK.createTime + keyValidSec <= now) {
                 generateNewKEK();
             }
+            if (MetricRepo.hasInit) {
+                MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+            }
         } finally {
             keysLock.writeLock().unlock();
         }
@@ -179,30 +186,43 @@ public class KeyMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int cnt = reader.readInt();
-        LOG.info("loading {} keys", cnt);
-        for (int i = 0; i < cnt; i++) {
-            EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
-            switch (pb.type) {
-                case NORMAL_KEY:
-                    NormalKey key = new NormalKey();
-                    key.fromPB(pb, this);
-                    idToKey.put(key.id, key);
+        keysLock.writeLock().lock();
+        try {
+            int cnt = reader.readInt();
+            LOG.info("loading {} keys", cnt);
+            for (int i = 0; i < cnt; i++) {
+                EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
+                switch (pb.type) {
+                    case NORMAL_KEY:
+                        NormalKey key = new NormalKey();
+                        key.fromPB(pb, this);
+                        idToKey.put(key.id, key);
+                }
             }
+            if (MetricRepo.hasInit) {
+                MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+            }
+        } finally {
+            keysLock.writeLock().unlock();
         }
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        final int cnt = 1 + idToKey.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.KEY_MGR, cnt);
-        // write keys
-        writer.writeJson(idToKey.size());
-        for (EncryptionKey key : idToKey.values()) {
-            EncryptionKeyPB pb = new EncryptionKeyPB();
-            key.toPB(pb, this);
-            writer.writeJson(pb);
+        keysLock.readLock().lock();
+        try {
+            final int cnt = 1 + idToKey.size();
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.KEY_MGR, cnt);
+            // write keys
+            writer.writeJson(idToKey.size());
+            for (EncryptionKey key : idToKey.values()) {
+                EncryptionKeyPB pb = new EncryptionKeyPB();
+                key.toPB(pb, this);
+                writer.writeJson(pb);
+            }
+            writer.close();
+        } finally {
+            keysLock.readLock().unlock();
         }
-        writer.close();
     }
 
     public TGetKeysResponse getKeys(TGetKeysRequest req) throws IOException {
