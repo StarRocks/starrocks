@@ -422,11 +422,11 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
-    void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
-        this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+    void set_non_broadcast_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_non_broadcast_rf_ids = std::move(filter_ids);
     }
 
-    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+    const std::unordered_set<int32_t>& non_broadcast_rf_ids() const { return this->_non_broadcast_rf_ids; }
 
     void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
         this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
@@ -567,7 +567,7 @@ private:
 
     bool _enable_pipeline_engine = false;
 
-    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    std::unordered_set<int32_t> _non_broadcast_rf_ids;
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 };
 
