@@ -15,6 +15,13 @@
 package com.starrocks.connector.odps;
 
 import com.aliyun.odps.TableSchema;
+import com.aliyun.odps.table.optimizer.predicate.Attribute;
+import com.aliyun.odps.table.optimizer.predicate.CompoundPredicate;
+import com.aliyun.odps.table.optimizer.predicate.Constant;
+import com.aliyun.odps.table.optimizer.predicate.InPredicate;
+import com.aliyun.odps.table.optimizer.predicate.Predicate;
+import com.aliyun.odps.table.optimizer.predicate.RawPredicate;
+import com.aliyun.odps.table.optimizer.predicate.UnaryPredicate;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.CharTypeInfo;
 import com.aliyun.odps.type.DecimalTypeInfo;
@@ -22,15 +29,25 @@ import com.aliyun.odps.type.MapTypeInfo;
 import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.VarcharTypeInfo;
+import com.aliyun.odps.utils.StringUtils;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class EntityConvertUtils {
@@ -98,5 +115,87 @@ public class EntityConvertUtils {
         columns.addAll(tableSchema.getPartitionColumns());
         return columns.stream().map(EntityConvertUtils::convertColumn).collect(
                 Collectors.toList());
+    }
+
+    /**
+     * convert StarRocks predicate operator to MaxCompute predicate
+     * Note that the predicates of the partition column have been filtered in advance at the optimizer layer and should not be pushed down to the storage layer.
+     * Therefore, this method will delete all the predicates of the partition column.
+     *
+     * @param predicate        StarRocks predicate operator
+     * @param partitionColumns partition columns to be filtered
+     * @return MaxCompute Predicate
+     */
+    public static Predicate convertPredicate(ScalarOperator predicate, Set<String> partitionColumns) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
+
+            Predicate leftChild = convertPredicate(binaryPredicateOperator.getChild(0), partitionColumns);
+            Predicate rightChild = convertPredicate(binaryPredicateOperator.getChild(1), partitionColumns);
+
+            if (Predicate.NO_PREDICATE.equals(leftChild) || Predicate.NO_PREDICATE.equals(rightChild)) {
+                return Predicate.NO_PREDICATE;
+            }
+
+            return new RawPredicate(leftChild +
+                    binaryPredicateOperator.getBinaryType().toString() +
+                    rightChild);
+        } else if (predicate instanceof ColumnRefOperator) {
+            if (partitionColumns.contains(((ColumnRefOperator) predicate).getName())) {
+                return Predicate.NO_PREDICATE;
+            }
+            return Attribute.of(((ColumnRefOperator) predicate).getName());
+        } else if (predicate instanceof ConstantOperator) {
+            return Constant.of(predicate.toString());
+        } else if (predicate instanceof CompoundPredicateOperator) {
+            CompoundPredicate compoundPredicate;
+            switch (((CompoundPredicateOperator) predicate).getCompoundType()) {
+                case AND:
+                    compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.AND);
+                    break;
+                case OR:
+                    compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.OR);
+                    break;
+                case NOT:
+                    compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.NOT);
+                    break;
+                default:
+                    return Predicate.NO_PREDICATE;
+            }
+            for (ScalarOperator child : predicate.getChildren()) {
+                Predicate childPredicate = convertPredicate(child, partitionColumns);
+                if (Predicate.NO_PREDICATE.equals(childPredicate)) {
+                    continue;
+                }
+                compoundPredicate.addPredicate(childPredicate);
+            }
+            return compoundPredicate;
+        } else if (predicate instanceof IsNullPredicateOperator) {
+            Predicate operand = convertPredicate(predicate.getChild(0), partitionColumns);
+            if (Predicate.NO_PREDICATE.equals(operand)) {
+                return Predicate.NO_PREDICATE;
+            }
+            return new UnaryPredicate(
+                    ((IsNullPredicateOperator) predicate).isNotNull() ? UnaryPredicate.Operator.NOT_NULL :
+                            UnaryPredicate.Operator.IS_NULL, operand);
+        } else if (predicate instanceof InPredicateOperator) {
+            InPredicateOperator inPredicateOperator = (InPredicateOperator) predicate;
+            Predicate operand = convertPredicate(inPredicateOperator.getChild(0), partitionColumns);
+            if (Predicate.NO_PREDICATE.equals(operand)) {
+                return Predicate.NO_PREDICATE;
+            }
+            List<Serializable> set =
+                    inPredicateOperator.getListChildren().stream().map(p -> convertPredicate(p, partitionColumns))
+                            .filter(
+                                    s -> !StringUtils.isNullOrEmpty(s.toString()))
+                            .collect(Collectors.toList());
+            if (inPredicateOperator.isNotIn()) {
+                return new InPredicate(InPredicate.Operator.NOT_IN, operand, set);
+            } else {
+                return new InPredicate(InPredicate.Operator.IN, operand, set);
+            }
+        } else {
+            return Predicate.NO_PREDICATE;
+        }
     }
 }

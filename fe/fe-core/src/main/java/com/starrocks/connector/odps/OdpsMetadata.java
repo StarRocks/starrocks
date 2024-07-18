@@ -16,7 +16,6 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.OdpsException;
-import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.Project;
 import com.aliyun.odps.security.SecurityManager;
@@ -25,7 +24,6 @@ import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.optimizer.predicate.Predicate;
-import com.aliyun.odps.table.optimizer.predicate.RawPredicate;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplit;
@@ -97,7 +95,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private String catalogOwner;
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
-    private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -226,25 +224,22 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
-        List<Partition> partitions = get(partitionCache, odpsTableName);
+        List<PartitionSpec> partitions = get(partitionCache, odpsTableName);
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
-        return partitions.stream().map(Partition::getPartitionSpec)
-                .map(p -> p.toString(false, true)).collect(
-                        Collectors.toList());
+        return partitions.stream().map(p -> p.toString(false, true)).collect(
+                Collectors.toList());
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<Partition> partitions = get(partitionCache, OdpsTableName.of(databaseName, tableName));
+        List<PartitionSpec> partitionSpecs = get(partitionCache, OdpsTableName.of(databaseName, tableName));
         ImmutableList.Builder<String> builder = ImmutableList.builder();
-        if (partitions == null || partitions.isEmpty()) {
+        if (partitionSpecs == null || partitionSpecs.isEmpty()) {
             return builder.build();
         }
-        List<PartitionSpec> partitionSpecs =
-                partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
         List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
         for (PartitionSpec partitionSpec : partitionSpecs) {
             boolean present = true;
@@ -281,10 +276,18 @@ public class OdpsMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
+    private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
         com.aliyun.odps.Table odpsTable =
                 odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        return odpsTable.getPartitions();
+        try {
+            return odpsTable.getPartitionSpecs();
+        } catch (OdpsException e) {
+            String errorMsg =
+                    "Encounter error when loading partitions of" + odpsTableName + ", error: " + e.getMessage() +
+                            ", MaxCompute requestId " + e.getRequestId();
+            LOG.error(errorMsg, e);
+            throw new StarRocksConnectorException(errorMsg, e);
+        }
     }
 
     @Override
@@ -293,15 +296,16 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         OdpsTable odpsTable = (OdpsTable) table;
-        List<Partition> partitions = get(partitionCache,
+        List<PartitionSpec> partitions = get(partitionCache,
                 OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
         Set<String> filter = new HashSet<>(partitionNames);
         return partitions.stream()
-                .filter(partition -> filter.contains(partition.getPartitionSpec().toString(false, true)))
-                .map(OdpsPartition::new).collect(Collectors.toList());
+                .filter(partition -> filter.contains(partition.toString(false, true)))
+                .map(p -> new OdpsPartition(odps.tables().get(odpsTable.getDbName(), odpsTable.getTableName()), p))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -360,13 +364,14 @@ public class OdpsMetadata implements ConnectorMetadata {
                                     SplitOptions.createDefault());
             TableBatchReadSession odpsTableScanSession;
             if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PREDICATE_PUSHDOWN))) {
-                String predicateExpr = predicate.toString();
-                LOG.info("try to push down predicate {}", predicateExpr);
-                tableReadSessionBuilder.withFilterPredicate(new RawPredicate(predicateExpr));
+                Predicate odpsPredicate = EntityConvertUtils.convertPredicate(predicate,
+                        ImmutableSet.copyOf(odpsTable.getPartitionColumnNames()));
+                LOG.info("try to push down predicate {}", odpsPredicate);
+                tableReadSessionBuilder.withFilterPredicate(odpsPredicate);
                 try {
                     odpsTableScanSession = tableReadSessionBuilder.buildBatchReadSession();
                 } catch (IOException e) {
-                    LOG.warn("push down predicate failed {}", predicateExpr);
+                    LOG.warn("push down predicate failed {}", odpsPredicate);
                     // fallback: clear predicate and retry
                     odpsTableScanSession =
                             tableReadSessionBuilder.withFilterPredicate(Predicate.NO_PREDICATE).buildBatchReadSession();

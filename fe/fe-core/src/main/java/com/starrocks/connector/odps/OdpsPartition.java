@@ -14,18 +14,21 @@
 
 package com.starrocks.connector.odps;
 
-import com.aliyun.odps.Partition;
+import com.aliyun.odps.PartitionSpec;
+import com.aliyun.odps.Table;
 import com.starrocks.connector.PartitionInfo;
 
 public class OdpsPartition implements PartitionInfo {
-    private Partition partition;
+    private final Table table;
+    private final PartitionSpec partition;
 
-    public OdpsPartition(Partition partition) {
+    public OdpsPartition(Table table, PartitionSpec partition) {
+        this.table = table;
         this.partition = partition;
     }
 
     @Override
     public long getModifiedTime() {
-        return partition.getLastDataModifiedTime().getTime();
+        return table.getPartition(partition).getLastDataModifiedTime().getTime();
     }
 }
