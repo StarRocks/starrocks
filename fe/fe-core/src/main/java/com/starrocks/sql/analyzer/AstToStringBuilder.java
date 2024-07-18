@@ -1165,6 +1165,8 @@ public class AstToStringBuilder {
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else if (node.getLabel() != null) {
+                return node.getLabel();
             } else {
                 return node.getColumnName();
             }
