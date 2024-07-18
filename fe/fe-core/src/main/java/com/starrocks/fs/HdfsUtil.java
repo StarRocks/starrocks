@@ -21,7 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.common.ClientPool;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsService;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
@@ -250,7 +250,7 @@ public class HdfsUtil {
     }
 
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws UserException {
-        rename(origFilePath, destFilePath, brokerDesc, ClientPool.brokerTimeoutMs);
+        rename(origFilePath, destFilePath, brokerDesc, Config.broker_client_timeout_ms);
     }
 
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc, int timeoutMs)

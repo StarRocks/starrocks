@@ -14,22 +14,17 @@
 
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.GenericPool;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
-public class PseudoGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
+public class PseudoGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends ThriftConnectionPool<VALUE> {
     public PseudoGenericPool(String name) {
         super(name, new GenericKeyedObjectPoolConfig(), 100);
     }
 
     @Override
     public boolean reopen(VALUE object, int timeoutMs) {
-        return true;
-    }
-
-    @Override
-    public boolean reopen(VALUE object) {
         return true;
     }
 

@@ -14,11 +14,11 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TListSessionsOptions;
 import com.starrocks.thrift.TListSessionsRequest;
@@ -67,8 +67,9 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
         for (Frontend frontend : frontends) {
             try {
                 TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
-                TListSessionsResponse response = FrontendServiceProxy.call(
-                        thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times,
+                TListSessionsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
                         client -> client.listSessions(request));
                 if (response.getStatus() == null || response.getStatus().getStatus_code() != TStatusCode.OK) {
                     throw new Exception("response status is not ok: " +

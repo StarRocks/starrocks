@@ -20,9 +20,7 @@ import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.GenericPool;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -47,6 +45,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -92,7 +91,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     private RoutineLoadMgr routineLoadMgr;
     private StreamLoadMgr streamLoadMgr;
 
-    private GenericPool<FrontendService.Client> prevFrontendClientPool;
+    private ThriftConnectionPool<FrontendService.Client> prevFrontendClientPool;
 
     @Before
     public void before() {
@@ -120,8 +119,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             }
         };
 
-        prevFrontendClientPool = ClientPool.frontendPool;
-        ClientPool.frontendPool = new MockGenericPool("mock-pool") {
+        prevFrontendClientPool = ThriftConnectionPool.frontendPool;
+        ThriftConnectionPool.frontendPool = new MockGenericPool("mock-pool") {
             @Override
             public TServiceClient borrowObject(TNetworkAddress address) throws Exception {
                 return new FrontendService.Client(null);
@@ -131,7 +130,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @After
     public void after() {
-        ClientPool.frontendPool = prevFrontendClientPool;
+        ThriftConnectionPool.frontendPool = prevFrontendClientPool;
     }
 
     @Test

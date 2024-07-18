@@ -2,13 +2,13 @@
 
 package com.starrocks.epack.failover;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -22,7 +22,7 @@ public class SecondaryHelper {
     private static final Logger LOG = LogManager.getLogger(SecondaryHelper.class);
 
     public static FailoverGroupMember initSecondaryMembers(String primaryMemberString,
-            Map<String, FailoverGroupMember> members)
+                                                           Map<String, FailoverGroupMember> members)
             throws DdlException {
         FailoverGroupMember primary = null;
         String[] splitStrings = primaryMemberString.split(":");
@@ -50,13 +50,14 @@ public class SecondaryHelper {
     }
 
     public static TFailoverGroupRequestMetaResponse sendRequestMetaTo(NetworkAddress address,
-            TFailoverGroupRequestMetaRequest request) {
+                                                                      TFailoverGroupRequestMetaRequest request) {
         TNetworkAddress thriftAddress = address.toThrift();
         try {
-            TFailoverGroupRequestMetaResponse response = FrontendServiceProxy.call(thriftAddress,
-                    Config.thrift_rpc_timeout_ms * 100,
-                    Config.thrift_rpc_retry_times,
+            TFailoverGroupRequestMetaResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddress,
                     client -> client.failoverGroupRequestMeta(request));
+
             if (response.getStatus().getStatus_code() == TStatusCode.OK) {
                 return response;
             }

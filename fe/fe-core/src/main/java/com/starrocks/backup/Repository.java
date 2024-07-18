@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -560,7 +559,7 @@ public class Repository implements Writable, GsonPostProcessable {
         FsBroker brokerAddr;
         try {
             brokerAddr = globalStateMgr.getBrokerMgr().getBroker(storage.getBrokerName(), be.getHost());
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             return new Status(ErrCode.COMMON_ERROR, "failed to get address of broker "
                     + storage.getBrokerName() + " when try to send upload snapshot task: "
                     + e.getMessage());

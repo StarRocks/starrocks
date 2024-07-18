@@ -65,7 +65,8 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -1098,11 +1099,10 @@ public class NodeMgr {
             }
 
             try {
-                TGetWarehousesResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.getWarehouses(request));
+                TGetWarehousesResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        client -> client.getWarehouses(request));
                 if (response.getStatus().getStatus_code() != TStatusCode.OK) {
                     LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost());
                 } else if (response.isSetWarehouse_infos()) {
@@ -1142,11 +1142,11 @@ public class NodeMgr {
             TRefreshRoleMappingRequest request = new TRefreshRoleMappingRequest();
             try {
                 // Currently, the responded status is always OK.
-                TRefreshRoleMappingResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                timeout,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.refreshRoleMapping(request));
+                TRefreshRoleMappingResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        timeout,
+                        client -> client.refreshRoleMapping(request));
             } catch (Exception e) {
                 errMsg.append("refresh role mapping for fe[").append(fe.getHost()).append("] failed, error msg: ")
                         .append(e.getMessage());
@@ -1175,11 +1175,11 @@ public class NodeMgr {
             request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
             request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
-                TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                timeout,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.setConfig(request));
+                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        timeout,
+                        client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
