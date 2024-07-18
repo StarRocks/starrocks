@@ -500,12 +500,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    const auto& key_column = ctx->get_constant_column(1);
-    if (key_column == nullptr) {
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    if (key_viewer.is_null(0)) {
         return Status::InvalidArgument("key is null");
     }
 
-    auto key_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(key_column);
+    auto key_value = key_viewer.value(0);
+
     auto key_size = key_value.size;
     if (key_size != 16 && key_size != 24 && key_size != 32) {
         return Status::InvalidArgument("key size must 16 or 24 or 32");
@@ -542,12 +543,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt(FunctionContext* ctx, const
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    const auto& key_column = ctx->get_constant_column(1);
-    if (key_column == nullptr) {
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    if (key_viewer.is_null(0)) {
         return Status::InvalidArgument("key is null");
     }
 
-    auto key_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(key_column);
+    auto key_value = key_viewer.value(0);
+
     auto key_size = key_value.size;
     if (key_size != 16 && key_size != 24 && key_size != 32) {
         return Status::InvalidArgument("key size must 16 or 24 or 32");
