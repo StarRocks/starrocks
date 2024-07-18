@@ -2254,6 +2254,166 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TGetTrackingLoadsResult getTrackingLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getTrackingLoads: {}", request);
+        TGetTrackingLoadsResult result = new TGetTrackingLoadsResult();
+        List<TTrackingLoadInfo> trackingLoadInfoList = Lists.newArrayList();
+
+        // Since job_id is globally unique, when one job has been found, no need to go forward.
+        if (request.isSetJob_id()) {
+            RESULT:
+            {
+                // BROKER, INSERT
+                LoadMgr loadManager = GlobalStateMgr.getCurrentState().getLoadMgr();
+                LoadJob loadJob = loadManager.getLoadJob(request.getJob_id());
+                if (loadJob != null) {
+                    trackingLoadInfoList = convertLoadInfoList(request);
+                    break RESULT;
+                }
+
+                // ROUTINE LOAD
+                RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+                RoutineLoadJob routineLoadJob = routineLoadManager.getJob(request.getJob_id());
+                if (routineLoadJob != null) {
+                    trackingLoadInfoList = convertRoutineLoadInfoList(request);
+                    break RESULT;
+                }
+
+                // STREAM LOAD
+                StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+                StreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
+                if (streamLoadTask != null) {
+                    trackingLoadInfoList = convertStreamLoadInfoList(request);
+                }
+            }
+        } else {
+            // iterate all types of loads to find the matching records
+            trackingLoadInfoList.addAll(convertLoadInfoList(request));
+            trackingLoadInfoList.addAll(convertRoutineLoadInfoList(request));
+            trackingLoadInfoList.addAll(convertStreamLoadInfoList(request));
+        }
+
+        result.setTrackingLoads(trackingLoadInfoList);
+        LOG.debug("get tracking load jobs size: {}", trackingLoadInfoList.size());
+        return result;
+    }
+
+    private List<TTrackingLoadInfo> convertLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetLoadsResult loadsResult = getLoads(request);
+        List<TLoadInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getJob_id(),
+                        load.getDb(), load.getLabel(), load.getType(), load.getUrl()))
+                .collect(Collectors.toList());
+    }
+
+    private List<TTrackingLoadInfo> convertRoutineLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetRoutineLoadJobsResult loadsResult = getRoutineLoadJobs(request);
+        List<TRoutineLoadJobInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getId(),
+                        load.getDb_name(), load.getName(), EtlJobType.ROUTINE_LOAD.name(), load.getError_log_urls()))
+                .collect(Collectors.toList());
+    }
+
+    private List<TTrackingLoadInfo> convertStreamLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetStreamLoadsResult loadsResult = getStreamLoads(request);
+        List<TStreamLoadInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getId(),
+                        load.getDb_name(), load.getLabel(), EtlJobType.STREAM_LOAD.name(), load.getTracking_url()))
+                .collect(Collectors.toList());
+    }
+
+    private TTrackingLoadInfo convertToTrackingLoadInfo(long jobId, String dbName, String label, String type, String url) {
+        TTrackingLoadInfo trackingLoad = new TTrackingLoadInfo();
+        trackingLoad.setJob_id(jobId);
+        trackingLoad.setDb(dbName);
+        trackingLoad.setLabel(label);
+        trackingLoad.setLoad_type(type);
+        if (url != null) {
+            if (url.contains(",")) {
+                trackingLoad.setUrls(Arrays.asList(url.split(",")));
+            } else {
+                trackingLoad.addToUrls(url);
+            }
+        }
+        return trackingLoad;
+    }
+
+    @Override
+    public TGetRoutineLoadJobsResult getRoutineLoadJobs(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getRoutineLoadJobs: {}", request);
+        TGetRoutineLoadJobsResult result = new TGetRoutineLoadJobsResult();
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        List<TRoutineLoadJobInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                RoutineLoadJob job = routineLoadManager.getJob(request.getJob_id());
+                if (job != null) {
+                    loads.add(job.toThrift());
+                }
+            } else {
+                List<RoutineLoadJob> loadJobList;
+                if (request.isSetDb()) {
+                    if (request.isSetLabel()) {
+                        loadJobList = routineLoadManager.getJob(request.getDb(), request.getLabel(), true);
+                    } else {
+                        loadJobList = routineLoadManager.getJob(request.getDb(), null, true);
+                    }
+                } else {
+                    if (request.isSetLabel()) {
+                        loadJobList = routineLoadManager.getJob(null, request.getLabel(), true);
+                    } else {
+                        loadJobList = routineLoadManager.getJob(null, null, true);
+                    }
+                }
+                loads.addAll(loadJobList.stream().map(RoutineLoadJob::toThrift).collect(Collectors.toList()));
+            }
+            result.setLoads(loads);
+        } catch (MetaNotFoundException e) {
+            LOG.warn("Failed to getRoutineLoadJobs", e);
+            throw new TException();
+        }
+        return result;
+    }
+
+    @Override
+    public TGetStreamLoadsResult getStreamLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getStreamLoads: {}", request);
+        TGetStreamLoadsResult result = new TGetStreamLoadsResult();
+        StreamLoadMgr loadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        List<TStreamLoadInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                StreamLoadTask task = loadManager.getTaskById(request.getJob_id());
+                if (task != null) {
+                    loads.add(task.toThrift());
+                }
+            } else {
+                List<StreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
+                if (streamLoadTaskList != null) {
+                    loads.addAll(
+                            streamLoadTaskList.stream().map(StreamLoadTask::toThrift).collect(Collectors.toList()));
+                }
+            }
+            result.setLoads(loads);
+        } catch (Exception e) {
+            LOG.warn("Failed to getStreamLoads", e);
+        }
+        return result;
+    }
+
+    @Override
+>>>>>>> f14eb1f4f4 ([BugFix] Fix jobName filter not work when getting routine load jobs (#47907))
     public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
