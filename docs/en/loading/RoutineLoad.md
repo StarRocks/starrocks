@@ -6,6 +6,10 @@ displayed_sidebar: "English"
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
+:::tip
+Try Routine Load out in this [Quick Start](../quick_start/routine-load.md)
+:::
+
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
 To continuously load messages of a stream into StarRocks, you can store the message stream in a Kafka topic, and create a Routine Load job to consume the messages. The Routine Load job persists in StarRocks, generates a series of load tasks to consume the messages in all or part of the partitions in the topic, and loads the messages into StarRocks.

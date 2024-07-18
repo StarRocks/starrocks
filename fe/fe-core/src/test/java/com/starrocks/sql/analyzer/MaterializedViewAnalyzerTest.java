@@ -338,6 +338,7 @@ public class MaterializedViewAnalyzerTest {
         }
 
         {
+            // Not supported
             String mvSql = "create materialized view window_mv_3\n" +
                     "partition by k1\n" +
                     "distributed by hash(k2)\n" +
@@ -348,6 +349,102 @@ public class MaterializedViewAnalyzerTest {
                     "from tbl1 \n";
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
                     " should contain the partition column k1 of materialized view");
+        }
+
+        {
+            starRocksAssert.withTable("CREATE TABLE t1_event(\n" +
+                    "    order_root_id VARCHAR(255),\n" +
+                    "    event_type VARCHAR(255),\n" +
+                    "    sequence_timestamp datetime\n" + ")\n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\"replication_num\"=\"1\");");
+
+            // Not supported
+            String mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC " +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" +
+                    "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) of" +
+                    " materialized view.");
+
+            // Not supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+
+            // Not supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
         }
     }
 

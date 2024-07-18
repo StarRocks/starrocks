@@ -102,14 +102,25 @@ Status PageIndexReader::_deal_with_min_max_conjuncts(const std::vector<ExprConte
     ColumnPtr max_column = ColumnHelper::create_column(type, true);
     max_chunk->append_column(max_column, id);
     // deal with min_values
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, type,
-                                                               _column_readers.at(id)->get_column_parquet_field(),
-                                                               _group_reader->_param.timezone));
+    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, type,
+                                                         _column_readers.at(id)->get_column_parquet_field(),
+                                                         _group_reader->_param.timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, slotid " << id << ", type " << type.debug_string();
+        return Status::OK();
+    }
 
     // deal with max_values
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, type,
-                                                               _column_readers.at(id)->get_column_parquet_field(),
-                                                               _group_reader->_param.timezone));
+    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, type,
+                                                    _column_readers.at(id)->get_column_parquet_field(),
+                                                    _group_reader->_param.timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, slotid " << id << ", type " << type.debug_string();
+        return Status::OK();
+    }
+
     size_t page_num = column_index.min_values.size();
     // both min and max value are filtered, the page is filtered.
     // for example pages {100, 200}, {200, 400}, {400, 600}, {500, 800}, {800, 1000}

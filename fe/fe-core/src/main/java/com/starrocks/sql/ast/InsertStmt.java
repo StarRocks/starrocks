@@ -63,6 +63,7 @@ public class InsertStmt extends DmlStmt {
     private boolean usePartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
+    private String targetBranch = null;
 
     // set after parse all columns and expr in query statement
     // this result expr in the order of target table's columns
@@ -253,6 +254,14 @@ public class InsertStmt extends DmlStmt {
 
     public void setTargetPartitionIds(List<Long> targetPartitionIds) {
         this.targetPartitionIds = targetPartitionIds;
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
     }
 
     public List<Long> getTargetPartitionIds() {

@@ -131,7 +131,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${big_query_log_roll_num}\" fileIndex=\"min\">\n" +
             "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.big_query.log.*\" />\n" +
             "          <IfLastModified age=\"${big_query_log_delete_age}\" />\n" +
@@ -146,7 +146,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${profile_log_roll_num}\" fileIndex=\"min\">\n" +
             "        <Delete basePath=\"${profile_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.profile.log.*\" />\n" +
             "          <IfLastModified age=\"${profile_log_delete_age}\" />\n" +
@@ -161,7 +161,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${internal_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${internal_log_roll_num}\" fileIndex=\"min\">\n" +
             "        <Delete basePath=\"${internal_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.internal.log.*\" />\n" +
             "          <IfLastModified age=\"${internal_log_delete_age}\" />\n" +

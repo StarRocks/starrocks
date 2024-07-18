@@ -298,6 +298,12 @@ public enum ErrorCode {
     ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
             "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
                     "or increase frontend config max_bucket_number_per_partition."),
+    ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE(5511, new byte[] {'4', '2', '0', '0', '0'},
+            "Column renaming is only supported for olap table"),
+    ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB(5512, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column in internal database: %s"),
+    ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column of table in %s state"),
 
     /**
      * 5600 - 5699: DML operation failure

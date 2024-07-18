@@ -19,7 +19,6 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 
-
 // TODO(stephen): what's the pretty class name?
 public class TableMetaMetadata implements ConnectorMetadata {
     public static final String METADATA_DB_NAME = "metadata_database";

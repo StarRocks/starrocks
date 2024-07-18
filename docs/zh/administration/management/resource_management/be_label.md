@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 使用标签管理 BE 节点
 
-自 3.2.8 版本起，StarRocks 支持使用标签对 BE 节点进行分组。如果您在建表时指定标签，则相同副本均衡分布在各个标签中，同时相同副本也均衡分布在同一标签内的 BE 节点中。该特性可以提高数据高可用和隔离资源等。
+自 3.2.8 版本起，StarRocks 支持使用标签对 BE 节点进行分组。您在建表或创建异步物化视图时可以通过指定和 BE 节点相同标签来使数据副本分布到指定的标签所对应的 BE 节点上。数据副本在相同标签的节点下会均匀分布，该特性可以提高数据高可用和资源隔离性能。
 
 ## 使用方式
 
@@ -25,7 +25,7 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 如果需要修改  BE 节点的标签，可以执行  `ALTER SYSTEM MODIFY BACKEND "172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`。
 
-### 为表添加标签
+### 使用标签指定表的数据在 BE 节点上的分布
 
 如果您需要指定表的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为表添加标签。
 
@@ -33,14 +33,14 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 :::note
 
-- 表所在标签中的全部 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为表添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为表指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为表指定的标签必须已经存在，否则会报错 `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
 
 :::
 
 #### 建表时
 
-建表时指定表的数据分布在 rack 1 和 rack 2，则可以执行如下语句：
+建表时指定表的数据分布在 rack 1 和 rack 2，可以通过设置表属性 `"labels.location"` 的值来指定数据分布的标签：
 
 ```SQL
 CREATE TABLE example_table (
@@ -79,7 +79,7 @@ ALTER TABLE example_table1
 
 :::
 
-### 为异步物化视图添加标签
+### 使用标签指定物化视图的数据在 BE 节点上的分布
 
 如果您需要指定异步物化视图的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为物化视图添加标签。
 
@@ -87,8 +87,8 @@ ALTER TABLE example_table1
 
 :::note
 
-- 物化视图所在标签中的全部 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为物化视图添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为物化视图指定的标签所包含的 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为物化视图指定的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
 
 :::
 

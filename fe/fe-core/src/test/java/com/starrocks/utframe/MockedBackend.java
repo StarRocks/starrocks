@@ -19,7 +19,6 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
-import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
@@ -87,6 +86,7 @@ import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -192,8 +192,8 @@ public class MockedBackend {
 
         lakeService = new MockLakeService();
 
-        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
-        ((MockGenericPool<?>) ClientPool.backendPool).register(this);
+        ((MockGenericPool<?>) ThriftConnectionPool.beHeartbeatPool).register(this);
+        ((MockGenericPool<?>) ThriftConnectionPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
             @Mock

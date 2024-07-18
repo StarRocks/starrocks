@@ -15,7 +15,8 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -75,9 +76,9 @@ public class RemoteTransactionMgr {
         request.setAuth_info(authenticateParams);
         TBeginRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
+            response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    addr,
                     client -> client.beginRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}", addr, label, e);
@@ -115,10 +116,10 @@ public class RemoteTransactionMgr {
         request.setCommit_timeout_ms(Config.external_table_commit_timeout_ms);
         TCommitRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
+            response = ThriftRPCRequestExecutor.call(ThriftConnectionPool.frontendPool,
+                    addr,
                     // commit txn might take a while, so add transaction timeout
                     Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
-                    Config.thrift_rpc_retry_times,
                     client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
@@ -158,9 +159,9 @@ public class RemoteTransactionMgr {
         request.setFail_infos(tabletFailInfos);
         TAbortRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
+            response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    addr,
                     client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);

@@ -49,6 +49,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -511,9 +512,11 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public TableVersionRange getTableVersionRange(Table table) {
+    public TableVersionRange getTableVersionRange(Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table))
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table, startVersion, endVersion))
                 .orElse(TableVersionRange.empty().empty());
     }
 
@@ -850,11 +853,12 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
     }
 
-    public void finishSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+    public void finishSink(String catalogName, String dbName, String tableName,
+                           List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> {
             try {
-                metadata.finishSink(dbName, tableName, sinkCommitInfos);
+                metadata.finishSink(dbName, tableName, sinkCommitInfos, branch);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
                 throw new StarRocksConnectorException(e.getMessage());

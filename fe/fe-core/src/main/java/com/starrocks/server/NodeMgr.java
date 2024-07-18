@@ -34,11 +34,11 @@
 
 package com.starrocks.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -54,13 +54,15 @@ import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -79,6 +81,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -249,6 +252,19 @@ public class NodeMgr {
         boolean isVersionFileChanged = false;
 
         Storage storage = new Storage(this.imageDir);
+
+        // prepare starmgr dir
+        if (RunMode.isSharedDataMode()) {
+            String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+            File dir = new File(subDir);
+            if (!dir.exists()) { // subDir might not exist
+                LOG.info("create image dir for star mgr, {}.", dir.getAbsolutePath());
+                if (!dir.mkdir()) {
+                    LOG.error("create image dir for star mgr failed! exit now.");
+                    System.exit(-1);
+                }
+            }
+        }
 
         // if helper node is point to self, or there is ROLE and VERSION file in local.
         // get the node type from local
@@ -434,16 +450,6 @@ public class NodeMgr {
             }
             getNewImageOnStartup(rightHelperNode, "");
             if (RunMode.isSharedDataMode()) { // get star mgr image
-                // subdir might not exist
-                String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
-                File dir = new File(subDir);
-                if (!dir.exists()) { // subDir might not exist
-                    LOG.info("create image dir for {}.", dir.getAbsolutePath());
-                    if (!dir.mkdir()) {
-                        LOG.error("create image dir for star mgr failed! exit now.");
-                        System.exit(-1);
-                    }
-                }
                 getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
             }
         }
@@ -558,14 +564,15 @@ public class NodeMgr {
     }
 
     private StorageInfo getStorageInfo(URL url) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(HTTP_TIMEOUT_SECOND * 1000);
             connection.setReadTimeout(HTTP_TIMEOUT_SECOND * 1000);
-            return mapper.readValue(connection.getInputStream(), StorageInfo.class);
+
+            InputStreamReader inputStreamReader = new InputStreamReader(connection.getInputStream());
+            JsonReader jsonReader = new JsonReader(inputStreamReader);
+            return GsonUtils.GSON.fromJson(jsonReader, StorageInfo.class);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -1089,11 +1096,11 @@ public class NodeMgr {
             request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
             request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
-                TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                timeout,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.setConfig(request));
+                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        timeout,
+                        client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");

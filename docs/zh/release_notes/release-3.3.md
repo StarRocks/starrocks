@@ -61,7 +61,7 @@ displayed_sidebar: "Chinese"
   针对 ARM 架构指令集大幅优化性能。在使用 AWS Gravinton 机型测试的情况下，在 SSB 100G 测试中，使用 ARM 架构时的性能比 x86 快 11%；在 Clickbench 测试中，使用 ARM 架构时的性能比 x86 快 39%，在 TPC-H 100G  测试中，使用 ARM 架构时的性能比 x86 快 13%，在 TPC-DS 100G  测试中，使用 ARM 架构时的性能比 x86 快 35%。
 
 - **中间结果落盘（Spill to Disk）能力 GA**：优化复杂查询的内存占用，优化 Spill 的调度，保证大查询都能稳定执行，不会 OOM。
-- [Preview] 支持将中间结果 [落盘至对象存储](https://docs.starrocks.io/zh/docs/administration/management/resource_management/spill_to_disk/)。
+- [Preview] 支持将中间结果 [落盘至对象存储](https://docs.starrocks.io/zh/docs/administration/management/resource_management/spill_to_disk/#preview-%E5%B0%86%E4%B8%AD%E9%97%B4%E7%BB%93%E6%9E%9C%E8%90%BD%E7%9B%98%E8%87%B3%E5%AF%B9%E8%B1%A1%E5%AD%98%E5%82%A8)。
 - **支持更多索引**：
   - [Preview] 支持[全文倒排索引](https://docs.starrocks.io/zh/docs/table_design/indexes/inverted_index/)，以加速全文检索。
   - [Preview] 支持 [N-Gram bloom filter 索引](https://docs.starrocks.io/zh/docs/table_design/indexes/Ngram_Bloom_Filter_Index/)，以加速 `LIKE` 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
@@ -79,7 +79,7 @@ displayed_sidebar: "Chinese"
 
 - **[增强 Range 分区的灵活性](https://docs.starrocks.io/zh/docs/table_design/Data_distribution/#range-分区)**：新增支持三个特定时间函数作为分区列，可以将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
 - **FE 内存可观测性**：提供 FE 内各模块的详细内存使用指标，以便更好地管理资源。
-- **[优化 FE 中的元数据锁](https://docs.starrocks.io/zh/docs/administration/management/FE_configuration/#lock_manager_enabled)**：提供 Lock Manager，可以对 FE  中的元数据锁实现集中管理，例如将元数据锁的粒度从库级别细化为表级别，可以提高导入和查询的并发性能。在 100 并发的导入场景下，导入耗时减少 35%。
+- **[优化 FE 中的元数据锁](https://docs.starrocks.io/zh/docs/administration/management/FE_configuration/#lock_manager_enabled)**：提供 Lock Manager，可以对 FE  中的元数据锁实现集中管理，例如将元数据锁的粒度从库级别细化为表级别，可以提高导入和查询的并发性能。在 100 并发小数据量导入场景下，导入耗时减少 35%。
 - **[使用标签管理 BE](https://docs.starrocks.io/zh/docs/administration/management/resource_management/be_label/)**：支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，以保证数据在机架或数据中心等之间均匀分布，应对某些机架断电或数据中心故障情况下的灾备需求。
 - **[优化排序键](https://docs.starrocks.io/zh/docs/table_design/indexes/Prefix_index_sort_key/)**：明细表、聚合表和更新表均支持通过 `ORDER BY` 子句指定排序键。
 - **[Experimental] 优化非字符串标量类型数据的存储效率**：这类数据支持字典编码，存储空间下降 12%。
@@ -119,7 +119,7 @@ displayed_sidebar: "Chinese"
 #### 建表与分区分桶
 
 - 用户使用 CTAS 创建 Colocate 表时，必须指定 Distribution Key。[#45537](https://github.com/StarRocks/starrocks/pull/45537)
-- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 或 CN 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
 
 #### 导入与导出
 
@@ -141,6 +141,7 @@ displayed_sidebar: "Chinese"
 - 默认启用 Data Cache 来加速数据湖查询。用户也可通过 `SET enable_scan_datacache = false` 手动关闭 Data Cache。
 - 对于存算分离场景，在降级到 v3.2.8 及其之前版本时，如需复用先前 Data Cache 中的缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。具体可参考 [Data Cache 使用说明](https://docs.starrocks.io/zh/docs/using_starrocks/block_cache/#使用说明)。v3.2.9 及以后版本自动兼容 v3.3 文件名，无需手动执行该操作。
 - 支持动态修改 FE 参数 `sys_log_level`。[#45062](https://github.com/StarRocks/starrocks/issues/45062)
+- Hive Catalog 属性 `metastore_cache_refresh_interval_sec` 默认值由 `7200` (两小时) 变为 `60` (一分钟)。 [#46681](https://github.com/StarRocks/starrocks/pull/46681)
 
 ### 问题修复
 

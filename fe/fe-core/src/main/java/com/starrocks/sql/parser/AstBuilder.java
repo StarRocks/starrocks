@@ -308,6 +308,7 @@ import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -736,6 +737,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnDefs = getColumnDefs(context.columnDesc());
         }
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             return new CreateTemporaryTableStmt(
                     context.IF() != null,
                     false,
@@ -1033,6 +1038,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(
                     context.IF() != null,
                     false,
@@ -1100,6 +1109,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = getProperties(context.properties());
 
         if (context.TEMPORARY() != null) {
+            if (!Config.enable_experimental_temporary_table) {
+                throw new ParsingException(
+                        PARSER_ERROR_MSG.feConfigDisable("enable_experimental_temporary_table"), NodePosition.ZERO);
+            }
             return new CreateTemporaryTableLikeStmt(context.IF() != null,
                     qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
                     qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
@@ -2047,11 +2060,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionNames = (PartitionNames) visit(context.partitionNames());
             }
 
+            String targetBranch = null;
+            if (context.writeBranch() != null) {
+                targetBranch = ((Identifier) visit(context.writeBranch())).getValue();
+            }
+
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                     createPos(context));
             stmt.setHintNodes(hintMap.get(context));
+            stmt.setTargetBranch(targetBranch);
             return stmt;
         }
 
@@ -2068,6 +2087,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
+        List<CTERelation> ctes = null;
+        if (context.withClause() != null) {
+            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
+        }
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
@@ -2082,10 +2105,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        List<CTERelation> ctes = null;
-        if (context.withClause() != null) {
-            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
-        }
         UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
@@ -2099,6 +2118,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
+        List<CTERelation> ctes = null;
+        if (context.withClause() != null) {
+            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
+        }
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
@@ -2107,10 +2130,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        List<CTERelation> ctes = null;
-        if (context.withClause() != null) {
-            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
-        }
         DeleteStmt ret =
                 new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
@@ -4579,14 +4598,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitQueryRelation(StarRocksParser.QueryRelationContext context) {
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
-
         List<CTERelation> withQuery = new ArrayList<>();
         if (context.withClause() != null) {
             withQuery = visit(context.withClause().commonTableExpression(), CTERelation.class);
         }
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
         withQuery.forEach(queryRelation::addCTERelation);
-
         return queryRelation;
     }
 
@@ -4997,13 +5014,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tableRelation.setAlias(new TableName(null, identifier.getValue()));
         }
 
-        if (context.temporalClause() != null) {
-            StringBuilder sb = new StringBuilder();
-            for (ParseTree child : context.temporalClause().children) {
-                sb.append(child.getText());
-                sb.append(" ");
+        if (context.queryPeriod() != null) {
+            tableRelation.setQueryPeriodString(buildQueryPeriodString(context.queryPeriod()));
+            QueryPeriod queryPeriod = (QueryPeriod) visit(context.queryPeriod());
+            if (queryPeriod != null) {
+                tableRelation.setQueryPeriod(queryPeriod);
             }
-            tableRelation.setTemporalClause(sb.toString());
         }
 
         if (context.BEFORE() != null) {
@@ -5017,6 +5033,40 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return tableRelation;
+    }
+
+    @Override
+    public ParseNode visitQueryPeriod(StarRocksParser.QueryPeriodContext context) {
+        if (context.periodType() == null || context.end == null) {
+            return null;
+        }
+
+        QueryPeriod.PeriodType type = getPeriodType((Token) context.periodType().getChild(0).getPayload());
+        Expr end = (Expr) visit(context.end);
+        return new QueryPeriod(type, end);
+    }
+
+    private QueryPeriod.PeriodType getPeriodType(Token token) {
+        switch (token.getType()) {
+            case StarRocksLexer.TIMESTAMP :
+            case StarRocksLexer.SYSTEM_TIME:
+                return QueryPeriod.PeriodType.TIMESTAMP;
+            case StarRocksLexer.VERSION :
+                return QueryPeriod.PeriodType.VERSION;
+            default:
+                throw new ParsingException("Unsupported query period type: " + token.getText());
+        }
+    }
+
+
+    // only used for mysql external table
+    private String buildQueryPeriodString(StarRocksParser.QueryPeriodContext context) {
+        StringBuilder sb = new StringBuilder();
+        for (ParseTree child : context.children) {
+            sb.append(child.getText());
+            sb.append(" ");
+        }
+        return sb.toString();
     }
 
     @Override

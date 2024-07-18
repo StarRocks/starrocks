@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -49,6 +48,8 @@ import com.starrocks.proto.TabletStatResponse;
 import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -152,26 +153,16 @@ public class TabletStatMgr extends FrontendDaemon {
 
         long start = System.currentTimeMillis();
         for (Backend backend : backends.values()) {
-            BackendService.Client client = null;
-            TNetworkAddress address = null;
-            boolean ok = false;
             try {
-                address = new TNetworkAddress(backend.getHost(), backend.getBePort());
-                client = ClientPool.backendPool.borrowObject(address);
-                TTabletStatResult result = client.get_tablet_stat();
-
+                TTabletStatResult result = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(backend.getHost(), backend.getBePort()),
+                        BackendService.Client::get_tablet_stat);
                 LOG.debug("get tablet stat from backend: {}, num: {}", backend.getId(), result.getTablets_statsSize());
                 updateLocalTabletStat(backend.getId(), result);
 
-                ok = true;
             } catch (Exception e) {
                 LOG.warn("task exec error. backend[{}]", backend.getId(), e);
-            } finally {
-                if (ok) {
-                    ClientPool.backendPool.returnObject(address, client);
-                } else {
-                    ClientPool.backendPool.invalidateObject(address, client);
-                }
             }
         }
         LOG.info("finished to get local tablet stat of all backends. cost: {} ms",

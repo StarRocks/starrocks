@@ -26,7 +26,7 @@ LIKE [database.]<source_table_name>
 - 3.2 版本起支持为新表指定分区方式、分桶方式、属性
 
 ```sql
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
+CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
 [partition_desc]
 [distribution_desc]
 [PROPERTIES ("key" = "value",...)]
@@ -35,6 +35,7 @@ LIKE [database.]<source_table_name>
 
 ## 参数说明
 
+- `TEMPORARY`：创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。
 - `database`：数据库。
 - `table_name`：要创建的表的名称。有关表名的命令要求，参见[系统限制](../../../reference/System_limit.md)。
 - `source_table_name`：要拷贝的表的名称。

@@ -35,10 +35,10 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -148,9 +148,9 @@ public class HeartbeatMgrTest {
         TBrokerOperationStatus status = new TBrokerOperationStatus();
         status.setStatusCode(TBrokerOperationStatusCode.OK);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
-            public TFileBrokerService.Client borrowObject(TNetworkAddress address) throws Exception {
+            public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
             }
 
@@ -190,9 +190,9 @@ public class HeartbeatMgrTest {
         THeartbeatResult res = new THeartbeatResult();
         res.setStatus(status);
 
-        new MockUp<GenericPool<HeartbeatService.Client>>() {
+        new MockUp<ThriftConnectionPool<?>>() {
             @Mock
-            public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
+            public HeartbeatService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
             }
 

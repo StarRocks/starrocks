@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -46,11 +45,12 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -777,16 +777,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
-
-        boolean ok = false;
-        BackendService.Client client = null;
         try {
-            client = ClientPool.backendPool.borrowObject(address);
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
             streamLoadChannel.setLabel(label);
             streamLoadChannel.setChannel_id(channelId);
-            TStatus tStatus = client.finish_stream_load_channel(streamLoadChannel);
-            ok = true;
+
+            TStatus tStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    address,
+                    client -> client.finish_stream_load_channel(streamLoadChannel));
 
             if (tStatus.getStatus_code() != TStatusCode.OK) {
                 // ignore fail status
@@ -794,12 +793,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
             throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
-        } finally {
-            if (ok) {
-                ClientPool.backendPool.returnObject(address, client);
-            } else {
-                ClientPool.backendPool.invalidateObject(address, client);
-            }
         }
     }
 

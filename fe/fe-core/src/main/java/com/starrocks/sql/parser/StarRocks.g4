@@ -1114,7 +1114,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) writeBranch? partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -1951,13 +1951,17 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
-temporalClause
-    : AS OF expression
-    | FOR SYSTEM_TIME AS OF TIMESTAMP string
-    | FOR SYSTEM_TIME BETWEEN expression AND expression
-    | FOR SYSTEM_TIME FROM expression TO expression
-    | FOR SYSTEM_TIME ALL
-    | FOR VERSION AS OF expression
+queryPeriod
+    : FOR? periodType BETWEEN expression AND expression
+    | FOR? periodType FROM expression TO expression
+    | FOR? periodType ALL
+    | FOR? periodType AS OF end=expression
+    ;
+
+periodType
+    : SYSTEM_TIME
+    | TIMESTAMP
+    | VERSION
     ;
 
 queryPrimary
@@ -2033,7 +2037,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName temporalClause? partitionNames? tabletList? replicaList? (
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2673,6 +2677,10 @@ decimalType
 
 qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
+    ;
+
+writeBranch
+    : FOR? VERSION AS OF identifier
     ;
 
 identifier

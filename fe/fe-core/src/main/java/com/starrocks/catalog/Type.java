@@ -806,6 +806,12 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canDistinct();
         }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().allMatch(sf -> sf.getType().canDistinct());
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
@@ -1723,5 +1729,14 @@ public abstract class Type implements Cloneable {
     // This is used for information_schema.COLUMNS COLUMN_TYPE
     public String toMysqlColumnTypeString() {
         return "unknown";
+    }
+
+    // This function is called by Column::getMaxUniqueId()
+    // If type is a scalar type, it does not have field Id because scalar type does not have sub fields
+    // If type is struct type, it will return the max field id(default value of field id is -1)
+    // If type is array type, it will return the max field id of item type
+    // if type is map type, it will return the max unique id between key type and value type
+    public int getMaxUniqueId() {
+        return -1;
     }
 }
