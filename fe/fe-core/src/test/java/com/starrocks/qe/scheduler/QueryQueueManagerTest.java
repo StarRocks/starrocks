@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -35,6 +34,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.service.FrontendServiceImpl;
@@ -1559,7 +1559,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     private static void mockFrontendService(MockFrontendServiceClient client) {
-        ClientPool.frontendPool = new MockGenericPool<FrontendService.Client>("query-queue-mocked-pool") {
+        ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("query-queue-mocked-pool") {
             @Override
             public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
