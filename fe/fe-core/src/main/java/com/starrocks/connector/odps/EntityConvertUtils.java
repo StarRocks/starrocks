@@ -137,17 +137,14 @@ public class EntityConvertUtils {
             return Constant.of(((ConstantOperator) predicate).getValue());
         } else if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
-
             Predicate leftChild = convertPredicate(binaryPredicateOperator.getChild(0), partitionColumns);
             Predicate rightChild = convertPredicate(binaryPredicateOperator.getChild(1), partitionColumns);
-
             if (Predicate.NO_PREDICATE.equals(leftChild) || Predicate.NO_PREDICATE.equals(rightChild)) {
                 return Predicate.NO_PREDICATE;
             }
-
-            return new RawPredicate(leftChild +
-                    binaryPredicateOperator.getBinaryType().toString() +
-                    rightChild);
+            return new RawPredicate(
+                    String.format("%s %s %s", leftChild, binaryPredicateOperator.getBinaryType().toString(),
+                            rightChild));
         } else if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicate compoundPredicate;
             switch (((CompoundPredicateOperator) predicate).getCompoundType()) {
