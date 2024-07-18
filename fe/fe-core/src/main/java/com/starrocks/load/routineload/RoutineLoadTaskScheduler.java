@@ -48,6 +48,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
@@ -112,6 +113,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         updateBackendSlotIfNecessary();
 
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();
+        MetricRepo.GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM.setValue((long) idleSlotNum);
         // scheduler will be blocked when there is no slot for task in cluster
         if (idleSlotNum <= 0) {
             LOG.warn("no available be slot to scheduler tasks, wait for {} seconds to scheduler again, " +
@@ -221,6 +223,17 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                                     "current value is %d",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000,
                             Config.max_routine_load_task_num_per_be));
+            return;
+        }
+
+        // Double check if task has been abandoned
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+            releaseBeSlot(routineLoadTaskInfo);
+            // task has been abandoned while renew task has been added in queue
+            // or database has been deleted
+            LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
+                    .add("error_msg", "task has been abandoned after BE was allocated")
+                    .build());
             return;
         }
 
