@@ -41,6 +41,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
@@ -60,9 +61,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -71,16 +74,26 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -99,6 +112,7 @@ import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -1582,5 +1596,68 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
+    }
+
+    public static class LookupRecord {
+
+        @SerializedName("data")
+        public List<String> data;
+
+        public static LookupRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, LookupRecord.class);
+        }
+    }
+
+    private static ConstantOperator deserializeLookupResult(List<TResultBatch> batches) {
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                List<String> data = LookupRecord.fromJson(jsonString).data;
+                if (CollectionUtils.isNotEmpty(data)) {
+                    return ConstantOperator.createVarchar(data.get(0));
+                } else {
+                    return ConstantOperator.NULL;
+                }
+            }
+        }
+        return ConstantOperator.NULL;
+    }
+
+    /**
+     * Lookup a value from a primary table, and evaluate in the optimizer
+     *
+     * @param tableName    table to lookup, must be a primary-key table
+     * @param lookupKey    key to lookup, must be a string type
+     * @param returnColumn column to return
+     * @return NULL if not found, otherwise return the value
+     */
+    @ConstantFunction(name = "lookup_string",
+            argTypes = {VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR,
+            isMetaFunction = true)
+    public static ConstantOperator lookupString(ConstantOperator tableName,
+                                                ConstantOperator lookupKey,
+                                                ConstantOperator returnColumn) {
+        TableName tableNameValue = TableName.fromString(tableName.getVarchar());
+        String sql = String.format("select cast(dict_mapping('%s', '%s', '%s') as string)",
+                tableNameValue.toString(), lookupKey.getVarchar(), returnColumn.getVarchar());
+        try {
+            List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
+            return deserializeLookupResult(result);
+        } catch (Throwable e) {
+            final String notFoundMessage = "query failed if record not exist in dict table";
+            Throwable root = ExceptionUtils.getRootCause(e);
+            // Record not found
+            if (e.getMessage().contains(notFoundMessage) ||
+                    root != null && root.getMessage().contains(notFoundMessage)) {
+                return ConstantOperator.NULL;
+            }
+            if (root instanceof StarRocksPlannerException) {
+                throw new SemanticException("lookup failed: " + root.getMessage(), root);
+            } else {
+                throw new SemanticException("lookup failed: " + e.getMessage(), e);
+            }
+        }
     }
 }
