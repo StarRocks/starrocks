@@ -1233,6 +1233,9 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STREQ(output.data(), "5");
 
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
+
+	EXPECT_OK(test_extract_from_object(R"({"time":"2024-01-01","event":"test","location":{"x":10,"y":20,"z":30},"array":[1,2,3]})", "$.*", &output));
+    EXPECT_STREQ(output.data(), "{\"time\":\"2024-01-01\",\"event\":\"test\",\"location\":{\"x\":10,\"y\":20,\"z\":30},\"array\":[1,2,3]}");
 }
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
