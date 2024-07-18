@@ -539,8 +539,28 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
+    # remove log4j
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+<<<<<<< HEAD
+=======
+
+    # remove zookeeper
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.5.6.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.5.6.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
+
+    rm -f ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib/zookeeper-3.8.3.jar
+
+    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
+>>>>>>> eb27d21ad0 ([Enhancement] BE remove unused zookeeper for CVEs (#48488))
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
