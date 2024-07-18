@@ -734,7 +734,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return node;
     }
 
-    private RoaringBitmap collectShuffleHashBucketRfIds(PlanNode root) {
+    private RoaringBitmap collectNonBroadcastRfIds(PlanNode root) {
         RoaringBitmap filterIds = root.getChildren().stream()
                 .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
                 .map(this::collectNonBroadcastRfIds)
