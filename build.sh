@@ -98,6 +98,8 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
+     --with-tenann
+                        build with vector index tenann library
 
   Eg.
     $0                                           build all
@@ -130,6 +132,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
+  -l 'with-tenann' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -154,6 +157,7 @@ WITH_BRPC_KEEPALIVE=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
+WITH_TENANN=OFF
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -173,6 +177,10 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
+fi
+
+if [[ -z ${WITH_TENANN} ]]; then
+  WITH_TENANN=ON
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -238,6 +246,7 @@ else
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
+            --with-tenann) WITH_TENANN=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -280,6 +289,7 @@ echo "Get params:
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN   -- $WITH_TENANN
 "
 
 check_tool()
@@ -316,6 +326,7 @@ cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+    WITH_TENANN=OFF
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
@@ -375,6 +386,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE}          \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DWITH_TENANN=${WITH_TENANN}                          \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}

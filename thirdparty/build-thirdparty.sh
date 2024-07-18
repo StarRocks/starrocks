@@ -1423,11 +1423,11 @@ build_fiu
 build_llvm
 build_clucene
 build_simdutf
-build_tenann
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
     build_libdeflate
+    build_tenann
 fi
 
 # strip unnecessary debug symbol for binaries in thirdparty
