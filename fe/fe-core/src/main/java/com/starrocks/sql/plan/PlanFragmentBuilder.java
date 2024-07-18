@@ -459,8 +459,6 @@ public class PlanFragmentBuilder {
 
             if (projection != null) {
                 fragment = buildProjectNode(optExpression, projection, fragment, context);
-                // push project to the same group
-                currentExecGroup.add(fragment.getPlanRoot());
             }
             PlanNode planRoot = fragment.getPlanRoot();
             if (!(optExpression.getOp() instanceof PhysicalProjectOperator) && planRoot instanceof ProjectNode) {
@@ -672,6 +670,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
+            currentExecGroup.add(projectNode);
             return inputFragment;
         }
 
@@ -2715,7 +2714,8 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
-            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
+            joinNode.setEnableLateMaterialization(
+                    ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
             // enable group execution for colocate join
             currentExecGroup = leftExecGroup;
             if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
@@ -2724,13 +2724,15 @@ public class PlanFragmentBuilder {
                     currentExecGroup.setColocateGroup();
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
-                } else if ((distributionMode.equals(JoinNode.DistributionMode.BROADCAST) || distributionMode.equals(
-                        JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) &&
-                        !leftExecGroup.isDisableColocateGroup()) {
+                } else if (!leftExecGroup.isDisableColocateGroup() &&
+                        (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) ||
+                                (distributionMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET) &&
+                                        !joinOperator.isRightJoin()))) {
+                    // case 1: broadcast join
+                    // case 2: local bucket shuffle (no-right) join
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup = execGroups.newExecGroup();
                     currentExecGroup.setDisableColocateGroup();
                 }
             }
