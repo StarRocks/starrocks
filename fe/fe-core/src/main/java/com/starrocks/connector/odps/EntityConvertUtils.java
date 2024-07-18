@@ -134,7 +134,7 @@ public class EntityConvertUtils {
             }
             return Attribute.of(((ColumnRefOperator) predicate).getName());
         } else if (predicate instanceof ConstantOperator) {
-            return Constant.of(predicate.toString());
+            return Constant.of(((ConstantOperator) predicate).getValue());
         } else if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
 
