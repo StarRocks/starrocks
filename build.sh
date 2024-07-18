@@ -529,11 +529,16 @@ if [ ${BUILD_BE} -eq 1 ]; then
     # remove zookeeper
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.5.6.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.5.6.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.6.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
+
     rm -f ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib/zookeeper-3.8.3.jar
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
