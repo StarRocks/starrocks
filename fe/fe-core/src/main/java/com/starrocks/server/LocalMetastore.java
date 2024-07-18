@@ -3657,8 +3657,45 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
         throw new DdlException("not implmented");
+=======
+    public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) {
+        if (!(table instanceof OlapTable)) {
+            ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+        }
+        if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
+            ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB, db.getFullName());
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE, olapTable.getState());
+        }
+
+        String colName = renameClause.getColName();
+        String newColName = renameClause.getNewColName();
+
+        Column column = olapTable.getColumn(colName);
+        if (column == null) {
+            ErrorReportException.report(ErrorCode.ERR_BAD_FIELD_ERROR, colName, table.getName());
+        }
+        Column currentColumn = olapTable.getColumn(newColName);
+        if (currentColumn != null) {
+            ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            olapTable.renameColumn(colName, newColName);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+
+        ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);
+        GlobalStateMgr.getCurrentState().getEditLog().logColumnRename(columnRenameInfo);
+        LOG.info("rename column {} to {}", colName, newColName);
+>>>>>>> 8e5b2bd132 ([Enhancement] Reject rename column name of tables in database: _statistic_ (#42761))
     }
 
     public void replayRenameColumn(TableInfo tableInfo) throws DdlException {
