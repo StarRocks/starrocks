@@ -95,7 +95,6 @@ private:
     };
     void _update_progress(Cell* fast = nullptr);
     void _closer_consumer(int32_t mcast_consumer_index);
-    RuntimeState* _runtime_state;
     mutable std::mutex _mutex;
     size_t _consumer_number;
     size_t _current_accumulated_row_size = 0;
