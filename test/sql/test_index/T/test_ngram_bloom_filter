@@ -150,3 +150,23 @@ select * from common_duplicate where c2 is not null order by c0;
 select * from common_duplicate where c2 is  null order by c0;
 select * from common_duplicate where c2 ="abc" order by c0;
 select * from common_duplicate where c1 = 2;
+
+-- name: test_bloom_filter_bug
+CREATE TABLE `t` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"bloom_filter_columns" = "c2",
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+insert into t values(1,1,1),(2,2,2),(3,3,1),(4,4,2),(5,4,3);
+select * from t where c2 in (1,2);
+select * from t where c2 in (1,2) and c2 is not null;
