@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -34,6 +35,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -138,6 +140,21 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public Map<Long, List<LiteralExpr>> getLiteralExprValues() {
         return this.idToLiteralExprValues;
+    }
+
+    /**
+     * Return all unique values for specified partitionIds
+     */
+    public Set<LiteralExpr> getValuesSet(Set<Long> partitionIds) {
+        if (MapUtils.isEmpty(idToLiteralExprValues)) {
+            return Sets.newHashSet();
+        }
+        return idToLiteralExprValues
+                .entrySet()
+                .stream()
+                .filter(x -> partitionIds.contains(x.getKey()))
+                .flatMap(x -> x.getValue().stream())
+                .collect(Collectors.toSet());
     }
 
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
