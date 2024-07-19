@@ -1673,7 +1673,12 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable, Partition partition) throws DdlException {
+=======
+    private PhysicalPartition createPhysicalPartition(String name, Database db, OlapTable olapTable,
+                                                      Partition partition, long warehouseId) throws DdlException {
+>>>>>>> 08b90929a8 ([Enhancement] Support getting physical partition by name (#47270))
         long partitionId = partition.getId();
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
         olapTable.inferDistribution(distributionInfo);
@@ -1691,8 +1696,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
 
+        if (name == null) {
+            name = partition.generatePhysicalPartitionName(id);
+        }
         PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
-                id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+                id, name, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1724,6 +1732,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return physicalParition;
     }
 
+<<<<<<< HEAD
     public void addSubPartitions(Database db, String tableName,
                                  Partition partition, int numSubPartition) throws DdlException {
         OlapTable olapTable;
@@ -1731,6 +1740,20 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.readLock();
         Set<String> checkExistPartitionName = Sets.newConcurrentHashSet();
+=======
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+            int numSubPartition, long warehouseId) throws DdlException {
+        addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
+    }
+
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+            int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
+        OlapTable olapTable;
+        OlapTable copiedTable;
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+>>>>>>> 08b90929a8 ([Enhancement] Support getting physical partition by name (#47270))
         try {
             olapTable = checkTable(db, tableName);
 
@@ -1749,7 +1772,12 @@ public class LocalMetastore implements ConnectorMetadata {
         List<PhysicalPartition> subPartitions = new ArrayList<>();
         // create physical partition
         for (int i = 0; i < numSubPartition; i++) {
+<<<<<<< HEAD
             PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition);
+=======
+            String name = subPartitionNames != null && subPartitionNames.length > i ? subPartitionNames[i] : null;
+            PhysicalPartition subPartition = createPhysicalPartition(name, db, copiedTable, partition, warehouseId);
+>>>>>>> 08b90929a8 ([Enhancement] Support getting physical partition by name (#47270))
             subPartitions.add(subPartition);
         }
 
