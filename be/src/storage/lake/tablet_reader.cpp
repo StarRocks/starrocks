@@ -102,6 +102,9 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::NotSupported("reader type not supported now");
     }
 
+    LOG(INFO) << "Open Tablet: " << _tablet_metadata->id()
+              << ", _need_split: " << _need_split;
+
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
         auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
@@ -117,6 +120,11 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             tablet_num_rows += rowset->num_rows();
             rss.emplace_back(rowset);
         }
+
+        LOG(INFO) << "Tablet: " << _tablet_metadata->id()
+                  << ", tablet_num_rows: " << tablet_num_rows
+                  << ", config::lake_tablet_rows_splitted_ratio: " << config::lake_tablet_rows_splitted_ratio
+                  << ", read_params.splitted_scan_rows: " << read_params.splitted_scan_rows;
 
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
