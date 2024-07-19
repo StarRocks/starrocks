@@ -806,6 +806,12 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canDistinct();
         }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().allMatch(sf -> sf.getType().canDistinct());
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }

@@ -61,7 +61,8 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -1095,11 +1096,11 @@ public class NodeMgr {
             request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
             request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
-                TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                timeout,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.setConfig(request));
+                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        timeout,
+                        client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");

@@ -42,10 +42,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,7 @@ import java.util.stream.Collectors;
 /**
  * Internal representation of partition-related metadata.
  */
-public class Partition extends MetaObject implements PhysicalPartition, Writable {
+public class Partition extends MetaObject implements PhysicalPartition, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -79,6 +80,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private PartitionState state;
     @SerializedName(value = "idToSubPartition")
     private Map<Long, PhysicalPartitionImpl> idToSubPartition = Maps.newHashMap();
+    private Map<String, PhysicalPartitionImpl> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
@@ -170,6 +172,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
+        partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
     }
 
@@ -201,11 +204,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     public void addSubPartition(PhysicalPartition subPartition) {
         if (subPartition instanceof PhysicalPartitionImpl) {
             idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
+            nameToSubPartition.put(subPartition.getName(), (PhysicalPartitionImpl) subPartition);
         }
     }
 
     public void removeSubPartition(long id) {
-        idToSubPartition.remove(id);
+        PhysicalPartitionImpl subPartition = idToSubPartition.remove(id);
+        if (subPartition != null) {
+            nameToSubPartition.remove(subPartition.getName());
+        }
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {
@@ -216,6 +223,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public PhysicalPartition getSubPartition(long id) {
         return this.id == id ? this : idToSubPartition.get(id);
+    }
+
+    public PhysicalPartition getSubPartition(String name) {
+        return this.name.equals(name) ? this : nameToSubPartition.get(name);
     }
 
     public long getParentId() {
@@ -540,5 +551,19 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    public String generatePhysicalPartitionName(long physicalParitionId) {
+        return this.name + '_' + physicalParitionId;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        for (PhysicalPartitionImpl subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
     }
 }
