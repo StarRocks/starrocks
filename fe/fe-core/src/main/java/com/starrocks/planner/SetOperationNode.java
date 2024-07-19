@@ -252,16 +252,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        int numInstances = 0;
-        for (PlanNode child : children) {
-            numInstances += child.getNumInstances();
-        }
-        numInstances = Math.max(1, numInstances);
-        return numInstances;
-    }
-
-    @Override
     public boolean canDoReplicatedJoin() {
         return false;
     }

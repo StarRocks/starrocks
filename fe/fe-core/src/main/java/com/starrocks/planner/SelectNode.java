@@ -81,11 +81,6 @@ public class SelectNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }

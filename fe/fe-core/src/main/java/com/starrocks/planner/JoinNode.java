@@ -532,11 +532,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
-    }
-
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),

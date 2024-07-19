@@ -175,10 +175,6 @@ public class MysqlScanNode extends ScanNode {
         return null;
     }
 
-    @Override
-    public int getNumInstances() {
-        return 1;
-    }
 
     @Override
     public void computeStats(Analyzer analyzer) {

@@ -159,10 +159,6 @@ public class HdfsScanNode extends ScanNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocations.getScanRangeLocationsSize();
-    }
 
     @Override
     protected void toThrift(TPlanNode msg) {
