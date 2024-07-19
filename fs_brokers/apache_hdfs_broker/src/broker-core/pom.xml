@@ -246,6 +246,16 @@ under the License.
         <dependency>
             <groupId>com.ksyun.kmr</groupId>
             <artifactId>hadoop-ks3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>netty</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                    <groupId>org.codehaus.jackson</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
