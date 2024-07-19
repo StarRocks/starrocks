@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
@@ -202,13 +203,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
-    private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
+    public static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
             throws AnalysisException {
         if (timeoutSecond > maxLoadTimeoutSecond ||
                 timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, "timeout", timeoutSecond,
+                    String.format("between %d and %d seconds", minLoadTimeOutSecond, maxLoadTimeoutSecond));
         }
     }
 
