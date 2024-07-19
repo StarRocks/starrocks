@@ -11,7 +11,7 @@ import Clients from '../assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
-# StarRocks with Helm
+# 使用 Helm 部署 StarRocks
 
 ## 目标
 
@@ -24,18 +24,18 @@ import Curl from '../assets/quick-start/_curl.mdx'
 - 将数据存储在持久存储中
 - 允许 MySQL 客户端从 Kubernetes 集群外部连接
 - 允许使用 Stream Load 从 Kubernetes 集群外部导入数据
-- 导入一些公共数据集
+- 导入公共数据集
 - 查询数据
 
 :::tip
-数据集和查询与基本快速入门中使用的相同。这里的主要区别在于使用 Helm 和 StarRocks Operator 进行部署。
+此处使用的数据集和查询与基本快速入门中使用的相同。本教程的主要区别在于使用 Helm 和 StarRocks Operator 进行部署。
 :::
 
 所使用的数据由 NYC OpenData 和国家环境信息中心提供。
 
-这些数据集都很大，因为本教程旨在帮助您熟悉使用 StarRocks，我们不会导入过去 120 年的数据。您可以使用三个 e2-standard-4 机器（或类似）的 GKE Kubernetes 集群运行本教程，磁盘空间为 80GB。对于更大的部署，我们有其他文档，稍后会提供。
+这些均为大型数据集，因为本教程旨在帮助您熟悉使用 StarRocks，所以不会导入过去 120 年的数据。您可以使用三个 e2-standard-4 机器（或类似）的 GKE Kubernetes 集群运行本教程，磁盘空间为 80GB。对于更大的部署方案，稍后会提供其他文档。
 
-本文档包含大量信息，开头是逐步内容，结尾是技术细节。这样安排是为了按以下顺序服务这些目的：
+本文档包含大量信息，前半部分为分步教程，后半部分为技术细节。这样安排是为了按顺序服务以下目的：
 
 1. 使用 Helm 部署系统。
 2. 允许读者在 StarRocks 中导入数据并分析这些数据。
@@ -69,9 +69,10 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 ---
 
-## 添加 StarRocks Helm chart 仓库
+## 添加 StarRocks Helm Chart 仓库
 
 Helm Chart 包含 StarRocks Operator 和自定义资源 StarRocksCluster 的定义。
+
 1. 添加 Helm Chart 仓库。
 
     ```Bash
@@ -123,17 +124,17 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 本快速入门的目标是：
 
 1. 为 StarRocks 数据库用户 `root` 配置密码
-2. 提供具有三个 FE 和三个 BE 的高可用性
-3. 将元数据存储在持久存储中
-4. 将数据存储在持久存储中
+2. 部署 3 FE 和 3 BE 保证高可用性
+3. 将元数据存储在持久化存储中
+4. 将数据存储在持久化存储中
 5. 允许 MySQL 客户端从 Kubernetes 集群外部连接
 6. 允许使用 Stream Load 从 Kubernetes 集群外部导入数据
 
-Helm chart 提供了满足所有这些目标的选项，但默认情况下未配置。本节的其余部分涵盖了满足所有这些目标所需的配置。将提供完整的 values 规范，但首先阅读每个部分的详细信息，然后复制完整的规范。
+Helm Chart 提供的选项足以满足所有这些目标，但默认情况下未配置。本小节的其余部分涵盖了满足所有这些目标所需的配置。最后将提供完整的 values 规范，但请您先阅读每个部分的详细信息，然后复制完整的范本。
 
 ### 1. 数据库用户的密码
 
-这段 YAML 指示 StarRocks operator 将数据库用户 `root` 的密码设置为 Kubernetes secret `starrocks-root-pass` 的 `password` 键的值。
+这段 YAML 指示 StarRocks Operator 将数据库用户 `root` 的密码设置为 Kubernetes secret `starrocks-root-pass` 中 `password` 键的值。
 
 ```yaml
 starrocks:
@@ -150,9 +151,9 @@ starrocks:
     kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
     ```
 
-### 2. 具有 3 个 FE 和 3 个 BE 的高可用性
+### 2. 部署 3 FE 和 3 BE 保证高可用性
 
-通过将 `starrocks.starrockFESpec.replicas` 设置为 3 和 `starrocks.starrockBeSpec.replicas` 设置为 3，您将拥有足够的 FE 和 BE 以实现高可用性。将 CPU 和内存请求设置得较低，可以在小型 Kubernetes 环境中创建 pod。
+通过将 `starrocks.starrockFESpec.replicas` 和 `starrocks.starrockBeSpec.replicas` 设置为 3，您将拥有足够的 FE 和 BE 以保证高可用性。将 CPU 和内存请求设置为较低数值，从而保证可以在小型 Kubernetes 环境中创建 pod。
 
 ```yaml
 starrocks:
@@ -171,7 +172,7 @@ starrocks:
                 memory: 2Gi
 ```
 
-### 3. 将元数据存储在持久存储中
+### 3. 将元数据存储在持久化存储中
 
 将 `starrocks.starrocksFESpec.storageSpec.name` 的值设置为 `""` 以外的任何值会导致：
 - 使用持久存储
@@ -189,7 +190,7 @@ starrocks:
             name: fe
 ```
 
-### 4. 将数据存储在持久存储中
+### 4. 将数据存储在持久化存储中
 
 将 `starrocks.starrocksBeSpec.storageSpec.name` 的值设置为 `""` 以外的任何值会导致：
 - 使用持久存储
@@ -274,7 +275,7 @@ starrocks:
 
 ## 设置 StarRocks root 数据库用户密码
 
-要从 Kubernetes 集群外部导入数据，StarRocks 数据库将被暴露在外部。您应该为 StarRocks 数据库用户 `root` 设置密码。operator 将把密码应用到 FE 和 BE 节点。
+要从 Kubernetes 集群外部导入数据，需要将 StarRocks 数据库暴露在外部。您应该为 StarRocks 数据库用户 `root` 设置密码。Operator 将把密码应用到 FE 和 BE 节点。
 
 ```bash
 kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
@@ -285,7 +286,7 @@ secret/starrocks-root-pass created
 ```
 ---
 
-## 部署 operator 和 StarRocks 集群
+## 部署 Operator 和 StarRocks 集群
 
 ```bash
 helm install -f my-values.yaml starrocks starrocks/kube-starrocks
@@ -361,7 +362,7 @@ fe-meta-kube-starrocks-fe-2   Bound    pvc-609cadd4-c7b7-4cf9-84b0-a75678bb3c4d 
 ### 验证集群是否健康
 
 :::tip
-这些命令与上面相同，但显示了期望的状态。
+以下使用的命令与上一小节相同，但您需要额外注意各服务的状态是否符合预期。
 :::
 
 ```bash
@@ -394,7 +395,7 @@ kube-starrocks-initpwd-m84br               0/1     Completed   4          2m9s
 kube-starrocks-operator-54ffcf8c5c-xsjc8   1/1     Running     0          2m9s
 ```
 
-`EXTERNAL-IP` 地址将在 Kubernetes 集群外部提供 SQL 客户端和 Stream Load 访问。
+`EXTERNAL-IP` 地址将用于允许 SQL 客户端和 Stream Load 访问在外部 Kubernetes 集群。
 
 ```bash
 kubectl get services
@@ -439,14 +440,14 @@ kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
   mysql -P9030 -h127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
-如果您在本地安装了 mysql CLI，可以使用它而不是 Kubernetes 集群中的那个：
+如果您在本地安装了 mysql CLI，可以直接使用本地客户端：
 
 ```sql
 mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 ```
 
 ---
-## 创建一些表
+## 建表
 
 ```bash
 mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
@@ -467,7 +468,7 @@ exit
 上传您之前下载的两个数据集。
 
 :::tip
-打开一个新 shell，因为这些 curl 命令是在操作系统提示符下运行的，而不是在 `mysql` 客户端中运行的。命令引用了您下载的数据集，因此请从下载文件的目录运行它们。
+因为这些 curl 命令是在操作系统提示符而非 `mysql` 客户端中运行的，您需要打开一个新 shell。命令引用了您下载的数据集，因此请从下载数据集的目录运行。
 
 由于这是一个新 shell，请再次运行 export 命令：
 
@@ -481,7 +482,7 @@ export FE_PROXY=`kubectl get services kube-starrocks-fe-proxy-service --output j
 系统会提示您输入密码。使用您添加到 Kubernetes secret `starrocks-root-pass` 的密码。如果您使用了提供的命令，密码是 `g()()dpa$$word`。
 :::
 
-`curl` 命令看起来很复杂，但它们在教程结尾有详细解释。目前，我们建议运行这些命令并运行一些 SQL 来分析数据，然后阅读结尾处的数据导入详细信息。
+尽管 `curl` 命令看起来很复杂，教程结尾提供了详细解释。当前，建议您直接运行以下命令和 SQL 来分析数据，最后在教程结尾处了解数据导入详细信息。
 
 ```bash
 curl --location-trusted -u root             \
@@ -560,7 +561,7 @@ Enter host password for user 'root':
 mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 ```
 
-## 回答一些问题
+## 分析数据
 
 <SQL />
 
@@ -570,7 +571,7 @@ exit
 
 ## 清理
 
-如果您完成了并且想要删除 StarRocks 集群和 StarRocks operator，请运行此命令。
+如果您完成了并且想要删除 StarRocks 集群和 StarRocks Operator，请运行此命令。
 
 ```bash
 helm delete starrocks
@@ -584,9 +585,9 @@ helm delete starrocks
 
 - 使用 Helm 和 StarRocks Operator 部署了 StarRocks
 - 导入了纽约市提供的交通事故数据和 NOAA 提供的天气数据
-- 使用 SQL JOIN 分析数据，发现低能见度或结冰的街道驾驶是个坏主意
+- 使用 SQL JOIN 分析数据，并得出低能见度或道路结冰增加事故几率的结论
 
-还有更多内容可以学习；我们有意略过了 Stream Load 期间的数据转换细节。有关详细信息，请参阅下面的 curl 命令说明。
+更多内容：本教程有意略过了 Stream Load 的数据转换细节。有关详细信息，请参阅下面的 curl 命令说明。
 
 ---
 
@@ -602,11 +603,11 @@ helm delete starrocks
 
 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 
-[Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受这些 [使用条款](https://www.nyc.gov/home/terms-of-use.page) 和 [隐私政策](https://www.nyc.gov/home/privacy-policy.page) 约束。
+[Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受以下 [使用条款](https://www.nyc.gov/home/terms-of-use.page) 和 [隐私政策](https://www.nyc.gov/home/privacy-policy.page) 约束。
 
 [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) 由 NOAA 提供，附有此 [免责声明](https://www.noaa.gov/disclaimer) 和此 [隐私政策](https://www.noaa.gov/protecting-your-privacy)。
 
-[Helm](https://helm.sh/) 是 Kubernetes 的包管理器。一个 [Helm Chart](https://helm.sh/docs/topics/charts/) 是一个 Helm 包，包含在 Kubernetes 集群上运行应用程序所需的所有资源定义。
+[Helm](https://helm.sh/) 是 Kubernetes 的包管理器。[Helm Chart](https://helm.sh/docs/topics/charts/) 是一个 Helm 包，包含在 Kubernetes 集群上运行应用程序所需的所有资源定义。
 
 [`starrocks-kubernetes-operator` 和 `kube-starrocks` Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)。
 ```
