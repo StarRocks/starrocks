@@ -503,4 +503,29 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
+
+void* my_roaring_malloc(size_t bytes) {
+    LOG(INFO) << "invoke my_roaring_malloc";
+    return malloc(bytes);
+}
+void* my_roaring_realloc(void* ptr, size_t size) {
+    return nullptr;
+}
+void* my_roaring_calloc(size_t n, size_t size) {
+    LOG(INFO) << "invoke my_roaring_calloc";
+    return nullptr;
+}
+void my_roaring_free(void* ptr) {}
+void* my_roaring_aligned_malloc(size_t, size_t) {
+    return nullptr;
+}
+void my_roaring_aligned_free(void*) {
+}
+
+void* roaring_malloc(size_t size) __THROW ALIAS(my_roaring_malloc);
+void* roaring_realloc(void* ptr) __THROW ALIAS(my_roaring_realloc);
+void* roaring_calloc(size_t n, size_t size) __THROW ALIAS(my_roaring_calloc);
+void roaring_free(void* ptr) __THROW ALIAS(my_roaring_free);
+void* roaring_aligned_malloc(size_t, size_t) __THROW ALIAS(my_roaring_aligned_malloc);
+void roaring_aligned_free(void*) __THROW ALIAS(my_roaring_aligned_free);
 }
