@@ -39,6 +39,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -211,6 +212,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockDatabase(db, LockType.WRITE);
         }
 
+        handleMVRepair(db, table);
         LOG.info("update meta job finished: {}", jobId);
     }
 
@@ -519,5 +521,39 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    private void handleMVRepair(Database db, LakeTable table) {
+        if (table.getRelatedMaterializedViews().isEmpty()) {
+            return;
+        }
+
+        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
+                long partitionId = partitionVersion.getKey();
+                Partition partition = table.getPartition(partitionId);
+                if (partition == null || table.isTempPartition(partitionId)) {
+                    continue;
+                }
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo();
+                partitionRepairInfo.setPartitionId(partitionId);
+                partitionRepairInfo.setPartitionName(partition.getName());
+                partitionRepairInfo.setVersion(partitionVersion.getValue());
+                partitionRepairInfo.setVersionTime(finishedTimeMs);
+                partitionRepairInfos.add(partitionRepairInfo);
+            }
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+
+        if (partitionRepairInfos.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
     }
 }
