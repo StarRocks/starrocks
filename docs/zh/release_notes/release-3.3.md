@@ -4,6 +4,67 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.3
 
+## 3.3.1
+
+发布日期：2024 年 7 月 18 日
+
+### 新增特性
+
+- [Preview] 支持临时表。
+- [Preview] JDBC Catalog 支持 Oracle 和 SQL Server。
+- [Preview] Unified Catalog 支持 Kudu。
+- INSERT INTO 导入主键表，支持部分列更新。
+- 用户自定义变量支持 ARRAY 类型。 [#42631](https://github.com/StarRocks/starrocks/pull/42613)
+- Stream Load 支持将 JSON 类型转化并导入至 STRUCT/MAP/ARRAY 类型目标列。[ #45406](https://github.com/StarRocks/starrocks/pull/45406)
+- 支持全局字典 Cache。
+- 支持批量删除分区。[#44744](https://github.com/StarRocks/starrocks/issues/44744)
+- 支持读取 Iceberg 中的视图。 [#46273](https://github.com/StarRocks/starrocks/issues/46273)
+- 支持在 Apache Ranger 中设置列级别权限（物化视图和视图的列级别权限需要在表对象下设置）。 [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+
+### 功能优化
+
+- 优化当前 IdChain 的 hashcode 实现，降低 FE 启动耗时。 [#47599](https://github.com/StarRocks/starrocks/pull/47599)
+- 优化 FILES() 函数中 `csv.trim_space` 参数的报错信息，检查非法字符并给出合理提示。 [#44740](https://github.com/StarRocks/starrocks/pull/44740)
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在 Schema Change 过程中，因 Tablet 迁移，文件位置变化导致的 Schema Change 失败。[#45517](https://github.com/StarRocks/starrocks/pull/45517)
+- 因为字段默认值中包含 `\`、`\r` 等控制字符导致跨集群迁移工具在目标集群中建表失败。 [#47861](https://github.com/StarRocks/starrocks/pull/47861)
+- BE 重启后 bRPC 持续失败。 [#40229](https://github.com/StarRocks/starrocks/pull/40229)
+- `user_admin` 角色可以通过 ALTER USER 命令修改 root 密码。[#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- 主键索引写入失败，导致数据写入报错。[#48045](https://github.com/StarRocks/starrocks/pull/48045) 
+
+### 行为变更
+
+- 写出 Hive、Iceberg 默认打开 Spill。 [#47118](https://github.com/StarRocks/starrocks/pull/47118)
+- 修改 BE 配置项 `max_cumulative_compaction_num_singleton_deltas` 默认值为 `500`。[#47621](https://github.com/StarRocks/starrocks/pull/47621)
+- 用户创建分区表但未设置分桶数时，当分区数量超过 5 个后，系统自动设置分桶数的规则更改为 `max(2 * BE 或 CN 数量, 根据最大历史分区数据量计算得出的分桶数)`。（原来的规则是根据最大历史分区数据量计算的分桶数）。[#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
+### 降级说明
+
+如需将 v3.3.1 及以上集群降级至 v3.2，用户需要在回滚前清理所有的临时表。步骤如下：
+
+1. 禁止用户创建新的临时表：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_experimental_temporary_table"="false"); 
+   ```
+
+2. 查询系统内是否存在临时表：
+
+   ```SQL
+   SELECT * FROM information_schema.temp_tables;
+   ```
+
+3. 如系统内存在临时表，通过以下命令清理系统内的临时表（需要 SYSTEM 级 OPERATE 权限）：
+
+   ```SQL
+   CLEAN TEMPORARY TABLE ON SESSION 'session';
+   ```
+
 ## 3.3.0
 
 发布日期：2024 年 6 月 21 日
