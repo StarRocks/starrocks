@@ -334,6 +334,10 @@ public:
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
+    bool check_schema_exist(int64_t id);
+    bool insert_committed_rowset_schema(RowsetId rowset_id, int64_t schema_id);
+    void erase_committed_rowset_schema(RowsetId rowset_id);
+
 protected:
     void on_shutdown() override;
 
@@ -349,6 +353,7 @@ private:
     /// Delete stale rowset by version. This method not only delete the version in expired rowset map,
     /// but also delete the version in rowset meta vector.
     void _delete_stale_rowset_by_version(const Version& version);
+    void _delete_stale_schema();
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
 

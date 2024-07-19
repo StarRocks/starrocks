@@ -382,6 +382,8 @@ public:
         }
     }
 
+    void get_active_schema_ids(std::set<int64_t>* active_schema_ids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

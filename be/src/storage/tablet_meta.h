@@ -163,7 +163,10 @@ public:
 
     const TabletSchema& tablet_schema() const;
 
-    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) {
+        _history_schema[_schema->id()] = std::move(_schema);
+        _schema = tablet_schema;
+    }
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
@@ -236,6 +239,11 @@ public:
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
+    void delete_stale_schema();
+    bool check_schema_exist(int64_t id);
+    bool insert_committed_rowset_schema(RowsetId rowset_id, int64_t schema_id);
+    void erase_committed_rowset_schema(RowsetId rowset_id);
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -299,6 +307,9 @@ private:
 
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     TabletSchemaCSPtr _source_schema = nullptr;
+
+    std::map<int64_t, TabletSchemaCSPtr> _history_schema;
+    std::map<RowsetId, int64_t> _committed_rowsets_schema;
 
     std::shared_mutex _meta_lock;
 };
