@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner.h"
 
+#include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"

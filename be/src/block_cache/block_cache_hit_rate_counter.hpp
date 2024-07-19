@@ -36,6 +36,10 @@ public:
     ssize_t get_miss_bytes() const { return _miss_bytes.get_value(); }
     ssize_t get_hit_bytes_last_minute() const { return _hit_bytes_last_minute.get_value(); }
     ssize_t get_miss_bytes_last_minute() const { return _miss_bytes_last_minute.get_value(); }
+    void reset() {
+        _hit_bytes.reset();
+        _miss_bytes.reset();
+    }
 
 private:
     static double hit_rate_calculate(ssize_t hit_bytes, ssize_t miss_bytes) {
