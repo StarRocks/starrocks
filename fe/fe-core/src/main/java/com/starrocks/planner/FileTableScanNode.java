@@ -163,11 +163,6 @@ public class FileTableScanNode extends ScanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
-    }
-
-    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();

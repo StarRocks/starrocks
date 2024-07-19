@@ -869,10 +869,6 @@ public class OlapScanNode extends ScanNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return result.size();
-    }
 
     private void assignOrderByHints(List<String> keyColumnNames) {
         // assign order by hint
@@ -1028,7 +1024,6 @@ public class OlapScanNode extends ScanNode {
             PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
             long warehouseId) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
-        olapScanNode.numInstances = 1;
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
         olapScanNode.selectedPartitionNum = 1;
         olapScanNode.selectedTabletsNum = 1;

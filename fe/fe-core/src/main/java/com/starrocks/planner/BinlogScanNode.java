@@ -190,10 +190,6 @@ public class BinlogScanNode extends ScanNode {
         return scanRanges;
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRanges.size();
-    }
 
     @Override
     public boolean canDoReplicatedJoin() {

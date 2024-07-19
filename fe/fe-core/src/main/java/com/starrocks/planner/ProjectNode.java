@@ -78,11 +78,6 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
-    }
-
-    @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 

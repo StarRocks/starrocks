@@ -233,11 +233,6 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return numInstances;
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

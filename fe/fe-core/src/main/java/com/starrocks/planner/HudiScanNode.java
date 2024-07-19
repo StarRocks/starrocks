@@ -134,10 +134,6 @@ public class HudiScanNode extends ScanNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocations.getScanRangeLocationsSize();
-    }
 
     @Override
     protected void toThrift(TPlanNode msg) {

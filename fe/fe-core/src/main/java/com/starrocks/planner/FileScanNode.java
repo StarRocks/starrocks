@@ -528,7 +528,7 @@ public class FileScanNode extends LoadScanNode {
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
         //     backends_size * parallelInstanceNum)
-        numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
+        int numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.max(1, numInstances);
 
@@ -674,9 +674,6 @@ public class FileScanNode extends LoadScanNode {
             processFileGroup(context, fileStatuses);
         }
 
-        // update numInstances
-        numInstances = locationsList.size();
-
         if (LOG.isDebugEnabled()) {
             for (TScanRangeLocations locations : locationsList) {
                 LOG.debug("Scan range is {}", locations);
@@ -748,10 +745,6 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
-    @Override
-    public int getNumInstances() {
-        return numInstances;
-    }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {

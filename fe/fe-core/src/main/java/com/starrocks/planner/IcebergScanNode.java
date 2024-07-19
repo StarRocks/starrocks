@@ -401,11 +401,6 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return result.size();
-    }
-
-    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();

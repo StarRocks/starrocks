@@ -334,7 +334,6 @@ public class PlanFragmentBuilder {
 
         ExchangeNode exchangeNode =
                 new ExchangeNode(execPlan.getNextNodeId(), inputFragment.getPlanRoot(), DataPartition.UNPARTITIONED);
-        exchangeNode.setNumInstances(1);
         PlanFragment exchangeFragment =
                 new PlanFragment(execPlan.getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
         inputFragment.setDestination(exchangeNode);
@@ -2326,14 +2325,11 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(exchangeNode, true);
             DataPartition dataPartition;
             if (DistributionSpec.DistributionType.GATHER.equals(distribution.getDistributionSpec().getType())) {
-                exchangeNode.setNumInstances(1);
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.BROADCAST
                     .equals(distribution.getDistributionSpec().getType())) {
-                exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
-                exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
                 List<ColumnRefOperator> partitionColumns =
                         getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
                 List<Expr> distributeExpressions =
@@ -2343,7 +2339,6 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
                     distribution.getDistributionSpec().getType())) {
-                exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
                 dataPartition = DataPartition.RANDOM;
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
@@ -2388,7 +2383,6 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     DistributionSpec.DistributionType.GATHER);
 
-            exchangeNode.setNumInstances(1);
             DataPartition dataPartition = DataPartition.UNPARTITIONED;
             exchangeNode.setDataPartition(dataPartition);
 
@@ -3232,7 +3226,6 @@ public class PlanFragmentBuilder {
                     // use merge-exchange
                     ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), child.getPlanRoot(),
                             DistributionSpec.DistributionType.GATHER);
-                    exchangeNode.setNumInstances(1);
                     exchangeNode.setDataPartition(DataPartition.UNPARTITIONED);
                     this.currentExecGroup.add(exchangeNode, true);
 
@@ -3272,8 +3265,6 @@ public class PlanFragmentBuilder {
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
-
-            exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
