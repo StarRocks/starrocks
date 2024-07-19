@@ -20,6 +20,7 @@ Release date: July 18, 2024
 - Supports deleting partitions in batch. [#44744](https://github.com/StarRocks/starrocks/issues/44744)
 - Supports queries on Iceberg views. [#46273](https://github.com/StarRocks/starrocks/issues/46273)
 - Supports managing column-level permissions in Apache Ranger. (Column-level permissions for materialized views and views must be set under the table object.) [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+- Supports column mode partial update of primary key table in shared-data cluster. [#46516](https://github.com/StarRocks/starrocks/issues/46516)
 
 ### Improvements
 
