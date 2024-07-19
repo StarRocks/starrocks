@@ -366,16 +366,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             << ", is_done=" << done;
 }
 
-void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) {
-    // It should be guaranteed that the done flag must be set to true in any cases.
-    // If the async task is submitted successfully, the done flag will be set to true in the lambda function.
-    // Otherwise, the done flag will be set to true in the defer object.
-    bool submit_success = false;
-    DeferOp defer([&]() {
-        if (!submit_success) {
-            *done = true;
-        }
-    });
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
     auto query_statistics = query_ctx->final_query_statistic();
 
     TReportAuditStatisticsParams params;
@@ -395,7 +386,6 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
     auto report_task = [=]() {
-        *done = true;
         auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
@@ -410,8 +400,8 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
-    if (st.ok()) {
-        submit_success = true;
+    if (!st.ok()) {
+        LOG(ERROR) << "submit audit statistics report fail, " << st.to_string();
     }
 }
 
