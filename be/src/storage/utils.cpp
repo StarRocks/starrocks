@@ -46,6 +46,7 @@
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -388,6 +389,16 @@ std::string parent_name(const std::string& fullpath) {
 std::string file_name(const std::string& fullpath) {
     std::filesystem::path path(fullpath);
     return path.filename().string();
+}
+
+std::string _mask_token(const std::string& str) {
+    const std::regex token_pattern("token=[^\\s&\\n]*");
+    const std::string token_replace("token=******");
+
+    const std::regex pass_pattern("passwd[^\\n]*");
+    const std::string pass_replace("passwd=******");
+
+    return regex_replace(regex_replace(str, token_pattern, token_replace), pass_pattern, pass_replace);
 }
 
 } // namespace starrocks

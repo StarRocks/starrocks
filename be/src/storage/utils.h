@@ -173,4 +173,6 @@ std::string file_name(const std::string& fullpath);
         }                                                     \
     } while (0)
 
+std::string _mask_token(const std::string& str);
+
 } // namespace starrocks

@@ -30,6 +30,7 @@
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
 #include "service/backend_options.h"
+#include "storage/utils.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
@@ -282,7 +283,7 @@ Status ReplicationUtils::download_remote_snapshot(
             estimate_timeout_sec = config::download_low_speed_time;
         }
 
-        VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
+        VLOG(1) << "Downloading " << _mask_token(remote_file_url) << ", bytes: " << file_size
                 << ", timeout: " << estimate_timeout_sec << "s";
 
         RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,
