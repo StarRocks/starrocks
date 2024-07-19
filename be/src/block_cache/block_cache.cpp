@@ -33,50 +33,6 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
-BlockCacheHitRateCounter* BlockCacheHitRateCounter::instance() {
-    static BlockCacheHitRateCounter counter;
-    return &counter;
-}
-
-void BlockCacheHitRateCounter::update(uint64_t hit_bytes, uint64_t miss_bytes) {
-    _hit_bytes << hit_bytes;
-    _miss_bytes << miss_bytes;
-}
-
-double BlockCacheHitRateCounter::hit_rate() const {
-    return hit_rate_calculate(_hit_bytes.get_value(), _miss_bytes.get_value());
-}
-
-double BlockCacheHitRateCounter::hit_rate_last_minute() const {
-    return hit_rate_calculate(_hit_bytes_last_minute.get_value(), _miss_bytes_last_minute.get_value());
-}
-
-ssize_t BlockCacheHitRateCounter::get_hit_bytes() const {
-    return _hit_bytes.get_value();
-}
-
-ssize_t BlockCacheHitRateCounter::get_miss_bytes() const {
-    return _miss_bytes.get_value();
-}
-
-ssize_t BlockCacheHitRateCounter::get_hit_bytes_last_minute() const {
-    return _hit_bytes_last_minute.get_value();
-}
-
-ssize_t BlockCacheHitRateCounter::get_miss_bytes_last_minute() const {
-    return _miss_bytes_last_minute.get_value();
-}
-
-double BlockCacheHitRateCounter::hit_rate_calculate(ssize_t hit_bytes, ssize_t miss_bytes) {
-    ssize_t total_bytes = hit_bytes + miss_bytes;
-    if (total_bytes > 0) {
-        double hit_rate = std::round(double(hit_bytes) / double(total_bytes) * 100.0) / 100.0;
-        return hit_rate;
-    } else {
-        return 0;
-    }
-}
-
 // The cachelib doesn't support a item (key+valueu+attribute) larger than 4 MB without chain.
 // So, we check and limit the block_size configured by users to avoid unexpected errors.
 // For starcache, in theory we doesn't have a hard limitation for block size, but a very large

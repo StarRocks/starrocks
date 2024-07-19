@@ -138,20 +138,6 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     fs::remove_all(cache_dir).ok();
 }
 
-TEST_F(BlockCacheTest, app_hit_rate) {
-    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
-    EXPECT_EQ(0, counter->hit_rate());
-    EXPECT_EQ(0, counter->get_hit_bytes_last_minute());
-    EXPECT_EQ(0, counter->get_miss_bytes_last_minute());
-    EXPECT_EQ(0, counter->hit_rate_last_minute());
-
-    counter->update(3, 10);
-
-    EXPECT_EQ(3, counter->get_hit_bytes());
-    EXPECT_EQ(10, counter->get_miss_bytes());
-    EXPECT_EQ(0.23, counter->hit_rate());
-}
-
 #ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
     const std::string cache_dir = "./block_disk_cache3";
