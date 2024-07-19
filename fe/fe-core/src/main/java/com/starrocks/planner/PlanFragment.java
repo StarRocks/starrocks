@@ -710,6 +710,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
 
         if (root instanceof RuntimeFilterBuildNode) {
+            if (root instanceof HashJoinNode) {
+                HashJoinNode hashJoinNode = (HashJoinNode) root;
+                if (hashJoinNode.isSkewBroadJoin()) {
+                    HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
+                    for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
+                        int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
+                        // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                        description.setSkew_shuffle_filter_id(filterId);
+                    }
+                }
+            }
             RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
             for (RuntimeFilterDescription description : rfBuildNode.getBuildRuntimeFilters()) {
                 buildRuntimeFilters.put(description.getFilterId(), description);
@@ -939,7 +950,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             boolean hasGlobalRuntimeFilter = hashJoinNode.getBuildRuntimeFilters()
                     .stream().anyMatch(RuntimeFilterDescription::isHasRemoteTargets);
-            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter) {
+            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter && !localOffspringsPerChild.isEmpty()) {
                 localRightOffsprings.or(localOffspringsPerChild.get(1));
             }
         }

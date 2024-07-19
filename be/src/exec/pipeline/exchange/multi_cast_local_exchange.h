@@ -44,7 +44,7 @@ namespace starrocks::pipeline {
 // The exchanger should take care of several things:
 // 1. can accept chunk or not. we don't want to block any consumer. we can accept chunk only when a any consumer needs chunk.
 // 2. can throw chunk or not. we can only throw any chunk when all consumers have consumed that chunk.
-// 3. can pull chiunk. we maintain the progress of consumers.
+// 3. can pull chunk. we maintain the progress of consumers.
 
 class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
@@ -52,6 +52,8 @@ class MultiCastLocalExchanger {
 public:
     virtual ~MultiCastLocalExchanger() = default;
     virtual Status init_metrics(RuntimeProfile* profile) = 0;
+    virtual Status prepare(RuntimeState* state) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
 
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
     virtual bool can_push_chunk() const = 0;

@@ -67,6 +67,9 @@ public:
                                                                     _exchanger);
     }
 
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
 private:
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
