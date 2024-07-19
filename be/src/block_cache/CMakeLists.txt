@@ -28,6 +28,7 @@ set(CACHE_FILES
   cache_options.cpp
   datacache_utils.cpp
   disk_space_monitor.cpp
+  block_cache_hit_rate_counter.hpp
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")
