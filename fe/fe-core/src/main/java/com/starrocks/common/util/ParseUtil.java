@@ -20,6 +20,8 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -95,6 +97,21 @@ public class ParseUtil {
         return replicaNumber;
     }
 
+    public static boolean parseBooleanValue(String value, String name) {
+        if (value.equalsIgnoreCase("ON")
+                || value.equalsIgnoreCase("TRUE")
+                || value.equalsIgnoreCase("1")) {
+            return true;
+        }
+        if (value.equalsIgnoreCase("OFF")
+                || value.equalsIgnoreCase("FALSE")
+                || value.equalsIgnoreCase("0")) {
+            return false;
+        }
+        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, name, value,
+                "1, 0, on, off, true, or false (case insensitive)");
+        return false;
+    }
 
     private static byte charToByte(char c) {
         return (byte) HEX_STRING.indexOf(c);

@@ -36,7 +36,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -154,7 +153,7 @@ public class Pipe implements GsonPostProcessable {
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
+                    pipeSource.setAutoIngest(ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
