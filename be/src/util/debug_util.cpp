@@ -66,6 +66,7 @@ std::string get_build_version(bool compact) {
     if (!compact) {
         ss << std::endl
            << "Build distributor id: " << STARROCKS_BUILD_DISTRO_ID << std::endl
+           << "Build arch: " << STARROCKS_BUILD_ARCH << std::endl
            << "Built on " << STARROCKS_BUILD_TIME << " by " << STARROCKS_BUILD_USER << "@" << STARROCKS_BUILD_HOST;
     }
 
