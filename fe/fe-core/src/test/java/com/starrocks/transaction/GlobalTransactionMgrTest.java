@@ -979,4 +979,15 @@ public class GlobalTransactionMgrTest {
         }
         Assert.assertTrue(exceptionThrown);
     }
+
+    @Test
+    public void testCommitLockTimeout() throws UserException, LockTimeoutException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitAndPublishTransaction(db, 1001L, Collections.emptyList(), Collections.emptyList(), 10L, null);
+        Assert.assertThrows(ErrorReportException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L));
+    }
 }

@@ -4,6 +4,67 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.3
 
+## 3.3.1
+
+Release date: July 18, 2024
+
+### New Features
+
+- [Preview] Supports temporary tables.
+- [Preview] JDBC Catalog supports Oracle and SQL Server.
+- [Preview] Unified Catalog supports Kudu.
+- Loading data into Primary Key tables with INSERT INTO supports partial updates in column mode.
+- User-defined variables support the ARRAY type. [#42631](https://github.com/StarRocks/starrocks/pull/42613)
+- Stream Load supports converting JSON-type data and loading it into columns of STRUCT/MAP/ARRAY types. [#45406](https://github.com/StarRocks/starrocks/pull/45406)
+- Supports global dictionary cache.
+- Supports deleting partitions in batch. [#44744](https://github.com/StarRocks/starrocks/issues/44744)
+- Supports queries on Iceberg views. [#46273](https://github.com/StarRocks/starrocks/issues/46273)
+- Supports managing column-level permissions in Apache Ranger. (Column-level permissions for materialized views and views must be set under the table object.) [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+
+### Improvements
+
+- Optimized the IdChain hashcode implementation to reduce the FE restart time. [#47599](https://github.com/StarRocks/starrocks/pull/47599)
+- Improved error messages for the `csv.trim_space` parameter in the FILES() function, checking for illegal characters and providing reasonable prompts. [#44740](https://github.com/StarRocks/starrocks/pull/44740)
+- Stream Load supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Schema Change failures due to file location changes caused by Tablet migration during the Schema Change process. [#45517](https://github.com/StarRocks/starrocks/pull/45517)
+- Cross-cluster Data Migration Tool fails to create tables in the target cluster due to control characters such as `\`, `\r` in the default values of fields.  [#47861](https://github.com/StarRocks/starrocks/pull/47861)
+- Persistent bRPC failures after BE restarts. [#40229](https://github.com/StarRocks/starrocks/pull/40229)
+- The `user_admin` role can change the root password using the ALTER USER command. [#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- Primary key index write failures cause data write errors. [#48045](https://github.com/StarRocks/starrocks/pull/48045) 
+
+### Behavior Changes
+
+- Intermediate result spilling is enabled by default when sinking data to Hive and Iceberg. [#47118](https://github.com/StarRocks/starrocks/pull/47118)
+- Changed the default value of the BE configuration item `max_cumulative_compaction_num_singleton_deltas` to `500`. [#47621](https://github.com/StarRocks/starrocks/pull/47621)
+- When users create a partitioned table without specifying the bucket number, if the number of partitions exceeds 5, the rule for setting the bucket count is changed to `max(2*BE or CN count, bucket number calculated based on the largest historical partition data volume)`.  The previous rule was to calculate the bucket number based on the largest historical partition data volume). [#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
+### Downgrade notes
+
+To downgrade a cluster from v3.3.1 or later to v3.2, users must clean all temporary tables in the cluster by following these steps:
+
+1. Disallow users to create new temporary tables:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_experimental_temporary_table"="false"); 
+   ```
+
+2. Check if there are any temporary tables in the cluster:
+
+   ```SQL
+   SELECT * FROM information_schema.temp_tables;
+   ```
+
+3. If there are temporary tables in the system, clean them up using the following command (the SYSTEM-level OPERATE privilege is required):
+
+   ```SQL
+   CLEAN TEMPORARY TABLE ON SESSION 'session';
+   ```
+
 ## 3.3.0
 
 Release date: June 21, 2024
