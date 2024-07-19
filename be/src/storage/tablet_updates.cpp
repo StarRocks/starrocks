@@ -2032,7 +2032,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
             return status;
         }
     }
+
+    _tablet.obtain_header_rdlock();
     std::lock_guard wl(_lock);
+    if (_tablet.tablet_meta()->check_schema_exist(rowset->tablet_schema()->id())) {
+        rowset->rowset_meta()->set_tablet_schema_id();
+    }
+    _tablet.release_header_lock();
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when commit_compaction tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -2640,6 +2646,18 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
                 delvec_deleted, dcg_deleted);
     }
     _remove_unused_rowsets();
+}
+
+// return schema id set of all rowsets including `_unused_rowsets`
+void TabletUpdates::get_active_schema_ids(std::set<int64_t>* active_schema_ids) {
+    std::lock_guard rl(_lock);
+    for (auto& [_, rowset] : _rowsets) {
+        active_schema_ids->insert(rowset->rowset_meta()->tablet_schema()->id());
+    }
+    RowsetSharedPtr rowset;
+    while (_unused_rowsets.try_get(&rowset) == 1) {
+        active_schema_ids->insert(rowset->tablet_schema()->id());
+    }
 }
 
 int64_t TabletUpdates::get_compaction_score() {
@@ -3864,6 +3882,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         // reset rowset schema to the latest one
         src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, _tablet.tablet_schema());
+        rowset_meta_pb.set_schema_id(_tablet.tablet_schema()->id());
+        rowset_meta_pb.clear_tablet_schema();
         rowset_meta_pb.set_deprecated_rowset_id(0);
         rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
@@ -4146,6 +4166,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         new_rowset_load_info.rowset_id = next_rowset_id;
 
         auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
+        (*new_rowset)->rowset_meta()->set_tablet_schema(_tablet.tablet_schema());
         (*new_rowset)->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
         rowset_meta_pb.set_rowset_id(rid.to_string());
@@ -4462,6 +4483,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
         new_rowset_load_info.rowset_id = next_rowset_id;
 
+        (*new_rowset)->rowset_meta()->set_tablet_schema(_tablet.tablet_schema());
         auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
         (*new_rowset)->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);

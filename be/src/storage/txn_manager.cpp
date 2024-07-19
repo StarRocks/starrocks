@@ -46,6 +46,7 @@
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
@@ -267,6 +268,14 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
     if (!is_recovery) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+        if (tablet == nullptr) {
+            return Status::InternalError("tablet not exist during commit txn");
+        }
+        // add committed rowset schema id into tablet meta to prevent schema gc
+        if (tablet->insert_committed_rowset_schema(rowset_ptr->rowset_id(), rowset_ptr->tablet_schema()->id())) {
+            rowset_ptr->rowset_meta()->set_tablet_schema_id();
+        }
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
@@ -274,6 +283,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
                          << ", rowset_id: " << rowset_ptr->rowset_id();
+            // write rowset meta faield, delete commtted rowset schema
+            tablet->erase_committed_rowset_schema(rowset_ptr->rowset_id());
             return Status::InternalError(
                     fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
         }
@@ -319,6 +330,7 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();
     }
+    tablet->erase_committed_rowset_schema(rowset->rowset_id());
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     pair<int64_t, int64_t> key(partition_id, transaction_id);
@@ -365,6 +377,7 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             return st;
         }
     }
+    tablet->erase_committed_rowset_schema(rowset->rowset_id());
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     pair<int64_t, int64_t> key(partition_id, transaction_id);
@@ -533,6 +546,10 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
                         fmt::format("Fail to delete txn because rowset is already published. tablet_id: {}, txn_id: {}",
                                     tablet_info.tablet_id, transaction_id));
             } else {
+                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                if (tablet != nullptr) {
+                    tablet->erase_committed_rowset_schema(load_info.rowset->rowset_id());
+                }
                 (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
 #ifndef BE_TEST
                 StorageEngine::instance()->add_unused_rowset(load_info.rowset);
@@ -592,6 +609,10 @@ void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tab
                               << ", tablet: " << tablet_info.to_string()
                               << ", rowset id: " << load_info.rowset->rowset_id();
                     (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
+                    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                    if (tablet != nullptr) {
+                        tablet->erase_committed_rowset_schema(load_info.rowset->rowset_id());
+                    }
                 }
                 LOG(INFO) << "remove tablet related txn."
                           << " partition_id: " << it->first.first << ", txn_id: " << it->first.second

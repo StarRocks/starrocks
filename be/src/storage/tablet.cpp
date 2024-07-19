@@ -582,6 +582,8 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
         ASSIGN_OR_RETURN(need_binlog, _prepare_binlog_if_needed(rowset, version));
     }
 
+    // TODO(zhangqiang)
+    // set rowset schema id in rowset_meta
     RowsetMetaPB rowset_meta_pb;
     rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
@@ -667,6 +669,10 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
 
+void Tablet::_delete_stale_schema() {
+    _tablet_meta->delete_stale_schema();
+}
+
 void Tablet::delete_expired_inc_rowsets() {
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
@@ -697,6 +703,9 @@ void Tablet::delete_expired_inc_rowsets() {
         VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << version.first;
     }
 
+    // TODO(zhangqiang)
+    // delete stale schema
+    _delete_stale_schema();
     save_meta();
     wrlock.unlock();
 
@@ -715,6 +724,11 @@ void Tablet::delete_expired_stale_rowset() {
 
     if (_updates) {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
+        {
+            std::unique_lock wrlock(_meta_lock);
+            _delete_stale_schema();
+            save_meta();
+        }
         return;
     }
 
@@ -772,6 +786,7 @@ void Tablet::delete_expired_stale_rowset() {
         delete_rowset_time = timer.elapsed_time() / MICROS_PER_SEC;
 
 #ifndef BE_TEST
+        _delete_stale_schema();
         save_meta();
 #endif
     }
@@ -1833,6 +1848,21 @@ void Tablet::remove_all_delta_column_group_cache() const {
 
     std::shared_lock rdlock(_meta_lock);
     return remove_all_delta_column_group_cache_unlocked();
+}
+
+bool Tablet::check_schema_exist(int64_t id) {
+    std::lock_guard l(_meta_lock);
+    return _tablet_meta->check_schema_exist(id);
+}
+
+bool Tablet::insert_committed_rowset_schema(RowsetId rowset_id, int64_t schema_id) {
+    std::lock_guard l(_meta_lock);
+    return _tablet_meta->insert_committed_rowset_schema(rowset_id, schema_id);
+}
+
+void Tablet::erase_committed_rowset_schema(RowsetId rowset_id) {
+    std::lock_guard l(_meta_lock);
+    return _tablet_meta->erase_committed_rowset_schema(rowset_id);
 }
 
 void Tablet::remove_all_delta_column_group_cache_unlocked() const {

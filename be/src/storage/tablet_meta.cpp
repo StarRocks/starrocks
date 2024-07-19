@@ -203,6 +203,7 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
 
 void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
+    _history_schema[_schema->id()] = std::move(_schema);
     _schema = tablet_schema;
     (void)_save_meta(data_dir);
 }
@@ -298,6 +299,13 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
         _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {
         _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+    }
+
+    for (const auto& [id, schema_pb] : tablet_meta_pb.history_schema()) {
+        auto schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+        if (schema != nullptr) {
+            _history_schema[id] = std::move(schema);
+        }
     }
 
     // init _rs_metas
@@ -410,6 +418,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     if (_source_schema != nullptr) {
         _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
     }
+
+    for (auto& [_, schema] : _history_schema) {
+        schema->to_schema_pb(&(*tablet_meta_pb->mutable_history_schema())[schema->id()]);
+    }
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
@@ -469,6 +481,13 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
     // put to_delete rowsets in _stale_rs_metas.
     _stale_rs_metas.insert(_stale_rs_metas.end(), to_delete.begin(), to_delete.end());
 
+    for (auto& rs_meta : to_add) {
+        auto schema_id = rs_meta->tablet_schema()->id();
+        if (schema_id == _schema->id() || _history_schema.find(schema_id) != _history_schema.end()) {
+            rs_meta->set_tablet_schema_id();
+        }
+    }
+
     // put to_add rowsets in _rs_metas.
     _rs_metas.insert(_rs_metas.end(), to_add.begin(), to_add.end());
 }
@@ -514,6 +533,83 @@ void TabletMeta::delete_inc_rs_meta_by_version(const Version& version) {
             it++;
         }
     }
+}
+
+void TabletMeta::delete_stale_schema() {
+    std::set<int64> active_schema_ids;
+
+    for (auto& [_, schema_id] : _committed_rowsets_schema) {
+        active_schema_ids.insert(schema_id);
+    }
+
+    if (_updates != nullptr) {
+        _updates->get_active_schema_ids(&active_schema_ids);
+    } else {
+        {
+            auto it = _rs_metas.begin();
+            while (it != _rs_metas.end()) {
+                if ((*it)->has_tablet_schema_id()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                } else if ((*it)->has_tablet_schema()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                }
+            }
+        }
+
+        {
+            auto it = _inc_rs_metas.begin();
+            while (it != _inc_rs_metas.end()) {
+                if ((*it)->has_tablet_schema_id()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                } else if ((*it)->has_tablet_schema()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                }
+            }
+        }
+
+        {
+            auto it = _stale_rs_metas.begin();
+            while (it != _stale_rs_metas.end()) {
+                if ((*it)->has_tablet_schema_id()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                } else if ((*it)->has_tablet_schema()) {
+                    active_schema_ids.insert((*it)->tablet_schema()->id());
+                }
+            }
+        }
+    }
+
+    std::set<int64_t> erase_schema_ids;
+    for (auto [id, _] : _history_schema) {
+        if (active_schema_ids.count(id) <= 0) {
+            erase_schema_ids.insert(id);
+        }
+    }
+
+    for (auto id : erase_schema_ids) {
+        _history_schema.erase(id);
+    }
+}
+
+bool TabletMeta::check_schema_exist(int64_t id) {
+    if (id == _schema->id() || _history_schema.find(id) != _history_schema.end()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool TabletMeta::insert_committed_rowset_schema(RowsetId rowset_id, int64_t schema_id) {
+    if (schema_id != _schema->id() && _history_schema.find(schema_id) == _history_schema.end()) {
+        return false;
+    }
+
+    _committed_rowsets_schema[rowset_id] = schema_id;
+    return true;
+}
+
+void TabletMeta::erase_committed_rowset_schema(RowsetId rowset_id) {
+    _committed_rowsets_schema.erase(rowset_id);
 }
 
 RowsetMetaSharedPtr TabletMeta::acquire_inc_rs_meta_by_version(const Version& version) const {
