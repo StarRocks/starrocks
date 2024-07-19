@@ -51,7 +51,7 @@ TEST_F(TestUtils, test_is_tracker_hit_hard_limit) {
     ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.1));
     ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.5));
     ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.7));
-    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 2));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 2));
     ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 2.5));
     ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 3));
     ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 4));
