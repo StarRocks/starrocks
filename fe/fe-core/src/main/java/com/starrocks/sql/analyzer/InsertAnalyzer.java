@@ -167,7 +167,8 @@ public class InsertAnalyzer {
             List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
-                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                    // case-insensitive match. refer to AstBuilder#getColumnNames
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName.toLowerCase())) {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
