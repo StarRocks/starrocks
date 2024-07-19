@@ -35,6 +35,7 @@
 #include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
+#include "util/stack_util.cpp"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -450,6 +451,7 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
+        LOG(WARNING) << get_stack_trace();
         auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
