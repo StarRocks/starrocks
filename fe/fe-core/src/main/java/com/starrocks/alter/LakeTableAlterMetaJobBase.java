@@ -192,15 +192,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
 
+        LakeTable table = (LakeTable) db.getTable(tableName);
+        if (table == null) {
+            throw new AlterCancelException("table does not exist, tableName:" + tableName);
+        }
         try {
-            LakeTable table = (LakeTable) db.getTable(tableId);
-            if (table == null) {
-                // table has been dropped
-                LOG.warn("table does not exist, tableId:" + tableId);
-                throw new AlterCancelException("table does not exist, tableId:" + tableId);
-            } else {
-                updateCatalog(db, table);
-            }
+            updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
