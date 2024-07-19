@@ -372,10 +372,6 @@ public class SchemaScanNode extends ScanNode {
         return beScanRanges;
     }
 
-    @Override
-    public int getNumInstances() {
-        return beScanRanges == null ? 1 : beScanRanges.size();
-    }
 
     @Override
     public boolean canUseRuntimeAdaptiveDop() {

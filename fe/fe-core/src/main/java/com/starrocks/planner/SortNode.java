@@ -319,11 +319,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
-    }
-
     public void init(Analyzer analyzer) throws UserException {
         // Compute the memory layout for the generated tuple.
         computeStats(analyzer);

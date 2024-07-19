@@ -209,11 +209,6 @@ public class KuduScanNode extends ScanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
