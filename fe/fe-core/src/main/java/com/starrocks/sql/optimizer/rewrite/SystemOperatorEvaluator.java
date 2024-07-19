@@ -20,6 +20,7 @@ import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -41,6 +42,12 @@ public enum SystemOperatorEvaluator {
     }
 
     public ConstantOperator evaluation(CallOperator root) {
+        for (ScalarOperator child : root.getChildren()) {
+            if (!OperatorType.CONSTANT.equals(child.getOpType())) {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR, "System Function's args does't match.");
+            }
+        }
+
         Function fn = root.getFunction();
         if (fn == null) {
             String msg = String.format("No matching system function: %s", root.getFnName());

@@ -34,6 +34,7 @@ public class CboStatsShowExclusion implements GenericFunction {
 
     @Override
     public void init(FunctionCallExpr node, ConnectContext context) {
+        genericSystemFunctionCheck(node);
         if (node.getChildren().size() != 0) {
             throw new SemanticException(FN_NAME + " input parameter must be empty", node.getPos());
         }

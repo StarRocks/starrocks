@@ -17,8 +17,6 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -52,11 +50,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         if (call.isSystemFunction()) {
-            if (notAllConstant(call.getChildren())) {
-                throw new StarRocksPlannerException(ErrorType.USER_ERROR, "System Function's args does't match.");
-            } else {
-                return SystemOperatorEvaluator.INSTANCE.evaluation(call);
-            }
+            return SystemOperatorEvaluator.INSTANCE.evaluation(call);
         }
 
         if (call.isAggregate()) {

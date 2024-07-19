@@ -28,10 +28,6 @@ public interface GenericFunction {
         if (!(functionCallExpr.getFn() instanceof SystemFunction)) {
             throw new SemanticException("Cannot convert scalar function to system funcion.", functionCallExpr.getPos());
         }
-
-        if (functionCallExpr.getParams().isStar()) {
-            throw new SemanticException("Cannot pass '*' to system function.", functionCallExpr.getPos());
-        }
     }
 
     //analyze function argument
