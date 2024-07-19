@@ -333,8 +333,8 @@ public class AlterTest {
     }
 
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail();

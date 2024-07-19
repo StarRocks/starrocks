@@ -535,7 +535,6 @@ public class AlterJobMgr {
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
-        OlapTable olapTable = (OlapTable) table;
 
         // some operations will take long time to process, need to be done outside the databse lock
         boolean needProcessOutsideDatabaseLock = false;
@@ -544,6 +543,7 @@ public class AlterJobMgr {
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
         }
+        OlapTable olapTable = (OlapTable) table;
 
         List<AlterClause> alterClauses = stmt.getAlterClauseList();
         Locker locker = new Locker();
