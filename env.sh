@@ -38,19 +38,16 @@ fi
 
 # check python
 if [[ -z ${PYTHON} ]]; then
-    export PYTHON=python
+    export PYTHON=python3
 fi
 
-if ! ${PYTHON} --version; then
-    export PYTHON=python2.7
-    if ! ${PYTHON} --version; then
-        export PYTHON=python3
-        if ! ${PYTHON} --version; then
-            echo "Error: python is not found"
-            exit 1
-        fi
-    fi
+if ${PYTHON} --version | grep -q '^Python 3\.'; then
+    echo "Found python3, version: `\${PYTHON} --version`"
+else
+    echo "Error: python3 is needed"
+    exit 1
 fi
+
 
 # set GCC HOME
 if [[ -z ${STARROCKS_GCC_HOME} ]]; then
@@ -59,7 +56,7 @@ fi
 
 gcc_ver=`${STARROCKS_GCC_HOME}/bin/gcc -dumpfullversion -dumpversion`
 required_ver="5.3.1"
-if [[ ! "$(printf '%s\n' "$required_ver" "$gcc_ver" | sort -V | head -n1)" = "$required_ver" ]]; then 
+if [[ ! "$(printf '%s\n' "$required_ver" "$gcc_ver" | sort -V | head -n1)" = "$required_ver" ]]; then
     echo "Error: GCC version (${gcc_ver}) must be greater than or equal to ${required_ver}"
     exit 1
 fi
