@@ -652,7 +652,9 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     }
 
     int64_t num_table_rows = 0;
+    int64_t tablet_id = 0;
     for (const auto& tablet_scan_range : scan_ranges) {
+        tablet_id = tablet_scan_range.scan_range.internal_scan_range.tablet_id;
         int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
 #ifdef BE_TEST
         ASSIGN_OR_RETURN(auto tablet_num_rows,
@@ -676,6 +678,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     // scan_dop is restricted in the range [1, dop].
     *scan_dop = num_table_rows / *splitted_scan_rows;
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+
+    LOG(INFO) << "Tablet: " << tablet_id
+              << ", splitted_scan_rows = " << *splitted_scan_rows
+              << ", scan_dop = " << *scan_dop
+              << ", force_split = " << force_split
+              << ", pipeline_dop = " << pipeline_dop;
 
     if (force_split) {
         return true;
