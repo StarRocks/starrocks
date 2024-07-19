@@ -403,7 +403,7 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
         // (FIXME) add this api just for tests of external table
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AddPartitionClause) {
                 addPartition(stmt, alterClause);
