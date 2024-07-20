@@ -221,6 +221,7 @@ public class PropertyAnalyzerTest {
     @Test
     public void testEnablePersistentIndex() throws AnalysisException {
         // empty property
+        Config.enable_persistent_index_by_default = false;
         Map<String, String> property = new HashMap<>();
         Pair<Boolean, Boolean> ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property, true);
         Assert.assertEquals(false, ret.first);
