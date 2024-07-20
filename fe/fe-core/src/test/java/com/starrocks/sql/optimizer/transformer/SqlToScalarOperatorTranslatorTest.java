@@ -20,12 +20,16 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.parser.NodePosition;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
@@ -59,5 +63,18 @@ public class SqlToScalarOperatorTranslatorTest {
         CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate(complexFunc,
                 new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
         assertEquals("if", so.getFnName());
+    }
+
+    @Test
+    public void testTranslateSystemFunction() {
+        FunctionName fnName = FunctionName.createFnName("system$cbo_stats_add_exclusion");
+        StringLiteral test = new StringLiteral("catalog.db.table");
+        SystemFunctionCallExpr systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, ImmutableList.of(test)), NodePosition.ZERO);
+
+        CallOperator call = (CallOperator) SqlToScalarOperatorTranslator.translate(systemFunctionCallExpr,
+                new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
+        assertEquals("system$cbo_stats_add_exclusion", call.getFnName());
+        assertEquals(OperatorType.CONSTANT, call.getChild(0).getOpType());
     }
 }

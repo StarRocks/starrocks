@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -26,7 +30,9 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -34,6 +40,8 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Map;
 
 public class ExpressionAnalyzerTest extends PlanTestBase {
 
@@ -225,5 +233,46 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         userVariableExpr.setValue(expr);
         UserVariableExpr copy = (UserVariableExpr) userVariableExpr.clone();
         Assert.assertEquals(userVariableExpr, copy);
+    }
+
+    @Test
+    public void testSystemFunctionAnalyzer() {
+        Type[] argumentTypes = new Type[0];
+        String functionName = "system$cbo_stats_show_exclusion";
+        Function fn = Expr.getBuiltinFunction(functionName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertEquals(fn.functionName(), functionName);
+        Assert.assertEquals(fn.getReturnType(), Type.VARCHAR);
+
+        FunctionName fnName = FunctionName.createFnName("system$test");
+        StringLiteral test = new StringLiteral("catalog.db.table");
+        SystemFunctionCallExpr systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, ImmutableList.of(test)), NodePosition.ZERO);
+
+        ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
+        try {
+            visitor.visitSystemFunctionCall(systemFunctionCallExpr,
+                    new Scope(RelationId.anonymous(), new RelationFields()));
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().
+                    contains("No matching system function with signature: system$test"));
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
+
+        fnName = FunctionName.createFnName("system$cbo_stats_show_exclusion");
+        systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, ImmutableList.of()), NodePosition.ZERO);
+
+        Map<Function, GenericFunction> systemFunctionTables = GlobalStateMgr.getCurrentState().getGenericFunctions();
+        try {
+            systemFunctionTables.clear();
+            visitor.visitSystemFunctionCall(systemFunctionCallExpr,
+                    new Scope(RelationId.anonymous(), new RelationFields()));
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().
+                    contains("No matching system function with signature: system$cbo_stats_show_exclusion"));
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
     }
 }
