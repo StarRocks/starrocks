@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "runtime/mem_tracker.h"
+
 namespace starrocks {
 class TestUtils : public ::testing::Test {};
 TEST_F(TestUtils, test_valid_decimal) {
@@ -41,4 +43,18 @@ TEST_F(TestUtils, test_valid_decimal) {
     ASSERT_TRUE(valid_decimal("31.4", 3, 1));
     ASSERT_TRUE(valid_decimal("314.15925", 8, 5));
 }
+
+TEST_F(TestUtils, test_is_tracker_hit_hard_limit) {
+    std::unique_ptr<MemTracker> tracker = std::make_unique<MemTracker>(1000, "test", nullptr);
+    tracker->consume(2000);
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 0.1));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.1));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.5));
+    ASSERT_TRUE(is_tracker_hit_hard_limit(tracker.get(), 1.7));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 2));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 2.5));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 3));
+    ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 4));
+}
+
 } // namespace starrocks
