@@ -41,6 +41,8 @@ public class SkewJoinTest extends PlanTestBase {
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
