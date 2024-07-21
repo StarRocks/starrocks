@@ -13,9 +13,11 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.LocalExchangerType;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -29,7 +31,6 @@ import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -43,6 +44,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
@@ -126,7 +130,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, requireEmptyForChild);
             }
 
-            ColumnRefOperator rightSkewColumn = findRightSkewColumn(opt);
+            Pair<ColumnRefOperator, ColumnRefOperator> skewColumns = findRightSkewColumn(opt);
+            ColumnRefOperator leftSkewColumn = skewColumns.first;
+            ColumnRefOperator rightSkewColumn = skewColumns.second;
+            if (rightSkewColumn == null) {
+                return opt;
+            }
 
             OptExpression leftExchangeOptExp = opt.inputAt(0);
             PhysicalDistributionOperator leftExchangeOp = (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
@@ -153,7 +162,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setCost(rightExchangeOptExp.getCost()).build();
 
             List<ScalarOperator> inPredicateParamsForLeftTable = new ArrayList<>();
-            inPredicateParamsForLeftTable.add(originalShuffleJoinOperator.getSkewColumn());
+            inPredicateParamsForLeftTable.add(leftSkewColumn);
             inPredicateParamsForLeftTable.addAll(originalShuffleJoinOperator.getSkewValues());
 
             List<ScalarOperator> inPredicateParamsForRightTable = new ArrayList<>();
@@ -161,12 +170,19 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             inPredicateParamsForRightTable.addAll(originalShuffleJoinOperator.getSkewValues());
 
             ScalarOperator inSkewPredicateForLeftTable = new InPredicateOperator(false, inPredicateParamsForLeftTable);
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            inSkewPredicateForLeftTable = rewriter.rewrite(inSkewPredicateForLeftTable,
+                    ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule()));
             ScalarOperator notInSkewPredicateForLeftTable =
-                    new InPredicateOperator(true, inPredicateParamsForLeftTable);
+                    new InPredicateOperator(true, inSkewPredicateForLeftTable.getChildren());
+
             ScalarOperator inSkewPredicateForRightTable =
                     new InPredicateOperator(false, inPredicateParamsForRightTable);
+            rewriter = new ScalarOperatorRewriter();
+            inSkewPredicateForRightTable = rewriter.rewrite(inSkewPredicateForRightTable,
+                    ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule()));
             ScalarOperator notInSkewPredicateForRightTable =
-                    new InPredicateOperator(true, inPredicateParamsForRightTable);
+                    new InPredicateOperator(true, inSkewPredicateForRightTable.getChildren());
 
             Map<ColumnRefOperator, ColumnRefOperator> leftSplitOutputColumnRefMap =
                     generateOutputColumnRefMap(
@@ -356,7 +372,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return new PhysicalMergeOperator(outputColumns, childOutputColumns, localExchangeType, limit);
         }
 
-        private ColumnRefOperator findRightSkewColumn(OptExpression input) {
+        private Pair<ColumnRefOperator, ColumnRefOperator> findRightSkewColumn(OptExpression input) {
             PhysicalHashJoinOperator oldJoinOperator = (PhysicalHashJoinOperator) input.getOp();
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
@@ -379,31 +395,31 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     break;
                 } else {
                     // find the skew column in the left/right child project map
-                    if (input.inputAt(0).getOp() instanceof LogicalProjectOperator) {
-                        Map<ColumnRefOperator, ScalarOperator> projectMap = ((LogicalProjectOperator) input.inputAt(0).
-                                getOp()).getColumnRefMap();
+                    if (input.inputAt(0).inputAt(0).getOp().getProjection() != null) {
+                        Map<ColumnRefOperator, ScalarOperator> projectMap =
+                                input.inputAt(0).inputAt(0).getOp().getProjection().getColumnRefMap();
                         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
                         ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
                         ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
                         if (skewColumn.equals(rewriteChild0)) {
-                            skewColumn = rewriteChild0;
+                            skewColumn = child0;
                             rightSkewColumn = child1;
                             break;
                         } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
-                            skewColumn = rewriteChild0.getChild(0);
+                            skewColumn = child0;
                             rightSkewColumn = child1;
                         } else if (skewColumn.equals(rewriteChild1)) {
-                            skewColumn = rewriteChild1;
-                            rightSkewColumn = child0;
+                            skewColumn = child0;
+                            rightSkewColumn = child1;
                             break;
                         } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
-                            skewColumn = rewriteChild1.getChild(0);
-                            rightSkewColumn = child0;
+                            skewColumn = child0;
+                            rightSkewColumn = child1;
                         }
                     }
                 }
             }
-            return (ColumnRefOperator) rightSkewColumn;
+            return Pair.create((ColumnRefOperator) skewColumn, (ColumnRefOperator) rightSkewColumn);
         }
 
         private Map<ColumnRefOperator, ColumnRefOperator> generateOutputColumnRefMap(
