@@ -164,6 +164,8 @@ public class SlotDescriptor {
                         scalarType.getPrimitiveType(),
                         scalarType.getScalarPrecision(),
                         scalarType.getScalarScale());
+            } else if (this.originType.isVarchar()) {
+                this.type = ScalarType.createVarcharType(scalarType.getLength());
             } else {
                 this.type = ScalarType.createType(this.originType.getPrimitiveType());
             }
