@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -774,7 +775,8 @@ public class StmtExecutor {
     }
 
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    private void processQueryScopeHint() throws DdlException {
+    @VisibleForTesting
+    public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
         UUID queryId = context.getQueryId();
         Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
