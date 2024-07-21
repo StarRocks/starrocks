@@ -164,6 +164,9 @@ select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_
 -- left join
 select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
 
+-- multi column
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+
 -- topn can execute correctly
 select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
 
