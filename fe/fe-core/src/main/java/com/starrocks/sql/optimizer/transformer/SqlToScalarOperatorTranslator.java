@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -107,6 +108,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -702,6 +704,13 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSystemFunctionCall(SystemFunctionCallExpr node, Context context) {
             // check privilege
             GenericFunction genericFunc = Expr.getGenericFunction(node.getFn());
+            if (genericFunc == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        node.getFn().getFunctionName(),
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(node.getFn().getArgs()).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
             genericFunc.prepare(node, session);
 
             List<ScalarOperator> arguments = node.getChildren()
