@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -132,7 +133,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
         if (executor != null) {
             for (SelectListItem item : node.getSelectList().getItems()) {
-                if (!item.isStar()) {
+                if (!item.isStar() && (item.getExpr() instanceof SystemFunctionCallExpr)) {
                     ExpressionAnalyzer.analyzeSystemFunctionExpression(item.getExpr(), executor, null);
                 }
             }

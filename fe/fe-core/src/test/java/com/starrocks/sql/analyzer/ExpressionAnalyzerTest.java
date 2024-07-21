@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -26,6 +27,7 @@ import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -41,6 +43,7 @@ import com.starrocks.thrift.TExprNodeType;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
 
 public class ExpressionAnalyzerTest extends PlanTestBase {
@@ -262,7 +265,33 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         fnName = FunctionName.createFnName("system$cbo_stats_show_exclusion");
         systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
                 new FunctionParams(false, ImmutableList.of()), NodePosition.ZERO);
+        visitor.visitSystemFunctionCall(systemFunctionCallExpr,
+                new Scope(RelationId.anonymous(), new RelationFields()));
+        Assert.assertTrue("analyze exception", systemFunctionCallExpr.getType() == Type.VARCHAR);
 
+        try {
+            List<Type> paramTypes = Lists.newArrayList();
+            paramTypes.add(ScalarType.DOUBLE);
+            paramTypes.add(Type.TINYINT);
+            Function functionNotSystem = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Type[] argumentTypesInner = systemFunctionCallExpr.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            Function fnSystem = Expr.getBuiltinFunction(systemFunctionCallExpr.getFnName().getFunction(),
+                    argumentTypesInner, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            GenericFunction genericFunc = Expr.getGenericFunction(fnSystem);
+            systemFunctionCallExpr.setFn(functionNotSystem);
+            genericFunc.init(systemFunctionCallExpr, null);
+
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().
+                    contains("Cannot convert scalar function to system funcion."));
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
+
+        fnName = FunctionName.createFnName("system$cbo_stats_show_exclusion");
+        systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, ImmutableList.of()), NodePosition.ZERO);
         Map<Function, GenericFunction> systemFunctionTables = GlobalStateMgr.getCurrentState().getGenericFunctions();
         try {
             systemFunctionTables.clear();
@@ -275,4 +304,5 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Assert.fail("analyze exception: " + e);
         }
     }
+
 }

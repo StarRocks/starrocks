@@ -75,4 +75,20 @@ public class SystemOperatorEvaluatorTest {
         assertEquals(OperatorType.CONSTANT, result.getOpType());
         assertTrue(((ConstantOperator) result).isNull());
     }
+
+    @Test
+    public void testSystemFunction() {
+        try {
+            SystemFunction fn = SystemFunction.createSystemFunctionBuiltin("system@cbo_stats_add_exclusion",
+                    new ArrayList<Type>((Arrays.asList(Type.VARCHAR))), false, Type.VARCHAR);
+        } catch (Throwable e) {
+            if (e.getMessage().
+                    contains("System function illegal functionName:system@cbo_stats_add_exclusion")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().
+                        contains("System function illegal functionName:system@cbo_stats_add_exclusion"));
+            } else {
+                Assert.fail("createSystemFunctionBuiltin exception: " + e);
+            }
+        }
+    }
 }
