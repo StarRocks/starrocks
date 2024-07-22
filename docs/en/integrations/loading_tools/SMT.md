@@ -106,7 +106,7 @@ The generally involved steps are as follows:
 
 Flink CDC connector and SMT can synchronize data from MySQL within subsecond. 
 
-![img](../../assets/load_tools.png)
+![img](../../_assets/load_tools.png)
 
 As shown in the image, SMT can automatically generate CREATE TABLE statements of the Flink's source and sink tables based on the cluster information and table structure of MySQL and StarRocks. Flink CDC connector reads the MySQL Binlog and Flink-connector-starrocks writes data to StarRocks .
 

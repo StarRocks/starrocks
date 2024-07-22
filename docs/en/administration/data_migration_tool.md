@@ -281,7 +281,7 @@ You can check the migration progress through the migration tool log **log/sync.I
 
 Example:
 
-![img](../assets/data_migration_tool-1.png)
+![img](../_assets/data_migration_tool-1.png)
 
 The important metrics are as follows:
 

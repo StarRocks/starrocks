@@ -98,7 +98,7 @@ DISTRIBUTED BY HASH(k1);
 
 You can create a materialized view whose partitions correspond to the partitions of the base table one-to-one by using the same Partitioning Key.
 
-![Partitioned Materialized View-1](../assets/partitioned_mv-1.png)
+![Partitioned Materialized View-1](../_assets/partitioned_mv-1.png)
 
 - If the Partitioning Key of the base table is the DATE or DATETIME type, you can directly specify the same Partitioning Key for the materialized view.
 
@@ -146,7 +146,7 @@ You can create a materialized view whose partitions correspond to the partitions
 
 You can create a materialized view whose partitioning granularity is larger than that of the base table by using the [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) function on the Partitioning Key. When data changes are detected in the partitions of the base table, StarRocks refreshes the corresponding rollup partitions in the materialized view.
 
-![Partitioned Materialized View-2](../assets/partitioned_mv-2.png)
+![Partitioned Materialized View-2](../_assets/partitioned_mv-2.png)
 
 - If the Partitioning Key of the base table is the DATE or DATETIME type, you can directly use the date_trunc function on the Partitioning Key of the base table.
 
@@ -227,7 +227,7 @@ GROUP BY datekey, k1;
 
 ### Align partitions with multiple base tables
 
-![Partitioned Materialized View-3](../assets/partitioned_mv-3.png)
+![Partitioned Materialized View-3](../_assets/partitioned_mv-3.png)
 
 You can create a materialized view whose partitions are aligned with those of multiple base tables, as long as the partitions of the base tables can align with each other, that is, the base tables use the same type of Partitioning Key. You can use JOIN to connect the base tables, and set the Partition Key as the common column. Alternatively, you can connect them with UNION. The base tables with aligned partitions are called reference tables. Data changes in any of the reference tables will trigger the refresh task on the corresponding partitions of the materialized view.
 
@@ -359,4 +359,4 @@ WHERE datekey='2021-01-01'
 GROUP BY datekey, k1;
 ```
 
-![Partitioned Materialized View-4](../assets/partitioned_mv-4.png)
+![Partitioned Materialized View-4](../_assets/partitioned_mv-4.png)

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Table overview
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
@@ -100,7 +100,7 @@ StarRocks provides four types of tables which are Duplicate Key tables, Primary 
 
 StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to evenly distribute data across BEs. A well-designed data distribution strategy can effectively reduce the amount of data scanned and maximize StarRocks' concurrent processing capabilities, thereby increasing query performance.
 
-![img](../assets/table_design/table_overview.png)
+![img](../_assets/table_design/table_overview.png)
 
 #### Partitioning
 
