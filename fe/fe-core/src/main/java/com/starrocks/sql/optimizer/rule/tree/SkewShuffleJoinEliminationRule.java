@@ -130,10 +130,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, requireEmptyForChild);
             }
 
-            Pair<ColumnRefOperator, ColumnRefOperator> skewColumns = findRightSkewColumn(opt);
+            // find skew columns, both can be warped with cast if column type mismatch
+            Pair<ColumnRefOperator, ColumnRefOperator> skewColumns = findSkewColumns(opt);
             ColumnRefOperator leftSkewColumn = skewColumns.first;
             ColumnRefOperator rightSkewColumn = skewColumns.second;
-            if (rightSkewColumn == null) {
+            if (leftSkewColumn == null || rightSkewColumn == null) {
                 return opt;
             }
 
@@ -372,7 +373,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return new PhysicalMergeOperator(outputColumns, childOutputColumns, localExchangeType, limit);
         }
 
-        private Pair<ColumnRefOperator, ColumnRefOperator> findRightSkewColumn(OptExpression input) {
+        private Pair<ColumnRefOperator, ColumnRefOperator> findSkewColumns(OptExpression input) {
             PhysicalHashJoinOperator oldJoinOperator = (PhysicalHashJoinOperator) input.getOp();
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();

@@ -704,6 +704,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
+            currentExecGroup.add(projectNode);
             return inputFragment;
         }
 
@@ -1422,6 +1423,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
+                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
@@ -2769,13 +2771,15 @@ public class PlanFragmentBuilder {
                     currentExecGroup.setColocateGroup();
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
-                } else if ((distributionMode.equals(JoinNode.DistributionMode.BROADCAST) || distributionMode.equals(
-                        JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) &&
-                        !leftExecGroup.isDisableColocateGroup()) {
+                } else if (!leftExecGroup.isDisableColocateGroup() &&
+                        (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) ||
+                                (distributionMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET) &&
+                                        !joinOperator.isRightJoin()))) {
+                    // case 1: broadcast join
+                    // case 2: local bucket shuffle (no-right) join
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup = execGroups.newExecGroup();
                     currentExecGroup.setDisableColocateGroup();
                 }
             }
@@ -3498,14 +3502,6 @@ public class PlanFragmentBuilder {
                 leftFragment.mergeQueryDictExprs(rightFragment.getQueryGlobalDictExprs());
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
-                //                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                //                        leftFragment.getDataPartition().getPartitionExprs());
-                //                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                //                        rightFragment.getDataPartition().getPartitionExprs());
-                //
-                //                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
-                //                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
-
                 PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
                         joinNode, leftFragment.getChild(0).getOutputPartition());
                 // Currently, we always generate new fragment for PhysicalDistribution.
