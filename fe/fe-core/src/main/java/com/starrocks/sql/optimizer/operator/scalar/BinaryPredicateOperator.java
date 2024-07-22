@@ -45,7 +45,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.GT, BinaryType.LE)
                     .build();
 
-    private final BinaryType type;
+    private BinaryType type;
 
     public BinaryPredicateOperator(BinaryType type, ScalarOperator... arguments) {
         super(OperatorType.BINARY, arguments);
@@ -57,6 +57,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.size() == 2);
+    }
+
+    public void setBinaryType(BinaryType type) {
+        this.type = type;
     }
 
     public BinaryType getBinaryType() {
@@ -98,13 +102,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
         if (getBinaryType() == BinaryType.NE) {
             return null;
         }
+        BinaryPredicateOperator result = (BinaryPredicateOperator) clone();
         if (getBinaryType() == BinaryType.LT) {
-            return new BinaryPredicateOperator(BinaryType.LE, getChildren());
+            result.setBinaryType(BinaryType.LE);
         }
         if (getBinaryType() == BinaryType.GT) {
-            return new BinaryPredicateOperator(BinaryType.GE, getChildren());
+            result.setBinaryType(BinaryType.GE);
         }
-        return (BinaryPredicateOperator) clone();
+        return result;
     }
 
     @Override

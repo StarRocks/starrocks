@@ -192,8 +192,8 @@ public class PartitionPruneTest extends PlanTestBase {
     @Test
     public void testGeneratedColumnPrune() throws Exception {
         // c2
-//        starRocksAssert.query("select * from t_gen_col where c2 = 1 ")
-//                .explainContains("partitions=3/7");
+        starRocksAssert.query("select * from t_gen_col where c2 = 1 ")
+                .explainContains("partitions=3/7");
 
         // c1
         starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' ")
@@ -201,9 +201,33 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.query("select * from t_gen_col where c1 = '2024-02-01' ")
                 .explainContains("partitions=2/7");
         starRocksAssert.query("select * from t_gen_col where c1 < '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 <= '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 > '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 >= '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 in ('2024-02-01') ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select * from t_gen_col where c1 in ('2024-02-01', '2024-01-01') ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 in ('2027-01-01') ")
+                .explainContains("partitions=0/7");
+        starRocksAssert.query("select * from t_gen_col where c1 != '2024-02-01' ")
+                .explainContains("partitions=7/7");
+
+        // compound
+        starRocksAssert.query("select * from t_gen_col where c1 >= '2024-02-01' and c1 <= '2024-03-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 >= '2024-02-01' and c1 = '2027-03-01' ")
+                .explainContains("partitions=0/7");
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-02-01' or c1 = '2024-03-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-02-01' or c1 = '2027-03-01' ")
                 .explainContains("partitions=2/7");
 
-        // c1 & c2
+        // c1 && c2
         starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' and c2 = 1 ")
                 .explainContains("partitions=1/7");
     }
