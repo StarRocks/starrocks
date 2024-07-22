@@ -22,7 +22,7 @@ STDDEV_SAMP(expr)
 
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
-![image](../../../assets/stddevsamp_formula.png)
+![image](../../../_assets/stddevsamp_formula.png)
 
 ## Examples
 

@@ -23,7 +23,7 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 
 Modern distributed database systems generally use the following basic distribution methods: Round-Robin, Range, List, and Hash.
 
-![Data distribution method](../assets/3.3.2-1.png)
+![Data distribution method](../_assets/3.3.2-1.png)
 
 - **Round-Robin**: distributes data across different nodes in a cyclic.
 - **Range**: distributes data across different nodes based on the ranges of partitioning column values. As shown in the diagram, the ranges [1-3] and [4-6] correspond to different nodes.

@@ -122,7 +122,7 @@ StarRocks 集群的 EC2 实例关联角色通过承担您所创建和配置的 I
 
 StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方式的原理和差异如下图所示。
 
-![Credentials](../assets/authenticate_s3_credential_methods.png)
+![Credentials](../_assets/authenticate_s3_credential_methods.png)
 
 ## 参数配置
 

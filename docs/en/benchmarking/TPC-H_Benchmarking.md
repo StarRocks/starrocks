@@ -10,7 +10,7 @@ TPC-H is a decision support benchmark developed by the Transaction Processing Pe
 
 A comparative test was conducted on the TPC-H 100G scale dataset, with a total of 22 queries. The results are as follows:
 
-![TPCH 100G results](../assets/tpch.png)
+![TPCH 100G results](../_assets/tpch.png)
 
 StarRocks tested two methods using local storage and Hive table queries. StarRocks Hive table and Trino query the same data. The data is stored in ORC format and compressed in zlib format.
 
