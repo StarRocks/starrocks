@@ -89,7 +89,7 @@
                         "deployment/shared_data/gcs",
                         "deployment/shared_data/azure",
                         "deployment/shared_data/minio",
-                        "deployment/shared_data/competence_boundary-shared-data"
+                        "deployment/shared_data/feature-support-shared-data"
                     ]
                 },
                 {
@@ -1556,7 +1556,7 @@
                         "deployment/shared_data/minio",
                         "deployment/shared_data/hdfs",
                         "deployment/shared_data/other",
-                        "deployment/shared_data/competence_boundary-shared-data"
+                        "deployment/shared_data/feature-support-shared-data"
                     ]
                 },
                 {
