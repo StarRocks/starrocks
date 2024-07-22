@@ -89,6 +89,24 @@ public class BinaryPredicateOperator extends PredicateOperator {
         }
     }
 
+    /**
+     * For Non-Strict Monotonic function, we need to convert
+     * 1. > to >=, and < to <=
+     * 2. !=, not supported
+     */
+    public BinaryPredicateOperator normalizeNonStrictMonotonic() {
+        if (getBinaryType() == BinaryType.NE) {
+            return null;
+        }
+        if (getBinaryType() == BinaryType.LT) {
+            return new BinaryPredicateOperator(BinaryType.LE, getChildren());
+        }
+        if (getBinaryType() == BinaryType.GT) {
+            return new BinaryPredicateOperator(BinaryType.GE, getChildren());
+        }
+        return (BinaryPredicateOperator) clone();
+    }
+
     @Override
     public String toString() {
         return getChild(0).toString() + " " + type.toString() + " " + getChild(1).toString();

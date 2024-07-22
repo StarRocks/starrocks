@@ -320,7 +320,10 @@ public class ListPartitionPruner implements PartitionPruner {
 
             @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
-                ScalarOperator result = operator.clone();
+                BinaryPredicateOperator result = operator.normalizeNonStrictMonotonic();
+                if (result == null) {
+                    return null;
+                }
                 result.setChild(0, generatedColumn);
                 result.setChild(1, replaceExpr(1));
                 return result;
