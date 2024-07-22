@@ -17,6 +17,7 @@ package com.starrocks.udf;
 import com.starrocks.utils.Platform;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -722,6 +723,21 @@ public class UDFHelper {
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
         }
+    }
+
+    public static Object[] batchCreateDirectBuffer(long data, int[] offsets, int size) throws Exception {
+        Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
+        Constructor<?> constructor = directByteBufferClass.getDeclaredConstructor(long.class, int.class);
+        constructor.setAccessible(true);
+
+        Object[] res = new Object[size];
+        int nums = 0;
+        for (int i = 0;i < size; i++) {
+            long address = data + offsets[i];
+            int length = offsets[i + 1] - offsets[i];
+            res[nums++] = constructor.newInstance(address, length);
+        }
+        return res;
     }
 
     // batch call Object(Object...)
