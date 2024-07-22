@@ -1306,10 +1306,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_BY_QUERY_REWRITE)
-    private boolean enableOptimizerSkewJoinByQueryRewrite = false;
+    private boolean enableOptimizerSkewJoinByQueryRewrite = true;
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_BY_BROADCAST_SKEW_VALUES)
-    private boolean enableOptimizerSkewJoinByBroadCastSkewValues = true;
+    private boolean enableOptimizerSkewJoinByBroadCastSkewValues = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
