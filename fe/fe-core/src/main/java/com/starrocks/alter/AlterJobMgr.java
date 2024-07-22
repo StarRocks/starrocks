@@ -547,7 +547,7 @@ public class AlterJobMgr {
 
         List<AlterClause> alterClauses = stmt.getAlterClauseList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             if (olapTable.getState() != OlapTableState.NORMAL) {
                 throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
@@ -633,7 +633,7 @@ public class AlterJobMgr {
                 throw new DdlException("Invalid alter operations: " + stmt.getAlterClauseList());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // the following ops should be done outside db lock. because it contains synchronized create operation
