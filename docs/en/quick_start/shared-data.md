@@ -6,7 +6,7 @@ description: Separate compute and storage
 
 # Separate storage and compute
 
-import DDL from '../assets/quick-start/_DDL.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
