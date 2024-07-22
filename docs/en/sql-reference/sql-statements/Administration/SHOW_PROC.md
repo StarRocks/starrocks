@@ -392,7 +392,7 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **Return** | **Description**                                  |
 | ---------- | ------------------------------------------------ |
-| Item       | Sub-command item in `cluster_balance`.          |
+| Item       | Sub-command item in `cluster_balance`. <ul><li>cluster_load_stat: The current load status of the cluster.</li><li>working_slots: The number of currently available working slots.</li><li>sched_stat: The current status of the scheduler.</li><li>priority_repair: The number of Tablet repair tasks that are prioritized.</li><li>pending_tablets: The number of Tablets waiting to be processed.</li><li>running_tablets: The number of Tablets currently being repaired.</li><li>history_tablets: The total number of Tablets repaired historically.</li></ul>         |
 | Number     | Number of each sub-command in `cluster_balance`. |
 
 Example 12: Shows the information of Colocate Join groups in the cluster.
