@@ -217,5 +217,10 @@ public class MapType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+
+    @Override
+    public int getMaxUniqueId() {
+        return Math.max(keyType.getMaxUniqueId(), valueType.getMaxUniqueId());
+    }
 }
 

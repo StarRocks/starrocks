@@ -600,6 +600,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             fields.add(field);
         }
+        if (fields.isEmpty()) {
+            throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
+                                   "], can not drop any more.");
+        }
         oriFieldType.updateFields(fields);
 
         // update the modifyColumn int index schema.
@@ -1782,7 +1786,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-  
+
                 int id = olapTable.incAndGetMaxColUniqueId();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
@@ -2657,15 +2661,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
-
-            // update max column unique id
-            int maxColUniqueId = olapTable.getMaxColUniqueId();
-            for (Column column : indexSchemaMap.get(olapTable.getBaseIndexId())) {
-                if (column.getUniqueId() > maxColUniqueId) {
-                    maxColUniqueId = column.getUniqueId();
-                }
-            }
-            olapTable.setMaxColUniqueId(maxColUniqueId);
 
             // If modified columns are already done, inactive related mv
             inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);

@@ -350,5 +350,14 @@ public class StructType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+
+    @Override
+    public int getMaxUniqueId() {
+        int maxUniqueId = -1;
+        for (StructField f : fields) {
+            maxUniqueId = Math.max(maxUniqueId, f.getMaxUniqueId());
+        }
+        return maxUniqueId;
+    }
 }
 

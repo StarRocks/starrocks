@@ -170,6 +170,10 @@ public class ArrayType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+    @Override
+    public int getMaxUniqueId() {
+        return itemType.getMaxUniqueId();
+    }
 }
 
 
