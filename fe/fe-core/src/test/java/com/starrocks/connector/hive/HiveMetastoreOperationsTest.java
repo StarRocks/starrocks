@@ -365,7 +365,7 @@ public class HiveMetastoreOperationsTest {
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs().stream()
                 .map(def -> def.toColumn(null)).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
     }
@@ -405,7 +405,7 @@ public class HiveMetastoreOperationsTest {
                 .stream()
                 .map(columnDef -> columnDef.toColumn(null))
                 .collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        stmt.setColumns(columns);
 
         CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
                 false,

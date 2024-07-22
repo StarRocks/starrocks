@@ -432,8 +432,7 @@ public class CreateTableTest {
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
-                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
-                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable(
                                 "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"

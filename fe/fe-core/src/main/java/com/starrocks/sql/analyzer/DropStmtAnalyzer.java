@@ -70,11 +70,7 @@ public class DropStmtAnalyzer {
 
             // check catalog
             String catalogName = statement.getCatalogName();
-            try {
-                MetaUtils.checkCatalogExistAndReport(catalogName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-            }
+            MetaUtils.checkCatalogExistAndReport(catalogName);
 
             String dbName = statement.getDbName();
             // check database
@@ -136,11 +132,7 @@ public class DropStmtAnalyzer {
             if (!CatalogMgr.isInternalCatalog(catalogName)) {
                 throw new SemanticException("drop temporary table can only be execute under default catalog");
             }
-            try {
-                MetaUtils.checkCatalogExistAndReport(catalogName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-            }
+            MetaUtils.checkCatalogExistAndReport(catalogName);
 
             String dbName = statement.getDbName();
             // check database
@@ -181,11 +173,7 @@ public class DropStmtAnalyzer {
                 statement.setCatalogName(context.getCurrentCatalog());
             }
 
-            try {
-                MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, statement.getCatalogName());
-            }
+            MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());
 
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
