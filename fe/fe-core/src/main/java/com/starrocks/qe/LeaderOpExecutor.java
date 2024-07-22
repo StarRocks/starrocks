@@ -45,7 +45,8 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
@@ -168,9 +169,10 @@ public class LeaderOpExecutor {
         TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
-        result = FrontendServiceProxy.call(thriftAddress,
+        result = ThriftRPCRequestExecutor.call(
+                ThriftConnectionPool.frontendPool,
+                thriftAddress,
                 thriftTimeoutMs,
-                Config.thrift_rpc_retry_times,
                 client -> client.forward(params));
     }
 
