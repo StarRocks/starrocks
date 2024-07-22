@@ -117,7 +117,12 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
+<<<<<<< HEAD
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -1119,7 +1124,9 @@ public class StarRocksAssert {
 
         public void explainContains(String... keywords) throws Exception {
             String plan = explainQuery();
-            Assert.assertTrue(plan, Stream.of(keywords).allMatch(plan::contains));
+            for (String keyword : keywords) {
+                PlanTestBase.assertContains(plan, keyword);
+            }
         }
 
         public void explainContains(String keywords, int count) throws Exception {
@@ -1127,7 +1134,7 @@ public class StarRocksAssert {
         }
 
         public void explainWithout(String s) throws Exception {
-            Assert.assertFalse(explainQuery().contains(s));
+            PlanTestBase.assertNotContains(explainQuery(), s);
         }
 
         public String explainQuery() throws Exception {

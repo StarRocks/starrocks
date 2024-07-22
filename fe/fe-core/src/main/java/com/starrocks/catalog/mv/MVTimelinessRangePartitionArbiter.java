@@ -15,6 +15,7 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -28,6 +29,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.TableWithPartitions;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffResult;
 import com.starrocks.sql.common.RangePartitionDiffer;
@@ -68,18 +71,40 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // if it needs to refresh based on non-ref base tables, return full refresh directly.
         boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTableAndColumns);
-        logMVPrepare(mv, "Is refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
+        logMVPrepare(mv, "MV refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
         if (isRefreshBasedOnNonRefTables) {
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
         }
 
+        // record the relation of partitions between materialized view and base partition table
+        MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
+                mvTimelinessInfo);
+
+        // collect all ref base table's partition range map
+        Map<Table, Map<String, Set<String>>> extBaseToMVPartitionNameMap = Maps.newHashMap();
+        Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
+                RangePartitionDiffer.syncBaseTablePartitionInfos(mv, partitionExpr, extBaseToMVPartitionNameMap);
+
+        // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
+        // otherwise base table(mv) may lose partition names of the real base table changed partitions.
+        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), entry -> {
+            Table baseTable = entry.getKey();
+            Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
+            Map<String, Range<PartitionKey>> refBaseTablePartitionRangeMap = basePartitionNameToRangeMap.get(baseTable);
+            Map<String, PCell> basePartitionNameToRanges = entry.getValue();
+            basePartitionNameToRanges.entrySet().forEach(e -> refBaseTablePartitionRangeMap.put(e.getKey(),
+                    ((PRangeCell) e.getValue()).getRange()));
+        });
+
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-        RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null, true);
+        RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null,
+                extBaseToMVPartitionNameMap, basePartitionNameToRangeMap, isQueryRewrite);
         if (differ == null) {
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));
         }
-        Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap = differ.refBaseTablePartitionMap;
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
@@ -92,9 +117,11 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // add all ref base table's added partitions to `mvPartitionMap`
         mvToRefreshPartitionNames.addAll(rangePartitionDiff.getAdds().keySet());
         mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
+        // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
+        Map<String, PCell> mvPartitionNameToCell = mvPartitionNameToRangeMap.entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getKey(), e -> new PRangeCell(e.getValue())));
+        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
 
-        // record the relation of partitions between materialized view and base partition table
-        MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
         Map<Table, Expr> baseTableToPartitionExprs = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
                 .generateBaseRefMap(basePartitionNameToRangeMap, baseTableToPartitionExprs, mvPartitionNameToRangeMap);
@@ -103,9 +130,6 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
-        // update mv's to refresh partitions based on base table's partition changes
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
-                mvTimelinessInfo);
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
 
         // handle mv's partition expr is function call expr
@@ -121,7 +145,6 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                         baseToMvNameRef, mvToBaseNameRef, Sets.newHashSet());
             }
         }
-
         // update mv's to refresh partitions
         mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;

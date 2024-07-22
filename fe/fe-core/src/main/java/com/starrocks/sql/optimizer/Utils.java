@@ -879,7 +879,7 @@ public class Utils {
         if (op == null) {
             return;
         }
-        op.setOpRuleMask(op.getOpRuleMask() | (~ ruleMask));
+        op.resetOpRuleMask(ruleMask);
     }
 
     /**

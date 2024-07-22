@@ -67,6 +67,8 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
+
 public class MvRewritePreprocessorTest extends MvRewriteTestBase {
     @BeforeClass
     public static void before() throws Exception {
@@ -219,7 +221,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Assert.assertEquals("mv_4", materializationContext.getMv().getName());
 
             MaterializedView mv = getMv("test", "mv_4");
-            Pair<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumn();
+            Pair<Table, Column> partitionTableAndColumn = getRefBaseTablePartitionColumn(mv);
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
             ScalarOperator scalarOperator = materializationContext.getMvPartialPartitionPredicate();

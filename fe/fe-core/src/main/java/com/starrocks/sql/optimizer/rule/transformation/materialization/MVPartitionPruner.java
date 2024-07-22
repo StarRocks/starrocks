@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -27,7 +29,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
@@ -43,8 +44,11 @@ import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 
 import java.util.List;
+<<<<<<< HEAD
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
+=======
+>>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
 
 public class MVPartitionPruner {
     private final OptimizerContext optimizerContext;
@@ -157,6 +161,7 @@ public class MVPartitionPruner {
             return OptExpression.create(optExpression.getOp(), children);
         }
     }
+<<<<<<< HEAD
 
     /**
      * Rewrite specific olap scan operator with specific selected partition ids.
@@ -260,4 +265,6 @@ public class MVPartitionPruner {
             return OptExpression.create(optExpression.getOp(), children);
         }
     }
+=======
+>>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
 }

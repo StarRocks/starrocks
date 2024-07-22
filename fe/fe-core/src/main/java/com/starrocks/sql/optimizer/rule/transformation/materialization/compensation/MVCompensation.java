@@ -12,60 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.sql.optimizer.rule.transformation.materialization.compensation;
 
-import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.util.List;
+import java.util.Map;
 
 /**
  * MVCompensation is used to store the compensation information for materialized view in mv rewrite.
  */
 public class MVCompensation {
+    private static final Logger LOG = LogManager.getLogger(MVCompensation.class);
+
     // The session variable of the current query.
     private final SessionVariable sessionVariable;
     // The state of compensation.
     private final MVTransparentState state;
-    // The partition ids of olap table that need to be compensated.
-    private final List<Long> olapCompensatePartitionIds;
-    // The partition keys of external table that need to be compensated.
-    private final List<PartitionKey> externalCompensatePartitionKeys;
-    private final MVUnionRewriteMode unionRewriteMode;
+    private final Map<Table, BaseCompensation<?>> compensations;
 
     public MVCompensation(SessionVariable sessionVariable,
                           MVTransparentState state,
-                          List<Long> olapCompensatePartitionIds,
-                          List<PartitionKey> externalCompensatePartitionKeys) {
+                          Map<Table, BaseCompensation<?>> compensations) {
         this.sessionVariable = sessionVariable;
         this.state = state;
-        this.olapCompensatePartitionIds = olapCompensatePartitionIds;
-        this.externalCompensatePartitionKeys = externalCompensatePartitionKeys;
-        this.unionRewriteMode = MVUnionRewriteMode.getInstance(sessionVariable.getMaterializedViewUnionRewriteMode());
+        this.compensations = compensations;
     }
 
     public static MVCompensation createNoCompensateState(SessionVariable sessionVariable) {
-        return new MVCompensation(sessionVariable, MVTransparentState.NO_COMPENSATE, null, null);
+        return new MVCompensation(sessionVariable, MVTransparentState.NO_COMPENSATE, null);
     }
 
     public static MVCompensation createNoRewriteState(SessionVariable sessionVariable) {
-        return new MVCompensation(sessionVariable, MVTransparentState.NO_REWRITE, null, null);
+        return new MVCompensation(sessionVariable, MVTransparentState.NO_REWRITE, null);
     }
 
     public static MVCompensation createUnkownState(SessionVariable sessionVariable) {
-        return new MVCompensation(sessionVariable, MVTransparentState.UNKNOWN, null, null);
+        return new MVCompensation(sessionVariable, MVTransparentState.UNKNOWN, null);
     }
 
     public MVTransparentState getState() {
         return state;
     }
 
-    public List<Long> getOlapCompensatePartitionIds() {
-        return olapCompensatePartitionIds;
-    }
-
-    public List<PartitionKey> getExternalCompensatePartitionKeys() {
-        return externalCompensatePartitionKeys;
+    public Map<Table, BaseCompensation<?>> getCompensations() {
+        return compensations;
     }
 
     private boolean useTransparentRewrite() {
@@ -101,8 +97,7 @@ public class MVCompensation {
     public String toString() {
         return "MvCompensation{" +
                 "state=" + state +
-                ", olapCompensatePartitionIds=" + olapCompensatePartitionIds +
-                ", externalCompensatePartitionKeys=" + externalCompensatePartitionKeys +
+                ", compensations=" + MvUtils.shrinkToSize(compensations, Config.max_mv_task_run_meta_message_values_length) +
                 '}';
     }
 }
