@@ -192,7 +192,7 @@ TEST_F(FlatJsonColumnCompactTest, testJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -217,7 +217,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -242,7 +242,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -267,7 +267,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson2) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -292,7 +292,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson3) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -317,7 +317,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson4) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -342,7 +342,7 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -367,7 +367,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -392,7 +392,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJson2) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -417,7 +417,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJson3) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -442,7 +442,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToJson4) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -467,7 +467,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -492,7 +492,7 @@ TEST_F(FlatJsonColumnCompactTest, testJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -517,7 +517,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -542,7 +542,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -567,7 +567,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson2) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -592,7 +592,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson3) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -617,7 +617,7 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson4) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -642,7 +642,7 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -667,7 +667,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -692,7 +692,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson2) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -717,7 +717,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson3) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -742,7 +742,7 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson4) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
 
@@ -767,9 +767,8 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson) {
     EXPECT_EQ(5, read_json->size());
     EXPECT_EQ(0, read_json->get_flat_fields().size());
     for (size_t i = 0; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i], read_json->debug_item(i));
+        EXPECT_EQ(jsons[i]->debug_item(0), read_json->debug_item(i));
     }
 }
-
 
 } // namespace starrocks
