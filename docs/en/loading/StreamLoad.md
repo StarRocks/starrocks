@@ -54,7 +54,7 @@ The BE that receives the load request runs as the Coordinator BE to split data b
 
 The following figure shows the workflow of a Stream Load job.
 
-![Workflow of Stream Load](../assets/4.2-1.png)
+![Workflow of Stream Load](../_assets/4.2-1.png)
 
 ### Limits
 
@@ -205,7 +205,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
-![JSON - Column Mapping](../assets/4.2-2.png)
+![JSON - Column Mapping](../_assets/4.2-2.png)
 
 The mappings shown in the preceding figure are described as follows:
 

@@ -331,7 +331,7 @@ To create an Access/Secret key pair to access your Google GCS bucket, follow the
 
 4. (Optional.) If you have not enabled the Interoperability feature, click **Interoperable Access**.
 
-   ![img](../../../assets/BROKERLOAD-1.png)
+   ![img](../../../_assets/BROKERLOAD-1.png)
 
 5. Click the **Create new Key** button to create an Access/Secret key pair.
 

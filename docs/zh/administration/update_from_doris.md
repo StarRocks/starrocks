@@ -345,4 +345,4 @@ displayed_sidebar: "Chinese"
 
 如果遇到无法解决的问题，您可以添加下方企业微信寻求帮助。
 
-![二维码](../assets/8.3.1.png)
+![二维码](../_assets/8.3.1.png)

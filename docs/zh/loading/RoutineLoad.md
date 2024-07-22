@@ -25,7 +25,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
 ## 基本原理
 
-![routine load](../assets/4.5.2-1.png)
+![routine load](../_assets/4.5.2-1.png)
 
 ### 概念
 

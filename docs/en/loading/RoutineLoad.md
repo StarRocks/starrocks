@@ -25,7 +25,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
 ## Basic concepts
 
-![routine load](../assets/4.5.2-1.png)
+![routine load](../_assets/4.5.2-1.png)
 
 ### Terminology
 

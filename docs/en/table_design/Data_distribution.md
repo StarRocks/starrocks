@@ -22,7 +22,7 @@ Before you dive into the details of designing and managing data distribution, fa
 
 Modern distributed database systems generally use four basic partitioning methods: round-robin, range, list, and hash.
 
-![Data distribution method](../assets/3.3.2-1.png)
+![Data distribution method](../_assets/3.3.2-1.png)
 
 - **Round-robin**: distributes data across different nodes in a cyclic.
 - **Range**: distributes data across different nodes based on the value range of partitioning columns.

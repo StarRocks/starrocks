@@ -18,7 +18,7 @@ Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Fl
 
 The following figure illustrates the entire synchronization process.
 
-![img](../assets/4.9.2.png)
+![img](../_assets/4.9.2.png)
 
 Real-time synchronization from MySQL through Flink to StarRocks is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
 
@@ -377,7 +377,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
 2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
 
     - Flink WebUI
-      ![img](../assets/4.9.3.png)
+      ![img](../_assets/4.9.3.png)
 
     - `bin/flink list -running`
 

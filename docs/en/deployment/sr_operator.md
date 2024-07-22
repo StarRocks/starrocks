@@ -8,7 +8,7 @@ This topic introduces how to use the StarRocks Operator to automate the deployme
 
 ## How it works
 
-![img](../assets/starrocks_operator.png)
+![img](../_assets/starrocks_operator.png)
 
 ## Before you begin
 

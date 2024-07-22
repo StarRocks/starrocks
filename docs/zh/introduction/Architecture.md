@@ -8,7 +8,7 @@ StarRocks 架构简洁，整个系统的核心只有 FE（Frontend）、BE（Bac
 
 ## 系统架构图
 
-![system_architecture](../assets/1.2-1.png)
+![system_architecture](../_assets/1.2-1.png)
 
 ### FE
 
@@ -45,7 +45,7 @@ StarRocks 使用列式存储，采用分区分桶机制进行数据管理。一�
 
 下图展示了 StarRocks 的数据划分以及 Tablet 多副本机制。图中，表按照日期划分为 4 个分区，第一个分区进一步切分成 4 个 Tablet。每个 Tablet 使用 3 副本进行备份，分布在 3 个不同的 BE 节点上。
 
-![data_management](../assets/1.2-2.png)
+![data_management](../_assets/1.2-2.png)
 
 由于一张表被切分成了多个 Tablet，StarRocks 在执行 SQL 语句时，可以对所有 Tablet 实现并发处理，从而充分的利用多机、多核提供的计算能力。用户也可以利用 StarRocks 数据的切分方式，将高并发请求压力分摊到多个物理节点，从而可以通过增加物理节点的方式来扩展系统支持高并发的能力。
 
