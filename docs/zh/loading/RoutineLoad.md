@@ -29,7 +29,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1
 
 ## 基本原理
 
-![routine load](../assets/4.5.2-1.png)
+![routine load](../_assets/4.5.2-1.png)
 
 ### 概念
 

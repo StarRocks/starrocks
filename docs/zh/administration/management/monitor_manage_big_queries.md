@@ -175,13 +175,13 @@ mysql> SHOW PROCESSLIST;
    http://<fe_IP>:<fe_http_port>/system?path=//current_queries
    ```
 
-   ![FE console 1](../../assets/console_1.png)
+   ![FE console 1](../../_assets/console_1.png)
 
    您可以在 **System Info** 页面上查看当前正在处理的查询及其资源消耗。
 
 2. 点击对应查询的 **QueryID**。
 
-   ![FE console 2](../../assets/console_2.png)
+   ![FE console 2](../../_assets/console_2.png)
 
    您可以在新页面中查看该查询在各节点上的资源消耗信息。
 

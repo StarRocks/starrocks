@@ -5,7 +5,7 @@ toc_max_heading_level: 5
 
 # BROKER LOAD
 
-import InsertPrivNote from '../../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 
