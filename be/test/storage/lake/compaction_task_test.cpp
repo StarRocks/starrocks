@@ -72,7 +72,6 @@ private:
     bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
     int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     int64_t _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
-
 };
 
 class LakeDuplicateKeyCompactionTest : public LakeCompactionTest {
