@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Overview of data loading
 
-import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 
 Data loading is the process of cleansing and transforming raw data from various data sources based on your business requirements and loading the resulting data into StarRocks to facilitate blazing-fast data analytics.
 
@@ -64,7 +64,7 @@ The process of asynchronous loading is as follows:
 
 The workflow of a Broker Load or Spark Load job consists of five stages, as shown in the following figure.
 
-![Broker Load or Spark Load overflow](../../assets/4.1-1.png)
+![Broker Load or Spark Load overflow](../../_assets/4.1-1.png)
 
 The workflow is described as follows:
 
@@ -134,7 +134,7 @@ You can determine the loading method of your choice based on your business scena
 
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
-![Data loading sources](../../assets/4.1-3.png)
+![Data loading sources](../../_assets/4.1-3.png)
 
 ## Memory limits
 

@@ -7,9 +7,9 @@ description: Separate compute and storage
 # Separate storage and compute
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -121,7 +121,7 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 
 MinIO will generate a key, click **Create** and download the key.
 
-![Make sure to click create](../assets/quick-start/MinIO-create.png)
+![Make sure to click create](../_assets/quick-start/MinIO-create.png)
 
 :::note
 The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
@@ -361,7 +361,7 @@ Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/brow
 :::tip
 The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
 
-![MinIO object browser](../assets/quick-start/MinIO-data.png)
+![MinIO object browser](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---

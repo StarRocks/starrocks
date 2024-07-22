@@ -97,7 +97,7 @@ DISTRIBUTED BY HASH(k1);
 
 您可以通过使用相同的分区键创建一个分区与基表分区一一对应的物化视图。
 
-![Partitioned Materialized View-1](../assets/partitioned_mv-1.png)
+![Partitioned Materialized View-1](../_assets/partitioned_mv-1.png)
 
 - 如果基表的分区键是 DATE 或 DATETIME 类型，可以直接为物化视图指定相同的分区键。
 
@@ -145,7 +145,7 @@ DISTRIBUTED BY HASH(k1);
 
 您可以通过在分区键上使用 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) 函数，创建一个分区时间粒度比基表更粗的物化视图。当检测到基表分区中的数据变更后，StarRocks 将会刷新物化视图中对应的上卷分区。
 
-![Partitioned Materialized View-2](../assets/partitioned_mv-2.png)
+![Partitioned Materialized View-2](../_assets/partitioned_mv-2.png)
 
 - 如果基表的分区键是 DATE 或 DATETIME 类型，可以直接在基表的分区键上使用 date_trunc 函数。
 
@@ -227,7 +227,7 @@ GROUP BY datekey, k1;
 <!--
 ### 多基表对齐分区
 
-![Partitioned Materialized View-3](../assets/partitioned_mv-3.png)
+![Partitioned Materialized View-3](../_assets/partitioned_mv-3.png)
 
 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，您就可以基于多张基表创建分区物化视图。您可以使用 JOIN 连接基表，并将分区键设置为公共列。您也可以使用 UNION 连接基表。具有对齐分区的基表称为 Reference Table。任意 Reference Table 中的数据变更都将触发对应物化视图分区的刷新任务。
 
@@ -359,4 +359,4 @@ WHERE datekey='2021-01-01'
 GROUP BY datekey, k1;
 ```
 
-![Partitioned Materialized View-4](../assets/partitioned_mv-4.png)
+![Partitioned Materialized View-4](../_assets/partitioned_mv-4.png)

@@ -1012,7 +1012,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 如下图所示。
 
-![Update policy on timeline](../../assets/catalog_timeline_zh.png)
+![Update policy on timeline](../../_assets/catalog_timeline_zh.png)
 
 StarRocks 采用如下策略更新和淘汰缓存的元数据：
 

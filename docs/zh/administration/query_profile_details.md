@@ -14,7 +14,7 @@ Query Profile 的结构与执行引擎的设计密切相关，由以下五部分
 - PipelineDriver：一个 Pipeline 可以有多个实例，每个实例称为 PipelineDriver，以充分利用多个计算核心。
 - Operator：算子。一个 PipelineDriver 由多个 Operator 组成。
 
-![img](../assets/Profile/profile-hierarchy.png)
+![img](../_assets/Profile/profile-hierarchy.png)
 
 ### Query Profile 的合并策略
 
@@ -175,7 +175,7 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 - PendingTime = InputEmptyTime + OutputFullTime + PreconditionBlockTime + PendingFinishTime
 - InputEmptyTime = FirstInputEmptyTime + FollowupInputEmptyTime
 
-![img](../assets/Profile/profile_pipeline_time_relationship.jpeg)
+![img](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
 ##### DegreeOfParallelism
 
@@ -313,13 +313,13 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该节点的时间指标的关系如下：
 
-![img](../assets/Profile/profile_scan_time_relationship.jpeg)
+![img](../_assets/Profile/profile_scan_time_relationship.jpeg)
 
 #### OLAP Scan Operator
 
 为了帮助大家更好地理解 Scan Operator 中的各项指标，以下图形将清晰展示这些指标与存储结构之间的关联。
 
-![img](../assets/Profile/profile_scan_relationship.jpeg)
+![img](../_assets/Profile/profile_scan_relationship.jpeg)
 
 ##### Table
 
