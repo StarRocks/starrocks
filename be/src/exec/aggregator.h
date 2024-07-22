@@ -44,6 +44,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
+#include "runtime/memory/counting_allocator.h"
 
 namespace starrocks {
 
@@ -407,6 +408,7 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    CountingAllocatorWithHook _allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 

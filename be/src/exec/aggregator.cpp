@@ -31,9 +31,11 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/memory/counting_allocator.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/runtime_profile.h"
+#include "runtime/memory/allocator.h"
 
 namespace starrocks {
 
@@ -748,6 +750,18 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
     }
     return Status::OK();
 }
+// @TODO add a scope to set tls allocator
+
+class TLSCountingAllocatorSetter {
+public:
+    TLSCountingAllocatorSetter(CountingAllocatorWithHook* allocator) {
+        _prev = starrocks::tls_counting_allocator;
+        starrocks::tls_counting_allocator = allocator;
+    }
+    ~TLSCountingAllocatorSetter() { starrocks::tls_counting_allocator = _prev; }
+private:
+    CountingAllocatorWithHook* _prev = nullptr;
+};
 
 Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
@@ -757,6 +771,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        TLSCountingAllocatorSetter setter(&_allocator);
         // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
@@ -779,6 +794,8 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+
+        TLSCountingAllocatorSetter setter(&_allocator);
         // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
@@ -801,6 +818,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
 
+        TLSCountingAllocatorSetter setter(&_allocator);
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                         _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
