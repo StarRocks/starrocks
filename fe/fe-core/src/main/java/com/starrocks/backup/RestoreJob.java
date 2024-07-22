@@ -687,7 +687,6 @@ public class RestoreJob extends AbstractJob {
                     // Table does not exist
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
-                    boolean isColocate = enableColocateRestore;
                     // Retain only expected restore partitions in this table;
                     Set<String> allPartNames = remoteOlapTbl.getPartitionNames();
                     for (String partName : allPartNames) {
@@ -696,7 +695,7 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
 
-                    if (!isColocate) {
+                    if (!enableColocateRestore) {
                         remoteOlapTbl.setColocateGroup(null);
                     }
 
@@ -709,7 +708,7 @@ public class RestoreJob extends AbstractJob {
                     }
 
                     ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-                    if (isColocate && colocateTableIndex.isColocateTable(remoteOlapTbl.getId())) {
+                    if (enableColocateRestore && colocateTableIndex.isColocateTable(remoteOlapTbl.getId())) {
                         ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(remoteOlapTbl.getId());
                         List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                         ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo
