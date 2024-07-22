@@ -127,14 +127,14 @@ void merge_string(vpack::Builder* builder, const std::string& name, const Column
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
-    builder->add(name, vpack::Value(col->get_slice(idx)));
+    builder->add(name, vpack::Value(col->get_slice(idx).to_string()));
 }
 
 void merge_json(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx) {
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
-    builder->add(name, vpack::Value(col->get_object(idx)->get_slice()));
+    builder->add(name, col->get_object(idx)->to_vslice());
 }
 
 using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
@@ -800,7 +800,9 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
+#ifndef NDEBUG
     std::string json = remain->toJson();
+#endif
     vpack::ObjectIterator it(*remain, false);
     for (; it.valid(); it.next()) {
         auto k = it.key().copyString();
@@ -1204,6 +1206,13 @@ Status HyperJsonTransformer::_merge(const MergeTask& task, std::vector<ColumnPtr
             _dst_columns[task.dst_index] = columns[task.src_index[0]];
             return Status::OK();
         }
+    }
+
+    if (task.src_index.empty()) {
+        // input has no remain and hit columns, but need output remain...
+        DCHECK(_dst_remain);
+        _dst_columns[task.dst_index]->append_default(columns[0]->size());
+        return Status::OK();
     }
 
     std::vector<ColumnPtr> cols;

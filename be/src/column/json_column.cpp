@@ -182,8 +182,7 @@ LogicalType JsonColumn::get_flat_field_type(const std::string& path) const {
 void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                   const Columns& flat_columns) {
     DCHECK_EQ(paths.size(), types.size());
-    DCHECK_GE(paths.size(), flat_columns.size());
-    DCHECK_LE(paths.size(), flat_columns.size() + 1);
+    DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
     _flat_column_paths.insert(_flat_column_paths.cbegin(), paths.cbegin(), paths.cend());
     _flat_column_types.insert(_flat_column_types.cbegin(), types.cbegin(), types.cend());
     _flat_columns.insert(_flat_columns.cbegin(), flat_columns.cbegin(), flat_columns.cend());
@@ -297,12 +296,18 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
 
     if (is_flat_json()) {
         DCHECK(src.is_object());
-        DCHECK(_flat_column_paths.size() == other_json->_flat_columns.size());
-        DCHECK(_flat_columns.size() == other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
+        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
+
+        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
+
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+        }
 
         for (size_t i = 0; i < _flat_columns.size(); i++) {
-            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
-            DCHECK_EQ(_flat_column_types[i], other_json->flat_column_types()[i]);
             _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
         }
     } else {
