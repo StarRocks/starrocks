@@ -38,6 +38,7 @@ cardinality: 1600000
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
+* expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -99,6 +100,7 @@ OutPut Exchange Id: 28
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
+|  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
 26:Project

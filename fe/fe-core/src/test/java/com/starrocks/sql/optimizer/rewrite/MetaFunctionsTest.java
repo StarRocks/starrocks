@@ -14,22 +14,31 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.leader.ReportHandler;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.nio.ByteBuffer;
+import java.util.List;
 
 public class MetaFunctionsTest {
 
@@ -146,4 +155,72 @@ public class MetaFunctionsTest {
         ScalarOperatorFunctions.inspectTable(new TableName("test", "mysql_external_table"));
     }
 
+    private String lookupString(String tableName, String key, String column) {
+        ConstantOperator res = ScalarOperatorFunctions.lookupString(
+                ConstantOperator.createVarchar(tableName),
+                ConstantOperator.createVarchar(key),
+                ConstantOperator.createVarchar(column)
+        );
+        if (res.isNull()) {
+            return null;
+        }
+        return res.toString();
+    }
+
+    @Test
+    public void testLookupString() throws Exception {
+        // exceptions:
+        // 1. table not found
+        // 2. column not found
+        // 3. key not exists
+        {
+            Exception e = Assert.assertThrows(SemanticException.class, () ->
+                    lookupString("t1", "v1", "c1")
+            );
+            Assert.assertEquals("Getting analyzing error. Detail message: Unknown table 'test.t1'.",
+                    e.getMessage());
+        }
+        {
+            starRocksAssert.withTable("create table t1(c1 string, c2 bigint) duplicate key(c1) " +
+                    "properties('replication_num'='1')");
+            Exception e = Assert.assertThrows(SemanticException.class, () ->
+                    lookupString("t1", "v1", "c1")
+            );
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                            "Invalid parameter must be PRIMARY_KEY.", e.getMessage());
+            starRocksAssert.dropTable("t1");
+        }
+        {
+            starRocksAssert.withTable("create table t1(c1 string, c2 bigint auto_increment) primary key(c1) " +
+                    "distributed by hash(c1) " +
+                    "properties('replication_num'='1')");
+            Assert.assertNull(lookupString("t1", "v1", "c1"));
+
+            // normal
+            new MockUp<RepoExecutor>() {
+                @Mock
+                public List<TResultBatch> executeDQL(String sql) {
+                    ScalarOperatorFunctions.LookupRecord record = new ScalarOperatorFunctions.LookupRecord();
+                    record.data = Lists.newArrayList("v1");
+                    String json = GsonUtils.GSON.toJson(record);
+
+                    TResultBatch resultBatch = new TResultBatch();
+                    ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                    resultBatch.setRows(Lists.newArrayList(buffer));
+                    return Lists.newArrayList(resultBatch);
+                }
+            };
+            Assert.assertEquals("v1", lookupString("t1", "v1", "c1"));
+
+            // record not found
+            new MockUp<RepoExecutor>() {
+                @Mock
+                public List<TResultBatch> executeDQL(String sql) {
+                    throw new RuntimeException("query failed if record not exist in dict table");
+                }
+            };
+            Assert.assertNull(lookupString("t1", "v1", "c1"));
+        }
+
+    }
 }

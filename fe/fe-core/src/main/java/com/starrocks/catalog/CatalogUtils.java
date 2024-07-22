@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -278,24 +277,14 @@ public class CatalogUtils {
             Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allLiteralExprValues.addAll(v);
-                    }
-                });
-
+                Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
-                    for (LiteralExpr value : allLiteralExprValues) {
-                        if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value " + item.getStringValue());
-                        }
+                    if (existingValues.contains(item)) {
+                        throw new DdlException("Duplicate partition value " + item.getStringValue());
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
                 int partitionColSize = listPartitionInfo.getPartitionColumns().size();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),

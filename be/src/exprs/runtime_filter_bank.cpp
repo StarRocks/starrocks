@@ -559,7 +559,7 @@ void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNode
             continue;
         }
         if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
-                                           state->shuffle_hash_bucket_rf_ids().contains(desc->filter_id()))) {
+                                           state->non_broadcast_rf_ids().contains(desc->filter_id()))) {
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());

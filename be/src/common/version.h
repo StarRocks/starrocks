@@ -22,4 +22,5 @@ extern const char* STARROCKS_BUILD_TIME;
 extern const char* STARROCKS_BUILD_USER;
 extern const char* STARROCKS_BUILD_HOST;
 extern const char* STARROCKS_BUILD_DISTRO_ID;
+extern const char* STARROCKS_BUILD_ARCH;
 } // namespace starrocks

@@ -50,6 +50,7 @@ column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
 * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
