@@ -46,7 +46,7 @@ public class Log4jConfigTest {
         Config.sys_log_format = "plaintext";
         {
             String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
-            Assert.assertFalse(xmlConfig.contains("<JSONLayout"));
+            Assert.assertFalse(xmlConfig.contains("<JsonTemplateLayout"));
             Assert.assertTrue(xmlConfig.contains("<PatternLayout"));
             // no unresolved variable
             Matcher matcher = Pattern.compile(regStr, Pattern.MULTILINE).matcher(xmlConfig);
@@ -59,7 +59,7 @@ public class Log4jConfigTest {
         Config.sys_log_format = "json";
         {
             String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
-            Assert.assertTrue(xmlConfig.contains("<JSONLayout"));
+            Assert.assertTrue(xmlConfig.contains("<JsonTemplateLayout"));
             Assert.assertFalse(xmlConfig.contains("<PatternLayout"));
             // no unresolved variable
             Matcher matcher = Pattern.compile(regStr, Pattern.MULTILINE).matcher(xmlConfig);

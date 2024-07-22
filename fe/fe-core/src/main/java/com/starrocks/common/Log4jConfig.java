@@ -258,7 +258,53 @@ public class Log4jConfig extends XmlConfiguration {
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
             // json logging
             String jsonLayout =
-                    "<JSONLayout compact=\"true\" eventEol=\"true\" properties=\"true\" stacktraceAsString=\"true\" />";
+                    "<JsonTemplateLayout locationInfoEnabled=\"true\">\n" +
+                            "        <EventTemplate><![CDATA[\n{\n" +
+                            "   \"@timestamp\": {\n" +
+                            "       \"$resolver\": \"timestamp\",\n" +
+                            "       \"pattern\": {\n" +
+                            "         \"format\": \"yyyy-MM-dd HH:mm:ss.SSSXXX\",\n" +
+                            "         \"timeZone\": \"UTC\"\n" +
+                            "        }\n" +
+                            "      },\n" +
+                            "      \"level\": {\n" +
+                            "       \"$resolver\": \"level\",\n" +
+                            "       \"field\": \"name\"\n" +
+                            "      },\n" +
+                            "      \"thread.name\": {\n" +
+                            "       \"$resolver\": \"thread\",\n" +
+                            "       \"field\": \"name\"\n" +
+                            "      },\n" +
+                            "      \"thread.id\": {\n" +
+                            "       \"$resolver\": \"thread\",\n" +
+                            "       \"field\": \"id\"\n" +
+                            "      },\n" +
+                            "      \"method\": {\n" +
+                            "       \"$resolver\": \"logger\",\n" +
+                            "       \"field\": \"name\",\n" +
+                            "       \"shorten\": {\n" +
+                            "         \"length\": 1,\n" +
+                            "         \"strategy\": \"tail\"\n" +
+                            "        }\n" +
+                            "      },\n" +
+                            "      \"line\": {\n" +
+                            "        \"$resolver\": \"source\",\n" +
+                            "        \"field\": \"lineNumber\"\n" +
+                            "      },\n" +
+                            "      \"message\": {\n" +
+                            "        \"$resolver\": \"message\",\n" +
+                            "        \"stringfield\": \"true\"\n" +
+                            "      },\n" +
+                            "      \"exception\": {\n" +
+                            "        \"$resolver\": \"exception\",\n" +
+                            "        \"field\": \"stackTrace\",\n" +
+                            "        \"stackTrace\": {\n" +
+                            "          \"stringified\": true,\n" +
+                            "          \"full\": true\n" +
+                            "        }\n" +
+                            "      }" +
+                            "      }\n]]></EventTemplate>\n" +
+                            "</JsonTemplateLayout>";
             properties.put("syslog_default_layout", jsonLayout);
             properties.put("syslog_warning_layout", jsonLayout);
             properties.put("syslog_audit_layout", jsonLayout);
