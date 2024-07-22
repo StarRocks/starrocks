@@ -1226,7 +1226,7 @@ public class FrontendServiceImplTest {
         partitionList.add(p19910425);
 
         currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
-                addPartitionClause, partitionInfo, partitionList, Sets.newSet("p19900425"));
+                addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
 
     }
 

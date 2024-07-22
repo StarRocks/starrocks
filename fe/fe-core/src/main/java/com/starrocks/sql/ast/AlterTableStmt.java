@@ -67,9 +67,11 @@ public class AlterTableStmt extends DdlStmt {
 
     public boolean hasPartitionOp() {
         List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(AlterOpType.ADD_PARTITION) || currentOps.contains(AlterOpType.DROP_PARTITION)
-                || currentOps.contains(AlterOpType.REPLACE_PARTITION) ||
-                currentOps.contains(AlterOpType.MODIFY_PARTITION);
+        return currentOps.contains(AlterOpType.ADD_PARTITION)
+                || currentOps.contains(AlterOpType.DROP_PARTITION)
+                || currentOps.contains(AlterOpType.REPLACE_PARTITION)
+                || currentOps.contains(AlterOpType.MODIFY_PARTITION)
+                || currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
     }
 
     public boolean hasSchemaChangeOp() {
