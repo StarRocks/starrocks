@@ -238,6 +238,10 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
+        if (dataCacheOptions != null) {
+            output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
+        }
+
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();

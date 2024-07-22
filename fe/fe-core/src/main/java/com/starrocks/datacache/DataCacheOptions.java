@@ -14,8 +14,6 @@
 
 package com.starrocks.datacache;
 
-import com.starrocks.thrift.TDataCacheOptions;
-
 public class DataCacheOptions {
     private final boolean enablePopulate;
     // todo remove later

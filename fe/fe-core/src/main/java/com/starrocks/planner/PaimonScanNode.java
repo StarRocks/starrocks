@@ -337,6 +337,10 @@ public class PaimonScanNode extends ScanNode {
 
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
+        if (dataCacheOptions != null) {
+            output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
+        }
+
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
