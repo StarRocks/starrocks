@@ -395,27 +395,20 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     rightSkewColumn = child0;
                     break;
                 } else {
-                    // find the skew column in the left/right child project map
+                    // find the skew column in the grandchild(exchange's child) project map
                     if (input.inputAt(0).inputAt(0).getOp().getProjection() != null) {
                         Map<ColumnRefOperator, ScalarOperator> projectMap =
                                 input.inputAt(0).inputAt(0).getOp().getProjection().getColumnRefMap();
                         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
                         ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
                         ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
-                        if (skewColumn.equals(rewriteChild0)) {
+                        if ((skewColumn.equals(rewriteChild0)) ||
+                                rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0)) ||
+                                (skewColumn.equals(rewriteChild1)) ||
+                                (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0)))) {
                             skewColumn = child0;
                             rightSkewColumn = child1;
                             break;
-                        } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
-                            skewColumn = child0;
-                            rightSkewColumn = child1;
-                        } else if (skewColumn.equals(rewriteChild1)) {
-                            skewColumn = child0;
-                            rightSkewColumn = child1;
-                            break;
-                        } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
-                            skewColumn = child0;
-                            rightSkewColumn = child1;
                         }
                     }
                 }
