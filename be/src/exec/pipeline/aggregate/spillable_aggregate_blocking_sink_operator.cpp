@@ -27,7 +27,11 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
+
+DEFINE_FAIL_POINT(spill_always_streaming);
+DEFINE_FAIL_POINT(spill_always_selection_streaming);
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -109,8 +113,105 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     }
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
     set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
+<<<<<<< HEAD
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
+=======
+    return _spill_all_data(state, true);
+}
+
+void SpillableAggregateBlockingSinkOperator::_add_streaming_chunk(ChunkPtr chunk) {
+    _streaming_rows += chunk->num_rows();
+    _streaming_bytes += chunk->memory_usage();
+    _streaming_chunks.push(std::move(chunk));
+}
+
+Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+    const auto chunk_size = chunk->num_rows();
+
+    const size_t ht_mem_usage = _aggregator->hash_map_memory_usage();
+    bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
+    const size_t max_mem_usage = state->spill_mem_table_size();
+
+    auto spiller = _aggregator->spiller();
+
+    // goal: control buffered data memory usage, aggregate data as much as possible before spill
+    // this strategy is similar to the LIMITED_MEM mode in agg streaming
+
+    bool always_streaming = false;
+    bool always_selection_streaming = false;
+
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_streaming = true;
+        }
+    });
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_selection_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_selection_streaming = true;
+        }
+    });
+
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
+    build_hash_table = build_hash_table && !always_selection_streaming;
+    if (_streaming_bytes + ht_mem_usage > max_mem_usage || always_streaming) {
+        // if current memory usage exceeds limit,
+        // use force streaming mode and spill all data
+        SCOPED_TIMER(_aggregator->streaming_timer());
+        ChunkPtr res = std::make_shared<Chunk>();
+        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+        _add_streaming_chunk(res);
+        return _spill_all_data(state, true);
+    } else if (build_hash_table) {
+        SCOPED_TIMER(_aggregator->agg_compute_timer());
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
+
+        _aggregator->update_num_input_rows(chunk_size);
+        RETURN_IF_ERROR(_aggregator->check_has_error());
+        _continuous_low_reduction_chunk_num = 0;
+    } else {
+        // selective preaggregation
+        {
+            SCOPED_TIMER(_aggregator->agg_compute_timer());
+            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+        }
+
+        size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
+        // very poor aggregation
+        if (hit_count == 0) {
+            // put all data into buffer
+            ChunkPtr tmp = std::make_shared<Chunk>();
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp));
+            _add_streaming_chunk(std::move(tmp));
+        } else if (hit_count == _aggregator->streaming_selection().size()) {
+            // very high reduction
+            SCOPED_TIMER(_aggregator->agg_compute_timer());
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
+        } else {
+            // middle case
+            {
+                SCOPED_TIMER(_aggregator->agg_compute_timer());
+                RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(chunk.get(), chunk_size));
+            }
+            {
+                SCOPED_TIMER(_aggregator->streaming_timer());
+                ChunkPtr res = std::make_shared<Chunk>();
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                _add_streaming_chunk(std::move(res));
+            }
+        }
+        if (hit_count * 1.0 / chunk_size <= HT_LOW_REDUCTION_THRESHOLD) {
+            _continuous_low_reduction_chunk_num++;
+        }
+
+        _aggregator->update_num_input_rows(hit_count);
+        RETURN_IF_ERROR(_aggregator->check_has_error());
+>>>>>>> 4480003a0d ([BugFix] Fix wrong result when enable spill preaggregation (#48700))
     }
     return Status::OK();
 }
