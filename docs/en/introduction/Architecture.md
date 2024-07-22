@@ -10,7 +10,7 @@ StarRocks is compatible with MySQL protocols and supports standard SQL. Users ca
 
 The following figure shows the architecture of StarRocks.
 
-![Architecture](../assets/1.1-1.png)
+![Architecture](../_assets/1.1-1.png)
 
 ## FE and BE
 
