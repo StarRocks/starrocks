@@ -64,9 +64,11 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
 
         for (auto& col : json_datas) {
             JsonColumn* json_col;
+            NullColumnPtr null_col;
             if (col->is_nullable()) {
                 auto nullable_column = down_cast<const NullableColumn*>(col.get());
                 json_col = down_cast<JsonColumn*>(nullable_column->data_column().get());
+                null_col = nullable_column->null_column();
             } else {
                 json_col = down_cast<JsonColumn*>(col.get());
             }
@@ -76,8 +78,16 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
             } else {
                 JsonMerger merger(json_col->flat_column_paths(), json_col->flat_column_types(), json_col->has_remain());
                 auto j = merger.merge(json_col->get_flat_fields());
-                RETURN_IF_ERROR(_json_writer->append(*j));
+
+                if (col->is_nullable()) {
+                    auto n = NullableColumn::create(j, null_col);
+                    n->set_has_null(col->has_null());
+                    RETURN_IF_ERROR(_json_writer->append(*n));
+                } else {
+                    RETURN_IF_ERROR(_json_writer->append(*j));
+                }
             }
+            col->resize_uninitialized(0);
         }
         return Status::OK();
     }
@@ -130,7 +140,6 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
         col->resize_uninitialized(0); // release after write
     }
 
-    _json_datas.clear(); // release after write
     return Status::OK();
 }
 
@@ -139,6 +148,7 @@ Status FlatJsonColumnCompactor::finish() {
         DCHECK_GT(js->size(), 0);
     }
     RETURN_IF_ERROR(_compact_columns(_json_datas));
+    _json_datas.clear(); // release after write
     for (auto& iter : _flat_writers) {
         RETURN_IF_ERROR(iter->finish());
     }
@@ -153,9 +163,9 @@ Status JsonColumnCompactor::append(const Column& column) {
     const JsonColumn* json_col;
     NullColumnPtr nulls = nullptr;
     if (column.is_nullable()) {
-        auto nullable_column = down_cast<const NullableColumn&>(column);
-        nulls = nullable_column.null_column();
-        json_col = down_cast<const JsonColumn*>(nullable_column.data_column().get());
+        auto nullable_column = down_cast<const NullableColumn*>(&column);
+        nulls = nullable_column->null_column();
+        json_col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
     } else {
         json_col = down_cast<const JsonColumn*>(&column);
     }

@@ -54,6 +54,10 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, cons
           _json_writer(std::move(json_writer)) {}
 
 Status FlatJsonColumnWriter::init() {
+    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
+    _json_meta->mutable_json_meta()->set_has_remain(false);
+    _json_meta->mutable_json_meta()->set_is_flat(false);
+
     return _json_writer->init();
 }
 
@@ -112,7 +116,6 @@ Status FlatJsonColumnWriter::_flat_column(const Column* json_data) {
 
 Status FlatJsonColumnWriter::_init_flat_writers() {
     // update json meta
-    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
     _json_meta->mutable_json_meta()->set_has_remain(_has_remain);
     _json_meta->mutable_json_meta()->set_is_flat(true);
 
@@ -127,7 +130,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         _flat_types.emplace_back(LogicalType::TYPE_JSON);
     }
 
-    for (size_t i = 0; i < _flat_columns.size(); i++) {
+    for (size_t i = 0; i < _flat_paths.size(); i++) {
         ColumnWriterOptions opts;
         opts.meta = _json_meta->add_children_columns();
         opts.meta->set_column_id(i);
@@ -140,7 +143,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             // set length for non-string type (e.g. int, double, date, etc.
             opts.meta->set_length(get_type_info(_flat_types[i])->size());
         }
-        if ((_json_meta->is_nullable() && i == 0) || (i == _flat_columns.size() - 1 && _has_remain)) {
+        if ((_json_meta->is_nullable() && i == 0) || (i == _flat_paths.size() - 1 && _has_remain)) {
             opts.meta->set_is_nullable(false);
         } else {
             opts.meta->set_is_nullable(true);
@@ -167,7 +170,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 
 Status FlatJsonColumnWriter::_write_flat_column() {
     DCHECK(!_flat_columns.empty());
-    DCHECK(_flat_columns.size() == _flat_writers.size());
+    DCHECK_EQ(_flat_columns.size(), _flat_writers.size());
     // flat datas
     for (size_t i = 0; i < _flat_columns.size(); i++) {
         RETURN_IF_ERROR(_flat_writers[i]->append(*_flat_columns[i]));

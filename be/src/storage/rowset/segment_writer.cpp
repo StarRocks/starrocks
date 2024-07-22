@@ -95,6 +95,7 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
         json_meta->set_is_flat(false);
+        json_meta->set_has_remain(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
