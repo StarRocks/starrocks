@@ -134,7 +134,8 @@ public class StructField {
         }
         StructField otherStructField = (StructField) other;
         // Both are named struct field
-        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
+        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
+                    (fieldId == otherStructField.fieldId);
     }
 
     @Override
