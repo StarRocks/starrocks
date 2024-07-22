@@ -16,6 +16,9 @@ package com.starrocks.connector;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
@@ -279,5 +282,38 @@ public class AlterTableTest extends TableTestBase {
         mockedNativeTableB.refresh();
         Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
         Assert.assertFalse(mockedNativeTableB.refs().containsKey("test_tag"));
+    }
+
+    @Test
+    public void testAlterView() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            Database getDB(String dbName) {
+                return new Database(1, "db");
+            }
+
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tblName) {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            boolean tableExists(String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            boolean isConnectorView() {
+                return true;
+            }
+        };
+
+        String sql = "alter view iceberg_catalog.db.srTableName as select * from a;";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "cannot alter connector view",
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+
     }
 }
