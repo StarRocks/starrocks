@@ -34,7 +34,18 @@ public class MvBaseTableUpdateInfo {
     // The mapping of partition name to partition range
     private final Map<String, PCell> nameToPartKeys = Maps.newHashMap();
 
+    // If the base table is a mv, needs to record the mapping of mv partition name to partition range
+    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
+
     public MvBaseTableUpdateInfo() {
+    }
+
+    public Map<String, PCell> getMvPartitionNameToCellMap() {
+        return mvPartitionNameToCellMap;
+    }
+
+    public void addMVPartitionNameToCellMap(Map<String, PCell> partitionNameToRangeMap) {
+        mvPartitionNameToCellMap.putAll(partitionNameToRangeMap);
     }
 
     public Set<String> getToRefreshPartitionNames() {

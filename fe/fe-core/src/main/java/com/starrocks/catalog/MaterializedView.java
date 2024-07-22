@@ -456,8 +456,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
     @Deprecated
     private List<Expr> partitionRefTableExprs;
-    @Deprecated
-    private transient volatile Optional<Pair<Table, Column>> refBaseTableColumnOpt = Optional.empty();
 
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
@@ -592,7 +590,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Reset cached metadata when mv's meta has changed.
      */
     public void resetMetadataCache() {
-        refBaseTableColumnOpt = Optional.empty();
         refBaseTablePartitionExprsOpt = Optional.empty();
         refBaseTablePartitionSlotsOpt = Optional.empty();
         refBaseTablePartitionColumnsOpt = Optional.empty();
@@ -887,7 +884,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (this.partitionExprMaps != null) {
             mv.partitionExprMaps = ImmutableMap.copyOf(this.partitionExprMaps);
         }
-        mv.refBaseTableColumnOpt = this.refBaseTableColumnOpt;
         mv.refBaseTablePartitionExprsOpt = this.refBaseTablePartitionExprsOpt;
         mv.refBaseTablePartitionSlotsOpt = this.refBaseTablePartitionSlotsOpt;
         mv.refBaseTablePartitionColumnsOpt = this.refBaseTablePartitionColumnsOpt;
@@ -1564,50 +1560,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return true;
         }
         return false;
-    }
-
-    /**
-     * Materialized View's partition column can only refer one base table's partition column, get the referred
-     * base table and its partition column.
-     * @return : The materialized view's referred base table and its partition column.
-     * TODO: Support multi-column partitions later.
-     * TODO: Use getRefBaseTablePartitionColumns instead since SR v3.3 has supported multi-tables partition change tracking.
-     */
-    @Deprecated
-    public Pair<Table, Column> getRefBaseTablePartitionColumn() {
-        if (partitionRefTableExprs == null || !(partitionInfo.isRangePartition() || partitionInfo.isListPartition())) {
-            return null;
-        }
-        if (refBaseTableColumnOpt.isEmpty()) {
-            Pair<Table, Column> refBaseTableColumn = getRefBaseTablePartitionColumnImpl();
-            synchronized (this) {
-                if (refBaseTableColumnOpt.isEmpty()) {
-                    refBaseTableColumnOpt = Optional.of(refBaseTableColumn);
-                    return refBaseTableColumn;
-                }
-            }
-        }
-        Preconditions.checkState(refBaseTableColumnOpt.isPresent());
-        return refBaseTableColumnOpt.get();
-    }
-
-    private Pair<Table, Column> getRefBaseTablePartitionColumnImpl() {
-        Expr partitionExpr = getPartitionRefTableExprs().get(0);
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        partitionExpr.collect(SlotRef.class, slotRefs);
-        Preconditions.checkState(slotRefs.size() == 1);
-        SlotRef partitionSlotRef = slotRefs.get(0);
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = MvUtils.getTableChecked(baseTableInfo);
-            if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
-                return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
-            }
-        }
-        String baseTableNames = baseTableInfos.stream()
-                .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getName())
-                .collect(Collectors.joining(","));
-        throw new RuntimeException(
-                String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
 
     /**
