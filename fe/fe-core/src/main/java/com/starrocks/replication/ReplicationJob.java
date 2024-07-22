@@ -22,7 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -585,7 +585,7 @@ public class ReplicationJob implements GsonPostProcessable {
             tableDataSize = olapTable.getDataSize();
 
             for (TPartitionReplicationInfo tPartitionInfo : request.partition_replication_infos.values()) {
-                Partition partition = olapTable.getPartition(tPartitionInfo.partition_id);
+                PhysicalPartition partition = olapTable.getPhysicalPartition(tPartitionInfo.partition_id);
                 if (partition == null) {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
@@ -611,12 +611,12 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private static PartitionInfo initPartitionInfo(OlapTable olapTable, TPartitionReplicationInfo tPartitionInfo,
-            Partition partition) throws MetaNotFoundException {
+            PhysicalPartition partition) throws MetaNotFoundException {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (TIndexReplicationInfo tIndexInfo : tPartitionInfo.index_replication_infos.values()) {
             MaterializedIndex index = partition.getIndex(tIndexInfo.index_id);
             if (index == null) {
-                throw new MetaNotFoundException("Index " + tIndexInfo.index_id + " in partition " + partition.getName()
+                throw new MetaNotFoundException("Index " + tIndexInfo.index_id + " in partition " + partition.getId()
                         + " in table " + olapTable.getName() + " not found");
             }
             IndexInfo indexInfo = initIndexInfo(olapTable, tIndexInfo, index);
@@ -677,8 +677,8 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (Partition partition : table.getPartitions()) {
-            Partition srcPartition = srcTable.getPartition(partition.getName());
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
             Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
                     "Partition " + partition.getName() + " in table " + table.getName()
                             + " publish version not finished");
@@ -695,8 +695,8 @@ public class ReplicationJob implements GsonPostProcessable {
         return partitionInfos;
     }
 
-    private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, Partition partition,
-            Partition srcPartition, SystemInfoService srcSystemInfoService) {
+    private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, PhysicalPartition partition,
+            PhysicalPartition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToId().entrySet()) {
             long indexId = indexNameToId.getValue();

@@ -259,10 +259,6 @@ public class DeltaLakeScanNode extends ScanNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
-    }
 
     @Override
     protected void toThrift(TPlanNode msg) {

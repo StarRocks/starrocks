@@ -4,6 +4,67 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.3
 
+## 3.3.1
+
+发布日期：2024 年 7 月 18 日
+
+### 新增特性
+
+- [Preview] 支持临时表。
+- [Preview] JDBC Catalog 支持 Oracle 和 SQL Server。
+- [Preview] Unified Catalog 支持 Kudu。
+- INSERT INTO 导入主键表，支持部分列更新。
+- 用户自定义变量支持 ARRAY 类型。 [#42631](https://github.com/StarRocks/starrocks/pull/42613)
+- Stream Load 支持将 JSON 类型转化并导入至 STRUCT/MAP/ARRAY 类型目标列。[ #45406](https://github.com/StarRocks/starrocks/pull/45406)
+- 支持全局字典 Cache。
+- 支持批量删除分区。[#44744](https://github.com/StarRocks/starrocks/issues/44744)
+- 支持读取 Iceberg 中的视图。 [#46273](https://github.com/StarRocks/starrocks/issues/46273)
+- 支持在 Apache Ranger 中设置列级别权限（物化视图和视图的列级别权限需要在表对象下设置）。 [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+
+### 功能优化
+
+- 优化当前 IdChain 的 hashcode 实现，降低 FE 启动耗时。 [#47599](https://github.com/StarRocks/starrocks/pull/47599)
+- 优化 FILES() 函数中 `csv.trim_space` 参数的报错信息，检查非法字符并给出合理提示。 [#44740](https://github.com/StarRocks/starrocks/pull/44740)
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在 Schema Change 过程中，因 Tablet 迁移，文件位置变化导致的 Schema Change 失败。[#45517](https://github.com/StarRocks/starrocks/pull/45517)
+- 因为字段默认值中包含 `\`、`\r` 等控制字符导致跨集群迁移工具在目标集群中建表失败。 [#47861](https://github.com/StarRocks/starrocks/pull/47861)
+- BE 重启后 bRPC 持续失败。 [#40229](https://github.com/StarRocks/starrocks/pull/40229)
+- `user_admin` 角色可以通过 ALTER USER 命令修改 root 密码。[#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- 主键索引写入失败，导致数据写入报错。[#48045](https://github.com/StarRocks/starrocks/pull/48045) 
+
+### 行为变更
+
+- 写出 Hive、Iceberg 默认打开 Spill。 [#47118](https://github.com/StarRocks/starrocks/pull/47118)
+- 修改 BE 配置项 `max_cumulative_compaction_num_singleton_deltas` 默认值为 `500`。[#47621](https://github.com/StarRocks/starrocks/pull/47621)
+- 用户创建分区表但未设置分桶数时，当分区数量超过 5 个后，系统自动设置分桶数的规则更改为 `max(2 * BE 或 CN 数量, 根据最大历史分区数据量计算得出的分桶数)`。（原来的规则是根据最大历史分区数据量计算的分桶数）。[#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
+### 降级说明
+
+如需将 v3.3.1 及以上集群降级至 v3.2，用户需要在回滚前清理所有的临时表。步骤如下：
+
+1. 禁止用户创建新的临时表：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_experimental_temporary_table"="false"); 
+   ```
+
+2. 查询系统内是否存在临时表：
+
+   ```SQL
+   SELECT * FROM information_schema.temp_tables;
+   ```
+
+3. 如系统内存在临时表，通过以下命令清理系统内的临时表（需要 SYSTEM 级 OPERATE 权限）：
+
+   ```SQL
+   CLEAN TEMPORARY TABLE ON SESSION 'session';
+   ```
+
 ## 3.3.0
 
 发布日期：2024 年 6 月 21 日
@@ -83,7 +144,7 @@ displayed_sidebar: "Chinese"
 - **[使用标签管理 BE](https://docs.starrocks.io/zh/docs/administration/management/resource_management/be_label/)**：支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，以保证数据在机架或数据中心等之间均匀分布，应对某些机架断电或数据中心故障情况下的灾备需求。
 - **[优化排序键](https://docs.starrocks.io/zh/docs/table_design/indexes/Prefix_index_sort_key/)**：明细表、聚合表和更新表均支持通过 `ORDER BY` 子句指定排序键。
 - **[Experimental] 优化非字符串标量类型数据的存储效率**：这类数据支持字典编码，存储空间下降 12%。
-- **主键表支持 Size-tiered Compaction 策略**：降低执行 Compaction 时写 I/O 和内存开销。存算分离和存算一体集群均支持该优化。
+- **主键表支持 Size-tiered Compaction 策略**：降低执行 Compaction 时写 I/O 和内存开销。存算分离和存算一体集群均支持该优化。您可以通过 BE 配置项 `enable_pk_size_tiered_compaction_strategy` 控制是否启用该功能。默认开启。  
 - **优化主键表持久化索引的读 I/O**：支持按照更小的粒度（页）读取持久化索引，并且改进持久化索引的 bloom filter。存算分离和存算一体集群均支持该优化。
 - 支持 IPv6 部署：可以基于 IPv6 网络部署集群。
 
@@ -119,7 +180,7 @@ displayed_sidebar: "Chinese"
 #### 建表与分区分桶
 
 - 用户使用 CTAS 创建 Colocate 表时，必须指定 Distribution Key。[#45537](https://github.com/StarRocks/starrocks/pull/45537)
-- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 或 CN 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
 
 #### 导入与导出
 

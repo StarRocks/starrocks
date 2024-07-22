@@ -377,8 +377,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
-        partitionInfo.add(Joiner.on(", ")
-                .join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn()))); // PartitionKey
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets

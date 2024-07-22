@@ -69,10 +69,13 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
@@ -1301,6 +1304,8 @@ public class LeaderImpl {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
             return response;
+        } catch (LockTimeoutException e) {
+            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
 
         TStatus status = new TStatus(TStatusCode.OK);

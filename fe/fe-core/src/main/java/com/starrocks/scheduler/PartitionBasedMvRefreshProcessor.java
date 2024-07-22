@@ -238,7 +238,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean syncAndCheckPartitions(TaskRunContext context,
                                            IMaterializedViewMetricsEntity mvEntity,
                                            Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions)
-            throws AnalysisException {
+            throws AnalysisException, LockTimeoutException {
         // collect partition infos of ref base tables
         LOG.info("start to sync and check partitions for mv: {}", materializedView.getName());
         int retryNum = 0;
@@ -285,7 +285,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * IF it's not, it would modify the context state, like `NEXT_PARTITION_START`
      */
     private Set<String> checkMvToRefreshedPartitions(TaskRunContext context, boolean tentative)
-            throws AnalysisException {
+            throws AnalysisException, LockTimeoutException {
         Set<String> mvToRefreshedPartitions = null;
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db, materializedView, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
@@ -324,9 +324,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             LOG.info("Do mv refresh, mv:{}, refBaseTablePartitionExprMap:{}," +
                             "refBaseTablePartitionSlotMap:{}, refBaseTablePartitionColumnMap:{}," +
-                            "refBaseTablePartitionColumn:{}, baseTableInfos:{}", materializedView.getName(),
+                            "baseTableInfos:{}", materializedView.getName(),
                     materializedView.getRefBaseTablePartitionExprs(), materializedView.getRefBaseTablePartitionSlots(),
-                    materializedView.getRefBaseTablePartitionColumns(), materializedView.getRefBaseTablePartitionColumn(),
+                    materializedView.getRefBaseTablePartitionColumns(),
                     MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()));
         } catch (Throwable e) {
             LOG.warn("Log mv basic info failed:", e);
@@ -486,8 +486,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Prepare the statement and plan for mv refreshing, considering the partitions of ref table
      */
-    private InsertStmt prepareRefreshPlan(Set<String> mvToRefreshedPartitions,
-                                          Map<String, Set<String>> refTablePartitionNames) throws AnalysisException {
+    private InsertStmt prepareRefreshPlan(Set<String> mvToRefreshedPartitions, Map<String, Set<String>> refTablePartitionNames)
+            throws AnalysisException, LockTimeoutException {
         // 1. Prepare context
         ConnectContext ctx = mvContext.getCtx();
         ctx.getAuditEventBuilder().reset();
@@ -1073,7 +1073,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Sync base table's partition infos to be used later.
      */
-    private boolean syncPartitions() throws AnalysisException {
+    private boolean syncPartitions() throws AnalysisException, LockTimeoutException {
         Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
         snapshotBaseTables = collectBaseTableSnapshotInfos(materializedView);
@@ -1259,7 +1259,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      *
      * @return: true if the base table's partition has changed, otherwise false.
      */
-    private boolean checkBaseTablePartitionChange(MaterializedView materializedView) {
+    private boolean checkBaseTablePartitionChange(MaterializedView materializedView) throws LockTimeoutException {
         LockParams lockParams = collectDatabases(materializedView);
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(lockParams,
@@ -1344,7 +1344,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @return the base table and its snapshot info map
      */
     @VisibleForTesting
-    public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
+    public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView)
+            throws LockTimeoutException {
         Map<Long, TableSnapshotInfo> tables = Maps.newHashMap();
         List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
 

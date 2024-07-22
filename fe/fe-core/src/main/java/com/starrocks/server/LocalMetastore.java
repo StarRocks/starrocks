@@ -1567,7 +1567,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         }
     }
 
-    private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
+    private PhysicalPartition createPhysicalPartition(String name, Database db, OlapTable olapTable,
                                                       Partition partition, long warehouseId) throws DdlException {
         long partitionId = partition.getId();
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
@@ -1586,8 +1586,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
 
+        if (name == null) {
+            name = partition.generatePhysicalPartitionName(id);
+        }
         PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
-                id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+                id, name, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1619,14 +1622,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         return physicalParition;
     }
 
-    public void addSubPartitions(Database db, OlapTable table,
-                                 Partition partition, int numSubPartition, long warehouseId) throws DdlException {
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+            int numSubPartition, long warehouseId) throws DdlException {
+        addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
+    }
+
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+            int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
-        Set<String> checkExistPartitionName = Sets.newConcurrentHashSet();
         try {
             olapTable = checkTable(db, table.getId());
 
@@ -1645,7 +1652,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         List<PhysicalPartition> subPartitions = new ArrayList<>();
         // create physical partition
         for (int i = 0; i < numSubPartition; i++) {
-            PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition, warehouseId);
+            String name = subPartitionNames != null && subPartitionNames.length > i ? subPartitionNames[i] : null;
+            PhysicalPartition subPartition = createPhysicalPartition(name, db, copiedTable, partition, warehouseId);
             subPartitions.add(subPartition);
         }
 
@@ -2039,6 +2047,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         try {
             List<CompletableFuture<Boolean>> futures = new ArrayList<>();
             for (Map.Entry<Long, List<AgentTask>> entry : backendToBatchTask.entrySet()) {
+                AgentTaskQueue.addTaskList(entry.getValue());
                 futures.add(sendTask(entry.getKey(), entry.getValue()));
             }
 

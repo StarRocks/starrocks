@@ -187,10 +187,4 @@ public class OdpsScanNode extends ScanNode {
         tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
     }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
-    }
-
 }

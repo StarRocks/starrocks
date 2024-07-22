@@ -11,14 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.common.util.concurrent.lock;
 
-public class IllegalLockStateException extends Exception {
-    public IllegalLockStateException(String msg) {
-        super(msg);
+package com.starrocks.sql.optimizer.rule.transformation.materialization.compensation;
+
+import com.starrocks.catalog.PartitionKey;
+
+import java.util.List;
+
+public class ExternalTableCompensation extends BaseCompensation {
+    public ExternalTableCompensation(List<PartitionKey> partitionKeys) {
+        super(partitionKeys);
     }
 
-    public IllegalLockStateException(String msg, Exception e) {
-        super(msg, e);
+    @Override
+    public String toString() {
+        return "ExternalTableCompensation{" +
+                "partitionKeys=" + getCompensations() +
+                '}';
     }
 }
+
+

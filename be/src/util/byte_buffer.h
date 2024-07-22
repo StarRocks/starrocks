@@ -40,17 +40,41 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
 struct ByteBuffer;
 using ByteBufferPtr = std::shared_ptr<ByteBuffer>;
 
+struct MemTrackerDeleter {
+    MemTrackerDeleter(MemTracker* tracker_) : tracker(tracker_) { DCHECK(tracker_ != nullptr); }
+    MemTracker* tracker;
+    template <typename T>
+    void operator()(T* ptr) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
+        if (ptr) {
+            delete ptr;
+        }
+    }
+};
+
 struct ByteBuffer {
     static ByteBufferPtr allocate(size_t size) {
         ByteBufferPtr ptr(new ByteBuffer(size));
         return ptr;
     }
+
+    static ByteBufferPtr allocate(size_t size, MemTracker* tracker) {
+        if (tracker == nullptr) {
+            return allocate(size);
+        }
+        ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker));
+        return ptr;
+    }
+
+    static ByteBufferPtr allocate_with_tracker(size_t size) { return allocate(size, CurrentThread::mem_tracker()); }
 
     static ByteBufferPtr reallocate(const ByteBufferPtr& old_ptr, size_t new_size) {
         if (new_size <= old_ptr->capacity) return old_ptr;

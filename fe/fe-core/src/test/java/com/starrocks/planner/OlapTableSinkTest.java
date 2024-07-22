@@ -464,10 +464,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, 2, 0, index);
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, 2, 0, index);
+        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 

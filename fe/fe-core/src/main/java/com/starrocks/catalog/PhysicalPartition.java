@@ -31,6 +31,8 @@ public interface PhysicalPartition {
 
     // physical partition id
     public long getId();
+    public String getName();
+    public void setName(String name);
     public void setIdForRestore(long id);
     public long getBeforeRestoreId();
 

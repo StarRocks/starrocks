@@ -518,8 +518,20 @@ CONF_mInt64(write_buffer_size, "104857600");
 CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Double(query_pool_spill_mem_limit_threshold, "1.0");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
-CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
+// It's is a soft limit, when this limit is hit,
+// memtable in delta writer will be flush to reduce memory cost.
+// Load memory beyond this limit is allowed.
+CONF_Int32(load_process_max_memory_limit_percent, "30"); // 30%
+// It's hard limit ratio, when this limit is hit, new loading task will be rejected.
+// we can caculate and got the hard limit percent.
+// E.g.
+//  load_process_max_memory_limit_percent is 30%,
+//  load_process_max_memory_hard_limit_ratio is 2.
+//  then hard limit percent is 30% * 2 = 60%.
+//  And when hard limit percent is larger than process limit percent,
+//  use process limit percent as hard limit percent.
+CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
@@ -855,6 +867,11 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 // When the ORC file file size is smaller than orc_loading_buffer_size,
 // we'll read the whole file at once instead of reading a footer first.
 CONF_Int32(orc_loading_buffer_size, "8388608");
+
+// orc writer
+// This is a workaround from SR side for a out-of-bound bug of hive orc reader.
+// Refer to https://issues.apache.org/jira/browse/ORC-125 for more detailed information.
+CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");

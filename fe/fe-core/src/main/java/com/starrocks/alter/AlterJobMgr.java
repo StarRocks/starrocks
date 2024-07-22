@@ -526,57 +526,44 @@ public class AlterJobMgr {
     public void processAlterTable(AlterTableStmt stmt) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
-
+        String tableName = dbTableName.getTbl();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
-        // check conflict alter ops first
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-
-        // check cluster capacity and db quota, only need to check once.
-        if (currentAlterOps.needCheckCapacity()) {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-            db.checkQuota();
-        }
-
-        // some operations will take long time to process, need to be done outside the databse lock
-        boolean needProcessOutsideDatabaseLock = false;
-        String tableName = dbTableName.getTbl();
-
-        boolean isSynchronous = true;
-
         Table table = db.getTable(tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
+
+        // some operations will take long time to process, need to be done outside the databse lock
+        boolean needProcessOutsideDatabaseLock = false;
+        boolean isSynchronous = true;
 
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
         }
         OlapTable olapTable = (OlapTable) table;
 
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             if (olapTable.getState() != OlapTableState.NORMAL) {
                 throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
-            if (currentAlterOps.hasSchemaChangeOp()) {
+            if (stmt.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
-                schemaChangeHandler.process(alterClauses, db, olapTable);
+                schemaChangeHandler.process(stmt.getAlterClauseList(), db, olapTable);
                 isSynchronous = false;
-            } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
+            } else if (stmt.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
                     olapTable.isCloudNativeTable()) {
                 schemaChangeHandler.processLakeTableAlterMeta(alterClauses, db, olapTable);
                 isSynchronous = false;
-            } else if (currentAlterOps.hasRollupOp()) {
+            } else if (stmt.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);
                 isSynchronous = false;
-            } else if (currentAlterOps.hasPartitionOp()) {
+            } else if (stmt.hasPartitionOp()) {
                 Preconditions.checkState(alterClauses.size() == 1);
                 AlterClause alterClause = alterClauses.get(0);
                 if (alterClause instanceof DropPartitionClause) {
@@ -630,23 +617,23 @@ public class AlterJobMgr {
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
-            } else if (currentAlterOps.hasTruncatePartitionOp()) {
+            } else if (stmt.contains(AlterOpType.TRUNCATE_PARTITION)) {
                 needProcessOutsideDatabaseLock = true;
-            } else if (currentAlterOps.hasRenameOp()) {
+            } else if (stmt.contains(AlterOpType.RENAME)) {
                 processRename(db, olapTable, alterClauses);
-            } else if (currentAlterOps.hasSwapOp()) {
+            } else if (stmt.contains(AlterOpType.SWAP)) {
                 new AlterJobExecutor().process(stmt, ConnectContext.get());
-            } else if (currentAlterOps.hasAlterCommentOp()) {
+            } else if (stmt.contains(AlterOpType.ALTER_COMMENT)) {
                 processAlterComment(db, olapTable, alterClauses);
-            } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
+            } else if (stmt.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
                 needProcessOutsideDatabaseLock = true;
-            } else if (currentAlterOps.contains(AlterOpType.COMPACT)) {
+            } else if (stmt.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
             } else {
-                throw new DdlException("Invalid alter operations: " + currentAlterOps);
+                throw new DdlException("Invalid alter operations: " + stmt.getAlterClauseList());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // the following ops should be done outside db lock. because it contains synchronized create operation
