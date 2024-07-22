@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -243,17 +244,22 @@ public class ListPartitionPruner implements PartitionPruner {
         };
 
         // Build a map of c1 -> c3, in which c3=fn(c1)
-        Map<ColumnRefOperator, ColumnRefOperator> refedGeneratedColumnMap = Maps.newHashMap();
+        Map<ColumnRefOperator, Pair<ColumnRefOperator, ScalarOperator>> refedGeneratedColumnMap = Maps.newHashMap();
         for (ColumnRefOperator partitionColumn : partitionColumnRefs) {
-            Column column = scanOperator.getColRefToColumnMetaMap().get(partitionColumn);
+            Column column = scanOperator.getTable().getColumn(partitionColumn.getName());
             if (column != null && column.isGeneratedColumn()) {
                 Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
+                ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
                 ScalarOperator call =
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
-                List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
-                for (ColumnRefOperator ref : columnRefOperatorList) {
-                    refedGeneratedColumnMap.put(ref, partitionColumn);
+                if (call instanceof CallOperator &&
+                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                    List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
+
+                    for (ColumnRefOperator ref : columnRefOperatorList) {
+                        refedGeneratedColumnMap.put(ref, Pair.create(partitionColumn, call));
+                    }
                 }
             }
         }
@@ -266,30 +272,46 @@ public class ListPartitionPruner implements PartitionPruner {
         List<ScalarOperator> extraConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : partitionConjuncts) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(conjunct);
-            if (partitionColumnRefs.containsAll(columnRefOperatorList) || columnRefOperatorList.size() != 1) {
+            if (!checkDeduceConjunct(conjunct, columnRefOperatorList)) {
                 continue;
             }
 
             ColumnRefOperator referenced = columnRefOperatorList.get(0);
-            ColumnRefOperator generated = refedGeneratedColumnMap.get(referenced);
-            if (generated == null) {
+            Pair<ColumnRefOperator, ScalarOperator> pair = refedGeneratedColumnMap.get(referenced);
+            if (pair == null) {
                 // No GeneratedColumn
                 continue;
             }
-            Column column = scanOperator.getColRefToColumnMetaMap().get(generated);
-            Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
-            ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
-            ScalarOperator call = SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
-            if (call instanceof CallOperator &&
-                    ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
-                ScalarOperator result = buildDeducedConjunct(conjunct, call, generated);
-                if (result != null) {
-                    extraConjuncts.add(result);
-                }
+            ColumnRefOperator generatedColumn = pair.first;
+            ScalarOperator generatedExpr = pair.second;
+            ScalarOperator result = buildDeducedConjunct(conjunct, generatedExpr, generatedColumn);
+            if (result != null) {
+                extraConjuncts.add(result);
             }
         }
 
         partitionConjuncts.addAll(extraConjuncts);
+    }
+
+    private boolean checkDeduceConjunct(ScalarOperator conjunct, List<ColumnRefOperator> columnRefs) {
+        // The conjunct should not contain partition-column
+        if (partitionColumnRefs.containsAll(columnRefs)) {
+            return false;
+        }
+        // Only one Column-Ref
+        if (columnRefs.size() != 1) {
+            return false;
+        }
+        // Only support predicate
+        if (!(conjunct instanceof PredicateOperator)) {
+            return false;
+        }
+        // Left child should be a column-ref
+        if (!conjunct.getChild(0).isColumnRef()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
