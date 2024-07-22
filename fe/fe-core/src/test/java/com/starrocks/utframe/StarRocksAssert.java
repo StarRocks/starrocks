@@ -117,12 +117,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
-<<<<<<< HEAD
-import com.starrocks.system.BackendCoreStat;
-=======
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.system.BackendResourceStat;
->>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
+import com.starrocks.system.BackendCoreStat;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;

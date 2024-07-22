@@ -22,7 +22,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -35,11 +34,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.apache.iceberg.Snapshot;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeysToListPredicate;
@@ -142,10 +139,6 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             }
 
             builder.setTable(currentTable);
-            TableVersionRange versionRange = TableVersionRange.withEnd(
-                    Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
-                            .map(Snapshot::snapshotId));
-            builder.setTableVersionRange(versionRange);
         }
         return builder.build();
     }

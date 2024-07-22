@@ -113,13 +113,9 @@ public class MvUpdateInfo {
         int maxLength = Config.max_mv_task_run_meta_message_values_length;
         return "MvUpdateInfo{" +
                 "refreshType=" + mvToRefreshType +
-<<<<<<< HEAD
-                ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
-=======
                 ", mvToRefreshPartitionNames=" + shrinkToSize(mvToRefreshPartitionNames, maxLength) +
                 ", basePartToMvPartNames=" + shrinkToSize(basePartToMvPartNames, maxLength) +
                 ", mvPartToBasePartNames=" + shrinkToSize(mvPartToBasePartNames, maxLength) +
->>>>>>> 062b98271e ([Enhancement] (Multi Ref Base Table Part3) Supports to track multi ref base tables in partition compensate (#48192))
                 '}';
     }
 
