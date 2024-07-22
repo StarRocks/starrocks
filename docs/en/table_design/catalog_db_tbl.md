@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 StarRocks uses internal catalogs to manage internal data and uses external catalogs to access external data in data lake. The data stored in StarRocks is maintained inside an internal catalog which consists of one or more databases. A database manages various objects, including tables, materialized views, and views, to store, manage, and manipulate data. StarRocks adopts a privilege system that controls users' privileges to perform operations on objects, thereby enhancing data security.
 
-![img](../assets/table_design/Catalog_db_tbl.png)
+![img](../_assets/table_design/Catalog_db_tbl.png)
 
 ## [Catalogs](../data_source/catalog/catalog_overview.md)
 

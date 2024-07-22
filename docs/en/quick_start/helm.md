@@ -7,10 +7,10 @@ toc_max_heading_level: 2
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import OperatorPrereqs from '../_assets/deployment/_OperatorPrereqs.mdx'
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsAllin1.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 # StarRocks with Helm
 

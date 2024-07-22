@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 StarRocks 使用 Internal Catalog 来管理内部数据，使用 External Catalog 来连接数据湖中的数据。存储在 StarRocks 中的数据都包含在 Internal Catalog 下，Internal Catalog 可以包含一个或多个数据库。数据库用于存储、管理和操作 StarRocks 中的数据，可用于管理多种对象，包括表、物化视图、视图等。StarRocks 采用权限系统来管理数据访问权限，定义了用户对哪些对象可以执行哪些操作，提高数据安全性。
 
-![img](../assets/table_design/Catalog_db_tbl.png)
+![img](../_assets/table_design/Catalog_db_tbl.png)
 
 ## [Catalogs](../data_source/catalog/catalog_overview.md)
 

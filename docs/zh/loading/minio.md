@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # 从 MinIO 导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 MinIO 导入数据：
 
@@ -45,7 +45,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 - MinIO 终端节点（Endpoint）
 - 作为访问凭证的 Access Key 和 Secret Key
 
-![MinIO access key](../assets/quick-start/MinIO-create.png)
+![MinIO access key](../_assets/quick-start/MinIO-create.png)
 
 ## 通过 INSERT+FILES() 导入
 
@@ -428,7 +428,7 @@ AVG_ROW_LENGTH: 17
 
 ### 工作原理
 
-![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../_assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
 2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。
