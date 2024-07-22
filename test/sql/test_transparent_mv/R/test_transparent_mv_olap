@@ -1115,8 +1115,8 @@ SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;
 -- result:
 2020-06-18 00:00:00	5
-2020-06-18 00:00:00	5
 2020-06-18 00:00:00	8
+2020-06-21 00:00:00	7
 -- !result
 SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
 -- result:
@@ -1139,39 +1139,39 @@ SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
-2020-06-24 00:00:00	27
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15 00:00:00	9
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
-2020-06-24 00:00:00	27
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
-2020-06-24 00:00:00	27
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
-2020-06-24 00:00:00	27
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
-2020-07-02 00:00:00	9
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
+2020-07-02 00:00:00	6
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
 -- result:
@@ -1184,20 +1184,20 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15 00:00:00	9
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-07-02 00:00:00	9
-2020-07-05 00:00:00	15
-2020-07-08 00:00:00	21
+2020-07-02 00:00:00	6
+2020-07-05 00:00:00	10
+2020-07-08 00:00:00	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15 00:00:00	9
-2020-06-18 00:00:00	18
-2020-06-21 00:00:00	21
+2020-06-18 00:00:00	13
+2020-06-21 00:00:00	14
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
@@ -1309,8 +1309,8 @@ SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;
 -- result:
 2020-06-18 00:00:00	2
-2020-06-18 00:00:00	2
 2020-06-18 00:00:00	3
+2020-06-21 00:00:00	3
 -- !result
 SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
 -- result:
@@ -1333,39 +1333,39 @@ SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
-2020-06-24 00:00:00	18
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15 00:00:00	6
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
-2020-06-24 00:00:00	18
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
-2020-06-24 00:00:00	18
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
-2020-06-24 00:00:00	18
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
-2020-07-02 00:00:00	6
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-07-02 00:00:00	3
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
 -- result:
@@ -1378,14 +1378,14 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15 00:00:00	6
-2020-06-18 00:00:00	10
-2020-06-21 00:00:00	14
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
-2020-07-02 00:00:00	6
-2020-07-05 00:00:00	10
-2020-07-08 00:00:00	14
+2020-07-02 00:00:00	3
+2020-07-05 00:00:00	5
+2020-07-08 00:00:00	7
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:

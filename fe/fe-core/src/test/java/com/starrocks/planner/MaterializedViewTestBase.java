@@ -16,10 +16,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
@@ -33,8 +32,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -43,6 +40,7 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -325,5 +323,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
         String tableName = matcher.group(1);
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
+    }
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, Column> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, Column> e = result.entrySet().iterator().next();
+        return Pair.create(e.getKey(), e.getValue());
     }
 }

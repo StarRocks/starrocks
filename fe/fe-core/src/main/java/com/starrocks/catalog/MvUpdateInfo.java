@@ -16,9 +16,13 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
+import com.starrocks.sql.common.PCell;
 
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.shrinkToSize;
 
 /**
  * Store the update information of MV used for mv rewrite(mv refresh can use it later).
@@ -36,6 +40,9 @@ public class MvUpdateInfo {
     private final Map<String, Map<Table, Set<String>>> mvPartToBasePartNames = Maps.newHashMap();
     // The consistency mode of query rewrite
     private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
+
+    // If the base table is a mv, needs to record the mapping of mv partition name to partition range
+    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
 
     /**
      * Marks the type of mv refresh later.
@@ -93,11 +100,22 @@ public class MvUpdateInfo {
         return queryRewriteConsistencyMode;
     }
 
+    public void addMVPartitionNameToCellMap(Map<String, PCell> m) {
+        mvPartitionNameToCellMap.putAll(m);
+    }
+
+    public Map<String, PCell> getMvPartitionNameToCellMap() {
+        return mvPartitionNameToCellMap;
+    }
+
     @Override
     public String toString() {
+        int maxLength = Config.max_mv_task_run_meta_message_values_length;
         return "MvUpdateInfo{" +
                 "refreshType=" + mvToRefreshType +
-                ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
+                ", mvToRefreshPartitionNames=" + shrinkToSize(mvToRefreshPartitionNames, maxLength) +
+                ", basePartToMvPartNames=" + shrinkToSize(basePartToMvPartNames, maxLength) +
+                ", mvPartToBasePartNames=" + shrinkToSize(mvPartToBasePartNames, maxLength) +
                 '}';
     }
 
@@ -137,7 +155,7 @@ public class MvUpdateInfo {
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;
         }
-        // MV's partition names to refresh is not only affected by the ref base table, but also other base tables.
+        // MV's partition names to refresh are not only affected by the ref base table, but also other base tables.
         // Deduce the partition names to refresh of the ref base table from the partition names to refresh of the mv.
         Set<String> refBaseTableToRefreshPartitionNames = Sets.newHashSet();
         for (String mvPartName : mvToRefreshPartitionNames) {
@@ -147,8 +165,10 @@ public class MvUpdateInfo {
                 continue;
             }
             Set<String> partNames = baseTableToPartNames.get(refBaseTable);
+            // Continue since mvPartName to refresh is not triggerred by the base table since multi base tables has been
+            // supported.
             if (partNames == null) {
-                return null;
+                continue;
             }
             refBaseTableToRefreshPartitionNames.addAll(partNames);
         }

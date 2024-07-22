@@ -320,9 +320,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             LOG.info("Do mv refresh, mv:{}, refBaseTablePartitionExprMap:{}," +
                             "refBaseTablePartitionSlotMap:{}, refBaseTablePartitionColumnMap:{}," +
-                            "refBaseTablePartitionColumn:{}, baseTableInfos:{}", materializedView.getName(),
+                            "baseTableInfos:{}", materializedView.getName(),
                     materializedView.getRefBaseTablePartitionExprs(), materializedView.getRefBaseTablePartitionSlots(),
-                    materializedView.getRefBaseTablePartitionColumns(), materializedView.getRefBaseTablePartitionColumn(),
+                    materializedView.getRefBaseTablePartitionColumns(),
                     MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()));
         } catch (Throwable e) {
             LOG.warn("Log mv basic info failed:", e);
