@@ -199,8 +199,9 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
-    public static ScalarOperator translateWithSlotRef(Expr expr, Map<SlotRef, ColumnRefOperator> mapping) {
-        ReplaceSlotVisitor visitor = new ReplaceSlotVisitor(mapping);
+    public static ScalarOperator translateWithSlotRef(Expr expr,
+                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
         return visitor.visit(expr, new Context());
     }
 
@@ -875,26 +876,26 @@ public final class SqlToScalarOperatorTranslator {
     }
 
     /**
-     * Replace the SlotRef
+     * Resolve the SlotRef
      */
-    static class ReplaceSlotVisitor extends Visitor {
+    static class ResolveSlotVisitor extends Visitor {
 
-        private final Map<SlotRef, ColumnRefOperator> mapping;
-        private final Map<String, ColumnRefOperator> nameMapping;
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
 
-        public ReplaceSlotVisitor(Map<SlotRef, ColumnRefOperator> mapping) {
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
             super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
                     new ColumnRefFactory(), Collections.emptyList(),
                     null, null, null, null);
-            this.mapping = mapping;
-            this.nameMapping = mapping.entrySet().stream().map(x -> Map.entry(x.getKey().getColumnName(), x.getValue()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            this.resolver = resolver;
         }
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Context context) {
             if (!node.isAnalyzed()) {
-                return nameMapping.get(node.getColumnName());
+                ColumnRefOperator ref = resolver.apply(node);
+                if (ref != null) {
+                    return ref;
+                }
             }
             throw unsupportedException("unknown slot: " + node.toSql());
         }

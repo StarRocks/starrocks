@@ -22,7 +22,6 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.Type;
@@ -43,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -174,7 +174,7 @@ public class ListPartitionPruner implements PartitionPruner {
             return null;
         }
 
-        inferExtraConjuncts();
+        deduceExtraConjuncts();
 
         if (partitionConjuncts.isEmpty()) {
             // no conjuncts, notEvalConjuncts is empty
@@ -226,100 +226,128 @@ public class ListPartitionPruner implements PartitionPruner {
         }
     }
 
-    // Infer equivalent partitions columns based on the partition-conjuncts
+    // Infer equivalent partitions columns based on the partition-conjuncts.
     // Suppose the query has an expression c1 >= '2024-01-02', and the table is partitioned by
-    // date_trunc('month', c1), so we can infer the expression:
-    // date_trunc('month', c1) >= date_trunc('month', '2024-01-02')
+    // a GeneratedColumn c3=date_trunc('month', c1), so we can infer the expression:
+    // c3 >= date_trunc('month', '2024-01-02')
     // This optimization is only applied to the case that the table's partition column is actually a GeneratedColumn
     // which is monotonic function
-    private void inferExtraConjuncts() {
-        Map<SlotRef, ColumnRefOperator> slotRefMap = Maps.newHashMap();
-        for (var e : scanOperator.getColumnMetaToColRefMap().entrySet()) {
-            SlotRef slot = new SlotRef(TableName.fromString(scanOperator.getTable().getName()), e.getKey().getName());
-            slotRefMap.put(slot, e.getValue());
-        }
+    private void deduceExtraConjuncts() {
+        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+            return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
+        };
+        // The GeneratedColumn doesn't have the correct type info, let's help it
         Consumer<SlotRef> slotRefConsumer = (slot) -> {
             ColumnRefOperator ref = scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
             slot.setType(ref.getType());
         };
 
-        // c1 -> c3, in which c3=date_trunc('month', c1);
+        // Build a map of c1 -> c3, in which c3=fn(c1)
         Map<ColumnRefOperator, ColumnRefOperator> refedGeneratedColumnMap = Maps.newHashMap();
         for (ColumnRefOperator partitionColumn : partitionColumnRefs) {
             Column column = scanOperator.getColRefToColumnMetaMap().get(partitionColumn);
             if (column != null && column.isGeneratedColumn()) {
                 Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
-                ScalarOperator call = SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefMap);
+                ScalarOperator call =
+                        SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
                 List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
-                for (ColumnRefOperator refed : columnRefOperatorList) {
-                    refedGeneratedColumnMap.put(refed, partitionColumn);
+                for (ColumnRefOperator ref : columnRefOperatorList) {
+                    refedGeneratedColumnMap.put(ref, partitionColumn);
                 }
             }
         }
 
-        List<ScalarOperator> inferedConjuncts = Lists.newArrayList();
+        // No GeneratedColumn with partition column
+        if (refedGeneratedColumnMap.isEmpty()) {
+            return;
+        }
+
+        List<ScalarOperator> extraConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : partitionConjuncts) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(conjunct);
-            if (partitionColumnRefs.containsAll(columnRefOperatorList)) {
+            if (partitionColumnRefs.containsAll(columnRefOperatorList) || columnRefOperatorList.size() != 1) {
                 continue;
             }
-            boolean isMonotonic = true;
-            ScalarOperator monoExpr = null;
 
-            ColumnRefOperator refed = columnRefOperatorList.get(0);
-            ColumnRefOperator generated = refedGeneratedColumnMap.get(refed);
-            if (generated != null) {
-                Column column = scanOperator.getColRefToColumnMetaMap().get(generated);
-                Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
-                ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
-                ScalarOperator call = SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefMap);
-                if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
-                    monoExpr = call;
-                    isMonotonic = true;
-                } else {
-                    isMonotonic = false;
-                }
+            ColumnRefOperator referenced = columnRefOperatorList.get(0);
+            ColumnRefOperator generated = refedGeneratedColumnMap.get(referenced);
+            if (generated == null) {
+                // No GeneratedColumn
+                continue;
             }
-
-            // TODO: only support BinaryPredicate now
-            // Replace c1 >= '2024-01-02' and c3=date_trunc('month', c1) into
-            // c3 >= date_trunc('month', '2024-01-02')
-            if (monoExpr != null && isMonotonic && conjunct instanceof BinaryPredicateOperator) {
-                ColumnRefOperator refColumn = Utils.extractColumnRef(monoExpr).get(0);
-                BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
-                ConstantOperator constant = (ConstantOperator) binary.getChild(1);
-                binary.getChild(1);
-
-                ScalarOperator result = conjunct.clone();
-
-
-                // Replace '2024-01-02' with date_trunc('month', '2024-01-02')
-                {
-                    Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
-                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(mapping);
-                    mapping.put(refColumn, constant);
-                    monoExpr = rewriter.rewrite(monoExpr);
-
+            Column column = scanOperator.getColRefToColumnMetaMap().get(generated);
+            Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
+            ScalarOperator call = SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
+            if (call instanceof CallOperator &&
+                    ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                ScalarOperator result = buildDeducedConjunct(conjunct, call, generated);
+                if (result != null) {
+                    extraConjuncts.add(result);
                 }
-
-                // Replace c1 with c3: c3 => date_trunc('month', '2024-01-02')
-                {
-                    result.setChild(0, generated);
-                    result.setChild(1, monoExpr);
-                }
-
-                // Fold constants
-                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-                result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
-
-                inferedConjuncts.add(result);
             }
         }
 
-        partitionConjuncts.addAll(inferedConjuncts);
+        partitionConjuncts.addAll(extraConjuncts);
     }
+
+    /**
+     * Input:
+     * - conjunct: c1 >= '2024-01-02'
+     * - monoExpr: date_trunc('MONTH', c1)
+     * - generatedColumn: c3
+     * <p>
+     * Deducted result: c3 >= date_trunc('MONTH', '2024-01-02')
+     */
+    private ScalarOperator buildDeducedConjunct(ScalarOperator conjunct,
+                                                ScalarOperator monoExpr,
+                                                ColumnRefOperator generatedColumn) {
+        ScalarOperatorVisitor<ScalarOperator, Void> visitor = new ScalarOperatorVisitor<>() {
+
+            private ScalarOperator replaceExpr(int index) {
+                Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(mapping);
+                mapping.put(Utils.extractColumnRef(monoExpr).get(0), conjunct.getChild((index)));
+                return rewriter.rewrite(monoExpr);
+            }
+
+            @Override
+            public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+                // Not supported
+                return null;
+            }
+
+            @Override
+            public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+                ScalarOperator result = operator.clone();
+                result.setChild(0, generatedColumn);
+                result.setChild(1, replaceExpr(1));
+                return result;
+            }
+
+            @Override
+            public ScalarOperator visitInPredicate(InPredicateOperator operator, Void context) {
+                ScalarOperator result = operator.clone();
+                result.setChild(0, generatedColumn);
+                for (int i = 1; i < operator.getChildren().size(); i++) {
+                    result.setChild(i, replaceExpr(i));
+                }
+                return result;
+            }
+
+        };
+        ScalarOperator result = conjunct.accept(visitor, null);
+        if (result == null) {
+            return null;
+        }
+
+        // Fold constants
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        result = rewriter.rewrite(result, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
+        return result;
+    }
+
 
     private Pair<Set<Long>, Boolean> evalPartitionPruneFilter(ScalarOperator operator) {
         Set<Long> matches = null;
