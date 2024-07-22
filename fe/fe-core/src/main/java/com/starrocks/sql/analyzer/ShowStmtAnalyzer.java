@@ -491,7 +491,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", procString));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
             }
         }
 
@@ -504,7 +504,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", path));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", path, e.getMessage()));
             }
             return null;
         }
