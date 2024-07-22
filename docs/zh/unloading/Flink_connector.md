@@ -20,13 +20,13 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
   Flink 先从 FE 节点获取查询计划 (Query Plan)，然后将获取到的查询计划作为参数，下发至 BE 节点，最后获取 BE 节点返回的数据。
 
-  ![Unload data - Flink Connector](../assets/unload_flink_connector_1.png)
+  ![Unload data - Flink Connector](../_assets/unload_flink_connector_1.png)
 
 - Flink JDBC Connector
 
   Flink JDBC Connector 仅能从 FE 单点上串行读取数据，数据读取效率较低。
 
-  ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
+  ![Unload data - JDBC Connector](../_assets/unload_flink_connector_2.png)
 
 ## 版本要求
 

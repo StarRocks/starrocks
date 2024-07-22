@@ -8,8 +8,8 @@ keywords: ['Routine Load']
 
 # Kafka routine load StarRocks using shared-data storage
 
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
 
 ## About Routine Load
 
@@ -146,7 +146,7 @@ In order to use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO
 
 Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
-![View the MinIO access key](../assets/quick-start/MinIO-view-key.png)
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
 ---
 

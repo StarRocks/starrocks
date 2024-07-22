@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # Loading concepts
 
-import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 
 This topic introduces common concepts and information about data loading.
 
@@ -89,7 +89,7 @@ The process of asynchronous loading is as follows:
 
 The workflow of a Broker Load or Spark Load job consists of five stages, as shown in the following figure.
 
-![Broker Load or Spark Load overflow](../../assets/4.1-1.png)
+![Broker Load or Spark Load overflow](../../_assets/4.1-1.png)
 
 The workflow is described as follows:
 

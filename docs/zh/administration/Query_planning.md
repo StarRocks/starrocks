@@ -229,7 +229,7 @@ Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方�
 
 抛开具体的表达式不谈，下图从宏观的角度展示了 query96.sql 的 Query Plan。
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## 查看分析 Profile
 
@@ -448,7 +448,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
 ```
 
-![8-9](../assets/8-9.png)
+![8-9](../_assets/8-9.png)
 
 ## 查看 SQL 指纹
 

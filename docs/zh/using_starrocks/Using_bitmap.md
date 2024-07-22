@@ -25,7 +25,7 @@ StarRocks 是基于 MPP 架构实现的，在使用 count distinct 做精确去�
 
 StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
 
-![alter](../assets/6.1.2-2.png)
+![alter](../_assets/6.1.2-2.png)
 
 > 注：图中是 6 行数据在 2 个 BE 节点上计算的示意图。
 

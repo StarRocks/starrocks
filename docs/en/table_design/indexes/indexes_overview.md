@@ -19,7 +19,7 @@ The Prefix index is automatically generated during data writing. To more specifi
 
 StarRocks actually adopts columnar storage in the underlying storage. Data per column is stored in data pages, and the size of each data page's is generally 64 * 1024 bytes (data_page_size = 64 * 1024). An Ordinal index entry is added at the same time when a data page is generated. The Ordinal index entry contains information such as the starting row number of the data page. In this way, the Ordinal index can locate the physical address of the column Data Page data page by using the row number.
 
-![img](../../assets/3.1-2.png)
+![img](../../_assets/3.1-2.png)
 
 ### ZoneMap indexes
 

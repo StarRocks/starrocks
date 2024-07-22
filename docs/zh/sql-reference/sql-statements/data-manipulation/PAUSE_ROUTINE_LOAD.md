@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # PAUSE ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## 功能
 

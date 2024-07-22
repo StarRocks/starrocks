@@ -84,7 +84,7 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
 
 结果如下图所示：
 
-![img](../assets/data_cache_observe.png)
+![img](../_assets/data_cache_observe.png)
 
 ### 指标说明
 

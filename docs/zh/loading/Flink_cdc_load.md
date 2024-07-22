@@ -21,7 +21,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 :::
 
-![flink](../assets/4.9.2.png)
+![flink](../_assets/4.9.2.png)
 
 将 MySQL 的数据通过 Flink 同步至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
@@ -399,7 +399,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
       1. Flink WebUI 界面
-         ![task 拓扑](../assets/4.9.3.png)
+         ![task 拓扑](../_assets/4.9.3.png)
 
       2. 在 Flink 命令行执行命令`bin/flink list -running`
 

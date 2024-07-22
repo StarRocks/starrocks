@@ -169,7 +169,7 @@ SET cbo_prune_json_subfield = true;
 
      由于 profile 结果比较长，以下截图仅展示几个 Flat JSON 相关的指标结果。
 
-     ![flat_json_profile](../assets/flat_json.png)
+     ![flat_json_profile](../_assets/flat_json.png)
 
 ## 其他可选 BE 配置
 

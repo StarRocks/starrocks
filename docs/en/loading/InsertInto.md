@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data using INSERT
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 

@@ -12,7 +12,7 @@ StarRocks is compatible with MySQL protocols and supports standard SQL. Users ca
 
 StarRocks supports shared-nothing (Each BE has a portion of the data on its local storage) and shared-data (all data on object storage or HDFS and each CN has only cache on local storage). You can decide where the data is stored based on your needs. 
 
-![Architecture choices](../assets/architecture_choices.png)
+![Architecture choices](../_assets/architecture_choices.png)
 
 ### Shared-nothing
 
@@ -20,7 +20,7 @@ Local storage provides improved query latency for real-time queries.
 
 As a typical massively parallel processing (MPP) database StarRocks supports the shared-nothing architecture. In this architecture, BEs are responsible for both data storage and computation. Direct access to local data on the BE mode allows for local computation, avoiding data transfer and data copying, and providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing the cluster's ability to handle high-concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
 
-![shared-data-arch](../assets/shared-nothing.png)
+![shared-data-arch](../_assets/shared-nothing.png)
 
 #### Nodes
 
@@ -55,7 +55,7 @@ In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" whi
 
 The shared-data architecture maintains as simple an architecture as its shared-nothing counterpart. It consists of only two types of nodes: FE and CN. The only difference is users have to provision backend object storage.
 
-![shared-data-arch](../assets/shared-data.png)
+![shared-data-arch](../_assets/shared-data.png)
 
 #### Nodes
 

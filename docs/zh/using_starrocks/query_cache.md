@@ -61,11 +61,11 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
 
    BE 收集查询所涉及的所有 Tablet 的中间计算结果，并将这些结果合并成最终结果。
 
-   ![Query cache - How it works - 1](../assets/query_cache_principle-1.png)
+   ![Query cache - How it works - 1](../_assets/query_cache_principle-1.png)
 
 后续发起的类似查询，就可以复用之前缓存的查询结果。比如下图所示的查询，一共涉及三个 Tablet（编号 0 到 2），Query Cache 中缓存了第一个Tablet（即 Tablet 0）的中间结果。此时，BE 可以从 Query Cache 直接获取 Tablet 0 的中间计算结果，而不必访问磁盘上的数据。如果 Query Cache 完全预热，就会包含所有三个 Tablet 的中间计算结果，此时，BE 不需要访问磁盘上的任何数据。
 
-![Query cache - How it works - 2](../assets/query_cache_principle-2.png)
+![Query cache - How it works - 2](../_assets/query_cache_principle-2.png)
 
 为释放额外占用的内存，Query Cache 采用基于“最近最少使用” (Least Recently Used，简称 LRU) 算法的移出策略对缓存条目进行管理。当 Query Cache 占用的内存超过 `query_cache_capacity` 参数中设置的缓存大小时，最近最少使用的缓存条目会移出 Query Cache。
 
@@ -453,7 +453,7 @@ Query Cache 支持多版本 Cache 机制。
 
 在查询使用 Query Cache 时，Profile 中会出现 `CacheOperator` 的统计情况，如下图所示。
 
-![Query Cache - Metrics Overview](../assets/query-cache-metrics-overview.png)
+![Query Cache - Metrics Overview](../_assets/query-cache-metrics-overview.png)
 
 首先，源执行计划里，含 `OlapScanOperator` 的 Pipeline 中，从 `OlapScanOperator` 后继算子到聚合算子的算子名会添加前缀 `ML_`，表示当前的 Pipeline 引入了 `MultilaneOperator` 做 Per-Tablet 计算。`ML_CONJUGATE_AGGREGATE` 算子上方插入了 `CacheOperator`，该 `CacheOperator` 处理 Query Cache 在 Passthrough、Populate、Probe 三种模式下的工作逻辑。`CacheOperator` 中 Profile 有下列指标来统计 Query Cache 的使用情况。
 
@@ -685,7 +685,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 1](../assets/query_cache_stage1_agg_with_cache_zh.png)
+![Query Cache - Stage 1](../_assets/query_cache_stage1_agg_with_cache_zh.png)
 
 #### 一阶段远程聚合不使用 Query Cache
 
@@ -737,7 +737,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 2](../assets/query_cache_stage2_agg_with_cache_zh.png)
+![Query Cache - Stage 2](../_assets/query_cache_stage2_agg_with_cache_zh.png)
 
 #### 三阶段聚合的本地聚合使用 Query Cache
 
@@ -768,7 +768,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 3](../assets/query_cache_stage3_agg_with_cache_zh.png)
+![Query Cache - Stage 3](../_assets/query_cache_stage3_agg_with_cache_zh.png)
 
 #### 四阶段聚合的本地聚合使用 Query Cache
 
@@ -788,7 +788,7 @@ WHERE
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 4](../assets/query_cache_stage4_agg_with_cache_zh.png)
+![Query Cache - Stage 4](../_assets/query_cache_stage4_agg_with_cache_zh.png)
 
 #### 两个查询的第一次聚合语义等价复用 Query Cache 缓存结果
 
@@ -837,11 +837,11 @@ Profile 中 Query Cache 相关指标统计如下图所示。
 
 Q1 查询 CachePopulate 类指标的统计结果如下图所示。
 
-![Query Cache - Q1 Metrics](../assets/query_cache_reuse_Q1_zh.png)
+![Query Cache - Q1 Metrics](../_assets/query_cache_reuse_Q1_zh.png)
 
 Q2 查询 CacheProbe 类指标的统计结果如下图所示。
 
-![Query Cache - Q2 Metrics](../assets/query_cache_reuse_Q2_zh.png)
+![Query Cache - Q2 Metrics](../_assets/query_cache_reuse_Q2_zh.png)
 
 #### 采用 CTE 优化的 DISTINCT 查询不使用 Query Cache
 
@@ -859,7 +859,7 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 1](../assets/query_cache_distinct_with_cte_Q1_zh.png)
+![Query Cache - CTE - 1](../_assets/query_cache_distinct_with_cte_Q1_zh.png)
 
 - 查询包含针对同一列的多个 DISTINCT 聚合函数。
 
@@ -875,7 +875,7 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 2](../assets/query_cache_distinct_with_cte_Q2_zh.png)
+![Query Cache - CTE - 2](../_assets/query_cache_distinct_with_cte_Q2_zh.png)
 
 - 查询包含针对不同列的多个 DISTINCT 聚合函数。
 
@@ -890,7 +890,7 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_zh.png)
+![Query Cache - CTE - 3](../_assets/query_cache_distinct_with_cte_Q3_zh.png)
 
 ## 最佳实践
 

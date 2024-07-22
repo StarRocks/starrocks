@@ -13,7 +13,7 @@ This test compares the performance of StarRocks, Apache Druid, and ClickHouse ag
 - Among the 13 queries performed on SSB standard datasets, StarRocks has an overall query performance **2.1x that of ClickHouse and 8.7x that of Apache Druid**.
 - After Bitmap Indexing of StarRocks is enabled, the performance is 1.3x compared to when this feature is disabled. The overall performance of StarRocks is **2.8x that of ClickHouse and 11.4x that of Apache Druid**.
 
-![overall comparison](../assets/7.1-1.png)
+![overall comparison](../_assets/7.1-1.png)
 
 ## Test preparation
 

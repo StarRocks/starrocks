@@ -12,7 +12,7 @@ TPC-DS 是一套决策支持系统的基准测试，它对决策支持系统的�
 
 在 TPC-DS 100 GB 规模的数据集上进行对比测试，共 99 个查询，测试结果如下：
 
-![tpc-ds](./../assets/tpc-ds.png)
+![tpc-ds](./../_assets/tpc-ds.png)
 
 StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，其中 StarRocks Hive 外表查询和 Trino 查询的是同一份数据，数据采用 Parquet 格式存储，LZ4 格式压缩。
 

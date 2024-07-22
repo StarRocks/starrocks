@@ -32,11 +32,11 @@ Please note that when you analyze the profiles of an INSERT INTO statement, no d
 
 Example 1: Simulate and analyze a SELECT statement. The query result are discarded.
 
-![img](../../../assets/Profile/text_based_explain_analyze_select.jpeg)
+![img](../../../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
 Example 2: Simulate and analyze an INSERT INTO statement. The loading transaction will be aborted.
 
-![img](../../../assets/Profile/text_based_explain_analyze_insert.jpeg)
+![img](../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
 ## Relevant SQLs
 

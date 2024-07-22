@@ -6,9 +6,9 @@ keywords: ['Broker Load']
 
 # 从 HDFS 导入
 
-import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.md'
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 HDFS 导入数据：
 
@@ -320,7 +320,7 @@ REJECTED_RECORD_PATH: NULL
 
 ### 工作原理
 
-![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../_assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
 2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。
@@ -455,7 +455,7 @@ Pipe 适用于大规模批量导入数据、以及持续导入数据的场景：
 
 ### 工作原理
 
-![Pipe 工作原理](../assets/pipe_data_flow.png)
+![Pipe 工作原理](../_assets/pipe_data_flow.png)
 
 ### Pipe 与 INSERT+FILES() 的区别
 

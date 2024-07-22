@@ -39,10 +39,10 @@ import TabItem from '@theme/TabItem';
 
 - 数据写入是通过 StarRocks 内部的 Loadjob 实现，包含一批数据变更操作（包括 Insert、Update、Delete）。StarRocks 会加载导入数据对应 Tablet 的主键索引至内存中。对于 Delete 操作，StarRocks 先通过主键索引找到数据行原来所在的数据文件以及行号，在 DelVector（用于存储和管理数据导入时生成数据行对应的删除标记）中把该条数据标记为删除。对于 Update 操作，StarRocks 除了在 DelVector 中将原先数据行标记为删除，还会把最新数据写入新的数据文件，相当于把 Update 改写为 Delete+Insert（如下图所示）。并且会更新主键索引中变更的数据行现在所在的数据文件和行号。
 
-   ![pk1](../../assets/table_design/pk1.png)
+   ![pk1](../../_assets/table_design/pk1.png)
 - 读取数据时，由于写入数据时各个数据文件中历史重复数据已经标记为删除，同一个主键值下仅需要读取最新的一条数据，无需在线 Merge 多个版本的数据文件来去重以找到最新的数据。扫描底层数据文件时借助过滤算子和各类索引，可以减少扫描开销（如下图所示），所以查询性能的提升空间更大。并且相对于 Merge-On-Read 策略的更新表，主键表的查询性能能够提升 3~10 倍。
 
-   ![pk2](../../assets/table_design/pk2.png)
+   ![pk2](../../_assets/table_design/pk2.png)
 
 <details>
 <summary>更多原理</summary>
@@ -60,11 +60,11 @@ StarRocks 属于分析型数据库，底层数据采用列式存储。具体来�
 
 - **Tablet**：一张表根据分区和分桶机制被划分成多个 Tablet，是实际的物理存储单元。Tablet 以副本（Replica）的形式分布式存储在不同 BE 节点上。一个 Tablet 主要包含以下 4 个组件：
 
-  ![pk3](../../assets/table_design/pk3.png)
+  ![pk3](../../_assets/table_design/pk3.png)
 
 - **元数据**：保存 Tablet 的版本历史以及每个版本的信息（比如包含哪些 Rowset）。每次 Loadjob 或者 Compaction 的 Commit 阶段都会生成一个新版本。
 
-  ![pk4](../../assets/table_design/pk4.png)
+  ![pk4](../../_assets/table_design/pk4.png)
 
 - **主键索引**：主键索引，用于保存主键标识的数据行与该数据行所在位置之间的映射关系。采用 HashMap 结构，Key 是编码后的主键列值，Value 记录数据行所在的位置（包括 `rowset_id`、`segment_id` 和 `rowid`）。通常只在数据写入时会使用到主键索引，根据主键值查找主键值标识的数据行在哪个 Rowset 的第几行。
 - **DelVector**: 每个 Rowset 中每一个 Segment 文件（列存文件）对应的删除标记。
@@ -176,10 +176,10 @@ PROPERTIES (
 
 - **数据有冷热特征**，即最近几天的热数据才经常被修改，老的冷数据很少被修改。例如，MySQL 订单表实时同步到 StarRocks 中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时老订单的主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的主键索引。如图所示，数据按天分区，最新两个分区的数据更新比较频繁。
 
-   ![pk5](../../assets/table_design/pk5.png)
+   ![pk5](../../_assets/table_design/pk5.png)
 
 - **大宽表**（数百到数千列）。主键只占整个数据的很小一部分，其内存开销比较低。比如用户状态和画像表，虽然列非常多，但总的用户数不大（千万至亿级别），主键索引内存占用相对可控。 如图所示，大宽表中主键只占一小部分，且数据行数不多。
-   ![pk6](../../assets/table_design/pk6.png)
+   ![pk6](../../_assets/table_design/pk6.png)
 
 </TabItem>
   </Tabs>

@@ -39,4 +39,4 @@ MySQL > SELECT * FROM sys.role_edges;
 
 The following diagram illustrates the nesting relation of the granted roles in the preceding example:
 
-![role_edges](../../assets/role_edges.png)
+![role_edges](../../_assets/role_edges.png)

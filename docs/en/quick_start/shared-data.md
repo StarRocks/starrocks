@@ -6,10 +6,10 @@ description: Separate compute and storage
 
 # Separate storage and compute
 
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -149,7 +149,7 @@ To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access k
 
 Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
-![View the MinIO access key](../assets/quick-start/MinIO-view-key.png)
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
 :::tip
 If there are no access keys showing in the MinIO web UI, check the logs of the `minio_mc` service:
@@ -371,7 +371,7 @@ Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/brow
 :::tip
 The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
 
-![MinIO object browser](../assets/quick-start/MinIO-data.png)
+![MinIO object browser](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---

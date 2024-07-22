@@ -12,7 +12,7 @@ StarRocks 兼容 MySQL 协议，支持标准 SQL。用户可以轻松地通过 M
 
 StarRocks 支持存算一体架构 (每个 BE 节点将其数据存储在本地存储) 和存算分离架构 (所有数据存储在对象存储或 HDFS 中，每个 CN 仅在本地存储缓存)。您可以根据需要决定数据存储的位置。
 
-![Architecture choices](../assets/architecture_choices.png)
+![Architecture choices](../_assets/architecture_choices.png)
 
 ### 存算一体
 
@@ -20,7 +20,7 @@ StarRocks 支持存算一体架构 (每个 BE 节点将其数据存储在本地�
 
 作为典型的大规模并行处理 (MPP) 数据库，StarRocks 支持存算一体架构。在存算一体架构中，BE 负责数据存储和计算。将数据存储在 BE 中使得数据可以在当前节点中计算，避免了数据传输和复制，从而提供极快的查询和分析性能。该架构支持多副本数据存储，增强了集群处理高并发查询的能力并确保数据可靠性，非常适合追求最佳查询性能的场景。
 
-![shared-data-arch](../assets/shared-nothing.png)
+![shared-data-arch](../_assets/shared-nothing.png)
 
 #### 节点
 
@@ -55,7 +55,7 @@ BE 负责数据存储和 SQL 执行。
 
 存算分离架构与存算一体架构一样简单。它仅由两种类型的节点组成：FE 和 CN。唯一的区别是用户必须配置后端对象存储。
 
-![shared-data-arch](../assets/shared-data.png)
+![shared-data-arch](../_assets/shared-data.png)
 
 #### 节点
 

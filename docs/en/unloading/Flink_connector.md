@@ -20,13 +20,13 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
   With the Flink connector of StarRocks, Flink can first obtain the query plan from the responsible FE, then distribute the obtained query plan as parameters to all the involved BEs, and finally obtain the data returned by the BEs.
 
-  ![- Flink connector of StarRocks](../assets/5.3.2-1.png)
+  ![- Flink connector of StarRocks](../_assets/5.3.2-1.png)
 
 - JDBC connector of Flink
 
   With the JDBC connector of Flink, Flink can only read data from individual FEs, one at a time. Data reads are slow.
 
-  ![JDBC connector of Flink](../assets/5.3.2-2.png)
+  ![JDBC connector of Flink](../_assets/5.3.2-2.png)
 
 ## Version requirements
 

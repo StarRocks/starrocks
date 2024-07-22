@@ -8,7 +8,7 @@ Hex 支持对 StarRocks 中的内部数据和外部数据进行查询和可视�
 
 在 Hex 中添加数据连接。注意需要选择 MySQL 作为连接类型。
 
-![Hex](../../assets/BI_hex_1.png)
+![Hex](../../_assets/BI_hex_1.png)
 
 需要设置的参数说明如下：
 

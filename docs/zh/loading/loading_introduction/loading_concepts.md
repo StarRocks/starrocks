@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # 概念介绍
 
-import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍数据导入相关的一些概念和信息。
 
@@ -88,7 +88,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![Broker Load 和 Spark Load 流程图](../../assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](../../_assets/4.1-1.png)
 
 每个阶段的描述如下：
 

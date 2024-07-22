@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # SHOW ROUTINE LOAD TASK
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## 功能
 

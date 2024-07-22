@@ -32,11 +32,11 @@ EXPLAIN ANALYZE <statement>
 
 示例一：模拟分析 SELECT 语句，查询返回结果会被丢弃。
 
-![img](../../../assets/Profile/text_based_explain_analyze_select.jpeg)
+![img](../../../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
 示例二：模拟分析 INSERT INTO 语句。执行结束后，导入事务会被强制回滚，数据不会被实际导入。
 
-![img](../../../assets/Profile/text_based_explain_analyze_insert.jpeg)
+![img](../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
 ## 相关 SQL
 

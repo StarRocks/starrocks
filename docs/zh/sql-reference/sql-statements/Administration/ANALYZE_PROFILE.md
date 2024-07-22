@@ -31,11 +31,11 @@ ANALYZE PROFILE FROM '<query_id>', [<plan_node_id>[, ...] ]
 
 示例一：查询 Query Profile，不指定节点 ID。
 
-![img](../../../assets/Profile/text_based_profile_without_node_id.jpeg)
+![img](../../../_assets/Profile/text_based_profile_without_node_id.jpeg)
 
 示例二：查询 Query Profile，并指定节点 ID 为 `0`。StarRocks 会返回 Node ID 为 `0` 的节点的所有详细指标，并且高亮显示使用占比较高的指标，便于定位问题。
 
-![img](../../../assets/Profile/text_based_profile_with_node_id.jpeg)
+![img](../../../_assets/Profile/text_based_profile_with_node_id.jpeg)
 
 ## 相关 SQL
 

@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 This topic describes the resource group feature of StarRocks.
 
-![resource group](../../../assets/resource_group.png)
+![resource group](../../../_assets/resource_group.png)
 
 With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 

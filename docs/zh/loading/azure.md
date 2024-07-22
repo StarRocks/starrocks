@@ -6,7 +6,7 @@ keywords: ['Broker Load']
 
 # 从 Microsoft Azure Storage 导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 Azure 导入数据：
 
@@ -331,7 +331,7 @@ REJECTED_RECORD_PATH: NULL
 
 ### 工作原理
 
-![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../_assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
 2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。

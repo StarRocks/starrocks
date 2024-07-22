@@ -4,16 +4,16 @@ displayed_sidebar: "English"
 
 # Use Azure Blob Storage for shared-data
 
-import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
 
 ## Architecture
 
-![Shared-data Architecture](../../assets/share_data_arch.png)
+![Shared-data Architecture](../../_assets/share_data_arch.png)
 
 ## Deploy a shared-data StarRocks cluster
 

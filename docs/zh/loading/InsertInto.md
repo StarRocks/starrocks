@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 通过 INSERT 语句导入数据
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 

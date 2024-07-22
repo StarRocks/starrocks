@@ -86,7 +86,7 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
 
 The following figure shows the returned metrics.
 
-![img](../assets/data_cache_observe.png)
+![img](../_assets/data_cache_observe.png)
 
 ### Metric description
 
