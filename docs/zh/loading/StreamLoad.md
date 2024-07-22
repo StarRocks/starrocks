@@ -54,7 +54,7 @@ Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业�
 
 下图展示了 Stream Load 的主要流程：
 
-![Stream Load 原理图](../assets/4.2-1-zh.png)
+![Stream Load 原理图](../_assets/4.2-1-zh.png)
 
 ### 使用限制
 
@@ -207,7 +207,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 `example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
 
-![JSON 映射图](../assets/4.2-2.png)
+![JSON 映射图](../_assets/4.2-2.png)
 
 上图所示的对应关系描述如下：
 

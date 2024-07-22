@@ -50,7 +50,7 @@ Spark Load 任务的执行主要分为以下几个阶段：
 
 下图展示了 Spark Load 的主要流程：
 
-![spark load](../assets/4.3.2-1.png)
+![spark load](../_assets/4.3.2-1.png)
 
 ---
 

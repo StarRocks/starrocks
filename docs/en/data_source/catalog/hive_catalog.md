@@ -577,7 +577,7 @@ For example, there is a Hive table named `table2`, which has four partitions: `p
 
 The following figure shows the time intervals on a timeline for easier understanding.
 
-![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../_assets/catalog_timeline.png)
 
 Then StarRocks updates or discards the metadata in compliance with the following rules:
 

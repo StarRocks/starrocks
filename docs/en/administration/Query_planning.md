@@ -195,7 +195,7 @@ Fragment 1 uses the `BROADCAST` method to perform `Order/Aggregation/Join` opera
 
 By removing the specific expressions (only keep the operators), the query plan can be presented in a more macroscopic view, as shown in the following figure.
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## SQL fingerprint
 

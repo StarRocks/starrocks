@@ -142,7 +142,7 @@ mkdir meta
 
 3. Set the environment variable, as shown in the following figure:
 
-![image-20220701193938856](../../assets/IDEA-1.png)
+![image-20220701193938856](../../_assets/IDEA-1.png)
 
 ```bash
 export PID_DIR=/Users/smith/Code/starrocks/fe/bin
@@ -154,7 +154,7 @@ export LOG_DIR=/Users/smith/Code/starrocks/fe/log
 
 5. Then you have run StarRocks FE successfully.
 
-![image-20220701193938856](../../assets/IDEA-2.png)
+![image-20220701193938856](../../_assets/IDEA-2.png)
 
 ## DEBUG StarRocks FE in MacOS
 
