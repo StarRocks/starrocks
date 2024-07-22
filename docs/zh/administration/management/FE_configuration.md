@@ -1093,7 +1093,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### lock_manager_enabled
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -1102,7 +1102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lock_manager_enable_using_fine_granularity_lock
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
