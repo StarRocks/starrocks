@@ -65,6 +65,7 @@ void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column
 
     new_tablet->set_tablet_state(TABLET_NOTREADY);
 
+    LOG(INFO) << "new tablet schema id:" << new_tablet->tablet_schema()->id();
     TAlterTabletReqV2 request;
     TAlterTabletMaterializedColumnReq mc_request;
 

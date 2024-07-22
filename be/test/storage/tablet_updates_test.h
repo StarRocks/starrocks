@@ -378,6 +378,7 @@ public:
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -386,6 +387,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
 
         if (multi_column_pk) {
             TColumn pk1;
@@ -430,6 +432,7 @@ public:
 
     TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash,
                                                 std::vector<int32_t> sort_key_idxes) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -438,6 +441,7 @@ public:
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
         request.tablet_schema.sort_key_idxes = sort_key_idxes;
+        request.tablet_schema.__set_id(rand());
 
         TColumn k1;
         k1.column_name = "pk";
@@ -463,6 +467,7 @@ public:
 
     TabletSharedPtr create_tablet_with_nullable_sort_key(int64_t tablet_id, int32_t schema_hash,
                                                          std::vector<int32_t> sort_key_idxes) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -471,6 +476,7 @@ public:
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
         request.tablet_schema.sort_key_idxes = sort_key_idxes;
+        request.tablet_schema.__set_id(rand());
 
         TColumn k1;
         k1.column_name = "pk";
@@ -498,6 +504,7 @@ public:
 
     TabletSharedPtr create_tablet_column_with_row(int64_t tablet_id, int32_t schema_hash,
                                                   bool multi_column_pk = false) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -506,6 +513,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
 
         if (multi_column_pk) {
             TColumn pk1;
@@ -562,6 +570,7 @@ public:
     }
 
     TabletSharedPtr create_tablet2(int64_t tablet_id, int32_t schema_hash) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -570,6 +579,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
 
         TColumn k1;
         k1.column_name = "pk";
@@ -601,6 +611,7 @@ public:
     }
 
     TabletSharedPtr create_tablet_to_schema_change(int64_t tablet_id, int32_t schema_hash) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -609,6 +620,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
 
         TColumn k1;
         k1.column_name = "pk";
@@ -635,6 +647,7 @@ public:
     }
 
     TabletSharedPtr create_tablet_to_add_generated_column(int64_t tablet_id, int32_t schema_hash) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -643,6 +656,8 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
+        LOG(INFO) << "tablet schema id:" << request.tablet_schema.id;
 
         TColumn k1;
         k1.column_name = "pk";
