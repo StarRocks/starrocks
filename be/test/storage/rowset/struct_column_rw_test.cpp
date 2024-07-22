@@ -101,7 +101,7 @@ protected:
             // init integer sub column
             ColumnMetaPB* f1_meta = writer_opts.meta->add_children_columns();
             f1_meta->set_column_id(0);
-            f1_meta->set_unique_id(0);
+            f1_meta->set_unique_id(1);
             f1_meta->set_type(f1_tablet_column.type());
             f1_meta->set_length(f1_tablet_column.length());
             f1_meta->set_encoding(DEFAULT_ENCODING);
@@ -110,7 +110,7 @@ protected:
 
             ColumnMetaPB* f2_meta = writer_opts.meta->add_children_columns();
             f2_meta->set_column_id(0);
-            f2_meta->set_unique_id(0);
+            f2_meta->set_unique_id(2);
             f2_meta->set_type(f2_tablet_column.type());
             f2_meta->set_length(f2_tablet_column.length());
             f2_meta->set_encoding(DEFAULT_ENCODING);
@@ -176,6 +176,13 @@ protected:
             TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
             ASSERT_TRUE(f3_tablet_column.has_default_value());
             new_struct_column.add_sub_column(f3_tablet_column);
+            {
+                auto f1_meta = meta2.mutable_children_columns(0);
+                f1_meta->set_unique_id(0);
+                auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+                ASSERT_FALSE(res.ok());
+                f1_meta->set_unique_id(1);
+            }
             auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
             ASSERT_TRUE(res.ok());
             auto struct_reader = std::move(res).value();

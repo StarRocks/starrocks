@@ -28,6 +28,13 @@ select * from tab1;
 insert into tab1 values (3, row(3, row(3,3), 3));
 select * from tab1;
 
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+function: wait_mv_refresh_count('test_add_drop_field_struct', 'mv1', 1)
+SELECT count(*) FROM mv1;
+select * from tab1;
+
 alter table tab1 modify column c1 drop field v2.v5;
 alter table tab1 modify column c1 drop field v1;
 function: wait_alter_table_finish()
@@ -71,6 +78,13 @@ function: wait_alter_table_finish()
 select * from tab1;
 
 insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
+select * from tab1;
+
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+function: wait_mv_refresh_count('test_add_drop_field_array', 'mv1', 1)
+SELECT count(*) FROM mv1;
 select * from tab1;
 
 alter table tab1 modify column c1 drop field [*].v1;
