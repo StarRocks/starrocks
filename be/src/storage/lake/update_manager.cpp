@@ -940,7 +940,8 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 }
 
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // use tabletid-txnid as update state cache's key, so it can retry safe.
@@ -995,7 +996,8 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // no need to preload if using light compaction publish
