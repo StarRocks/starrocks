@@ -84,7 +84,7 @@
    GRANT ALL ON ALL FUNCTIONS IN DATABASE db1 TO ROLE db1_admin;
    ```
 
-7. 全局、数据库级、表级以及分区级备份恢复权限
+6. 全局、数据库级、表级以及分区级备份恢复权限
 
    - 全局备份恢复权限
 
