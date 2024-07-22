@@ -2,13 +2,13 @@
 displayed_sidebar: "English"
 ---
 
-# Boundaries of Competence: Shared-data Clusters
+# Feature Support: Shared-data Clusters
 
 ## Overview
 
 Introduced in v3.0, the shared-data cluster of StarRocks features a disaggregated storage and compute architecture. It allows data to be stored in remote storage, leading to lower storage costs, optimized resource isolation, and better service elasticity compared to a shared-nothing cluster.
 
-This document outlines the boundaries of competence for shared-data clusters, covering deployment methods, storage configurations, caching mechanisms, Compaction, Primary Key table functionalities, and performance test results.
+This document outlines the feature support for shared-data clusters, covering deployment methods, storage configurations, caching mechanisms, Compaction, Primary Key table functionalities, and performance test results.
 
 ## Deployment
 
