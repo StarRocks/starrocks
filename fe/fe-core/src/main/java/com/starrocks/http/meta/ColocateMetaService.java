@@ -358,6 +358,7 @@ public class ColocateMetaService {
             ColocatePersistInfo info2 =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
+            colocateIndex.markGroupUnstable(groupId, true);
         }
     }
 
