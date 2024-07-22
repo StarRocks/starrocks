@@ -165,7 +165,7 @@ public class MvUtils {
                 newMvIds.addAll(mvIds);
             } else if (currentLevel == 0) {
                 logMVPrepare("Table/MaterializedView {} has no related materialized views, " +
-                                "identifier:{}", table.getName(), table.getTableIdentifier());
+                        "identifier:{}", table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
@@ -738,7 +738,7 @@ public class MvUtils {
      * NOTE:
      * 1. `canonizePredicateForRewrite` will do more optimizations than `canonizePredicate`.
      * 2. if you need to rewrite src predicate to target predicate, should use `canonizePredicateForRewrite`
-     *  both rather than one use `canonizePredicate` or `canonizePredicateForRewrite`.
+     * both rather than one use `canonizePredicate` or `canonizePredicateForRewrite`.
      */
     public static ScalarOperator canonizePredicateForRewrite(QueryMaterializationContext queryMaterializationContext,
                                                              ScalarOperator predicate) {
@@ -975,8 +975,9 @@ public class MvUtils {
 
     /**
      * Convert partition range to IN predicate
+     *
      * @param slotRef the comparison column
-     * @param values the target partition values
+     * @param values  the target partition values
      * @return in predicate
      */
     public static Expr convertToInPredicate(Expr slotRef, List<Expr> values) {
@@ -989,7 +990,8 @@ public class MvUtils {
 
     /**
      * Convert partition range to IN predicate scalar operator
-     * @param col the comparison operator
+     *
+     * @param col    the comparison operator
      * @param values the target scalar operators
      * @return in predicate scalar operator
      */
@@ -1068,7 +1070,6 @@ public class MvUtils {
     }
 
 
-
     public static String toString(Object o) {
         if (o == null) {
             return "";
@@ -1080,7 +1081,7 @@ public class MvUtils {
     /**
      * Return the max refresh timestamp of all partition infos.
      */
-    public static long  getMaxTablePartitionInfoRefreshTime(
+    public static long getMaxTablePartitionInfoRefreshTime(
             Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
         return partitionInfos.stream()
                 .flatMap(x -> x.values().stream())
@@ -1122,7 +1123,7 @@ public class MvUtils {
     }
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
-        return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
+        return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 
     public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
@@ -1276,6 +1277,7 @@ public class MvUtils {
 
     /**
      * Check whether opt expression or its children have applied mv union rewrite.
+     *
      * @param optExpression: opt expression to check
      * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
      */
@@ -1285,9 +1287,10 @@ public class MvUtils {
 
     /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
+     *
      * @param connectContext: connect context
-     * @param mv: input mv
-     * @param isInlineView: whether to inline mv's difined query.
+     * @param mv:             input mv
+     * @param isInlineView:   whether to inline mv's difined query.
      */
     public static MvPlanContext getMVPlanContext(ConnectContext connectContext,
                                                  MaterializedView mv,
@@ -1305,7 +1308,8 @@ public class MvUtils {
 
     /**
      * Get column refs of scanMvOperator by MV's defined output columns order.
-     * @param mv: mv to be referenced for output's order
+     *
+     * @param mv:       mv to be referenced for output's order
      * @param scanMvOp: scan mv operator which contains mv
      * @return: column refs of scanMvOperator in the defined order
      */
@@ -1443,9 +1447,10 @@ public class MvUtils {
 
     /**
      * Trim the input set if its size is larger than maxLength.
+     *
      * @return the trimmed set.
      */
-    public static Set<String> shrinkToSize(Set<String> set, int maxLength) {
+    public static <K> Set<K> shrinkToSize(Set<K> set, int maxLength) {
         if (set != null && set.size() > maxLength) {
             return set.stream().limit(maxLength).collect(Collectors.toSet());
         }
@@ -1454,9 +1459,10 @@ public class MvUtils {
 
     /**
      * Trim the input map if its size is larger than maxLength.
+     *
      * @return the trimmed map.
      */
-    public static Map<String, Set<String>> shrinkToSize(Map<String, Set<String>> map, int maxLength) {
+    public static <K, V> Map<K, V> shrinkToSize(Map<K, V> map, int maxLength) {
         if (map != null && map.size() > maxLength) {
             return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
@@ -1465,8 +1471,9 @@ public class MvUtils {
 
     /**
      * Get the mv partition expr by partition expr maps and table.
+     *
      * @param partitionExprMaps partition expr maps of the specific mv
-     * @param table the base table to find the specific partition expr
+     * @param table             the base table to find the specific partition expr
      * @return the mv partition expr if found, otherwise empty
      */
     public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
@@ -1481,6 +1488,7 @@ public class MvUtils {
 
     /**
      * Get the column by slot ref from table's columns
+     *
      * @param columns base table's columns
      * @param slotRef the base table's partition slot ref to find
      * @return the column if found, otherwise empty
@@ -1492,6 +1500,7 @@ public class MvUtils {
 
     /**
      * Format the base table infos to readable string.
+     *
      * @param baseTableInfos: input base table infos
      * @return formatted string
      */
@@ -1500,5 +1509,16 @@ public class MvUtils {
             return "";
         }
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
+    }
+
+    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
+                                                                     Collection<PartitionKey> partitionRanges) {
+        List<ScalarOperator> values = Lists.newArrayList();
+        for (PartitionKey partitionKey : partitionRanges) {
+            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
+            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+            values.add(upperBound);
+        }
+        return MvUtils.convertToInPredicate(partitionColRef, values);
     }
 }

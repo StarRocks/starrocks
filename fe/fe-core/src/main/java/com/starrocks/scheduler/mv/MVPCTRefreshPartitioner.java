@@ -172,6 +172,7 @@ public abstract class MVPCTRefreshPartitioner {
         Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
+            
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
                 LOG.info("The ref base table {} is not supported partition refresh, refresh all " +
