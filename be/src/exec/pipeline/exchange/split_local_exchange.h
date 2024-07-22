@@ -27,7 +27,6 @@ public:
     SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs, size_t chunk_size)
             : _split_expr_ctxs(std::move(split_expr_ctxs)),
               _buffer(num_consumers),
-              _num_consumers(num_consumers),
               _opened_source_opcount(num_consumers, 0),
               _chunk_size(chunk_size) {}
 
@@ -47,7 +46,6 @@ private:
     // one input chunk will be split into _num_consumers chunks by _split_expr_ctxs and saved in _buffer
     std::vector<ExprContext*> _split_expr_ctxs;
     std::vector<std::queue<ChunkPtr>> _buffer;
-    int _num_consumers;
 
     size_t _current_accumulated_row_size = 0;
     size_t _current_memory_usage = 0;
