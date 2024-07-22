@@ -52,7 +52,7 @@ admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 
 admin disable failpoint 'output_stream_io_error';
 
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 
@@ -116,7 +116,7 @@ admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 
 admin disable failpoint 'output_stream_io_error';
 
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 
@@ -181,7 +181,7 @@ admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 
 admin disable failpoint 'output_stream_io_error';
 
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 

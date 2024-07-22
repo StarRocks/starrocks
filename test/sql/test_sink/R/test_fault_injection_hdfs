@@ -63,7 +63,7 @@ admin disable failpoint 'output_stream_io_error';
 -- result:
 []
 -- !result
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
 1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-06-19	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin
 1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-06-15	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe
@@ -158,7 +158,7 @@ admin disable failpoint 'output_stream_io_error';
 -- result:
 []
 -- !result
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
 1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-06-19	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin
 1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-06-19	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin
@@ -253,7 +253,7 @@ admin disable failpoint 'output_stream_io_error';
 -- result:
 []
 -- !result
-select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+[UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
 1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-06-19	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin
 1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-06-15	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe
