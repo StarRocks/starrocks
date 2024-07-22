@@ -1,0 +1,47 @@
+-- name: test_jvm_udf
+set enable_group_execution = true;
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint(bigint)
+RETURNS bigint
+symbol = "Sumbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1 limit 10) tb;
+-- result:
+0	10	10
+-- !result
+set streaming_preaggregation_mode="auto";
+-- result:
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1) tb;
+-- result:
+0	40960	40960
+-- !result
