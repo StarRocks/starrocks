@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -255,8 +256,8 @@ public:
 
     // This is only used to get portion of the entire binary column
     template <class StatesProvider, class MergeCaller>
-    void _merge_batch_process(StatesProvider&& states_provider, MergeCaller&& caller, const Column* column,
-                              size_t start, size_t size) const {
+    void _merge_batch_process(FunctionContext* ctx, StatesProvider&& states_provider, MergeCaller&& caller,
+                              const Column* column, size_t start, size_t size, bool need_multi_buffer) const {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         // get state lists
@@ -269,17 +270,32 @@ public:
                 ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
 
         auto& serialized_bytes = serialized_column->get_bytes();
-        size_t start_offset = serialized_column->get_offset()[start];
-        size_t end_offset = serialized_column->get_offset()[start + size];
+        const auto& offsets = serialized_column->get_offset();
 
-        auto buffer =
-                std::make_unique<DirectByteBuffer>(serialized_bytes.data() + start_offset, end_offset - start_offset);
-        auto buffer_array = helper.create_object_array(buffer->handle(), size);
-        RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
-        LOCAL_REF_GUARD_ENV(env, buffer_array);
+        if (serialized_bytes.size() > std::numeric_limits<int>::max()) {
+            ctx->set_error("serialized column size is too large");
+            return;
+        }
 
-        // batch call merge
-        caller(state_array, buffer_array);
+        if (!need_multi_buffer) {
+            size_t start_offset = serialized_column->get_offset()[start];
+            size_t end_offset = serialized_column->get_offset()[start + size];
+            // create one buffer will be ok
+            auto buffer = std::make_unique<DirectByteBuffer>(serialized_bytes.data() + start_offset,
+                                                             end_offset - start_offset);
+            auto buffer_array = helper.create_object_array(buffer->handle(), size);
+            RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+            LOCAL_REF_GUARD_ENV(env, buffer_array);
+            // batch call merge
+            caller(state_array, buffer_array);
+        } else {
+            auto buffer_array =
+                    helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
+            RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+            LOCAL_REF_GUARD_ENV(env, buffer_array);
+            // batch call merge
+            caller(state_array, buffer_array);
+        }
     }
 
     void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
@@ -300,7 +316,7 @@ public:
             helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
                                       state_and_buffer, 2);
         };
-        _merge_batch_process(std::move(provider), std::move(merger), column, 0, batch_size);
+        _merge_batch_process(ctx, std::move(provider), std::move(merger), column, 0, batch_size, false);
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
@@ -318,7 +334,7 @@ public:
             helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
                                             ctx->udaf_ctxs()->merge->method.handle(), state_array, state_and_buffer, 1);
         };
-        _merge_batch_process(std::move(provider), std::move(merger), column, 0, batch_size);
+        _merge_batch_process(ctx, std::move(provider), std::move(merger), column, 0, batch_size, true);
     }
 
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
@@ -336,7 +352,7 @@ public:
             helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
                                       state_and_buffer, 2);
         };
-        _merge_batch_process(std::move(provider), std::move(merger), column, start, size);
+        _merge_batch_process(ctx, std::move(provider), std::move(merger), column, start, size, false);
     }
 
     void batch_serialize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
