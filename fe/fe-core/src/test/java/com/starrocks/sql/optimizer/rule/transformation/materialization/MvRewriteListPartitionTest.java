@@ -106,7 +106,6 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                     () -> {
                         String query = "select dt, province, sum(age) from t2 group by dt, province;";
                         String plan = getFragmentPlan(query);
-                        System.out.println(plan);
                         // assert contains mv1
                         PlanTestBase.assertContains(plan, "     TABLE: mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -347,19 +346,204 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                     () -> {
                         // TODO: support list partition partial refresh
                         // refreshMaterializedViewWithPartition(DB_NAME, mvName, "beijing", "beijing");
-                        String sql = "insert into t2 partition(p1) values (2, 2, '2021-12-02', 'guangdong');";
+                        String sql = "insert into t2 partition(p2) values (2, 2, '2021-12-02', 'guangdong');";
                         executeInsertSql(connectContext, sql);
-                        // mv is only partial refreshed, needs to union rewrite
+                        // mv is only partially refreshed, needs it to union rewrite
                         String[] sqls = {
                                 "SELECT * from mv1",
                                 "SELECT * from mv1 where province = 'beijing'",
                                 "SELECT * from mv1 where province = 'guangdong'",
                         };
                         for (String query : sqls) {
+                            System.out.println("start to check: " + query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, "UNION", "mv1", "t2");
                         }
                     });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithNestedMVs() {
+        starRocksAssert.withTables(ImmutableList.of(T2, T3), () -> {
+            // update base table
+            String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+            executeInsertSql(connectContext, insertSql);
+            // refresh complete
+            createAndRefreshMv("create materialized view mv1\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    "as select dt, province, sum(age) from t2 group by dt, province;");
+            createAndRefreshMv("create materialized view mv2\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    "as select dt, province, sum(age) from t3 group by dt, province;");
+            createAndRefreshMv("create materialized view mv3\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    "as select b.province, count(1) from mv1 a join mv2 b on a.province=b.province \n" +
+                    "group by b.province;");
+            // with full refresh
+            {
+                String[] sqls = {
+                        "SELECT * from mv3",
+                        "SELECT * from mv3 where province = 'beijing'",
+                        "SELECT * from mv3 where province = 'guangdong'",
+                };
+                for (String query : sqls) {
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION");
+                    PlanTestBase.assertContains(plan, "mv3");
+                }
+            }
+            // with one table updated
+            {
+                String sql = "insert into t2 partition(p2) values (2, 2, '2021-12-02', 'guangdong');";
+                executeInsertSql(connectContext, sql);
+                {
+                    String query = "SELECT * from mv3";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "SELECT * from mv3 where province = 'beijing'";
+                    String plan = getFragmentPlan(query);
+                    // TODO(fixme): prune empty nodes
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "SELECT * from mv3 where province = 'guangdong'";
+                    String plan = getFragmentPlan(query);
+                    // TODO(fixme): prune empty nodes
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+            }
+            // with two tables updated
+            {
+                String sql = "insert into t3 partition(p2) values (2, 2, '2024-01-01', 'guangdong');";
+                executeInsertSql(connectContext, sql);
+                {
+                    String query = "SELECT * from mv3";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "SELECT * from mv3 where province = 'beijing'";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "SELECT * from mv3 where province = 'guangdong'";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+            }
+            starRocksAssert.dropMaterializedView("mv3");
+            starRocksAssert.dropMaterializedView("mv2");
+            starRocksAssert.dropMaterializedView("mv1");
+        });
+    }
+
+    @Test
+    public void testRewriteWithNestedMVs() {
+        starRocksAssert.withTables(ImmutableList.of(T2, T3), () -> {
+            // update base table
+            String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+            executeInsertSql(connectContext, insertSql);
+            // refresh complete
+            createAndRefreshMv("create materialized view mv1\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'false')\n" +
+                    "as select dt, province, sum(age) from t2 group by dt, province;");
+            createAndRefreshMv("create materialized view mv2\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'false')\n" +
+                    "as select dt, province, sum(age) from t3 group by dt, province;");
+            createAndRefreshMv("create materialized view mv3\n" +
+                    "partition by province \n" +
+                    "distributed by random \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "PROPERTIES ('transparent_mv_rewrite_mode' = 'false')\n" +
+                    "as select b.province, count(1) from mv1 a join mv2 b on a.province=b.province \n" +
+                    "group by b.province;");
+            // with full refresh
+            {
+                String[] sqls = {
+                        "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province group by b.province;",
+                        "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province where b" +
+                                ".province='guangdong' group by b.province",
+                        "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province where b.province='beijing' " +
+                                "group by b.province",
+                };
+                for (String query : sqls) {
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION");
+                    PlanTestBase.assertContains(plan, "mv3");
+                }
+            }
+            // with one table updated
+            {
+                String sql = "insert into t2 partition(p2) values (2, 2, '2021-12-02', 'guangdong');";
+                executeInsertSql(connectContext, sql);
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "where b.province='beijing' group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION");
+                    PlanTestBase.assertContains(plan, "mv3");
+                }
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "where b.province='guangdong' group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION", "mv3");
+                    PlanTestBase.assertContains(plan, "mv1", "mv2");
+                }
+            }
+            // with two tables updated
+            {
+                String sql = "insert into t3 partition(p2) values (2, 2, '2024-01-01', 'guangdong');";
+                executeInsertSql(connectContext, sql);
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv3", "mv1", "mv2");
+                }
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "where b.province='beijing' group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION");
+                    PlanTestBase.assertContains(plan, "mv3");
+                }
+                {
+                    String query = "select b.province, count(1) from mv1 a join mv2 b on a.province=b.province " +
+                            "where b.province='guangdong' group by b.province;";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, "UNION", "mv3");
+                    PlanTestBase.assertContains(plan, "mv1", "mv2");
+                }
+            }
+            starRocksAssert.dropMaterializedView("mv3");
+            starRocksAssert.dropMaterializedView("mv2");
+            starRocksAssert.dropMaterializedView("mv1");
         });
     }
 }

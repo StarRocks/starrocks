@@ -177,6 +177,7 @@ public class MvRefreshArbiter {
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
                 baseUpdatedPartitionNames.addAll(mvUpdateInfo.getMvToRefreshPartitionNames());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getMvPartitionNameToCellMap());
             }
             // update base table's partition info
             baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);

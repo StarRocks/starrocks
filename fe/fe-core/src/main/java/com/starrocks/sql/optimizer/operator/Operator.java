@@ -165,6 +165,10 @@ public abstract class Operator {
         this.opRuleMask |= bit;
     }
 
+    public void resetOpRuleMask(int bit) {
+        this.opRuleMask &= (~ bit);
+    }
+
     public boolean isOpRuleMaskSet(int bit) {
         return (opRuleMask & bit) != 0;
     }
