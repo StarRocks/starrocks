@@ -42,11 +42,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-<<<<<<< HEAD
-import java.net.URISyntaxException;
-=======
 import java.io.InterruptedIOException;
->>>>>>> 3fcafac8b9 ([BugFix] Avoid hdfs fs manager interrupting the thread when exception occurs (#48403))
+import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -1007,33 +1004,8 @@ public class HdfsFsManager {
         return;
     }
 
-<<<<<<< HEAD
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties) 
         throws UserException {
-=======
-    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
-        WildcardURI pathUri = new WildcardURI(path);
-        HdfsFs fileSystem = getFileSystem(path, properties, null);
-        Path pathPattern = new Path(pathUri.getPath());
-        try {
-            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
-        } catch (FileNotFoundException e) {
-            LOG.info("file not found: " + path, e);
-            throw new UserException("file not found: " + path, e);
-        } catch (InterruptedIOException e) {
-            Thread.interrupted(); // clear interrupted flag
-            LOG.error("Interrupted while get file status: " + path, e);
-            throw new UserException("Failed to get file status: " + path, e); // throw unified user exception
-        } catch (Exception e) {
-            LOG.error("errors while get file status ", e);
-            throw new UserException("Fail to get file status: " + e.getMessage(), e);
-        }
-    }
-
-    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
-            throws UserException {
->>>>>>> 3fcafac8b9 ([BugFix] Avoid hdfs fs manager interrupting the thread when exception occurs (#48403))
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1065,22 +1037,12 @@ public class HdfsFsManager {
                 resultFileStatus.add(brokerFileStatus);
             }
         } catch (FileNotFoundException e) {
-<<<<<<< HEAD
             LOG.info("file not found: " + e.getMessage());
             throw new UserException("file not found: " + e.getMessage());
-=======
-            LOG.info("file not found: " + path, e);
-            throw new UserException("file not found: " + path, e);
-        } catch (IllegalArgumentException e) {
-            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
-                    "the arguments like region, IAM, instance profile and so on.");
-            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
-                    "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while list path: " + path, e);
             throw new UserException("Failed to list path: " + path, e); // throw unified user exception
->>>>>>> 3fcafac8b9 ([BugFix] Avoid hdfs fs manager interrupting the thread when exception occurs (#48403))
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("unknown error when get file status: " + e.getMessage());
@@ -1144,16 +1106,11 @@ public class HdfsFsManager {
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
-<<<<<<< HEAD
-            boolean isPathExist = fileSystem.getDFSFileSystem().exists(filePath);
-            return isPathExist;
-=======
             return fileSystem.getDFSFileSystem().exists(filePath);
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
-            LOG.error("Interrupted while check path exist: " + path, e);
-            throw new UserException("Failed to check path exist: " + path, e); // throw unified user exception
->>>>>>> 3fcafac8b9 ([BugFix] Avoid hdfs fs manager interrupting the thread when exception occurs (#48403))
+            LOG.error("Interrupted while list path: " + path, e);
+            throw new UserException("Failed to list path: " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path, e);
             throw new UserException("errors while check if path " + path + " exist", e);
