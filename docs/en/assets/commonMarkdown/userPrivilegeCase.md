@@ -75,7 +75,7 @@ You can only write data into Iceberg tables (since v3.1) and Hive tables (since 
    ```SQL
    -- Create a role.
    CREATE ROLE db1_admin;
-   -- Grant ALL privileges on the destination database to the role. This role can create table, view, materialized view, UDF in this database. And also can drop or modify this database.
+   -- Grant ALL privileges on the destination database to the role. This role can create tables, views, materialized views, and UDFs in this database. And it also can drop or modify this database.
    GRANT ALL ON DATABASE db1 TO ROLE db1_admin;
    -- Switch to the corresponding catalog.
    SET CATALOG iceberg_catalog;
