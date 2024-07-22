@@ -38,8 +38,7 @@
 namespace starrocks::pipeline {
 
 SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number,
-                                                                   int32_t plan_node_id)
-        : _runtime_state(runtime_state) {
+                                                                   int32_t plan_node_id) {
     DCHECK(runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill());
     MemLimitedChunkQueue::Options opts;
     if (runtime_state->spill_mode() == TSpillMode::FORCE) {
