@@ -291,6 +291,74 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     }
     _params.column_access_paths = &_column_access_paths;
 
+<<<<<<< HEAD
+=======
+    // update counter
+    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
+    return Status::OK();
+}
+
+Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        DCHECK_EQ(path->children().size(), 1);
+        DCHECK_EQ(field->sub_fields().size(), 1);
+        RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[0], path->children()[0].get()));
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        DCHECK_EQ(path->children().size(), 1);
+        auto child_path = path->children()[0].get();
+        if (child_path->is_index() || child_path->is_all()) {
+            DCHECK_EQ(field->sub_fields().size(), 2);
+            RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[1], child_path));
+        } else {
+            return Status::OK();
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        std::unordered_map<std::string_view, ColumnAccessPath*> path_index;
+        for (auto& child_path : path->children()) {
+            path_index[child_path->path()] = child_path.get();
+        }
+
+        std::vector<Field> new_fields;
+        for (auto& child_fields : field->sub_fields()) {
+            auto iter = path_index.find(child_fields.name());
+            if (iter != path_index.end()) {
+                auto child_path = iter->second;
+                RETURN_IF_ERROR(prune_field_by_access_paths(&child_fields, child_path));
+                new_fields.emplace_back(child_fields);
+            }
+        }
+
+        field->set_sub_fields(std::move(new_fields));
+    }
+    return Status::OK();
+}
+
+Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
+    if (_column_access_paths.empty()) {
+        return Status::OK();
+    }
+
+    // schema
+    for (auto& path : _column_access_paths) {
+        if (path->is_from_predicate()) {
+            continue;
+        }
+        auto& root = path->path();
+        auto field = schema->get_field_by_name(root);
+        if (field == nullptr) {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+            continue;
+        }
+        // field maybe modified, so we need to deep copy
+        auto new_field = std::make_shared<Field>(*field);
+        schema->set_field_by_name(new_field, root);
+        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+    }
+
+>>>>>>> dc57abbcec ([Enhancement] Initialize olap_reader without copying tablet schema (#48485))
     return Status::OK();
 }
 
@@ -305,6 +373,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
+<<<<<<< HEAD
     auto tablet_schema_ptr = _tablet->tablet_schema();
     _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
 
@@ -317,6 +386,22 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
             _tablet_schema->append_column(TabletColumn(column_desc));
         }
         _tablet_schema->generate_sort_key_idxes();
+=======
+    if (_scan_node->thrift_olap_scan_node().__isset.schema_id) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->get(_scan_node->thrift_olap_scan_node().schema_id);
+    }
+
+    if (_tablet_schema == nullptr) {
+        // if column_desc come from fe, reset tablet schema
+        if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+            !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+            _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+            _tablet_schema =
+                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+        } else {
+            _tablet_schema = _tablet->tablet_schema();
+        }
+>>>>>>> dc57abbcec ([Enhancement] Initialize olap_reader without copying tablet schema (#48485))
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
