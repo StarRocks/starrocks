@@ -370,6 +370,18 @@
             "items": [
                 {
                     "type": "category",
+                    "label": "Configuration",
+                    "link": {
+                        "type": "doc",
+                        "id": "administration/management/configuration"
+                    },
+                    "items": [
+                        "administration/management/FE_configuration",
+                        "administration/management/BE_configuration"
+                ]
+                },
+                {
+                    "type": "category",
                     "label": "Management",
                     "link": {
                         "type": "doc",
@@ -378,8 +390,6 @@
                     "items": [
                         "administration/management/Scale_up_down",
                         "administration/management/Backup_and_restore",
-                        "administration/management/FE_configuration",
-                        "administration/management/BE_configuration",
                         {
                             "type": "category",
                             "label": "Monitor and Alert",
@@ -1605,6 +1615,18 @@
             "items": [
                 {
                     "type": "category",
+                    "label": "配置项",
+                    "link": {
+                        "type": "doc",
+                        "id": "administration/management/configuration"
+                    },
+                    "items": [
+                        "administration/management/FE_configuration",
+                        "administration/management/BE_configuration"
+                    ]
+                },
+                {
+                    "type": "category",
                     "label": "运维集群",
                     "link": {
                         "type": "doc",
@@ -1613,8 +1635,6 @@
                     "items": [
                         "administration/management/Scale_up_down",
                         "administration/management/Backup_and_restore",
-                        "administration/management/FE_configuration",
-                        "administration/management/BE_configuration",
                         {
                             "type": "category",
                             "label": "监控报警",
