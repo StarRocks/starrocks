@@ -20,6 +20,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -143,7 +144,7 @@ public class KuduMetadataTest {
         };
         Table table = metadata.getTable("db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
-        List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFileInfos(kuduTable, null, -1,
+        List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFileInfos(kuduTable, null, TableVersionRange.empty(),
                 null, requiredNames, -1);
         Assert.assertEquals(1, remoteFileInfos.size());
         Assert.assertEquals(1, remoteFileInfos.get(0).getFiles().size());
@@ -171,7 +172,7 @@ public class KuduMetadataTest {
         Table table = metadata.getTable("db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Statistics statistics = metadata.getTableStatistics(
-                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1);
+                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1, TableVersionRange.empty());
         Assert.assertEquals(1D, statistics.getOutputRowCount(), 0.01);
     }
 

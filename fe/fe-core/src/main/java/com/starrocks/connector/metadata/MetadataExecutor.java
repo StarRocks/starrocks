@@ -39,6 +39,7 @@ public class MetadataExecutor {
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
         } catch (Exception e) {
+            LOG.error("Failed to execute metadata collect job", e);
             context.getState().setError(e.getMessage());
             return;
         }

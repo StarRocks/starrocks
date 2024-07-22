@@ -50,6 +50,7 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
@@ -219,7 +220,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
         List<Partition> partitions = get(partitionCache, odpsTableName);
@@ -266,7 +267,8 @@ public class OdpsMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange version) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -312,15 +314,15 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange versionRange, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
         // add scanBuilder param for mock
-        return getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, columnNames, limit,
+        return getRemoteFileInfos(table, partitionKeys, versionRange, predicate, columnNames, limit,
                 new TableReadSessionBuilder());
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange versionRange, ScalarOperator predicate,
                                                    List<String> columnNames, long limit,
                                                    TableReadSessionBuilder scanBuilder) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();

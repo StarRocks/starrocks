@@ -35,6 +35,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -420,7 +421,7 @@ public class OptExternalPartitionPruner {
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (!icebergTable.getSnapshot().isPresent()) {
+            if (operator.getTableVersionRange().end().isEmpty()) {
                 // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
                 //  is empty. It's expensive to set all partitions here.
                 return;
@@ -433,7 +434,8 @@ public class OptExternalPartitionPruner {
             } else {
                 String catalogName = icebergTable.getCatalogName();
                 List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
+                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(),
+                                operator.getLimit(), operator.getTableVersionRange());
                 for (PartitionKey partitionKey : partitionKeys) {
                     partitionKeyMap.put(context.getNextUniquePartitionId(), partitionKey);
                 }
@@ -447,7 +449,8 @@ public class OptExternalPartitionPruner {
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                    paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+                    paimonTable.getCatalogName(), table, null, TableVersionRange.empty(),
+                    operator.getPredicate(), fieldNames, -1);
             if (fileInfos.isEmpty()) {
                 return;
             }
