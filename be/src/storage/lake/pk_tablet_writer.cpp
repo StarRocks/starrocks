@@ -32,7 +32,7 @@ namespace starrocks::lake {
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                    ThreadPool* flush_pool, bool is_compaction)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
@@ -111,7 +111,7 @@ VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_
                                                uint32_t max_rows_per_segment, ThreadPool* flush_pool,
                                                bool is_compaction)
         : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
-                                      flush_pool) {
+                                      is_compaction, flush_pool) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
         if (rows_mapper_filename.ok()) {

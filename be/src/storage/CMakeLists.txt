@@ -77,6 +77,7 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_compactor.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
     rowset/cast_column_iterator.cpp
