@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE Configuration
 

@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 ## 工作原理
 
-![sr operator and src](../assets/starrocks_operator.png)
+![sr operator and src](../_assets/starrocks_operator.png)
 
 ## **环境准备**
 

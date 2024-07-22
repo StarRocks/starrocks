@@ -106,7 +106,7 @@ ON lo_custkey = c_custkey;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-1](../assets/Rewrite-1.png)
+![Rewrite-1](../_assets/Rewrite-1.png)
 
 StarRocks 支持改写具有复杂表达式的 Join 查询，如算术运算、字符串函数、日期函数、CASE WHEN 表达式和谓词 OR 等。例如，上述物化视图可以改写以下查询：
 
@@ -138,7 +138,7 @@ FROM
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-2](../assets/Rewrite-2.png)
+![Rewrite-2](../_assets/Rewrite-2.png)
 
 ### View Delta Join 改写
 
@@ -146,7 +146,7 @@ View Delta Join 指的是查询中 Join 的表是物化视图中 Join 的表的�
 
 要启用 View Delta Join 改写，必须保证物化视图中包含在查询中不存在的 1:1 的 Cardinality Preservation Join。满足以下约束条件的九种 Join 都被视为 Cardinality Preservation Join，可以用于启用 View Delta Join 改写：
 
-![Rewrite-3](../assets/Rewrite-3.png)
+![Rewrite-3](../_assets/Rewrite-3.png)
 
 以 SSB 测试为例，创建以下基表：
 
@@ -350,7 +350,7 @@ ORDER BY d_year, p_brand;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-4](../assets/Rewrite-4.png)
+![Rewrite-4](../_assets/Rewrite-4.png)
 
 同样，SSB 中的其他查询也可以通过使用 `lineorder_flat_mv` 进行透明改写，从而优化查询性能。
 
@@ -397,7 +397,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
 
   其原始查询计划和改写后的计划如下：
 
-  ![Rewrite-5](../assets/Rewrite-5.png)
+  ![Rewrite-5](../_assets/Rewrite-5.png)
 
   同样，如果物化视图定义为 `t1 INNER JOIN t2 INNER JOIN t3`，而查询为 `LEFT OUTER JOIN t2 INNER JOIN t3`，那么查询也可以被改写。而且，在涉及超过三个表的情况下，也具备上述的改写能力。
 
@@ -405,7 +405,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
 
   两表 Join 的派生改写支持以下几种细分场景：
 
-  ![Rewrite-6](../assets/Rewrite-6.png)
+  ![Rewrite-6](../_assets/Rewrite-6.png)
 
   在场景一至九中，需要向改写结果补偿过滤谓词，以确保语义等效性。例如，创建以下物化视图：
 
@@ -428,7 +428,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
 
   其原始查询计划和改写后的计划如下：
 
-  ![Rewrite-7](../assets/Rewrite-7.png)
+  ![Rewrite-7](../_assets/Rewrite-7.png)
 
   在场景十中， 需要 Left Outer Join 查询中包含右表中 `IS NOT NULL` 的过滤谓词，如 `=`、`<>`、`>`、`<`、`<=`、`>=`、`LIKE`、`IN`、`NOT LIKE` 或 `NOT IN`。例如，创建以下物化视图：
 
@@ -452,7 +452,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
 
   其原始查询计划和改写后的计划如下：
 
-  ![Rewrite-8](../assets/Rewrite-8.png)
+  ![Rewrite-8](../_assets/Rewrite-8.png)
 
 ## 聚合改写
 
@@ -489,7 +489,7 @@ GROUP BY lo_orderkey, lo_linenumber, c_name;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-9](../assets/Rewrite-9.png)
+![Rewrite-9](../_assets/Rewrite-9.png)
 
 以下各节详细阐述了聚合改写功能可用的场景。
 
@@ -510,7 +510,7 @@ GROUP BY lo_orderkey, c_name;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-10](../assets/Rewrite-10.png)
+![Rewrite-10](../_assets/Rewrite-10.png)
 
 > **说明**
 >
@@ -694,7 +694,7 @@ GROUP BY lo_orderkey;
 
 其关系如下：
 
-![Rewrite-11](../assets/Rewrite-11.png)
+![Rewrite-11](../_assets/Rewrite-11.png)
 
 `agg_mv3` 可改写以下查询：
 
@@ -710,7 +710,7 @@ GROUP BY lo_orderkey;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-12](../assets/Rewrite-12.png)
+![Rewrite-12](../_assets/Rewrite-12.png)
 
 ## Union 改写
 
@@ -746,7 +746,7 @@ GROUP BY lo_orderkey;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-13](../assets/Rewrite-13.png)
+![Rewrite-13](../_assets/Rewrite-13.png)
 
 其中，`agg_mv5` 包含`lo_orderkey < 300000000` 的数据，`lo_orderkey >= 300000000` 的数据通过直接查询表 `lineorder` 得到，最终通过 Union 操作之后再聚合，获取最终结果。
 
@@ -785,7 +785,7 @@ GROUP BY lo_orderkey;
 
 其原始查询计划和改写后的计划如下：
 
-![Rewrite-14](../assets/Rewrite-14.png)
+![Rewrite-14](../_assets/Rewrite-14.png)
 
 如上所示，`agg_mv5` 包含来自分区 `p1` 到 `p7` 的数据，而分区 `p8` 的数据来源于 `lineorder`。最后，这两组数据使用 UNION 操作合并。
 
@@ -849,7 +849,7 @@ JOIN t2 ON v1.a = t2.a;
 
 原始查询的执行计划如下图左侧所示。由于 JOIN 内的 LogicalAggregateOperator 与 SPJG 模式不匹配，StarRocks 不支持这种情况下的查询改写。然而，如果将子查询定义为一个视图，原始查询可以展开为针对该视图的查询。通过 LogicalViewScanOperator，StarRocks 可以将不匹配的部分转换为 SPJG 模式，从而允许改写查询。
 
-![img](../assets/Rewrite-view-based.png)
+![img](../_assets/Rewrite-view-based.png)
 
 ### 使用
 

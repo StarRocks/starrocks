@@ -21,7 +21,7 @@ This topic provides an overview of these options, along with comparisons between
 
 This section mainly describes the characteristics and business scenarios of the loading options available in StarRocks.
 
-![Loading options overview](../../assets/loading_intro_overview.png)
+![Loading options overview](../../_assets/loading_intro_overview.png)
 
 :::note
 
