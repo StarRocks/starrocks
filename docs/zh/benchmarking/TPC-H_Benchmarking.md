@@ -12,7 +12,7 @@ TPC-H 根据真实的生产运行环境来建模，模拟了一套销售系统�
 
 在 TPC-H 100G 规模的数据集上进行对比测试，共 22 个查询，结果如下：
 
-![TPCH 100G结果](../assets/tpch.png)
+![TPCH 100G结果](../_assets/tpch.png)
 
 StarRocks 测试了使用本地存储查询和 Hive 外表查询两种方式，其中 StarRocks Hive 外表和 Trino 查询的是同一份数据，数据采用 ORC 格式存储，zlib 格式压缩。
 

@@ -124,7 +124,7 @@ Then, attach the [IAM policies](../reference/aws_iam_policies.md) for accessing 
 
 The following figure provides a high-level explanation of the differences in mechanism between instance profile-based authentication, assumed role-based authentication, and IAM user-based authentication in StarRocks.
 
-![Comparison between authentication methods](../assets/authenticate_s3_credential_methods.png)
+![Comparison between authentication methods](../_assets/authenticate_s3_credential_methods.png)
 
 ## Build connections with AWS resources
 

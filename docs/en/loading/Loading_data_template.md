@@ -90,7 +90,7 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 
 ***Note: Processes that involve multiple components or steps may be easier to understand with a diagram. This example includes a diagram that helps describe the steps that happen when a user chooses the Broker Load option.***
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE).

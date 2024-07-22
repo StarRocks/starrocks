@@ -5,7 +5,7 @@ toc_max_heading_level: 4
 
 # Load data from MinIO
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the following options for loading data from MinIO:
 
@@ -46,7 +46,7 @@ In a nutshell, to use MinIO Access Key authentication you need to gather the fol
 - The MinIO endpoint
 - The access key and secret key used as access credentials.
 
-![MinIO access key](../assets/quick-start/MinIO-create.png)
+![MinIO access key](../_assets/quick-start/MinIO-create.png)
 
 ## Use INSERT+FILES()
 
@@ -435,7 +435,7 @@ This method supports the following file formats:
 
 ### Data flow
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BEs) or compute nodes (CNs).
@@ -608,7 +608,7 @@ The load status of each data file is recorded and saved to the `information_sche
 
 ### Data flow
 
-![Pipe data flow](../assets/pipe_data_flow.png)
+![Pipe data flow](../_assets/pipe_data_flow.png)
 
 ### Differences between Pipe and INSERT+FILES()
 

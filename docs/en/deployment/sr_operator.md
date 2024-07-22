@@ -14,7 +14,7 @@ The StarRocks Operator is designed to be a level 2 operator. To understand more 
 
 ## How it works
 
-![img](../assets/starrocks_operator.png)
+![img](../_assets/starrocks_operator.png)
 
 ## Before you begin
 

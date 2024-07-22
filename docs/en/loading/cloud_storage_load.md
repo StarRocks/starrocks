@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from cloud storage
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
@@ -45,7 +45,7 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 ## Prepare data examples
 
