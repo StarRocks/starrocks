@@ -18,7 +18,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.datacache.DataCachePopulateMode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -31,14 +33,15 @@ import org.apache.log4j.Logger;
 public class DataCachePopulateRewriteRule implements TreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(DataCachePopulateRewriteRule.class);
 
-    private final SessionVariable sessionVariable;
+    private final ConnectContext connectContext;
 
-    public DataCachePopulateRewriteRule(SessionVariable sessionVariable) {
-        this.sessionVariable = sessionVariable;
+    public DataCachePopulateRewriteRule(ConnectContext connectContext) {
+        this.connectContext = connectContext;
     }
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         if (!sessionVariable.isEnableScanDataCache()) {
             return root;
         }
@@ -50,6 +53,19 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
 
         // for NEVER or ALWAYS mode, we don't need to rewrite it
         if (populateMode == DataCachePopulateMode.NEVER || populateMode == DataCachePopulateMode.ALWAYS) {
+            return root;
+        }
+
+        // check is analyze sql
+        if (connectContext.isStatisticsJob()) {
+            return root;
+        }
+
+        // check is query statement
+        if (connectContext.getExecutor() == null) {
+            return root;
+        }
+        if (!(connectContext.getExecutor().getParsedStmt() instanceof QueryStatement)) {
             return root;
         }
 

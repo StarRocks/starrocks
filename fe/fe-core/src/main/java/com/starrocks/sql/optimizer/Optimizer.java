@@ -853,7 +853,7 @@ public class Optimizer {
         }
 
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
-        result = new DataCachePopulateRewriteRule(connectContext.getSessionVariable()).rewrite(result, rootTaskContext);
+        result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
 
         result.setPlanCount(planCount);
         return result;
