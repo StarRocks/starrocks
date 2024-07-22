@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # GRANT
 
-import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 
 ## Description
 

@@ -39,4 +39,4 @@ MySQL > SELECT * FROM sys.role_edges;
 
 下图说明了以上示例中角色授予的嵌套关系：
 
-![role_edges](../../assets/role_edges.png)
+![role_edges](../../_assets/role_edges.png)
