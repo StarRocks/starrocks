@@ -77,11 +77,12 @@ public class HashJoinNode extends JoinNode {
     }
 
     public boolean isSkewJoin() {
-        return isSkewJoin && ConnectContext.get().getSessionVariable().isEnableOptimizerSkewJoinByBroadCastSkewValues();
+        return isSkewJoin;
     }
 
     public void setSkewJoin(boolean skewJoin) {
-        isSkewJoin = skewJoin;
+        isSkewJoin =
+                skewJoin && ConnectContext.get().getSessionVariable().isEnableOptimizerSkewJoinByBroadCastSkewValues();
     }
 
     public boolean isSkewShuffleJoin() {
