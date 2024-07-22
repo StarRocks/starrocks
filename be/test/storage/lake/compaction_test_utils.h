@@ -24,12 +24,23 @@ struct CompactionParam {
     CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
     uint32_t vertical_compaction_max_columns_per_group = 5;
     bool enable_persistent_index = false;
+<<<<<<< HEAD
+=======
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    bool enable_size_tiered_compaction_strategy = true;
+>>>>>>> 507625f004 ([UT] Fix lake compaction UT (#48648))
 };
 
 static std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
     std::stringstream ss;
     ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
+<<<<<<< HEAD
        << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.enable_persistent_index;
+=======
+       << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.enable_persistent_index << "_"
+       << PersistentIndexTypePB_Name(info.param.persistent_index_type) << "_"
+       << info.param.enable_size_tiered_compaction_strategy;
+>>>>>>> 507625f004 ([UT] Fix lake compaction UT (#48648))
     return ss.str();
 }
 
