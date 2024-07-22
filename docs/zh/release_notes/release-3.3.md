@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
 - 支持批量删除分区。[#44744](https://github.com/StarRocks/starrocks/issues/44744)
 - 支持读取 Iceberg 中的视图。 [#46273](https://github.com/StarRocks/starrocks/issues/46273)
 - 支持在 Apache Ranger 中设置列级别权限（物化视图和视图的列级别权限需要在表对象下设置）。 [#47702](https://github.com/StarRocks/starrocks/pull/47702)
-- 存算分离主键模型表 partial update 支持列模式。[#46516](https://github.com/StarRocks/starrocks/issues/46516)
+- 存算分离主键模型表支持列模式部份更新。[#46516](https://github.com/StarRocks/starrocks/issues/46516)
 
 ### 功能优化
 
