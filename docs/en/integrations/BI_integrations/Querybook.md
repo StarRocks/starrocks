@@ -39,7 +39,7 @@ Make sure that you have finished the following preparations:
 
 Visit [https:///admin/query_engine/](https://localhost:10001/admin/query_engine/) and add a new query engine:
 
-![Querybook](../../assets/BI_querybook_1.png)
+![Querybook](../../_assets/BI_querybook_1.png)
 
 Take note of the following points:
 

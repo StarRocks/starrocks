@@ -27,13 +27,13 @@ When you create a table, you can define the primary key and sort key separately.
 
     As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-    ![Primary index -1](../../assets/3.2-1.png)
+    ![Primary index -1](../../_assets/3.2-1.png)
 
   - The table is a flat table that is composed of hundreds or thousands of columns. The primary key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
 
     As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
 
-    ![Primary index -2](../../assets/3.2.4-2.png)
+    ![Primary index -2](../../_assets/3.2.4-2.png)
 
 ### Principle
 

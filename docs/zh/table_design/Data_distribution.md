@@ -16,7 +16,7 @@ keywords: ['fenqu','fentong', 'lengre']
 
 现代分布式数据库中，常见的数据分布方式有如下四种：Round-Robin、Range、List 和 Hash。如下图所示：
 
-![数据分布方式](../assets/3.3.2-1.png)
+![数据分布方式](../_assets/3.3.2-1.png)
 
 - Round-Robin：以轮询的方式把数据逐个放置在相邻节点上。
 

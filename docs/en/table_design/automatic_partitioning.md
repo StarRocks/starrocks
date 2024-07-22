@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Automatic partitioning
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 This topic describes how to create a table that supports automatic partitioning. This topic also describes the usage notes and limits of automatic partitioning.
 

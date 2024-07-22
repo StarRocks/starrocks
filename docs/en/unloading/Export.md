@@ -50,7 +50,7 @@ After you submit an export job, StarRocks identifies all tablets involved in the
 
 The following figure shows the general workflow.
 
-![img](../assets/5.3.1-1.png)
+![img](../_assets/5.3.1-1.png)
 
 The general workflow consists of the following three steps:
 

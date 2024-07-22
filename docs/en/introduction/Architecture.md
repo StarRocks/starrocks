@@ -43,7 +43,7 @@ Partitions and tablets reduce table scans and increase query concurrency. Replic
 
 In the following figure, the table is divided into four partitions based on time. Data in the first partition is further split into four tablets. Each tablet has three replicas, which are stored on three different BEs.
 
-![Architecture](../assets/1.1-2.png)
+![Architecture](../_assets/1.1-2.png)
 
 Since one table is split into multiple tablets, StarRocks can schedule one SQL statement to all the tablets for parallel processing, fully utilizing the computing power of multiple physical machines and cores. This also helps offload the query pressure to multiple nodes, increasing service availability. You can add physical machines on demand to achieve high concurrency.
 

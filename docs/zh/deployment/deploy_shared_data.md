@@ -18,7 +18,7 @@ StarRocks 存算分离集群采用了存储计算分离架构，特别为云存�
 
 StarRocks 存算分离集群架构如下：
 
-![Shared-data Architecture](../assets/share_data_arch.png)
+![Shared-data Architecture](../_assets/share_data_arch.png)
 
 该功能从 3.0 版本开始支持。
 
