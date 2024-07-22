@@ -32,8 +32,8 @@ public class AlterHelper {
         for (Column column : newColumns) {
             Preconditions.checkState(column.getUniqueId() >= 0);
             columnUniqueIdSet.add(column.getUniqueId());
-            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
-                modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, column.getName()));
+            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+                modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, column.getName()));
             }
         }
         
