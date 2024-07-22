@@ -71,6 +71,7 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
+    jobject batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
 
     // batch update single
     void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows);
@@ -176,6 +177,7 @@ private:
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;
+    jmethodID _batch_create_bytebuf;
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
@@ -359,10 +361,12 @@ private:
 // UDAF State Lists
 // mapping a java object as a int index
 // use get method to
+// TODO: implement a Java binder to avoid using this class
 class UDAFStateList {
 public:
     static inline const char* clazz_name = "com.starrocks.udf.FunctionStates";
-    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add);
+    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add,
+                  JavaGlobalRef&& remove, JavaGlobalRef&& clear);
 
     jobject handle() { return _handle.handle(); }
 
@@ -375,14 +379,24 @@ public:
     // add a state to StateList
     int add_state(FunctionContext* ctx, JNIEnv* env, jobject state);
 
+    // remove a state from StateList
+    void remove(FunctionContext* ctx, JNIEnv* env, int state);
+
+    // clear all state in StateList
+    void clear(FunctionContext* ctx, JNIEnv* env);
+
 private:
     JavaGlobalRef _handle;
     JavaGlobalRef _get_method;
     JavaGlobalRef _batch_get_method;
     JavaGlobalRef _add_method;
+    JavaGlobalRef _remove_method;
+    JavaGlobalRef _clear_method;
     jmethodID _get_method_id;
     jmethodID _batch_get_method_id;
     jmethodID _add_method_id;
+    jmethodID _remove_method_id;
+    jmethodID _clear_method_id;
 };
 
 // For loading UDF Class
