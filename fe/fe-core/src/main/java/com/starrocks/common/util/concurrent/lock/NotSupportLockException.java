@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
-public class NotSupportLockException extends IllegalLockStateException {
+public class NotSupportLockException extends LockException {
     public NotSupportLockException() {
         super("Lock operations under the new framework are currently not supported.");
     }
