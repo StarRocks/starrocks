@@ -3070,11 +3070,9 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         }
         FAIL_POINT_TRIGGER_EXECUTE(immutable_index_no_page_off, { meta.mutable_shards(i)->clear_page_off(); });
         if (src.page_off().size() == 0) {
-            int off = 0;
-            for (int i = 0; i < src.npage() + 1; i++) {
-                dest.page_off.emplace_back(off);
-                off += page_size;
-            }
+            // When upgrading from a historical version that does not support page compression, set page off to 0 to distinguish it 
+            // from the new version which support page compression.
+            dest.page_off.resize(src.npage() + 1, 0);
         } else {
             for (int i = 0; i < src.npage() + 1; i++) {
                 dest.page_off.emplace_back(src.page_off(i));
