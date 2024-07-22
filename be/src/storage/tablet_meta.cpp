@@ -121,6 +121,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
     auto st = convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
                                             compression_type);
+    LOG(INFO) << "schema pb id: " << schema->id();
     // compression level is only used for zstd for now.
     if (compression_type == TCompressionType::ZSTD && compression_level != -1) {
         schema->set_compression_level(compression_level);

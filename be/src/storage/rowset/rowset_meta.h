@@ -268,13 +268,13 @@ public:
         tablet_schema_ptr->to_schema_pb(&ts_pb);
         if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
             _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
+            _has_tablet_schema_id = true;
+            _rowset_meta_pb->set_schema_id(_schema->id());
         } else {
             // Only for compatible, in very old versions, there is no schema id.
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
             _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
-        _rowset_meta_pb->set_schema_id(_schema->id());
-        _has_tablet_schema_id = true;
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
@@ -303,8 +303,11 @@ private:
 
         if (_rowset_meta_pb->has_schema_id() && _rowset_meta_pb->schema_id() != 0) {
             _schema = GlobalTabletSchemaMap::Instance()->get(_rowset_meta_pb->schema_id());
-            _has_tablet_schema_id = true;
-        } else if (_rowset_meta_pb->has_tablet_schema()) {
+            if (_schema != nullptr) {
+                _has_tablet_schema_id = true;
+            }
+        }
+        if (_rowset_meta_pb->has_tablet_schema() && !_has_tablet_schema_id) {
             if (_rowset_meta_pb->tablet_schema().has_id() &&
                 _rowset_meta_pb->tablet_schema().id() != TabletSchema::invalid_id()) {
                 _schema = GlobalTabletSchemaMap::Instance()->emplace(_rowset_meta_pb->tablet_schema()).first;
@@ -313,6 +316,7 @@ private:
             }
             _has_tablet_schema_pb = true;
         }
+        CHECK(_schema != nullptr);
 
         // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();

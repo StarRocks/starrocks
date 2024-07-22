@@ -164,7 +164,9 @@ public:
     const TabletSchema& tablet_schema() const;
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) {
-        _history_schema[_schema->id()] = std::move(_schema);
+        if (_schema != nullptr) {
+            _history_schema[_schema->id()] = std::move(_schema);
+        }
         _schema = tablet_schema;
     }
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);

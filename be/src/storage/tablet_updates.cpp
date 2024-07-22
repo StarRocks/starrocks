@@ -3882,8 +3882,10 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         // reset rowset schema to the latest one
         src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, _tablet.tablet_schema());
-        rowset_meta_pb.set_schema_id(_tablet.tablet_schema()->id());
-        rowset_meta_pb.clear_tablet_schema();
+        if (GlobalTabletSchemaMap::Instance()->get(_tablet.tablet_schema()->id())) {
+            rowset_meta_pb.set_schema_id(_tablet.tablet_schema()->id());
+            rowset_meta_pb.clear_tablet_schema();
+        }
         rowset_meta_pb.set_deprecated_rowset_id(0);
         rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
