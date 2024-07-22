@@ -25,8 +25,6 @@ import com.starrocks.warehouse.Warehouse;
 // This class is simply used as the Interface to trigger the background task
 // in CatalogRecycleBin
 public class RecycleLakeUnPartitionInfo extends RecycleUnPartitionInfo {
-    private static final Logger LOG = LogManager.getLogger(RecycleLakeUnPartitionInfo.class);
-
     public RecycleLakeUnPartitionInfo(long dbId, long tableId, Partition partition,
                                         DataProperty dataProperty, short replicationNum,
                                         boolean isInMemory, DataCacheInfo dataCacheInfo) {
