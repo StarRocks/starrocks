@@ -325,13 +325,53 @@ StarRocks 访问存储系统的认证配置。
 
 2. 在左侧导航栏，选择 **Google Cloud Storage**，然后选择 **Settings**。
 
+<<<<<<< HEAD
 3. 选择 **Interoperability** 页签。
+=======
+  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""         | `"user@hello.iam.gserviceaccount.com"` | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
+  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
+>>>>>>> 63af2b18fa ([Doc] Fix typos and misused formats (#48689))
 
    如果还没有启用 Interoperability 特性，请单击 **Interoperable Access**。
 
    ![Google GCS - Access Key Pair](../../../assets/8.2.2-1.png)
 
+<<<<<<< HEAD
 4. 单击 **Create new Key** 按钮，按界面提示完成密钥对的创建。
+=======
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
+    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
+    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
+
+  - 使用一个 Service Account（即“Meta Service Account”）模拟另一个 Service Account（即“Data Service Account”）
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""         | `"user@hello.iam.gserviceaccount.com"` | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
+    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
+    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+>>>>>>> 63af2b18fa ([Doc] Fix typos and misused formats (#48689))
 
 #### 阿里云 OSS
 
