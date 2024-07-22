@@ -904,10 +904,12 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
         Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
+        long schemaId = -1;
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
+                schemaId = indexMeta.getSchemaId();
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
                     tColumn.setColumn_name(col.getColumnId().getId());
@@ -976,6 +978,7 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.olap_scan_node.setColumns_desc(columnsDesc);
+            msg.olap_scan_node.setSchema_id(schemaId);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
