@@ -23,7 +23,7 @@ STDDEV(expr)
 
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
-![image](../../../assets/stddevpop_formula.png)
+![image](../../../_assets/stddevpop_formula.png)
 
 ## Examples
 

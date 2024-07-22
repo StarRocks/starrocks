@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 自动创建分区
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 本文介绍如何创建支持自动建分区的表、相关使用说明和限制。
 

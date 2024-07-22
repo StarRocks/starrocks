@@ -13,7 +13,7 @@ StarRocks 架构简洁，整个系统的核心只有 FE（Frontend）、BE (Back
 
 下图展示了存算一体到存算分离的架构演进。
 
-![evolution](../assets/architecture_evolution.png)
+![evolution](../_assets/architecture_evolution.png)
 
 ## 存算一体
 
@@ -48,7 +48,7 @@ StarRocks 使用列式存储，采用分区分桶机制进行数据管理。一�
 
 下图展示了 StarRocks 的数据划分以及 Tablet 多副本机制。表按照日期划分为 4 个分区，第一个分区进一步切分成 4 个 Tablet。每个 Tablet 使用 3 副本进行备份，分布在 3 个不同的 BE 节点上。
 
-![data_management](../assets/1.2-2.png)
+![data_management](../_assets/1.2-2.png)
 
 在执行 SQL 语句时，StarRocks 可以对所有 Tablet 实现并发处理，从而充分利用多机、多核提供的计算能力。用户也可以将高并发请求压力分摊到多个物理节点，通过增加物理节点的方式来扩展系统的高并发能力。
 
@@ -68,7 +68,7 @@ StarRocks 存算分离技术在现有存算一体架构的基础上，将计算�
 
 与存算一体架构类似，存算分离版本拥有同样简洁的架构，整个系统依然只有 FE 和 CN 两种服务进程，用户唯一需要额外提供的是后端对象存储。
 
-![image](../assets/architecture_shared_data.png)
+![image](../_assets/architecture_shared_data.png)
 
 ### 节点介绍
 

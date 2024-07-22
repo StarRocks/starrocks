@@ -18,7 +18,7 @@ Compared to the classic StarRocks architecture, separation of storage and comput
 
 The architecture of the shared-data StarRocks cluster is as follows:
 
-![Shared-data Architecture](../assets/share_data_arch.png)
+![Shared-data Architecture](../_assets/share_data_arch.png)
 
 This feature is supported from v3.0.
 

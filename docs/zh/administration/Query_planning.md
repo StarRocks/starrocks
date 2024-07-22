@@ -229,7 +229,7 @@ Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方�
 
 抛开具体的表达式不谈，下图从宏观的角度展示了 query96.sql 的 Query Plan。
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## 查看分析 Profile
 
@@ -261,7 +261,7 @@ order by o_orderpriority;
 
 执行查询后，您可以查看当前查询的 **执行时间** Tab。
 
-![8-6](../assets/8-6.png)
+![8-6](../_assets/8-6.png)
   
 在页面左上角，您可以看到整个查询执行了 3.106s。通过点击每个节点，您可以看到每一部分的执行信息，`Active` 字段表示当前节点（包含其所有子节点）的执行时间。当前节点有两个子节点，即两个 Scan Node，二者分别扫描了 5,730,776 条和 379,364,474 条数据，并进行了一次 Shuffle Join，完成后输出 5,257,429 条数据，然后经过两层聚合，最后通过一个 Sort Node 后输出结果，其中 Exchange Node 是数据交换节点，在当前示例中进行了两次 Shuffle。
 
@@ -308,7 +308,7 @@ order by o_orderpriority;
 
 执行结果如下所示：
 
-![8-7](../assets/8-7.png)
+![8-7](../_assets/8-7.png)
 
 新的 SQL 执行时间从 3.106s 降低至 1.042s。两张大表没有了 Exchange 节点，直接通过 Colocate Join 进行 Join。除此之外，调换左右表顺序后，整体性能大幅提升，新的 Join Node 信息如下：
 
@@ -435,7 +435,7 @@ CREATE MATERIALIZED VIEW mv
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
 ```
 
-![8-9](../assets/8-9.png)
+![8-9](../_assets/8-9.png)
 
 ## 查看 SQL 指纹
 

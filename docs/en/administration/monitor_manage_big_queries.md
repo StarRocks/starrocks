@@ -175,13 +175,13 @@ In addition to MySQL client, you can use the FE console for visualized, interact
    http://<fe_IP>:<fe_http_port>/system?path=//current_queries
    ```
 
-   ![FE console 1](../assets/console_1.png)
+   ![FE console 1](../_assets/console_1.png)
 
    You can view the queries that are currently processed and their resource consumption on the **System Info** page.
 
 2. Click the **QueryID** of the query.
 
-   ![FE console 2](../assets/console_2.png)
+   ![FE console 2](../_assets/console_2.png)
 
    You can view the detailed, node-specific resource consumption information on the page that appears.
 
