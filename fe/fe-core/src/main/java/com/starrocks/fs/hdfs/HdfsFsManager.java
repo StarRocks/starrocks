@@ -1181,29 +1181,6 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
-<<<<<<< HEAD
-=======
-    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
-        WildcardURI pathUri = new WildcardURI(path);
-        HdfsFs fileSystem = getFileSystem(path, properties, null);
-        Path pathPattern = new Path(pathUri.getPath());
-        try {
-            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
-        } catch (FileNotFoundException e) {
-            LOG.info("file not found: " + path, e);
-            throw new UserException("file not found: " + path, e);
-        } catch (InterruptedIOException e) {
-            Thread.interrupted(); // clear interrupted flag
-            LOG.error("Interrupted while get file status: " + path, e);
-            throw new UserException("Failed to get file status: " + path, e); // throw unified user exception
-        } catch (Exception e) {
-            LOG.error("errors while get file status ", e);
-            throw new UserException("Fail to get file status: " + e.getMessage(), e);
-        }
-    }
-
->>>>>>> 3fcafac8b9 ([BugFix] Avoid hdfs fs manager interrupting the thread when exception occurs (#48403))
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
             throws UserException {
         List<TBrokerFileStatus> resultFileStatus = null;
