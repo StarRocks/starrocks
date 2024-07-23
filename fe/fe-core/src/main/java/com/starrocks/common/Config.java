@@ -3127,4 +3127,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
 }
