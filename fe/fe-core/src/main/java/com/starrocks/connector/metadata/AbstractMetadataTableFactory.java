@@ -14,22 +14,8 @@
 
 package com.starrocks.connector.metadata;
 
-public enum MetadataTableType {
-    LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
-    REFS("refs");
+import com.starrocks.catalog.Table;
 
-    public final String typeString;
-
-    MetadataTableType(String typeString) {
-        this.typeString = typeString;
-    }
-
-    public static MetadataTableType get(String type) {
-        for (MetadataTableType typeEnum : values()) {
-            if (typeEnum.typeString.equalsIgnoreCase(type)) {
-                return typeEnum;
-            }
-        }
-        throw new IllegalArgumentException("unknown type " + type);
-    }
+public interface AbstractMetadataTableFactory {
+    Table createTable(String catalogName, String dbName, String tableName, MetadataTableType tableType);
 }

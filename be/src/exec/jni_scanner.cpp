@@ -94,8 +94,9 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
     jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
     jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
-    jmethodID get_scanner_method = env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
-    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
+    jmethodID get_scanner_method = env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
+    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
     env->DeleteLocalRef(scanner_factory_class);
     env->DeleteLocalRef(scanner_factory_obj);
@@ -650,6 +651,9 @@ std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner
     jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
     jni_scanner_params["split_info"] = scan_range.serialized_split;
     jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+    jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+
 
     const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);

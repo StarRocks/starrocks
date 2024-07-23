@@ -54,6 +54,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -82,7 +83,6 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.ManifestFile;
-import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.MetricsConfig;
@@ -513,7 +513,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Map<String, Partition> partitionMap = Maps.newHashMap();
         IcebergTable icebergTable = (IcebergTable) table;
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
-                createMetadataTableInstance(icebergTable.getNativeTable(), MetadataTableType.PARTITIONS);
+                createMetadataTableInstance(icebergTable.getNativeTable(), org.apache.iceberg.MetadataTableType.PARTITIONS);
 
         if (icebergTable.isUnPartitioned()) {
             try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
@@ -626,8 +626,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                                    long snapshotId, String serializedPredicate) {
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
+                                                    String serializedPredicate, MetadataTableType metadataTableType) {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -641,6 +641,17 @@ public class IcebergMetadata implements ConnectorMetadata {
             predicate = SerializationUtil.deserializeFromBase64(serializedPredicate);
         }
 
+        FileIO fileIO = nativeTable.io();
+        if (fileIO instanceof IcebergCachingFileIO) {
+            fileIO = ((IcebergCachingFileIO) fileIO).getWrappedIO();
+        }
+
+        String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
+
+        if (IcebergMetaSplit.onlySingleSplit(metadataTableType)) {
+            return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
+        }
+
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
 
         List<ManifestFile> matchingDataManifests = filterManifests(dataManifests, nativeTable, predicate);
@@ -651,12 +662,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
         List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
 
-        FileIO fileIO = nativeTable.io();
-        if (fileIO instanceof IcebergCachingFileIO) {
-            fileIO = ((IcebergCachingFileIO) fileIO).getWrappedIO();
-        }
-
-        String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
         boolean loadColumnStats = enableCollectColumnStatistics(ConnectContext.get()) ||
                 (!matchingDeleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
                         catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());

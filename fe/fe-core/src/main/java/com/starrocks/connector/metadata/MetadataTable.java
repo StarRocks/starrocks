@@ -30,7 +30,6 @@ public class MetadataTable extends Table {
     private final MetadataTableType metadataTableType;
 
     private final String catalogName;
-
     private final String originDb;
     private final String originTable;
 
@@ -64,6 +63,10 @@ public class MetadataTable extends Table {
 
     public void readFields(DataInput in) throws IOException {
         throw new UnsupportedOperationException("Do not allow read SchemaTable from image.");
+    }
+
+    public List<Column> getPlaceHolderColumns() {
+        return PLACEHOLDER_COLUMNS;
     }
 
     public static Builder builder() {
