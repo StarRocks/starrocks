@@ -386,7 +386,7 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **返回** | **说明**                                     |
 | -------- | -------------------------------------------- |
-| Item     | cluster_balance 中的子命令。                 |
+| Item     | cluster_balance 中的子命令。<ul><li>cluster_load_stat: 集群当前的负载状态。</li><li>working_slots: 当前可用的工作插槽数。</li><li>sched_stat: 调度系统的当前状态。</li><li>priority_repair: 当前需要优先处理的 Tablet 修复任务数。</li><li>pending_tablets: 当前等待处理的 Tablet 数量。</li><li>running_tablets: 当前正在修复的 Tablet 数量。</li><li>history_tablets: 历史上修复过的 Tablet 数量。</li></ul>                 |
 | Number   | cluster_balance 中每个子命令正在执行的个数。 |
 
 示例十三：查看当前集群的 Colocate Join Group 信息。
