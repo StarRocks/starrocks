@@ -2618,13 +2618,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx).shallowCopy();
                 List<Column> originSchema = currentIndexMeta.getSchema();
                 
-                if (hasMv && indexSchema.size() < originSchema.size()) {
-                    // drop column
-                    List<Column> differences = originSchema.stream().filter(element ->
-                                   !indexSchema.contains(element)).collect(Collectors.toList());
-                    // can just drop one column one time, so just one element in differences
-                    int dropIdx = originSchema.indexOf(differences.get(0));
-                    modifiedColumns.add(originSchema.get(dropIdx).getName());
+                if (hasMv) {
+                    modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, indexSchema)); 
                 }
 
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
