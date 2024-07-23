@@ -71,13 +71,13 @@ struct CastFn {
     static ColumnPtr cast_fn(ColumnPtr& column);
 };
 
+// clang-format off
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                   \
-    template <bool AllowThrowException>                        \
-    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> { \
-        static ColumnPtr cast_fn(ColumnPtr& column) {          \
-            return column->clone();                            \
-        }
+#define SELF_CAST(FROM_TYPE)                                                    \
+    template <bool AllowThrowException>                                         \
+    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
+        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+    };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
     template <bool AllowThrowException>                                                                      \
@@ -122,6 +122,7 @@ struct CastFn {
             return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(column); \
         }                                                                           \
     };
+// clang-format on
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
     return ((uint64_t)value % 100 > 59 || (uint64_t)value % 10000 > 5959);
