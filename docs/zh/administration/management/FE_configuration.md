@@ -1343,6 +1343,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
+#### enable_materialized_view_spill
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：系统内物化视图的刷新任务是否开启算子落盘功能。
+- 引入版本：3.1.1
+
 ##### enable_udf
 
 - 默认值：false
