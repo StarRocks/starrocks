@@ -30,6 +30,7 @@ import uuid
 from typing import List
 
 from nose import tools
+from nose.tools import timed
 from parameterized import parameterized
 from cup import log
 
@@ -44,6 +45,8 @@ from lib.sr_sql_lib import self_print
 record_mode = os.environ.get("record_mode", "false") == "true"
 
 case_list = choose_cases.choose_cases(record_mode).case_list
+
+process_timeout = int(os.environ.get("process_timeout", 1200))
 
 if len(case_list) == 0:
     print("** INFO: No case! **")
@@ -87,9 +90,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self._init_global_configs()
 
     def _init_global_configs(self):
-        ''''
+        """
         Configs that are not ready for production but it can be used for testing.
-        '''
+        """
         default_configs = [
             "'enable_mv_refresh_insert_strict' = 'true'",
         ]
@@ -126,6 +129,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
+    @timed(process_timeout)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester
@@ -319,7 +323,7 @@ Start to run: %s
             self.drop_resource(each_resource)
 
     def _create_and_use_db(self):
-        db_name = "test_db_%s" % uuid.uuid1().hex
+        db_name = "test_db_%s" % uuid.uuid4().hex
         self.db.append(db_name)
         self.execute_sql("CREATE DATABASE %s;" % db_name)
         self.execute_sql("USE %s;" % db_name)
