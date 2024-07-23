@@ -21,6 +21,7 @@ Release date: July 18, 2024
 - Supports queries on Iceberg views. [#46273](https://github.com/StarRocks/starrocks/issues/46273)
 - Supports managing column-level permissions in Apache Ranger. (Column-level permissions for materialized views and views must be set under the table object.) [#47702](https://github.com/StarRocks/starrocks/pull/47702)
 - Supports Partial Updates in Column mode For Primary Key tables in shared-data clusters. [#46516](https://github.com/StarRocks/starrocks/issues/46516)
+- Stream Load supports data compression during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. [#43732](https://github.com/StarRocks/starrocks/pull/43732)
 
 ### Improvements
 
