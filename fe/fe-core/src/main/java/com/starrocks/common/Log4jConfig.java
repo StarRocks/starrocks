@@ -34,6 +34,7 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import groovy.lang.Tuple3;
@@ -61,12 +62,10 @@ public class Log4jConfig extends XmlConfiguration {
             "<Configuration status=\"info\" packages=\"com.starrocks.common\">\n" +
             "  <Appenders>\n" +
             "    <Console name=\"ConsoleErr\" target=\"SYSTEM_ERR\" follow=\"true\">\n" +
-            "      <PatternLayout pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>\n" +
+            "      ${syslog_default_layout}\n" +
             "    </Console>\n" +
             "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
@@ -79,9 +78,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_warning_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
@@ -94,9 +91,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_audit_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${audit_roll_maxsize}MB\"/>\n" +
@@ -109,9 +104,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"dumpFile\" fileName=\"${dump_log_dir}/fe.dump.log\" filePattern=\"${dump_log_dir}/fe.dump.log.${dump_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_dump_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${dump_roll_maxsize}MB\"/>\n" +
@@ -124,9 +117,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"BigQueryFile\" fileName=\"${big_query_log_dir}/fe.big_query.log\" filePattern=\"${big_query_log_dir}/fe.big_query.log.${big_query_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_bigquery_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
@@ -139,9 +130,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"ProfileFile\" fileName=\"${profile_log_dir}/fe.profile.log\" filePattern=\"${profile_log_dir}/fe.profile.log.${profile_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
@@ -154,9 +143,7 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${internal_roll_maxsize}MB\"/>\n" +
@@ -211,7 +198,8 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] bigQueryModules;
     private static String[] internalModules;
 
-    private static void reconfig() throws IOException {
+    @VisibleForTesting
+    static String generateActiveLog4jXmlConfig() throws IOException {
         Map<String, String> properties = Maps.newHashMap();
 
         // sys log config
@@ -244,7 +232,7 @@ public class Log4jConfig extends XmlConfiguration {
         // big query log config
         properties.put("big_query_log_dir", Config.big_query_log_dir);
         properties.put("big_query_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
-        properties.put("big_query_roll_num", String.valueOf(Config.big_query_log_roll_num));
+        properties.put("big_query_log_roll_num", String.valueOf(Config.big_query_log_roll_num));
         properties.put("big_query_log_delete_age", String.valueOf(Config.big_query_log_delete_age));
         properties.put("big_query_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.big_query_log_roll_interval));
@@ -260,15 +248,92 @@ public class Log4jConfig extends XmlConfiguration {
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);
         properties.put("internal_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
-        properties.put("internal_roll_num", String.valueOf(Config.internal_log_roll_num));
+        properties.put("internal_log_roll_num", String.valueOf(Config.internal_log_roll_num));
         properties.put("internal_log_delete_age", String.valueOf(Config.internal_log_delete_age));
         properties.put("internal_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
 
+        // appender layout
+        final String jsonLoggingConfValue = "json";
+        if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
+            // json logging
+            String jsonLayout =
+                    "<JsonTemplateLayout locationInfoEnabled=\"true\">\n" +
+                            "        <EventTemplate><![CDATA[\n{\n" +
+                            "   \"@timestamp\": {\n" +
+                            "       \"$resolver\": \"timestamp\",\n" +
+                            "       \"pattern\": {\n" +
+                            "         \"format\": \"yyyy-MM-dd HH:mm:ss.SSSXXX\",\n" +
+                            "         \"timeZone\": \"UTC\"\n" +
+                            "        }\n" +
+                            "      },\n" +
+                            "      \"level\": {\n" +
+                            "       \"$resolver\": \"level\",\n" +
+                            "       \"field\": \"name\"\n" +
+                            "      },\n" +
+                            "      \"thread.name\": {\n" +
+                            "       \"$resolver\": \"thread\",\n" +
+                            "       \"field\": \"name\"\n" +
+                            "      },\n" +
+                            "      \"thread.id\": {\n" +
+                            "       \"$resolver\": \"thread\",\n" +
+                            "       \"field\": \"id\"\n" +
+                            "      },\n" +
+                            "      \"method\": {\n" +
+                            "       \"$resolver\": \"logger\",\n" +
+                            "       \"field\": \"name\",\n" +
+                            "       \"shorten\": {\n" +
+                            "         \"length\": 1,\n" +
+                            "         \"strategy\": \"tail\"\n" +
+                            "        }\n" +
+                            "      },\n" +
+                            "      \"line\": {\n" +
+                            "        \"$resolver\": \"source\",\n" +
+                            "        \"field\": \"lineNumber\"\n" +
+                            "      },\n" +
+                            "      \"message\": {\n" +
+                            "        \"$resolver\": \"message\",\n" +
+                            "        \"stringfield\": \"true\"\n" +
+                            "      },\n" +
+                            "      \"exception\": {\n" +
+                            "        \"$resolver\": \"exception\",\n" +
+                            "        \"field\": \"stackTrace\",\n" +
+                            "        \"stackTrace\": {\n" +
+                            "          \"stringified\": true,\n" +
+                            "          \"full\": true\n" +
+                            "        }\n" +
+                            "      }" +
+                            "      }\n]]></EventTemplate>\n" +
+                            "</JsonTemplateLayout>";
+            properties.put("syslog_default_layout", jsonLayout);
+            properties.put("syslog_warning_layout", jsonLayout);
+            properties.put("syslog_audit_layout", jsonLayout);
+            properties.put("syslog_dump_layout", jsonLayout);
+            properties.put("syslog_bigquery_layout", jsonLayout);
+            properties.put("syslog_profile_layout", jsonLayout);
+        } else {
+            // fallback to plaintext logging
+            properties.put("syslog_default_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>");
+            properties.put("syslog_warning_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex\"/>");
+            properties.put("syslog_audit_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+            properties.put("syslog_dump_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+            properties.put("syslog_bigquery_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+            properties.put("syslog_profile_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+        }
+
         String xmlConfTemplate = generateXmlConfTemplate();
         strSub = new StrSubstitutor(new Interpolator(properties));
-        xmlConfTemplate = strSub.replace(xmlConfTemplate);
+        return strSub.replace(xmlConfTemplate);
+    }
 
+    private static void reconfig() throws IOException {
+        String xmlConfTemplate = generateActiveLog4jXmlConfig();
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
             System.out.println(xmlConfTemplate);
