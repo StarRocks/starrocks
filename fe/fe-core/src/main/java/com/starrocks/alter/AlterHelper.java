@@ -33,7 +33,7 @@ public class AlterHelper {
             Preconditions.checkState(column.getUniqueId() >= 0);
             columnUniqueIdSet.add(column.getUniqueId());
             if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, column.getName()));
+                modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
             }
         }
         
