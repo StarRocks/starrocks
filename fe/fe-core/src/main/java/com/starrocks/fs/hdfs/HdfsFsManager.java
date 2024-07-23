@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -1038,6 +1039,10 @@ public class HdfsFsManager {
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + e.getMessage());
             throw new UserException("file not found: " + e.getMessage());
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while list path: " + path, e);
+            throw new UserException("Failed to list path: " + path, e); // throw unified user exception
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("unknown error when get file status: " + e.getMessage());
@@ -1051,6 +1056,10 @@ public class HdfsFsManager {
         Path filePath = new Path(pathUri.getPath());
         try {
             fileSystem.getDFSFileSystem().delete(filePath, true);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while delete path: " + path, e);
+            throw new UserException("Failed to delete path: " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while delete path " + path, e);
             throw new UserException("delete path " + path + "error", e);
@@ -1081,6 +1090,11 @@ public class HdfsFsManager {
             if (!isRenameSuccess) {
                 throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
             }
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while rename path from " + srcPath + " to " + destPath, e);
+            // throw unified user exception
+            throw new UserException("Failed to rename path from " + srcPath + " to " + destPath, e);
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
             throw new UserException("errors while rename " + srcPath + "to " + destPath, e);
@@ -1092,8 +1106,11 @@ public class HdfsFsManager {
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
-            boolean isPathExist = fileSystem.getDFSFileSystem().exists(filePath);
-            return isPathExist;
+            return fileSystem.getDFSFileSystem().exists(filePath);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while list path: " + path, e);
+            throw new UserException("Failed to list path: " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path, e);
             throw new UserException("errors while check if path " + path + " exist", e);
@@ -1111,6 +1128,10 @@ public class HdfsFsManager {
             TBrokerFD fd = parseUUIDToFD(uuid);
             ioStreamManager.putNewInputStream(fd, fsDataInputStream, fileSystem);
             return fd;
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while open file " + path, e);
+            throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while open path", e);
             throw new UserException("could not open file " + path, e);
@@ -1123,6 +1144,11 @@ public class HdfsFsManager {
             long currentStreamOffset;
             try {
                 currentStreamOffset = fsDataInputStream.getPos();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while get file pos from output stream", e);
+                // throw unified user exception
+                throw new UserException("Failed to get file pos from output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while get file pos from output stream", e);
                 throw new UserException("errors while get file pos from output stream");
@@ -1134,6 +1160,11 @@ public class HdfsFsManager {
                         + offset + " seek to it");
                 try {
                     fsDataInputStream.seek(offset);
+                } catch (InterruptedIOException e) {
+                    Thread.interrupted(); // clear interrupted flag
+                    LOG.error("Interrupted while seek file pos from output stream", e);
+                    // throw unified user exception
+                    throw new UserException("Failed to seek file pos from output stream", e);
                 } catch (IOException e) {
                     throw new UserException("current read offset " + currentStreamOffset + " is not equal to "
                          + offset + ", and could not seek to it");
@@ -1161,6 +1192,10 @@ public class HdfsFsManager {
                     System.arraycopy(buf, 0, smallerBuf, 0, readLength);
                     return smallerBuf;
                 }
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while read data from stream", e);
+                throw new UserException("Failed to read data from stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
                 throw new UserException("errors while read data from stream", e);
@@ -1177,6 +1212,10 @@ public class HdfsFsManager {
         synchronized (fsDataInputStream) {
             try {
                 fsDataInputStream.close();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while close file input stream", e);
+                throw new UserException("Failed to close file input stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while close file input stream", e);
                 throw new UserException("errors while close file input stream", e);
@@ -1198,6 +1237,10 @@ public class HdfsFsManager {
             LOG.info("finish a open writer request. fd: " + fd);
             ioStreamManager.putNewOutputStream(fd, fsDataOutputStream, fileSystem);
             return fd;
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while open file " + path, e);
+            throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while open path", e);
             throw new UserException("could not open file " + path, e);
@@ -1214,6 +1257,11 @@ public class HdfsFsManager {
             }
             try {
                 fsDataOutputStream.write(data);
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while write file " + fd + " to output stream", e);
+                // throw unified user exception
+                throw new UserException("Failed to write file " + fd + " to output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while write file " + fd + " to output stream", e);
                 throw new UserException("errors while write data to output stream", e);
@@ -1227,6 +1275,11 @@ public class HdfsFsManager {
             try {
                 fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
+            } catch (InterruptedIOException e) {
+                Thread.interrupted(); // clear interrupted flag
+                LOG.error("Interrupted while close file " + fd + " output stream", e);
+                // throw unified user exception
+                throw new UserException("Failed to close file " + fd + " output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while close file " + fd + " output stream", e);
                 throw new UserException("errors while close file output stream", e);
