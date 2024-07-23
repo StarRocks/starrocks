@@ -122,11 +122,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableVersionRange(table, startVersion, endVersion);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override

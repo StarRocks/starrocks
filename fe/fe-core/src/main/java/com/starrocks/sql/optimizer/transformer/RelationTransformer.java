@@ -550,7 +550,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
         }
         TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTableVersionRange(node.getTable(), startVersion, endVersion);
+                .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
@@ -610,10 +610,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             MetadataTable metadataTable = (MetadataTable) node.getTable();
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
                 scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
-                if (node.getQueryPeriodString() != null) {
-                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getQueryPeriodString());
-                }
+                        columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
             } else {
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
                         ErrorType.UNSUPPORTED);
