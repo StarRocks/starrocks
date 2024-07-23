@@ -85,7 +85,7 @@ int64_t ChunkWriter::estimated_buffered_bytes() const {
     }
 
     auto buffered_bytes = std::accumulate(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
-    return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + buffered_bytes;
+    return _rg_writer->total_compressed_bytes_written() + _rg_writer->total_compressed_bytes() + buffered_bytes;
 }
 
 } // namespace starrocks::parquet
