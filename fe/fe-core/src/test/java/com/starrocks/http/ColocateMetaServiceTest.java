@@ -21,10 +21,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
