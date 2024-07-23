@@ -41,8 +41,7 @@ import java.util.stream.Collectors;
  * normalize expression to ColumnAccessPath
  */
 public class SubfieldAccessPathNormalizer {
-    // todo: BE only support one-layer json path, supported more layer in future
-    public static int JSON_FLATTEN_DEPTH = 1;
+    public static int JSON_FLATTEN_DEPTH = 20;
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
 
