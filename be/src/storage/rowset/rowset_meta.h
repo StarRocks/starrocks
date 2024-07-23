@@ -307,7 +307,6 @@ private:
             if (_schema != nullptr) {
                 _has_tablet_schema_id = true;
             }
-            LOG(INFO) << "rowset has tablet schema id";
         }
         if (_rowset_meta_pb->has_tablet_schema() && !_has_tablet_schema_id) {
             if (_rowset_meta_pb->tablet_schema().has_id() &&

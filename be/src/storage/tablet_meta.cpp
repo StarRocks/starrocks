@@ -121,7 +121,6 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
     auto st = convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
                                             compression_type);
-    LOG(INFO) << "schema pb id: " << schema->id();
     // compression level is only used for zstd for now.
     if (compression_type == TCompressionType::ZSTD && compression_level != -1) {
         schema->set_compression_level(compression_level);
@@ -487,11 +486,9 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
 
     for (auto& rs_meta : to_add) {
         auto schema_id = rs_meta->tablet_schema()->id();
-        LOG(INFO) << "rs_meta schema id:" << schema_id << ", tablet_schema id:" << _schema->id();
         if (schema_id == _schema->id() || _history_schema.find(schema_id) != _history_schema.end()) {
             rs_meta->set_tablet_schema_id();
         }
-        LOG(INFO) << "rs_meta has tablet schema id: " << rs_meta->has_tablet_schema_id();
     }
 
     // put to_add rowsets in _rs_metas.
@@ -514,7 +511,6 @@ void TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
 }
 
 void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
-    LOG(INFO) << "delete stale rowset meta, version:" << version;
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {

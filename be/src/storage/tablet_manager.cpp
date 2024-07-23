@@ -1007,7 +1007,6 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 }
 
 Status TabletManager::start_trash_sweep() {
-    LOG(INFO) << "start to do trash sweep";
     {
         // we use this vector to save all tablet ptr for saving lock time.
         std::vector<TabletSharedPtr> all_tablets;
