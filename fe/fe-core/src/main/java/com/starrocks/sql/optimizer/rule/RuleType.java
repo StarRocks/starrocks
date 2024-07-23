@@ -182,6 +182,14 @@ public enum RuleType {
     TF_ARRAY_DISTINCT_AFTER_AGG,
 
     TF_ELIMINATE_GROUP_BY_CONSTANT,
+<<<<<<< HEAD
+=======
+    TF_ELIMINATE_AGG,
+
+    TF_CTE_ADD_PROJECTION,
+
+    TF_PREDICATE_PROPAGATE,
+>>>>>>> 6076570358 ([BugFix] Fix CTE distinct grouping sets rewrite generate invalid plan (#48765))
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
