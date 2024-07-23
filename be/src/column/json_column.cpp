@@ -384,11 +384,14 @@ void JsonColumn::check_or_die() const {
     DCHECK(_flat_column_types.size() == _flat_columns.size());
     if (!_flat_columns.empty()) {
         size_t rows = _flat_columns[0]->size();
-        for (size_t i = 0; i < _flat_columns.size(); i++) {
+        for (size_t i = 0; i < _flat_columns.size() - 1; i++) {
             DCHECK(_flat_columns[i]->is_nullable());
             DCHECK(_flat_columns[i]->size() == rows);
             _flat_columns[i]->check_or_die();
         }
+        DCHECK(has_remain() ? _flat_columns.back()->is_json() : _flat_columns.back()->is_nullable());
+        DCHECK(_flat_columns.back()->size() == rows);
+        _flat_columns.back()->check_or_die();
     }
 }
 

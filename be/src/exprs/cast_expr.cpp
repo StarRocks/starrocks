@@ -72,10 +72,12 @@ struct CastFn {
 };
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                                    \
-    template <bool AllowThrowException>                                         \
-    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+#define SELF_CAST(FROM_TYPE)                                   \
+    template <bool AllowThrowException>                        \
+    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> { \
+        static ColumnPtr cast_fn(ColumnPtr& column) {          \
+            return column->clone();                            \
+        }                                                      \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
@@ -201,7 +203,6 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         }
     }
     return builder.build(column->is_constant());
-    return {};
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
