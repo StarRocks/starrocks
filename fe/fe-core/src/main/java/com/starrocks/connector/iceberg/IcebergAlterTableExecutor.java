@@ -63,10 +63,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     }
 
     @Override
-    public void checkConflict() throws DdlException {
-    }
-
-    @Override
     public void applyClauses() throws DdlException {
         transaction = table.newTransaction();
         super.applyClauses();

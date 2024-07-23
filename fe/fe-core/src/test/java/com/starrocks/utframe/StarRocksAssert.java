@@ -673,8 +673,8 @@ public class StarRocksAssert {
 
     public StarRocksAssert alterTableProperties(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
-        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Assert.assertFalse(alterTableStmt.getAlterClauseList().isEmpty());
+        Assert.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof ModifyTablePropertiesClause);
         Analyzer.analyze(alterTableStmt, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         return this;
