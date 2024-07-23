@@ -225,16 +225,10 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
   - If you load data from a single HDFS cluster that has one Kerberos user configured, both broker-based loading and broker-free loading are supported.
+
+    - To perform broker-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
-<<<<<<< HEAD
-    - To perform load-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
-  
-    - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
-=======
-    - To perform broker-based loading, make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
-  
-    - To perform broker-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE or CN node.
->>>>>>> 63af2b18fa ([Doc] Fix typos and misused formats (#48689))
+    - To perform broker-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
   
   - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 
@@ -333,53 +327,13 @@ To create an Access/Secret key pair to access your Google GCS bucket, follow the
 
 2. In the left-side navigation pane, choose **Google Cloud Storage** and then **Settings**.
 
-<<<<<<< HEAD
 3. Click the **Interoperability** tab.
-=======
-  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
-  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the service account. |
-  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
-  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
->>>>>>> 63af2b18fa ([Doc] Fix typos and misused formats (#48689))
 
 4. (Optional.) If you have not enabled the Interoperability feature, click **Interoperable Access**.
 
    ![img](../../../assets/BROKERLOAD-1.png)
 
-<<<<<<< HEAD
 5. Click the **Create new Key** button to create an Access/Secret key pair.
-=======
-    ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true",
-    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
-    ```
-
-    The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
-    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
-    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
-    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
-
-  - Make a service account (named as meta service account) impersonate another service account (named as data service account):
-
-    ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>",
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
-    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
-    ```
-
-    The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
-    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the meta service account. |
-    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
-    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
-    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
->>>>>>> 63af2b18fa ([Doc] Fix typos and misused formats (#48689))
 
 #### Other S3-compatible storage system
 
