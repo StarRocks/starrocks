@@ -243,7 +243,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | Parameter                       | Description                                                  |
     | ------------------------------- | ------------------------------------------------------------ |
     | hadoop.security.authentication  | The authentication method. Valid values: `simple` and `kerberos`. Default value: `simple`. `simple` represents simple authentication, meaning no authentication, and `kerberos` represents Kerberos authentication. |
-    | kerberos_principal              | The Kerberos principal to be authenticated. Each principal consists of the following three parts to ensure that it is unique across the HDFS cluster:<ul><li>`username` or `servicename`: The name of the principal.</li><li>`instance`: the name of the server that hosts the node to be authenticated in the HDFS cluster. The server name helps ensure that the principal is unique, for example, when the HDFS cluster consists of multiple DataNodes that each are independently authenticated.</li><li>`realm`: The name of the realm. The realm name must be capitalized. Example: `nn/[zelda1@ZELDA.COM](mailto:zelda1@ZELDA.COM)`.</li></ul> |
+    | kerberos_principal              | The Kerberos principal to be authenticated. Each principal consists of the following three parts to ensure that it is unique across the HDFS cluster:<ul><li>`username` or `servicename`: The name of the principal.</li><li>`instance`: the name of the server that hosts the node to be authenticated in the HDFS cluster. The server name helps ensure that the principal is unique, for example, when the HDFS cluster consists of multiple DataNodes that each are independently authenticated.</li><li>`realm`: The name of the realm. The realm name must be capitalized.</li></ul>Example: `nn/zelda1@ZELDA.COM`. |
     | kerberos_keytab                 | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
@@ -262,11 +262,11 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
   You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
-  - If you load data from a single HDFS cluster that has one Kerberos user configured, both load-based loading and load-free loading are supported.
+  - If you load data from a single HDFS cluster that has one Kerberos user configured, both broker-based loading and broker-free loading are supported.
+
+    - To perform broker-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
-    - To perform load-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
-  
-    - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
+    - To perform broker-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
   
   - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 
@@ -365,7 +365,7 @@ If you choose Google GCS as your storage system, take one of the following actio
 
   | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
   | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
 
@@ -398,7 +398,7 @@ If you choose Google GCS as your storage system, take one of the following actio
 
     | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
     | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
