@@ -238,7 +238,7 @@ public class SqlParser {
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
                 decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
             }
-           parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
         }
 
         try {
