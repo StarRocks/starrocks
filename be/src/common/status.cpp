@@ -259,6 +259,8 @@ std::string Status::code_as_string() const {
         return "JIT compile error";
     case TStatusCode::CAPACITY_LIMIT_EXCEED:
         return "Capaticy limit exceeded";
+    case TStatusCode::SHUTDOWN:
+        return "Shut down in progress";
     }
     return {};
 }

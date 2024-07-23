@@ -752,6 +752,7 @@ public class ShowExecutorTest {
         backend.setCpuCores(16);
         backend.setMemLimitBytes(100L);
         backend.updateResourceUsage(0, 1L, 30);
+        backend.setAlive(false);
         clusterInfo.addBackend(backend);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -806,7 +807,7 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertEquals(32, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(33, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22).getName());
         Assert.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23).getName());
@@ -814,16 +815,19 @@ public class ShowExecutorTest {
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(25).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(26).getName());
         Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(27).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(29).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(30).getName());
+        Assert.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
+
         Assert.assertEquals("16", resultSet.getString(22));
         Assert.assertEquals("100.000B", resultSet.getString(23));
         Assert.assertEquals("0", resultSet.getString(24));
         Assert.assertEquals("N/A", resultSet.getString(27));
-        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(30));
+        Assert.assertEquals("DISCONNECTED", resultSet.getString(29));
+        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(31));
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }
 
@@ -840,6 +844,7 @@ public class ShowExecutorTest {
         tDataCacheMetrics.setDisk_quota_bytes(1024 * 1024 * 1024);
         tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
         node.updateDataCacheMetrics(DataCacheMetrics.buildFromThrift(tDataCacheMetrics));
+        node.setAlive(true);
         clusterInfo.addComputeNode(node);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -903,7 +908,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("1.00 %", resultSet.getString(16));
         Assert.assertEquals("3.0 %", resultSet.getString(17));
         Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(23));
+        Assert.assertEquals("OK", resultSet.getString(20));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(24));
     }
 
     @Test
