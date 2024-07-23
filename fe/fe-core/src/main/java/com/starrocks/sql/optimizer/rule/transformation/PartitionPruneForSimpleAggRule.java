@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
@@ -28,11 +29,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -137,14 +141,10 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
 
-        List<Long> selectedPartitionIds = prune(table, checkMinMax(aggregationOperator));
+        LogicalScanOperator scanOperator = optimizeWithPartitionPrune(logicalOlapScanOperator, table,
+                checkMinMax(aggregationOperator));
 
-        LogicalOlapScanOperator prunedOperator = new LogicalOlapScanOperator.Builder()
-                .withOperator(logicalOlapScanOperator)
-                .setSelectedPartitionId(selectedPartitionIds)
-                .build();
-
-        return Lists.newArrayList(OptExpression.create(prunedOperator, input.getInputs()));
+        return Lists.newArrayList(OptExpression.create(scanOperator, input.getInputs()));
     }
 
     /**
@@ -152,7 +152,9 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
      * 1. choose MAX partition for max(ds) function
      * 2. choose MIN partition for min(ds) function
      */
-    private List<Long> prune(OlapTable table, Pair<Boolean, Boolean> hasMinMax) {
+    private LogicalScanOperator optimizeWithPartitionPrune(LogicalOlapScanOperator scanOperator,
+                                                           OlapTable table,
+                                                           Pair<Boolean, Boolean> hasMinMax) {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
 
@@ -162,7 +164,7 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
 
         List<Long> pruned = Lists.newArrayList();
         if (CollectionUtils.isEmpty(sorted)) {
-            return pruned;
+            return null;
         }
 
         if (hasMinMax.first) {
@@ -171,13 +173,17 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         if (hasMinMax.second) {
             pruned.add(sorted.get(sorted.size() - 1));
         }
-        return pruned;
+
+        return new LogicalOlapScanOperator.Builder()
+                .withOperator(scanOperator)
+                .setSelectedPartitionId(pruned)
+                .build();
     }
 
     /**
      * For List Partition, we can evaluate the MAX(pt) based on the partition values
      */
-    private Pair<ConstantOperator, ConstantOperator> evaluateWithPartitionValues(OlapTable table,
+    private Pair<ConstantOperator, ConstantOperator> optimizeWithPartitionValues(OlapTable table,
                                                                                  Pair<Boolean, Boolean> hasMinMax) {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
@@ -189,5 +195,26 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
             long minPartition = sorted.get(0);
             partitionInfo.getPartitionListExpr(minPartition);
         }
+    }
+
+    /**
+     * For PRIMARY-KEY Table and RANGE PARTITION, we cannot apply the PartitionPrune && PartitionValues, so transform
+     * it into a TopN query
+     */
+    private LogicalTopNOperator optimizeWithTop1(LogicalAggregationOperator aggregation,
+                                  OlapTable table,
+                                  Pair<Boolean, Boolean> hasMinMax) {
+        if (hasMinMax.first && hasMinMax.second) {
+            return null;
+        }
+        final long limit = 1;
+        final long offset = 0;
+        List<CallOperator> aggregations = Lists.newArrayList(aggregation.getAggregations().values());
+        Preconditions.checkState(aggregations.size() == 1, "must have 1 aggregations but " + aggregations.size());
+        CallOperator agg = aggregations.get(0);
+        ColumnRefOperator columnRefOperator = agg.getColumnRefs().get(0);
+
+        List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, hasMinMax.first, false));
+        return new LogicalTopNOperator(ordering, limit, offset);
     }
 }
