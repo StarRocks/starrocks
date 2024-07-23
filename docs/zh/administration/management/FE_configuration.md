@@ -158,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String[]
 - 单位：-
 - 是否动态：否
-- 描述：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。connection 模块为连接日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 描述：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。自 v3.0 起 支持 `connection` 模块，即连接日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
 - 引入版本：-
 
 ##### qe_slow_log_ms
