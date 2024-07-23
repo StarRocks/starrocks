@@ -3192,6 +3192,7 @@ public class Config extends ConfigBase {
     public static int thrift_max_message_size = 1024 * 1024 * 1024;
 
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static int thrift_max_frame_size = 16384000;
 
     @ConfField(mutable = true)
@@ -3200,4 +3201,10 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+=======
+    public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+>>>>>>> db005eba61 ([Refactor] Add max column table limit max_column_number_per_table for table (#47869))
 }
