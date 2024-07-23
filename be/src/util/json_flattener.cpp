@@ -555,8 +555,6 @@ void JsonFlattener::flatten(const Column* json_column) {
         json_data = down_cast<const JsonColumn*>(json_column);
     }
 
-    // may not empty rows when compaction
-    size_t base_rows = _flat_columns[0]->size();
     // output
     if (_has_remain) {
         _flatten<true>(json_column, json_data);
@@ -571,13 +569,13 @@ void JsonFlattener::flatten(const Column* json_column) {
     }
 
     for (auto& col : _flat_columns) {
-        DCHECK_EQ(col->size(), json_column->size() + base_rows);
+        DCHECK_EQ(col->size(), json_column->size());
     }
 }
 
 template <bool REMAIN>
 bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
-                                  uint32_t* flat_hit) {
+                                  uint32_t* hit_count) {
     vpack::ObjectIterator it(value, false);
     for (; it.valid(); it.next()) {
         auto current = (*it);
@@ -592,7 +590,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
                 continue;
             }
         } else {
-            if (*flat_hit == 0) {
+            if (*hit_count == _dst_paths.size()) {
                 return false;
             }
             if (child == root->children.end()) {
@@ -608,15 +606,15 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             auto* c = down_cast<NullableColumn*>(_flat_columns[index].get());
             auto func = flat_json::JSON_EXTRACT_FUNC.at(child->second->type);
             func(&v, c);
-            *flat_hit ^= (1 << index);
+            *hit_count += 1;
             // not leaf node, should goto deep
         } else if (v.isObject()) {
             if constexpr (REMAIN) {
                 builder->add(k, vpack::Value(vpack::ValueType::Object));
-                _flatten_json<REMAIN>(v, child->second.get(), builder, flat_hit);
+                _flatten_json<REMAIN>(v, child->second.get(), builder, hit_count);
                 builder->close();
             } else {
-                if (!_flatten_json<REMAIN>(v, child->second.get(), builder, flat_hit)) {
+                if (!_flatten_json<REMAIN>(v, child->second.get(), builder, hit_count)) {
                     return false;
                 }
             }
@@ -632,8 +630,6 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
 template <bool HAS_REMAIN>
 void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_data) {
     DCHECK(!_dst_paths.empty());
-    // may not empty rows when compaction
-    size_t base_rows = _flat_columns[0]->size();
     // output
     DCHECK_LE(_dst_paths.size(), std::numeric_limits<int>::max());
     for (size_t row = 0; row < json_column->size(); row++) {
@@ -662,33 +658,32 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
             }
             continue;
         }
-        // bitset, all 1,
-        // to mark which column exists in json, to fill null if doesn't found in json
-        uint32_t flat_hit = (1 << _dst_paths.size()) - 1;
+        // to count how many columns hit in json, for append default value
+        uint32_t hit_count = 0;
         if constexpr (HAS_REMAIN) {
             vpack::Builder builder;
             builder.add(vpack::Value(vpack::ValueType::Object));
-            _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), &builder, &flat_hit);
+            _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), &builder, &hit_count);
             builder.close();
             _remain->append(JsonValue(builder.slice()));
         } else {
-            _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), nullptr, &flat_hit);
+            _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), nullptr, &hit_count);
         }
 
-        if (UNLIKELY(flat_hit > 0)) {
-            for (size_t k = 0; k < _dst_paths.size() && flat_hit > 0; k++) {
-                if (flat_hit & (1 << k)) {
-                    _flat_columns[k]->append_default(1);
-                    flat_hit ^= (1 << k);
+        if (UNLIKELY(hit_count < _dst_paths.size())) {
+            for (auto& col : _flat_columns) {
+                if (col->size() != row + 1) {
+                    DCHECK_EQ(col->size(), row);
+                    col->append_default(1);
                 }
             }
         }
 
         for (auto& col : _flat_columns) {
-            DCHECK_EQ(col->size(), row + 1 + base_rows);
+            DCHECK_EQ(col->size(), row + 1);
         }
         if constexpr (HAS_REMAIN) {
-            DCHECK_EQ(row + 1 + base_rows, _remain->size());
+            DCHECK_EQ(row + 1, _remain->size());
         }
     }
 }
