@@ -1202,16 +1202,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
-<!--
 ##### enable_materialized_view_spill
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
+- Introduced in: v3.1.1
 
 ##### enable_backup_materialized_view
 
@@ -1341,16 +1339,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
-
-#### enable_materialized_view_spill
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable spill in materialized views' refresh tasks.
-- Introduced in: 3.1.1
-
 
 ##### enable_udf
 
