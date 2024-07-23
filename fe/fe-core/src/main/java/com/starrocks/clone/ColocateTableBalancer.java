@@ -767,13 +767,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         db.readUnlock();
                         db.readLock();
                         lockStart = System.nanoTime();
-<<<<<<< HEAD
                         if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
-                            return lockTotalTime;
-=======
-                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, false);
->>>>>>> 30104e04fe ([BugFix] Fix Colocate Group marked as stable when checking urgent tables (#48680))
                         }
                         if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
