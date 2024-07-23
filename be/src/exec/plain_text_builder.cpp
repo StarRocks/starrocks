@@ -76,7 +76,11 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
     for (size_t row = 0; row < num_rows; row++) {
         for (size_t col = 0; col < num_cols; col++) {
             auto col_ptr = columns_raw_ptr[col];
-            RETURN_IF_ERROR(_converters[col]->write_string(os, *col_ptr, row, opts));
+            Status st = (_converters[col]->write_string(os, *col_ptr, row, opts));
+            if (!st.ok()) {
+                LOG(INFO) << "write string failed. row = " << row << ", col = " << col;
+                return st;
+            }
             RETURN_IF_ERROR(os->write((col == num_cols - 1) ? row_delimiter : column_delimiter));
         }
     }
