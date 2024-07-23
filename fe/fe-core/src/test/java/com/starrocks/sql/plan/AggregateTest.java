@@ -1528,6 +1528,32 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 27: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 28: expr");
+        // count distinct with grouping sets
+
+        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
+                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by rollup(t1c, t1b)";
+        plan = getFragmentPlan(sql);
+        // make sure repeat + project + multi cast sink
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 10\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 17\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 13> : 13: expr\n" +
+                "  |  <slot 14> : 14: expr\n" +
+                "  |  <slot 18> : 18: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [3], [2, 3]]");
     }
 
     @Test
