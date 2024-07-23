@@ -51,6 +51,7 @@ Status SchemaBeDataCacheMetricsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
+#ifdef WITH_STARCACHE
     if (_is_fetched) {
         *eos = true;
         return Status::OK();
@@ -123,6 +124,10 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     *eos = false;
     _is_fetched = true;
     return Status::OK();
+#else
+    *eos = true;
+    return Status::OK();
+#endif
 }
 
 } // namespace starrocks
