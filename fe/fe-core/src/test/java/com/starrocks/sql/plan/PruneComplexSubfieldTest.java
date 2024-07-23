@@ -1133,4 +1133,28 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "ColumnAccessPath: [/a1/OFFSET]");
         assertContains(plan, "1:Project");
     }
+
+    @Test
+    public void testMultiLevelJson() throws Exception {
+        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 20;
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c.d') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b/c/d(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(st1.j1, '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st1/j1/a/b/c(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(ar1[1], '$.a.b.c'), " +
+                "get_json_int(mp1[1], '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/ar1/INDEX/a/b/c(bigint(20)), /mp1/INDEX/a/b/c(bigint(20))]");
+    }
+
 }
