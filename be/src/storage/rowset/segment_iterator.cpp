@@ -1569,6 +1569,12 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
+    if (UNLIKELY(read_indexes.size() > output_schema().num_fields())) {
+        // May only occur in certain situations in cross-cluster replication
+        return Status::Corruption(
+                "Failed to filter unused columns, please set enable_filter_unused_columns_in_scan_stage = false");
+    }
+
     // map output_schema[cid, index] to read_schema[cid index]
     ctx->_read_index_map.resize(read_indexes.size());
     for (size_t i = 0; i < read_indexes.size(); i++) {
