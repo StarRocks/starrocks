@@ -34,6 +34,15 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
+import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
+>>>>>>> 6076570358 ([BugFix] Fix CTE distinct grouping sets rewrite generate invalid plan (#48765))
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
@@ -314,7 +323,14 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+<<<<<<< HEAD
         ruleRewriteOnlyOnce(tree, rootTaskContext, LimitPruneTabletsRule.getInstance());
+=======
+        ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
+        ruleRewriteIterative(tree, rootTaskContext, new CTEProduceAddProjectionRule());
+>>>>>>> 6076570358 ([BugFix] Fix CTE distinct grouping sets rewrite generate invalid plan (#48765))
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
