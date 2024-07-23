@@ -657,7 +657,6 @@ public:
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
         request.tablet_schema.__set_id(rand());
-        LOG(INFO) << "tablet schema id:" << request.tablet_schema.id;
 
         TColumn k1;
         k1.column_name = "pk";
