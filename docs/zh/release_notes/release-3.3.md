@@ -21,6 +21,7 @@ displayed_sidebar: "Chinese"
 - 支持读取 Iceberg 中的视图。 [#46273](https://github.com/StarRocks/starrocks/issues/46273)
 - 支持在 Apache Ranger 中设置列级别权限（物化视图和视图的列级别权限需要在表对象下设置）。 [#47702](https://github.com/StarRocks/starrocks/pull/47702)
 - 存算分离主键模型表支持列模式部份更新。[#46516](https://github.com/StarRocks/starrocks/issues/46516)
+- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
 
 ### 功能优化
 
