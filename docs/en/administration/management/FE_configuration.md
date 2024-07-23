@@ -157,7 +157,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the `slow_query` module and the `query` module. `connection` module is supported from v3.0.4. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ##### qe_slow_log_ms
