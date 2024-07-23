@@ -26,66 +26,63 @@
 namespace starrocks {
 
 template<class Base>
-class CountingAllocatorT final : public Base {
+class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<Base>> {
 public:
-    ALWAYS_INLINE void* alloc(size_t size) {
-        LOG(INFO) << "CountingAllocatorT::alloc";
-        void* result = Base::alloc(size);
+    void* alloc(size_t size) override {
+        void* result = static_cast<Base*>(this)->alloc(size);
         _memory_usage += size;
         return result;
     }
-    ALWAYS_INLINE void free(void* ptr) {
-        Base::free(ptr);
+    void free(void* ptr) override {
+        static_cast<Base*>(this)->free(ptr);
         _memory_usage -= malloc_usable_size(ptr);
     }
 
-    ALWAYS_INLINE void* realloc(void* ptr, size_t size) {
+    void* realloc(void* ptr, size_t size) override {
         int64_t old_size = malloc_usable_size(ptr);
-        void* result = Base::realloc(ptr, size);
-        // @TODO
-        if (result != nullptr && result != ptr) {
-            _memory_usage += size - old_size;
+        void* result = static_cast<Base*>(this)->realloc(ptr, size);
+        if (LIKELY(result != nullptr)) {
+            _memory_usage += malloc_usable_size(ptr) - old_size;
         }
         return result;
     }
 
-    ALWAYS_INLINE void* calloc(size_t n, size_t size) {
-        void* result = Base::calloc(n, size);
+    void* calloc(size_t n, size_t size) override {
+        void* result = static_cast<Base*>(this)->calloc(n, size);
         _memory_usage += n * size;
         return result;
     }
 
-    ALWAYS_INLINE void cfree(void* ptr) {
-        ::free(ptr);
+    void cfree(void* ptr) override {
+        static_cast<Base*>(this)->cfree(ptr);
         _memory_usage -= malloc_usable_size(ptr);
     }
 
-    ALWAYS_INLINE void* memalign(size_t align, size_t size) {
-        void* result = Base::memalign(align, size);
+    void* memalign(size_t align, size_t size) override {
+        void* result = static_cast<Base*>(this)->memalign(align, size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
-    ALWAYS_INLINE void* aligned_alloc(size_t align, size_t size) {
-        void* result = Base::aligned_alloc(align, size);
-        _memory_usage += malloc_usable_size(result);
-        return result;
-    }
-
-    ALWAYS_INLINE void* valloc(size_t size) {
-        void* result = Base::valloc(size);
+    void* aligned_alloc(size_t align, size_t size) override {
+        void* result = static_cast<Base*>(this)->aligned_alloc(align, size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
 
-    ALWAYS_INLINE void* pvalloc(size_t size) {
-        void* result = Base::pvalloc(size);
-        // @TODO how to avoid invoke malloc_usable_size twice
+    void* valloc(size_t size) override {
+        void* result = static_cast<Base*>(this)->valloc(size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
 
-    ALWAYS_INLINE int posix_memalign(void** ptr, size_t align, size_t size) {
-        int result = Base::posix_memalign(ptr, align, size);
+    void* pvalloc(size_t size) override {
+        void* result = static_cast<Base*>(this)->pvalloc(size);
+        _memory_usage += malloc_usable_size(result);
+        return result;
+    }
+
+    int posix_memalign(void** ptr, size_t align, size_t size) override {
+        int result = static_cast<Base*>(this)->posix_memalign(ptr, align, size);
         if (LIKELY(result == 0)) {
             _memory_usage += malloc_usable_size(*ptr);
         }
@@ -99,15 +96,13 @@ public:
     int64_t _memory_usage = 0;
 };
 
-using CountingAllocatorWithHook = CountingAllocatorT<MemHookAllocator>;
+using CountingAllocatorWithHook = CountingAllocator<MemHookAllocator>;
 
-// inline thread_local CountingAllocatorT* _counting_allocator = nullptr;
-inline thread_local CountingAllocatorWithHook* tls_counting_allocator = nullptr;
+inline thread_local Allocator* tls_counting_allocator = nullptr;
 
-
-// @TODO this is stl compitable allocator
+// based on tls counting allocator
 template <class T>
-class CountingAllocator {
+class STLCountingAllocator {
 public:
     typedef T value_type;
     typedef size_t size_type;
@@ -117,19 +112,19 @@ public:
 
     template <typename U>
     struct rebind {
-        using other = CountingAllocator<U>;
+        using other = STLCountingAllocator<U>;
     };
-    CountingAllocator() = default;
-    explicit CountingAllocator(int64_t* counter) : _counter(counter) {}
-    explicit CountingAllocator(const CountingAllocator& rhs) : _counter(rhs._counter) {}
+    STLCountingAllocator() = default;
+    explicit STLCountingAllocator(int64_t* counter) : _counter(counter) {}
+    explicit STLCountingAllocator(const STLCountingAllocator& rhs) : _counter(rhs._counter) {}
     template <class U>
-    CountingAllocator(const CountingAllocator<U>& other) : _counter(other._counter) {}
+    STLCountingAllocator(const STLCountingAllocator<U>& other) : _counter(other._counter) {}
 
-    ~CountingAllocator() = default;
+    ~STLCountingAllocator() = default;
 
-    CountingAllocator(CountingAllocator&& rhs) noexcept { std::swap(_counter, rhs._counter); }
+    STLCountingAllocator(STLCountingAllocator&& rhs) noexcept { std::swap(_counter, rhs._counter); }
 
-    CountingAllocator& operator=(CountingAllocator&& rhs) noexcept {
+    STLCountingAllocator& operator=(STLCountingAllocator&& rhs) noexcept {
         if (this != &rhs) {
             std::swap(_counter, rhs._counter);
         }
@@ -149,28 +144,28 @@ public:
         *_counter -= n * sizeof(T);
     }
 
-    CountingAllocator& operator=(const CountingAllocator& rhs) {
+    STLCountingAllocator& operator=(const STLCountingAllocator& rhs) {
         _counter = rhs._counter;
         return *this;
     }
 
     template <class U>
-    CountingAllocator& operator=(const CountingAllocator<U>& rhs) {
+    STLCountingAllocator& operator=(const STLCountingAllocator<U>& rhs) {
         _counter = rhs._counter;
         return *this;
     }
 
-    bool operator==(const CountingAllocator& rhs) const { return _counter == rhs._counter; }
+    bool operator==(const STLCountingAllocator& rhs) const { return _counter == rhs._counter; }
 
-    bool operator!=(const CountingAllocator& rhs) const { return !(*this == rhs); }
+    bool operator!=(const STLCountingAllocator& rhs) const { return !(*this == rhs); }
 
     // CountingAllocator doesn't support swap
-    void swap(CountingAllocator& rhs) {}
+    void swap(STLCountingAllocator& rhs) {}
 
     int64_t* _counter = nullptr;
 };
 template <class T>
-void swap(CountingAllocator<T>& lhs, CountingAllocator<T>& rhs) {
+void swap(STLCountingAllocator<T>& lhs, STLCountingAllocator<T>& rhs) {
     lhs.swap(rhs);
 }
 

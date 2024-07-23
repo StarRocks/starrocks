@@ -754,13 +754,19 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
 
 class TLSCountingAllocatorSetter {
 public:
-    TLSCountingAllocatorSetter(CountingAllocatorWithHook* allocator) {
-        _prev = starrocks::tls_counting_allocator;
-        starrocks::tls_counting_allocator = allocator;
+    TLSCountingAllocatorSetter(Allocator* allocator) {
+        if (config::test_allocator) {
+            _prev = starrocks::tls_counting_allocator;
+            starrocks::tls_counting_allocator = allocator;
+        }
     }
-    ~TLSCountingAllocatorSetter() { starrocks::tls_counting_allocator = _prev; }
+    ~TLSCountingAllocatorSetter() {
+        if (config::test_allocator) {
+            starrocks::tls_counting_allocator = _prev;
+        }
+    }
 private:
-    CountingAllocatorWithHook* _prev = nullptr;
+    Allocator* _prev = nullptr;
 };
 
 Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {

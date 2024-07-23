@@ -20,44 +20,45 @@
 
 namespace starrocks {
 
-class MemHookAllocator: public Allocator<MemHookAllocator> {
+class MemHookAllocator: public AllocatorFactory<Allocator, MemHookAllocator> {
 public:
-    ALWAYS_INLINE void* alloc(size_t size) {
+    ALWAYS_INLINE void* alloc(size_t size) override {
+        LOG(INFO) << "MemHookAllocator::alloc";
         return ::malloc(size);
     }
 
-    ALWAYS_INLINE void free(void* ptr) {
+    ALWAYS_INLINE void free(void* ptr) override {
         ::free(ptr);
     }
 
-    ALWAYS_INLINE void* realloc(void* ptr, size_t size) {
+    ALWAYS_INLINE void* realloc(void* ptr, size_t size) override {
         return ::realloc(ptr, size);
     }
 
-    ALWAYS_INLINE void* calloc(size_t n, size_t size) {
+    ALWAYS_INLINE void* calloc(size_t n, size_t size) override {
         return ::calloc(n, size);
     }
 
-    ALWAYS_INLINE void cfree(void* ptr) {
+    ALWAYS_INLINE void cfree(void* ptr) override {
         ::free(ptr);
     }
 
-    ALWAYS_INLINE void* memalign(size_t align, size_t size) {
+    ALWAYS_INLINE void* memalign(size_t align, size_t size) override {
         return ::memalign(align, size);
     }
-    ALWAYS_INLINE void* aligned_alloc(size_t align, size_t size) {
+    ALWAYS_INLINE void* aligned_alloc(size_t align, size_t size) override {
         return ::aligned_alloc(align, size);
     }
 
-    ALWAYS_INLINE void* valloc(size_t size) {
+    ALWAYS_INLINE void* valloc(size_t size) override {
         return ::valloc(size);
     }
 
-    ALWAYS_INLINE void* pvalloc(size_t size) {
+    ALWAYS_INLINE void* pvalloc(size_t size) override {
         return ::pvalloc(size);
     }
 
-    ALWAYS_INLINE int posix_memalign(void** ptr, size_t align, size_t size) {
+    ALWAYS_INLINE int posix_memalign(void** ptr, size_t align, size_t size) override {
         return ::posix_memalign(ptr, align, size);
     }
 };
