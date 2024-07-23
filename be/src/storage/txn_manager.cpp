@@ -273,9 +273,12 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
             return Status::InternalError("tablet not exist during commit txn");
         }
         // add committed rowset schema id into tablet meta to prevent schema gc
+        // if return true, the tablet schema is saved in `history_schema` of tablet meta
+        // so we can only save schema id but not save all tablet schema in rowset meta
         if (tablet->insert_committed_rowset_schema(rowset_ptr->rowset_id(), rowset_ptr->tablet_schema()->id())) {
             rowset_ptr->rowset_meta()->set_tablet_schema_id();
         }
+        LOG(INFO) << "rowset: " << rowset_ptr->rowset_id_str() << " has schema id: " << rowset_ptr->rowset_meta()->has_tablet_schema_id();
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);

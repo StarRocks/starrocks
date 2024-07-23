@@ -204,8 +204,11 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
 
 void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
-    _history_schema[_schema->id()] = std::move(_schema);
+    if (tablet_schema->id() != _schema->id()) {
+        _history_schema[_schema->id()] = std::move(_schema);
+    }
     _schema = tablet_schema;
+    delete_stale_schema();
     (void)_save_meta(data_dir);
 }
 
@@ -484,9 +487,11 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
 
     for (auto& rs_meta : to_add) {
         auto schema_id = rs_meta->tablet_schema()->id();
+        LOG(INFO) << "rs_meta schema id:" << schema_id << ", tablet_schema id:" << _schema->id();
         if (schema_id == _schema->id() || _history_schema.find(schema_id) != _history_schema.end()) {
             rs_meta->set_tablet_schema_id();
         }
+        LOG(INFO) << "rs_meta has tablet schema id: " << rs_meta->has_tablet_schema_id();
     }
 
     // put to_add rowsets in _rs_metas.
@@ -509,6 +514,7 @@ void TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
 }
 
 void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
+    LOG(INFO) << "delete stale rowset meta, version:" << version;
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
@@ -554,6 +560,7 @@ void TabletMeta::delete_stale_schema() {
                 } else if ((*it)->has_tablet_schema()) {
                     active_schema_ids.insert((*it)->tablet_schema()->id());
                 }
+                it++;
             }
         }
 
@@ -565,6 +572,7 @@ void TabletMeta::delete_stale_schema() {
                 } else if ((*it)->has_tablet_schema()) {
                     active_schema_ids.insert((*it)->tablet_schema()->id());
                 }
+                it++;
             }
         }
 
@@ -576,6 +584,7 @@ void TabletMeta::delete_stale_schema() {
                 } else if ((*it)->has_tablet_schema()) {
                     active_schema_ids.insert((*it)->tablet_schema()->id());
                 }
+                it++;
             }
         }
     }
