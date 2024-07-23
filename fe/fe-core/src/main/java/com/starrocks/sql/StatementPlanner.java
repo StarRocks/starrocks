@@ -109,7 +109,9 @@ public class StatementPlanner {
         // 1. For all queries, we need db lock when analyze phase
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
         try (var guard = session.bindScope()) {
-            lock(plannerMetaLocker);
+            try (Timer ignored = Tracers.watchScope("Lock")) {
+                lock(plannerMetaLocker);
+            }
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
