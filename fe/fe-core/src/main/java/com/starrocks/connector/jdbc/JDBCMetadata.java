@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.JDBCDriverException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
@@ -37,6 +38,11 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -68,35 +74,44 @@ public class JDBCMetadata implements ConnectorMetadata {
     public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
         this.catalogName = catalogName;
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
         try {
+            String driverLocation = JDBCDriverManager.getInstance().checkDriver(this.properties);
+            URL driverURL = new File(driverLocation).toURI().toURL();
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
+            Thread.currentThread().setContextClassLoader(classLoader);
             String driverName = getDriverName();
-            Class.forName(driverName);
-        } catch (ClassNotFoundException e) {
+            classLoader.loadClass(driverName);
+
+            if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
+                schemaResolver = new MysqlSchemaResolver();
+            } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
+                schemaResolver = new PostgresSchemaResolver();
+            } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
+                schemaResolver = new MysqlSchemaResolver();
+            } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
+                schemaResolver = new ClickhouseSchemaResolver(properties);
+            } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
+                schemaResolver = new OracleSchemaResolver();
+            } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
+                schemaResolver = new SqlServerSchemaResolver();
+            } else {
+                LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
+                throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+            }
+            if (dataSource == null) {
+                dataSource = createHikariDataSource();
+            }
+            this.dataSource = dataSource;
+            checkAndSetSupportPartitionInformation();
+            createMetaAsyncCacheInstances(properties);
+        } catch (ClassNotFoundException | JDBCDriverException | IOException e) {
             LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
         }
-        if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
-            schemaResolver = new MysqlSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
-            schemaResolver = new PostgresSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
-            schemaResolver = new MysqlSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
-            schemaResolver = new ClickhouseSchemaResolver(properties);
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
-            schemaResolver = new OracleSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
-            schemaResolver = new SqlServerSchemaResolver();
-        } else {
-            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
-            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
-        }
-        if (dataSource == null) {
-            dataSource = createHikariDataSource();
-        }
-        this.dataSource = dataSource;
-        checkAndSetSupportPartitionInformation();
-        createMetaAsyncCacheInstances(properties);
+
     }
 
     private String getDriverName() {

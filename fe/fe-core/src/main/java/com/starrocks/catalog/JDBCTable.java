@@ -171,7 +171,7 @@ public class JDBCTable extends Table {
         }
     }
 
-    private static String buildCatalogDriveName(String uri) {
+    public static String buildCatalogDriveName(String uri) {
         // jdbc:postgresql://172.26.194.237:5432/db_pg_select
         // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
         // requirement: it should be used as local path.

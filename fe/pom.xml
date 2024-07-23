@@ -769,34 +769,34 @@ under the License.
                 <scope>import</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client -->
-            <dependency>
-                <groupId>org.mariadb.jdbc</groupId>
-                <artifactId>mariadb-java-client</artifactId>
-                <version>3.3.2</version>
-            </dependency>
+<!--            &lt;!&ndash; https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>org.mariadb.jdbc</groupId>-->
+<!--                <artifactId>mariadb-java-client</artifactId>-->
+<!--                <version>3.3.2</version>-->
+<!--            </dependency>-->
 
-            <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
-            <dependency>
-                <groupId>org.postgresql</groupId>
-                <artifactId>postgresql</artifactId>
-                <version>42.4.4</version>
-            </dependency>
+<!--            &lt;!&ndash; https://mvnrepository.com/artifact/org.postgresql/postgresql &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>org.postgresql</groupId>-->
+<!--                <artifactId>postgresql</artifactId>-->
+<!--                <version>42.4.4</version>-->
+<!--            </dependency>-->
 
-            <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
-            <!-- we need clickhouse driver for jdbc connector -->
-            <dependency>
-                <groupId>com.clickhouse</groupId>
-                <artifactId>clickhouse-jdbc</artifactId>
-                <version>0.4.6</version>
-            </dependency>
-			
-			<!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
-            <dependency>
-                <groupId>com.oracle.database.jdbc</groupId>
-                <artifactId>ojdbc10</artifactId>
-                <version>19.18.0.0</version>
-            </dependency>
+<!--            &lt;!&ndash; https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc &ndash;&gt;-->
+<!--            &lt;!&ndash; we need clickhouse driver for jdbc connector &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>com.clickhouse</groupId>-->
+<!--                <artifactId>clickhouse-jdbc</artifactId>-->
+<!--                <version>0.4.6</version>-->
+<!--            </dependency>-->
+<!--			-->
+<!--			&lt;!&ndash; https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>com.oracle.database.jdbc</groupId>-->
+<!--                <artifactId>ojdbc10</artifactId>-->
+<!--                <version>19.18.0.0</version>-->
+<!--            </dependency>-->
 
             <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
             <dependency>
@@ -805,12 +805,12 @@ under the License.
                 <version>19.18.0.0</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 -->
-            <dependency>
-                <groupId>com.microsoft.sqlserver</groupId>
-                <artifactId>mssql-jdbc</artifactId>
-                <version>12.4.2.jre11</version>
-            </dependency>
+<!--            &lt;!&ndash; https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>com.microsoft.sqlserver</groupId>-->
+<!--                <artifactId>mssql-jdbc</artifactId>-->
+<!--                <version>12.4.2.jre11</version>-->
+<!--            </dependency>-->
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
