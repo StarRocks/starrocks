@@ -193,6 +193,7 @@ public enum RuleType {
     TF_ELIMINATE_GROUP_BY_CONSTANT,
     TF_ELIMINATE_AGG,
 
+    TF_CTE_ADD_PROJECTION,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
