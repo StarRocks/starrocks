@@ -392,6 +392,12 @@ under the License.
                 <version>${log4j.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-layout-template-json</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
