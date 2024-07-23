@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -42,6 +43,7 @@ public class DataCacheAutomaticPopulateTest extends PlanTestBase {
     public void resetSessionVariable() {
         connectContext.setStatisticsContext(false);
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        sessionVariable.setEnableScanDataCache(true);
         sessionVariable.setEnablePopulateDataCache(true);
         sessionVariable.setDataCachePopulateMode(DataCachePopulateMode.AUTO.modeName());
         // just for mock
@@ -111,5 +113,12 @@ public class DataCacheAutomaticPopulateTest extends PlanTestBase {
         connectContext.setStatisticsContext(true);
         String sql = "select * from hive0.datacache_db.normal_table";
         assertPlanContains(sql, "dataCacheOptions={populate: false}");
+    }
+
+    @Test
+    public void testDisableDataCache() throws Exception {
+        connectContext.getSessionVariable().setEnableScanDataCache(false);
+        String sql = "select * from hive0.datacache_db.normal_table";
+        Assert.assertFalse(getFragmentPlan(sql).contains("dataCacheOptions"));
     }
 }
