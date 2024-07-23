@@ -1,0 +1,7 @@
+# local mirrorlist for $releasever - $basearch
+https://vault.centos.org/centos/$releasever/updates/$basearch/
+https://archive.kernel.org/centos-vault/centos/$releasever/updates/$basearch/
+https://linuxsoft.cern.ch/centos-vault/centos/$releasever/updates/$basearch/
+https://mirror.nsc.liu.se/centos-store/centos/$releasever/updates/$basearch/
+https://mirrors.163.com/centos-vault/centos/$releasever/updates/$basearch/
+https://mirrors.aliyun.com/centos-vault/centos/$releasever/updates/$basearch/
