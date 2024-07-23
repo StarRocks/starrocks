@@ -914,8 +914,6 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
                                           bool has_remain) {
     DCHECK(_src_paths.empty());
     DCHECK(_src_types.empty());
-    DCHECK(!paths.empty());
-    DCHECK(!types.empty());
 
     _src_paths.assign(paths.begin(), paths.end());
     _src_types.assign(types.begin(), types.end());
@@ -1191,7 +1189,11 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, ColumnPtr& col) {
     } else if (res->is_constant()) {
         auto data = down_cast<ConstColumn*>(res.get())->data_column();
         _dst_columns[task.dst_index]->append_value_multiple_times(*data, 0, col->size());
+    } else if (_dst_columns[task.dst_index]->is_nullable() && !res->is_nullable()) {
+        auto nl = NullColumn::create(col->size(), 0);
+        _dst_columns[task.dst_index] = NullableColumn::create(res, nl);
     } else {
+        DCHECK_EQ(_dst_columns[task.dst_index]->is_nullable(), res->is_nullable());
         _dst_columns[task.dst_index].swap(res);
     }
     return Status::OK();

@@ -36,6 +36,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -686,9 +687,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         std::vector<std::string> target_paths;
         std::vector<LogicalType> target_types;
         if (path != nullptr && !path->children().empty()) {
+            auto field_name = path->path();
             path->get_all_leafs(&access_paths);
             for (auto& p : access_paths) {
-                target_paths.emplace_back(p->absolute_path()); // use absolute path, not relative path
+                // use absolute path, not relative path
+                // root path is field name, we remove it
+                target_paths.emplace_back(p->absolute_path().substr(field_name.size() + 1));
                 target_types.emplace_back(p->value_type().type);
             }
         }
@@ -770,8 +774,25 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             all_iters.emplace_back(std::move(iter));
         }
 
-        DCHECK(!source_paths.empty());
-        DCHECK(!all_iters.empty());
+        if (all_iters.empty()) {
+            DCHECK(!_sub_readers->empty());
+            // has none remain and can't hit any column, we read any one
+            // why not return null directly, segemnt iterater need ordinal index...
+            // it's canbe optimized
+            size_t index = start;
+            LogicalType type = (*_sub_readers)[start]->column_type();
+            for (size_t i = start + 1; i < end; i++) {
+                const auto& rd = (*_sub_readers)[i];
+                if (type < rd->column_type()) {
+                    index = i;
+                    type = rd->column_type();
+                }
+            }
+            const auto& rd = (*_sub_readers)[index];
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            all_iters.emplace_back(std::move(iter));
+        }
+
         return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
                                          source_paths, source_types);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
