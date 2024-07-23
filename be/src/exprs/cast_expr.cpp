@@ -77,8 +77,7 @@ struct CastFn {
     struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> { \
         static ColumnPtr cast_fn(ColumnPtr& column) {          \
             return column->clone();                            \
-        }                                                      \
-    };
+        }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
     template <bool AllowThrowException>                                                                      \
