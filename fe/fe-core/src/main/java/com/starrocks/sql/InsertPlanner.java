@@ -489,7 +489,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(plannerMetaLocker);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
