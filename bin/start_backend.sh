@@ -177,7 +177,7 @@ fi
 if [ ${RUN_CN} -eq 1 ]; then
     pidfile=$PID_DIR/cn.pid
     process_name="compute node"
-    conf_file="STARROCKS_HOME/conf/cn.conf"
+    conf_file="$STARROCKS_HOME/conf/cn.conf"
 fi
 
 http_port=$(grep -v ^# $conf_file |grep be_http_port| sed 's/.*= *//')
