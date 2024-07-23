@@ -41,6 +41,7 @@ SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState*
                                                                    int32_t plan_node_id) {
     DCHECK(runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill());
     MemLimitedChunkQueue::Options opts;
+    opts.block_size = config::mem_limited_chunk_queue_block_size;
     if (runtime_state->spill_mode() == TSpillMode::FORCE) {
         opts.memory_limit = 16L * 1024 * 1024;
     } else {
