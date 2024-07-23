@@ -291,9 +291,16 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
+<<<<<<< HEAD
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasReplace = false;
+=======
+        if (columnDefs.size() > Config.max_column_number_per_table) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_COLUMNS, Config.max_column_number_per_table);
+        }
+
+>>>>>>> db005eba61 ([Refactor] Add max column table limit max_column_number_per_table for table (#47869))
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {

@@ -3036,5 +3036,12 @@ public class Config extends ConfigBase {
 
     // whether to print sql before parser
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean enable_print_sql = false;
+=======
+    public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+>>>>>>> db005eba61 ([Refactor] Add max column table limit max_column_number_per_table for table (#47869))
 }
