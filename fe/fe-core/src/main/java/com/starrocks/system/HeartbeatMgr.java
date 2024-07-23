@@ -325,14 +325,14 @@ public class HeartbeatMgr extends FrontendDaemon {
                     }
                     return backendHbResponse;
                 } else {
-                    return new BackendHbResponse(computeNodeId,
+                    return new BackendHbResponse(computeNodeId, result.getStatus().getStatus_code(),
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception, addr: {}:{}",
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
-                return new BackendHbResponse(computeNodeId,
+                return new BackendHbResponse(computeNodeId, TStatusCode.UNKNOWN,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             }
         }

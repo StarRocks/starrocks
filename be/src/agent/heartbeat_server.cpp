@@ -83,8 +83,13 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                    << " BE/CN:" << config::enable_transparent_data_encryption;
     }
 
-    // do heartbeat
-    StatusOr<CmpResult> res = compare_master_info(master_info);
+    StatusOr<CmpResult> res;
+    // reject master's heartbeat when exit
+    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+        res = Status::Shutdown("BE is shutting down");
+    } else {
+        res = compare_master_info(master_info);
+    }
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
@@ -149,11 +154,6 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
     static const char* LOCALHOST = "127.0.0.1";
     static const char* LOCALHOST_IPV6 = "::1";
-
-    // reject master's heartbeat when exit
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
-        return Status::InternalError("BE is shutting down");
-    }
 
     MasterInfoPtr curr_master_info;
     if (!get_master_info(&curr_master_info)) {
