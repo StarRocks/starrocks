@@ -54,24 +54,24 @@ public:
     virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                           uint32_t idx_end) = 0;
     // batch upsert a range [idx_begin, idx_end) of keys
-    virtual void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                        DeletesMap* deletes) = 0;
+    virtual Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                          DeletesMap* deletes) = 0;
 
     // replace values, return error if not exist. replace a range [indexes[idx_begin], indexes[idx_end-1]]
     virtual Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes,
                            uint32_t idx_begin, uint32_t idx_end, const Column& pks) = 0;
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch try_replace a range [idx_begin, idx_end) of keys
-    [[maybe_unused]] virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                              const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
-                                              vector<uint32_t>* failed) = 0;
+    [[maybe_unused]] virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                                vector<uint32_t>* failed) = 0;
 
-    virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                             uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) = 0;
+    virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                               uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) = 0;
     // batch erase a range [idx_begin, idx_end) of keys
-    virtual void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
+    virtual Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
-    virtual void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) = 0;
+    virtual Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) = 0;
 
     // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
@@ -123,6 +123,7 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::insert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -146,6 +147,7 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::insert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -159,8 +161,9 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes) override {
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::upsert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -178,11 +181,13 @@ public:
                 p.first->second = v;
             }
         }
+        return Status::OK();
     }
 
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                      const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
-                                      vector<uint32_t>* failed) override {
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -197,10 +202,12 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+        return Status::OK();
     }
 
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                     uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -213,9 +220,11 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+        return Status::OK();
     }
 
-    void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::erase");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -227,9 +236,11 @@ public:
                 _map.erase(iter);
             }
         }
+        return Status::OK();
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::get");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -241,6 +252,7 @@ public:
                 (*rowids)[i] = -1;
             }
         }
+        return Status::OK();
     }
 
     std::size_t memory_usage() const final {
@@ -295,6 +307,7 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::insert");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -349,6 +362,7 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -361,8 +375,9 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes) override {
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::upsert");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -409,10 +424,12 @@ public:
                 }
             }
         }
+        return Status::OK();
     }
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                      const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
-                                      vector<uint32_t>* failed) override {
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -453,10 +470,12 @@ public:
                 }
             }
         }
+        return Status::OK();
     }
 
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                     uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -497,9 +516,11 @@ public:
                 }
             }
         }
+        return Status::OK();
     }
 
-    void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::erase");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -535,9 +556,11 @@ public:
                 }
             }
         }
+        return Status::OK();
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::get");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -573,6 +596,7 @@ public:
                 }
             }
         }
+        return Status::OK();
     }
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
@@ -611,6 +635,7 @@ public:
     void reserve(size_t size) override { _map.reserve(size); }
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::insert");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -632,8 +657,9 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes) override {
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::upsert");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -651,10 +677,12 @@ public:
                 _total_length += keys[i].size;
             }
         }
+        return Status::OK();
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -669,9 +697,10 @@ public:
         return Status::OK();
     }
 
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                      const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
-                                      vector<uint32_t>* failed) override {
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -684,10 +713,12 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+        return Status::OK();
     }
 
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                     uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -700,9 +731,11 @@ public:
                 failed->push_back(rowid_start + i);
             }
         }
+        return Status::OK();
     }
 
-    void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::erase");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -713,9 +746,11 @@ public:
                 _total_length -= keys[i].size;
             }
         }
+        return Status::OK();
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::get");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -725,6 +760,7 @@ public:
                 (*rowids)[i] = -1;
             }
         }
+        return Status::OK();
     }
 
     std::size_t memory_usage() const final {
@@ -855,18 +891,21 @@ public:
         return Status::OK();
     }
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes) override {
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes);
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                            ->upsert(rssid, rowid_start, pks, idx_begin, i, deletes));
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes));
         }
+        return Status::OK();
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
@@ -886,63 +925,68 @@ public:
         return Status::OK();
     } // namespace starrocks
 
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                      const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
-                                      vector<uint32_t>* failed) override {
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
+                                        vector<uint32_t>* failed) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)
-                            ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, i, failed);
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                            ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, i, failed));
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)
-                    ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, idx_end, failed);
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, src_rssid, idx_begin, idx_end, failed));
         }
+        return Status::OK();
     }
 
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                     uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)
-                            ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, i, failed);
+                    RETURN_IF_ERROR(
+                            get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, i, failed));
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)
-                    ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, idx_end, failed);
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
+                                    ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, idx_end, failed));
         }
+        return Status::OK();
     }
 
-    void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
+    Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, i, deletes);
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, i, deletes));
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, idx_end, deletes);
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->erase(pks, idx_begin, idx_end, deletes));
         }
+        return Status::OK();
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, i, rowids);
+                    RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, i, rowids));
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, idx_end, rowids);
+            RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)->get(pks, idx_begin, idx_end, rowids));
         }
+        return Status::OK();
     }
 
     std::size_t memory_usage() const final {
@@ -1123,6 +1167,7 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
+    CHECK_MEM_LIMIT("PrimaryIndex::_do_load");
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());
@@ -1218,12 +1263,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        TRY_CATCH_BAD_ALLOC(
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    auto st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc);
+                    st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc);
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()
                                    << " rowsets:" << int_list_to_string(rowset_ids)
@@ -1399,25 +1445,21 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
                             IOStat* stat) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
     }
-    return st;
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                             uint32_t idx_end, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
-    return st;
 }
 
 Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
@@ -1449,49 +1491,41 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                   const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
-        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
+        return _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
-        _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
     }
-    return st;
 }
 
 Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                                  vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
-        st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
+        return _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
-        _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
     }
-    return st;
 }
 
 Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        st = _erase_persistent_index(key_col, deletes);
+        return _erase_persistent_index(key_col, deletes);
     } else {
-        _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        return _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
     }
-    return st;
 }
 
 Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) const {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
-    Status st;
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        st = _get_from_persistent_index(key_col, rowids);
+        return _get_from_persistent_index(key_col, rowids);
     } else {
-        _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
+        return _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
     }
-    return st;
 }
 
 std::size_t PrimaryIndex::memory_usage() const {

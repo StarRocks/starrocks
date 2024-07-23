@@ -449,6 +449,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     }
 
     // handle partial update
+    bool skip_pk_preload = config::skip_lake_pk_preload;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update) {
@@ -490,7 +491,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
