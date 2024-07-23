@@ -166,7 +166,7 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         }
 
         private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
-            if (scanOperatorPredicates.getSelectedPartitionIds().size() == 1) {
+            if (scanOperatorPredicates.getIdToPartitionKey().size() == 1) {
                 // for none-partition table, it has one partition id
                 return false;
             }
