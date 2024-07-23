@@ -223,23 +223,29 @@ echo "using java version $JAVA_VERSION" >> $LOG_FILE
 echo $final_java_opt >> $LOG_FILE
 echo "start time: $(date), server uptime: $(uptime)" >> $LOG_FILE
 
-sys_log_file=$(grep -v ^# $STARROCKS_HOME/conf/fe.conf |grep sys_log_dir)
-if [ -z "$sys_log_dir" ]; then
-    sys_log_file="$STARROCKS_HOME/log/fe.log"
-else
-    sys_log_file="${sys_log_dir}/fe.log"
-fi
-# get the current number of rows in the FE log file
-if [ ! -f $sys_log_file ]; then
-    start_line=1
-else
-    start_line=$(wc -l $sys_log_file)
+process_name="frontend"
+conf_file="$STARROCKS_HOME/conf/fe.conf"
+http_port=$(grep -v ^# $conf_file | grep http_port | sed 's/.*= *//')
+if [ -z "$http_port" ]; then
+    http_port="8030"
 fi
 
-check_log() {
-    if tail -n +$start_line $sys_log_file | grep -q "thrift server started with port"; then
-        echo "The frontend process started successfully!"
-        return 0
+check_health() {
+    response=$(curl -s -w "\n%{http_code}" http://127.0.0.1:${http_port}/api/health)
+    body=$(echo "$response" | sed -e '$d')
+    status_code=$(echo "$response" | tail -n1)
+
+    # check http status code
+    if [ "$status_code" -eq 200 ]
+    then
+        # Parse the JSON response and check the status field
+        status=$(echo "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        if [ "$status" = "OK" ]
+        then
+            return 0
+        else
+            return 1
+        fi
     else
         return 1
     fi
@@ -247,17 +253,22 @@ check_log() {
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    echo "The frontend process is starting!"
+    echo "The $process_name process is starting!"
     nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" &> /dev/null &
-    timeout=30
-    end_time=$((SECONDS + timeout))
-    while [ $SECONDS -lt $end_time ]; do
-        if check_log; then
-            exit 0
-        fi
-        sleep 1
-    done
-    echo "The startup time is more than $timeout seconds, the frontend process may not start successfully!"
+    if command -v curl &>/dev/null; then
+        timeout=30
+        end_time=$((SECONDS + timeout))
+        while [ $SECONDS -lt $end_time ]; do
+            if check_health; then
+                echo "The $process_name process has started successfully!"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "The startup time is more than $timeout seconds, the $process_name process may not start successfully!"
+    else
+        echo "This node does not have the curl command, please manually check whether the $process_name process is successfully started"
+    fi
 else
     exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
 fi

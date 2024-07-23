@@ -172,29 +172,17 @@ fi
 if [ ${RUN_BE} -eq 1 ]; then
     pidfile=$PID_DIR/be.pid
     process_name="backend"
-    sys_log_file=$(grep -v ^# $STARROCKS_HOME/conf/be.conf |grep sys_log_dir)
-    if [ -z "$sys_log_dir" ]; then
-        sys_log_file="$STARROCKS_HOME/log/be.INFO"
-    else
-        sys_log_file="${sys_log_dir}/be.INFO"
-    fi
+    conf_file="$STARROCKS_HOME/conf/be.conf"
 fi
 if [ ${RUN_CN} -eq 1 ]; then
     pidfile=$PID_DIR/cn.pid
     process_name="compute node"
-    sys_log_file=$(grep -v ^# $STARROCKS_HOME/conf/cn.conf |grep sys_log_dir)
-    if [ -z "$sys_log_dir" ]; then
-        sys_log_file="$STARROCKS_HOME/log/cn.INFO"
-    else
-        sys_log_file="${sys_log_dir}/cn.INFO"
-    fi
+    conf_file="STARROCKS_HOME/conf/cn.conf"
 fi
 
-# get the current number of rows in the log file
-if [ ! -f $sys_log_file ]; then
-    start_line=1
-else
-    start_line=$(wc -l $sys_log_file)
+http_port=$(grep -v ^# $conf_file |grep be_http_port| sed 's/.*= *//')
+if [ -z "$http_port" ]; then
+    http_port="8040"
 fi
 
 if [ -f $pidfile ]; then
@@ -229,10 +217,22 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     export GLOG_logtostderr=1
 fi
 
-check_log() {
-    if tail -n +$start_line $sys_log_file | grep -q "heartbeat has started listening port"; then
-        echo "The $process_name process started successfully!"
-        return 0
+check_health() {
+    response=$(curl -s -w "\n%{http_code}" http://127.0.0.1:${http_port}/api/health)
+    body=$(echo "$response" | sed -e '$d')
+    status_code=$(echo "$response" | tail -n1)
+
+    # check http status code
+    if [ "$status_code" -eq 200 ]
+    then
+        # Parse the JSON response and check the status field
+        status=$(echo "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        if [ "$status" = "OK" ]
+        then
+            return 0
+        else
+            return 1
+        fi
     else
         return 1
     fi
@@ -242,15 +242,20 @@ echo "start time: $(date), server uptime: $(uptime)" >> ${LOG_FILE}
 if [ ${RUN_DAEMON} -eq 1 ]; then
     echo "The $process_name process is starting!"
     nohup ${START_BE_CMD} "$@" &>/dev/null &
-    timeout=30
-    end_time=$((SECONDS + timeout))
-    while [ $SECONDS -lt $end_time ]; do
-        if check_log; then
-            exit 0
-        fi
-        sleep 1
-    done
-    echo "The startup time is more than $timeout seconds, the $process_name process may not start successfully!"
+    if command -v curl &>/dev/null; then
+        timeout=30
+        end_time=$((SECONDS + timeout))
+        while [ $SECONDS -lt $end_time ]; do
+            if check_health; then
+                echo "The $process_name process has started successfully!"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "The startup time is more than $timeout seconds, the $process_name process may not start successfully!"
+    else
+        echo "This node does not have the curl command, please manually check whether the $process_name process is successfully started"
+    fi
 else
     exec ${START_BE_CMD} "$@" </dev/null
 fi
