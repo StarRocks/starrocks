@@ -363,6 +363,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     ColocatePersistInfo info =
                             ColocatePersistInfo.createForBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
                     globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                    colocateIndex.markGroupUnstable(groupId, true);
                     LOG.info("balance colocate per group , group id {}, " +
                                     "now backends per bucket sequence is: {}, " +
                                     "bucket sequence before balance: {}", gid, balancedBackendsPerBucketSeq,
@@ -668,6 +669,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                colocateIndex.markGroupUnstable(groupId, true);
                 LOG.info("overall colocate balance for group {}, now backends per bucket sequence is: {}, " +
                                 "bucket sequence before balance: {}",
                         groupId, balancedBackendsPerBucketSeq, oldBackendsPerBucketSeq);
@@ -712,7 +714,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 tablet.getId(), tablet.getReplicaInfos(), bucketSeq);
     }
 
-    private long doMatchOneGroup(GroupId groupId,
+    private ColocateMatchResult doMatchOneGroup(GroupId groupId,
                                  boolean isUrgent,
                                  GlobalStateMgr globalStateMgr,
                                  ColocateTableIndex colocateIndex,
@@ -723,12 +725,12 @@ public class ColocateTableBalancer extends FrontendDaemon {
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
         Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
-            return lockTotalTime;
+            return new ColocateMatchResult(lockTotalTime, false);
         }
 
         List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
         if (backendBucketsSeq.isEmpty()) {
-            return lockTotalTime;
+            return new ColocateMatchResult(lockTotalTime, false);
         }
 
         boolean isGroupStable = true;
@@ -766,7 +768,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         db.readLock();
                         lockStart = System.nanoTime();
                         if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
-                            return lockTotalTime;
+                            return new ColocateMatchResult(lockTotalTime, false);
                         }
                         if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
@@ -873,28 +875,22 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 } // end for partitions
             } // end for tables
 
-            // mark group as stable or unstable
-            if (isGroupStable) {
-                colocateIndex.markGroupStable(groupId, true);
-            } else {
-                colocateIndex.markGroupUnstable(groupId, true);
-            }
         } finally {
             lockTotalTime += System.nanoTime() - lockStart;
             db.readUnlock();
         }
 
-        return lockTotalTime - waitTotalTimeMs * 1000000;
+        return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000, isGroupStable);
     }
 
-    private long matchOneGroupUrgent(GroupId groupId,
+    private ColocateMatchResult matchOneGroupUrgent(GroupId groupId,
                                      GlobalStateMgr globalStateMgr,
                                      ColocateTableIndex colocateIndex,
                                      TabletScheduler tabletScheduler) {
         return doMatchOneGroup(groupId, true, globalStateMgr, colocateIndex, tabletScheduler);
     }
 
-    private long matchOneGroupNonUrgent(GroupId groupId,
+    private ColocateMatchResult matchOneGroupNonUrgent(GroupId groupId,
                                         GlobalStateMgr globalStateMgr,
                                         ColocateTableIndex colocateIndex,
                                         TabletScheduler tabletScheduler) {
@@ -916,8 +912,17 @@ public class ColocateTableBalancer extends FrontendDaemon {
         // check each group
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
         for (GroupId groupId : groupIds) {
-            lockTotalTime += matchOneGroupUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
-            lockTotalTime += matchOneGroupNonUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
+            ColocateMatchResult urgentResult = matchOneGroupUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
+            lockTotalTime += urgentResult.lockTotalTime;
+
+            ColocateMatchResult nonUrgentResult = matchOneGroupNonUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
+            lockTotalTime += nonUrgentResult.lockTotalTime;
+
+            if (urgentResult.isGroupStable && nonUrgentResult.isGroupStable) {
+                colocateIndex.markGroupStable(groupId, true);
+            } else {
+                colocateIndex.markGroupUnstable(groupId, true);
+            }
         } // end for groups
 
         long cost = (System.nanoTime() - start) / 1000000;
