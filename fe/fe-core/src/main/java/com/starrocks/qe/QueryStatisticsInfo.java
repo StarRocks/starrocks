@@ -39,6 +39,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.CurrentQueryInfoProvider;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 
 import java.util.Comparator;
@@ -49,6 +50,7 @@ import java.util.stream.Collectors;
 
 public class QueryStatisticsInfo {
     private long queryStartTime;
+    private String feIp;
     private String queryId;
     private String connId;
     private String db;
@@ -60,13 +62,16 @@ public class QueryStatisticsInfo {
     private long spillBytes;
     private long execTime;
     private String wareHouseName;
+    private String customQueryId;
 
     public QueryStatisticsInfo() {
     }
 
-    public QueryStatisticsInfo(long queryStartTime, String queryId, String connId, String db, String user, long cpuCostNs,
-                               long scanBytes, long scanRows, long memUsageBytes, long spillBytes, long execTime, String wareHouseName) {
+    public QueryStatisticsInfo(long queryStartTime, String feIp, String queryId, String connId, String db, String user,
+                               long cpuCostNs, long scanBytes, long scanRows, long memUsageBytes, long spillBytes,
+                               long execTime, String wareHouseName, String customQueryId) {
         this.queryStartTime = queryStartTime;
+        this.feIp = feIp;
         this.queryId = queryId;
         this.connId = connId;
         this.db = db;
@@ -78,10 +83,15 @@ public class QueryStatisticsInfo {
         this.spillBytes = spillBytes;
         this.execTime = execTime;
         this.wareHouseName = wareHouseName;
+        this.customQueryId = customQueryId;
     }
 
     public long getQueryStartTime() {
         return queryStartTime;
+    }
+
+    public String getFeIp() {
+        return feIp;
     }
 
     public String getQueryId() {
@@ -124,10 +134,21 @@ public class QueryStatisticsInfo {
         return execTime;
     }
 
-    public String getWareHouseName() { return wareHouseName; }
+    public String getWareHouseName() {
+        return wareHouseName;
+    }
+
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
 
     public QueryStatisticsInfo withQueryStartTime(long queryStartTime) {
         this.queryStartTime = queryStartTime;
+        return this;
+    }
+
+    public QueryStatisticsInfo withFeIp(String feIp) {
+        this.feIp = feIp;
         return this;
     }
 
@@ -186,9 +207,15 @@ public class QueryStatisticsInfo {
         return this;
     }
 
+    public QueryStatisticsInfo withCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+        return this;
+    }
+
     public TQueryStatisticsInfo toThrift() {
         return new TQueryStatisticsInfo()
                 .setQueryStartTime(queryStartTime)
+                .setFeIp(feIp)
                 .setQueryId(queryId)
                 .setConnId(connId)
                 .setDb(db)
@@ -199,12 +226,14 @@ public class QueryStatisticsInfo {
                 .setMemUsageBytes(memUsageBytes)
                 .setSpillBytes(spillBytes)
                 .setExecTime(execTime)
-                .setWareHouseName(wareHouseName);
+                .setWareHouseName(wareHouseName)
+                .setCustomQueryId(customQueryId);
     }
 
     public static QueryStatisticsInfo fromThrift(TQueryStatisticsInfo tinfo) {
         return new QueryStatisticsInfo()
                 .withQueryStartTime(tinfo.getQueryStartTime())
+                .withFeIp(tinfo.getFeIp())
                 .withQueryId(tinfo.getQueryId())
                 .withConnId(tinfo.getConnId())
                 .withDb(tinfo.getDb())
@@ -215,12 +244,14 @@ public class QueryStatisticsInfo {
                 .withSpillBytes(tinfo.getSpillBytes())
                 .withCpuCostNs(tinfo.getCpuCostNs())
                 .withExecTime(tinfo.getExecTime())
-                .withWareHouseName(tinfo.getWareHouseName());
+                .withWareHouseName(tinfo.getWareHouseName())
+                .withCustomQueryId(tinfo.getCustomQueryId());
     }
 
     public List<String> formatToList() {
         final List<String> values = Lists.newArrayList();
         values.add(TimeUtils.longToTimeString(this.getQueryStartTime()));
+        values.add(this.getFeIp());
         values.add(this.getQueryId());
         values.add(this.getConnId());
         values.add(this.getDb());
@@ -232,6 +263,7 @@ public class QueryStatisticsInfo {
         values.add(QueryStatisticsFormatter.getSecondsFromNano(this.getCpuCostNs()));
         values.add(QueryStatisticsFormatter.getSecondsFromMilli(this.getExecTime()));
         values.add(this.getWareHouseName());
+        values.add(this.getCustomQueryId());
         return values;
     }
 
@@ -244,23 +276,25 @@ public class QueryStatisticsInfo {
             return false;
         }
         QueryStatisticsInfo that = (QueryStatisticsInfo) o;
-        return queryStartTime == that.queryStartTime && Objects.equals(queryId, that.queryId) &&
-                Objects.equals(connId, that.connId) && Objects.equals(db, that.db) &&
-                Objects.equals(user, that.user) && cpuCostNs == that.cpuCostNs && scanBytes == that.scanBytes &&
-                scanRows == that.scanRows && memUsageBytes == that.memUsageBytes && spillBytes == that.spillBytes &&
-                execTime == that.execTime && Objects.equals(wareHouseName, that.wareHouseName);
+        return queryStartTime == that.queryStartTime && Objects.equals(feIp, that.feIp) &&
+                Objects.equals(queryId, that.queryId) && Objects.equals(connId, that.connId) &&
+                Objects.equals(db, that.db) && Objects.equals(user, that.user) && cpuCostNs == that.cpuCostNs &&
+                scanBytes == that.scanBytes && scanRows == that.scanRows && memUsageBytes == that.memUsageBytes &&
+                spillBytes == that.spillBytes && execTime == that.execTime &&
+                Objects.equals(wareHouseName, that.wareHouseName) && Objects.equals(customQueryId, that.customQueryId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(queryStartTime, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
-                spillBytes, execTime, wareHouseName);
+        return Objects.hash(queryStartTime, feIp, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
+                spillBytes, execTime, wareHouseName, customQueryId);
     }
 
     @Override
     public String toString() {
         return "QueryStatisticsInfo{" +
                 "queryStartTime='" + queryStartTime + '\'' +
+                ", feIp=" + feIp +
                 ", queryId=" + queryId +
                 ", connId=" + connId +
                 ", db=" + db +
@@ -271,6 +305,7 @@ public class QueryStatisticsInfo {
                 ", spillBytes=" + spillBytes +
                 ", execTime=" + execTime +
                 ", wareHouseName=" + wareHouseName +
+                ", customQueryId=" + customQueryId +
                 '}';
     }
 
@@ -291,8 +326,10 @@ public class QueryStatisticsInfo {
             if (statistics == null) {
                 continue;
             }
+
             QueryStatisticsInfo info = new QueryStatisticsInfo()
                     .withQueryStartTime(item.getQueryStartTime())
+                    .withFeIp(FrontendOptions.getLocalHostAddress())
                     .withQueryId(item.getQueryId())
                     .withConnId(item.getConnId())
                     .withDb(item.getDb())
@@ -303,7 +340,8 @@ public class QueryStatisticsInfo {
                     .withSpillBytes(statistics.getSpillBytes())
                     .withCpuCostNs(statistics.getCpuCostNs())
                     .withExecTime(item.getQueryExecTime())
-                    .withWareHouseName(item.getWarehouseName());
+                    .withWareHouseName(item.getWarehouseName())
+                    .withCustomQueryId(item.getCustomQueryId());
             sortedRowData.add(info);
         }
 

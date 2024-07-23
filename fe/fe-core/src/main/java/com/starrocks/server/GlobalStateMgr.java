@@ -939,10 +939,6 @@ public class GlobalStateMgr {
         return warehouseMgr;
     }
 
-    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        return nodeMgr.getWarehouseInfosFromOtherFEs();
-    }
-
     public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
         return nodeMgr.getQueryStatisticsInfoFromOtherFEs();
     }

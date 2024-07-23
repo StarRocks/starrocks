@@ -74,8 +74,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetQueryStatisticsRequest;
 import com.starrocks.thrift.TGetQueryStatisticsResponse;
-import com.starrocks.thrift.TGetWarehousesRequest;
-import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1084,37 +1082,6 @@ public class NodeMgr {
         this.leaderRpcPort = info.getRpcPort();
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
-    }
-
-    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        List<WarehouseInfo> warehouseInfos = Lists.newArrayList();
-        TGetWarehousesRequest request = new TGetWarehousesRequest();
-
-        List<Frontend> allFrontends = getAllFrontends();
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            try {
-                TGetWarehousesResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.getWarehouses(request));
-                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
-                    LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost());
-                } else if (response.isSetWarehouse_infos()) {
-                    response.getWarehouse_infos().stream()
-                            .map(WarehouseInfo::fromThrift)
-                            .forEach(warehouseInfos::add);
-                }
-            } catch (Exception e) {
-                LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost(), e);
-            }
-        }
-
-        return warehouseInfos;
     }
 
     public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {

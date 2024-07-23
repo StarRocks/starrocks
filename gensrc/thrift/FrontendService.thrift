@@ -1568,17 +1568,19 @@ struct TGetQueryStatisticsRequest {
 
 struct TQueryStatisticsInfo {
     1: optional i64 queryStartTime
-    2: optional string queryId
-    3: optional string connId
-    4: optional string db
-    5: optional string user
-    6: optional i64 cpuCostNs
-    7: optional i64 scanBytes
-    8: optional i64 scanRows
-    9: optional i64 memUsageBytes
-    10: optional i64 spillBytes
-    11: optional i64 execTime
-    12: optional string wareHouseName
+    2: optional string feIp
+    3: optional string queryId
+    4: optional string connId
+    5: optional string db
+    6: optional string user
+    7: optional i64 cpuCostNs
+    8: optional i64 scanBytes
+    9: optional i64 scanRows
+    10: optional i64 memUsageBytes
+    11: optional i64 spillBytes
+    12: optional i64 execTime
+    13: optional string wareHouseName
+    14: optional string customQueryId
 }
 
 struct TGetQueryStatisticsResponse {
