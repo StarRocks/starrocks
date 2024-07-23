@@ -464,7 +464,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     }
 
     // handle partial update
-    bool skip_pk_preload = false;
+    bool skip_pk_preload = config::skip_lake_pk_preload;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {

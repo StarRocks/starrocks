@@ -426,6 +426,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
     const bool old_val = config::enable_pk_strict_memcheck;
     config::enable_pk_strict_memcheck = true;
+    config::skip_lake_pk_preload = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -453,6 +454,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
     }
     _update_mgr->mem_tracker()->set_limit(old_limit);
     config::enable_pk_strict_memcheck = old_val;
+    config::skip_lake_pk_preload = false;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
