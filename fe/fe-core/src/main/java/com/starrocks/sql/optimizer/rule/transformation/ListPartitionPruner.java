@@ -99,28 +99,22 @@ public class ListPartitionPruner implements PartitionPruner {
     private final List<ColumnRefOperator> partitionColumnRefs;
     private final List<Long> specifyPartitionIds;
     private final ListPartitionInfo listPartitionInfo;
-    private final LogicalScanOperator scanOperator;
+
+    private boolean deduceExtraConjuncts = false;
+    private LogicalScanOperator scanOperator;
 
     public ListPartitionPruner(
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
             List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
-        this(columnToPartitionValuesMap, columnToNullPartitions, partitionConjuncts, specifyPartitionIds, null, null);
-    }
-
-    public ListPartitionPruner(
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-            List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds, LogicalScanOperator scanOperator) {
-        this(columnToPartitionValuesMap, columnToNullPartitions, partitionConjuncts, specifyPartitionIds, null, scanOperator);
+        this(columnToPartitionValuesMap, columnToNullPartitions, partitionConjuncts, specifyPartitionIds, null);
     }
 
     public ListPartitionPruner(
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
             List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds,
-            ListPartitionInfo listPartitionInfo,
-            LogicalScanOperator scanOperator) {
+            ListPartitionInfo listPartitionInfo) {
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
@@ -128,7 +122,6 @@ public class ListPartitionPruner implements PartitionPruner {
         this.partitionColumnRefs = getPartitionColumnRefs();
         this.specifyPartitionIds = specifyPartitionIds;
         this.listPartitionInfo = listPartitionInfo;
-        this.scanOperator = scanOperator;
     }
 
     private Set<Long> getAllPartitions() {
@@ -227,6 +220,11 @@ public class ListPartitionPruner implements PartitionPruner {
         }
     }
 
+    public void prepareDeduceExtraConjuncts(LogicalScanOperator scanOperator) {
+        this.deduceExtraConjuncts = true;
+        this.scanOperator = scanOperator;
+    }
+
     // Infer equivalent partitions columns based on the partition-conjuncts.
     // Suppose the query has an expression c1 >= '2024-01-02', and the table is partitioned by
     // a GeneratedColumn c3=date_trunc('month', c1), so we can infer the expression:
@@ -234,6 +232,9 @@ public class ListPartitionPruner implements PartitionPruner {
     // This optimization is only applied to the case that the table's partition column is actually a GeneratedColumn
     // which is monotonic function
     private void deduceExtraConjuncts() {
+        if (!deduceExtraConjuncts) {
+            return;
+        }
         java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
             return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
         };
