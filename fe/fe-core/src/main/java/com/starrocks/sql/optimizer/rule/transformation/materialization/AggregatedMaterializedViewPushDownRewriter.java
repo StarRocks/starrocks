@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.api.client.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -396,6 +396,11 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                     List<ScalarOperator> newArgs = aggCall.getChildren();
                     newArgs.set(0, newArg0);
                     String rollupFuncName = getRollupFunctionName(aggCall, false);
+                    // eg: count(distinct) + rollup
+                    if (rollupFuncName == null) {
+                        logMVRewrite(mvRewriteContext, "Get rollup function name is null, aggCall:{}", aggCall);
+                        return AggRewriteInfo.NOT_REWRITE;
+                    }
                     Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                     Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
