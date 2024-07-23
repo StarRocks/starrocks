@@ -45,36 +45,52 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         if (!sessionVariable.isEnableScanDataCache()) {
             return root;
         }
+        DataCachePopulateMode populateMode = getPopulateMode(sessionVariable);
+
+        DataCachePopulateRewriteVisitor visitor = new DataCachePopulateRewriteVisitor(populateMode);
+        root.getOp().accept(visitor, root, taskContext);
+        return root;
+    }
+
+    private DataCachePopulateMode getPopulateMode(SessionVariable sessionVariable) {
         DataCachePopulateMode populateMode = sessionVariable.getDataCachePopulateMode();
         if (!sessionVariable.isEnablePopulateDataCache()) {
             // be compatible with old parameter
             populateMode = DataCachePopulateMode.NEVER;
         }
 
-        // for NEVER or ALWAYS mode, we don't need to rewrite it
-        if (populateMode == DataCachePopulateMode.NEVER || populateMode == DataCachePopulateMode.ALWAYS) {
-            return root;
+        // if populateMode is auto, we have to check further
+        if (populateMode == DataCachePopulateMode.AUTO) {
+            if (!isSatisfiedStatement()) {
+                populateMode = DataCachePopulateMode.NEVER;
+            }
         }
+        return populateMode;
+    }
 
+    private boolean isSatisfiedStatement() {
         // check is analyze sql
         if (connectContext.isStatisticsJob()) {
-            return root;
+            return false;
         }
-
         // check is query statement
+        // make sure executor is not nullptr first
         if (connectContext.getExecutor() == null) {
-            return root;
+            return false;
         }
         if (!(connectContext.getExecutor().getParsedStmt() instanceof QueryStatement)) {
-            return root;
+            return false;
         }
-
-        DataCachePopulateRewriteVisitor visitor = new DataCachePopulateRewriteVisitor();
-        root.getOp().accept(visitor, root, taskContext);
-        return root;
+        return true;
     }
 
     private static class DataCachePopulateRewriteVisitor extends OptExpressionVisitor<Void, TaskContext> {
+        private final DataCachePopulateMode populateMode;
+
+        private DataCachePopulateRewriteVisitor(DataCachePopulateMode populateMode) {
+            this.populateMode = populateMode;
+        }
+
         @Override
         public Void visit(OptExpression optExpression, TaskContext context) {
             for (OptExpression input : optExpression.getInputs()) {
@@ -86,40 +102,45 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         @Override
         public Void visitPhysicalScan(OptExpression optExpression, TaskContext context) {
             PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpression.getOp();
-            Table table = scanOperator.getTable();
 
-            if (!isValidScanOperatorType(scanOperator.getOpType())) {
-                return null;
+            switch (populateMode) {
+                case NEVER:
+                    return rewritePhysicalScanOperator(scanOperator, false);
+                case ALWAYS:
+                    return rewritePhysicalScanOperator(scanOperator, true);
+                default: {
+                    Table table = scanOperator.getTable();
+
+                    if (!isValidScanOperatorType(scanOperator.getOpType())) {
+                        return rewritePhysicalScanOperator(scanOperator, false);
+                    }
+
+                    // ignore full table scan
+                    if (checkIsFullColumnScan(table, scanOperator)) {
+                        return rewritePhysicalScanOperator(scanOperator, false);
+                    }
+
+                    ScanOperatorPredicates predicates = null;
+                    try {
+                        // ScanOperatorPredicates maybe nullptr, we have to check it
+                        predicates = scanOperator.getScanOperatorPredicates();
+                    } catch (AnalysisException e) {
+                        LOG.warn("Failed to get ScanOperatorPredicates", e);
+                    }
+
+                    if (predicates == null) {
+                        LOG.warn("ScanOperatorPredicates can't be null");
+                        return rewritePhysicalScanOperator(scanOperator, false);
+                    }
+
+                    // ignore full partition scan
+                    if (checkIsFullPartitionScan(predicates)) {
+                        return rewritePhysicalScanOperator(scanOperator, false);
+                    }
+
+                    return rewritePhysicalScanOperator(scanOperator, true);
+                }
             }
-
-            // ignore full table scan
-            if (checkIsFullColumnScan(table, scanOperator)) {
-                rewritePhysicalScanOperator(scanOperator, false);
-                return null;
-            }
-
-            ScanOperatorPredicates predicates = null;
-            try {
-                // ScanOperatorPredicates maybe nullptr, we have to check it
-                predicates = scanOperator.getScanOperatorPredicates();
-            } catch (AnalysisException e) {
-                LOG.warn("Failed to get ScanOperatorPredicates", e);
-            }
-
-            if (predicates == null) {
-                LOG.warn("ScanOperatorPredicates can't be null");
-                return null;
-            }
-
-            // ignore full partition scan
-            if (checkIsFullPartitionScan(predicates)) {
-                rewritePhysicalScanOperator(scanOperator, false);
-                return null;
-            }
-
-            rewritePhysicalScanOperator(scanOperator, true);
-
-            return null;
         }
 
         private boolean isValidScanOperatorType(OperatorType operatorType) {
@@ -153,9 +174,10 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
                     scanOperatorPredicates.getIdToPartitionKey().size();
         }
 
-        private void rewritePhysicalScanOperator(PhysicalScanOperator op, boolean enablePopulate) {
+        private Void rewritePhysicalScanOperator(PhysicalScanOperator op, boolean enablePopulate) {
             op.setDataCacheOptions(
                     DataCacheOptions.DataCacheOptionsBuilder.builder().setEnablePopulate(enablePopulate).build());
+            return null;
         }
     }
 

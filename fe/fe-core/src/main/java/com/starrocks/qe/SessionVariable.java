@@ -2336,6 +2336,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return DataCachePopulateMode.fromName(this.dataCachePopulateMode);
     }
 
+    public void setDataCachePopulateMode(String mode) {
+        this.dataCachePopulateMode = mode;
+    }
+
     public void setEnableDataCacheAsyncPopulateMode(boolean enableDataCacheAsyncPopulateMode) {
         this.enableDataCacheAsyncPopulateMode = enableDataCacheAsyncPopulateMode;
     }
