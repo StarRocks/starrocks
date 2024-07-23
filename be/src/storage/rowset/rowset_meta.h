@@ -39,6 +39,7 @@
 #include <string_view>
 #include <vector>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "google/protobuf/util/message_differencer.h"
@@ -247,6 +248,7 @@ public:
         const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
 
         if (!_has_tablet_schema_id) {
+            LOG(INFO) << "rowset does not have rowset id";
             if (target_schema != nullptr) {
                 rs_meta_pb->clear_tablet_schema();
                 TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
@@ -258,7 +260,7 @@ public:
     void set_tablet_schema_id() {
         if (_schema != nullptr && !_has_tablet_schema_id) {
             _rowset_meta_pb->set_schema_id(_schema->id());
-            _has_tablet_schema_pb = true;
+            _has_tablet_schema_id = true;
         }
     }
 
@@ -268,13 +270,12 @@ public:
         tablet_schema_ptr->to_schema_pb(&ts_pb);
         if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
             _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
-            _has_tablet_schema_id = true;
-            _rowset_meta_pb->set_schema_id(_schema->id());
         } else {
             // Only for compatible, in very old versions, there is no schema id.
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
             _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
+        _has_tablet_schema_pb = true;
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
@@ -306,6 +307,7 @@ private:
             if (_schema != nullptr) {
                 _has_tablet_schema_id = true;
             }
+            LOG(INFO) << "rowset has tablet schema id";
         }
         if (_rowset_meta_pb->has_tablet_schema() && !_has_tablet_schema_id) {
             if (_rowset_meta_pb->tablet_schema().has_id() &&
@@ -316,7 +318,6 @@ private:
             }
             _has_tablet_schema_pb = true;
         }
-        CHECK(_schema != nullptr);
 
         // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();

@@ -431,6 +431,7 @@ Status DataDir::load() {
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
+                LOG(INFO) << "tablet: " << tablet->tablet_id() << " has some rowset without tablet schema";
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
                 if (rowset_meta->has_tablet_schema()) {
                     LOG(ERROR) << "rowset does not have tablet schema. rowset=" << rowset_meta->rowset_id()

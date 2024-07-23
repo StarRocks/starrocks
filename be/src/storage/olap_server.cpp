@@ -597,6 +597,7 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         interval_calculator.maybe_interval_updated();
         int32_t curr_interval = interval_calculator.curr_interval();
+        LOG(INFO) << "garbage sweeper interval: " << curr_interval;
 
         // For shutdown gracefully
         std::cv_status cv_status = std::cv_status::no_timeout;
