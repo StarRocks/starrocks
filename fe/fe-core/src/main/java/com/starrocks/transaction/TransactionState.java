@@ -62,6 +62,7 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -949,6 +950,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
                 }
             }
             sb.append("]");
+        }
+        // NOTE: Please always keep this `warehouse` property in the last position (EMR serverless)
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+        if (warehouse != null) {
+            sb.append(", warehouse: ").append(warehouse.getName());
         }
         return sb.toString();
     }
