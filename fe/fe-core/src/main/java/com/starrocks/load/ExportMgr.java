@@ -69,7 +69,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -204,7 +203,10 @@ public class ExportMgr implements MemoryTrackable {
             ArrayList<OrderByPair> orderByPairs, long limit) {
 
         long resultNum = limit == -1L ? Integer.MAX_VALUE : limit;
-        LinkedList<List<Comparable>> exportJobInfos = new LinkedList<List<Comparable>>();
+        LinkedList<List<Comparable>> exportJobInfos = new LinkedList<>();
+        //If sorting is required, all data needs to be obtained before limiting it
+        //If not needed, directly obtain the limit quantity and then sort it
+        boolean isLimitBreak = orderByPairs == null;
         readLock();
         try {
             int counter = 0;
@@ -217,20 +219,16 @@ public class ExportMgr implements MemoryTrackable {
                 }
 
                 // filter job
-                if (jobId != 0) {
-                    if (id != jobId) {
-                        continue;
-                    }
+                if (jobId != 0 && id != jobId) {
+                    continue;
                 }
 
-                if (states != null) {
-                    if (!states.contains(state)) {
-                        continue;
-                    }
+                if (states != null && !states.contains(state)) {
+                    continue;
                 }
 
                 UUID jobQueryId = job.getQueryId();
-                if (queryId != null && (jobQueryId == null || !queryId.equals(jobQueryId))) {
+                if (queryId != null && !queryId.equals(jobQueryId)) {
                     continue;
                 }
 
@@ -260,7 +258,7 @@ public class ExportMgr implements MemoryTrackable {
                     }
                 }
 
-                List<Comparable> jobInfo = new ArrayList<Comparable>();
+                List<Comparable> jobInfo = new ArrayList<>();
 
                 jobInfo.add(id);
                 // query id
@@ -305,7 +303,7 @@ public class ExportMgr implements MemoryTrackable {
 
                 exportJobInfos.add(jobInfo);
 
-                if (++counter >= resultNum) {
+                if (isLimitBreak && ++counter >= resultNum) {
                     break;
                 }
             }
@@ -313,23 +311,23 @@ public class ExportMgr implements MemoryTrackable {
             readUnlock();
         }
 
-        // TODO: fix order by first, then limit
         // order by
-        ListComparator<List<Comparable>> comparator = null;
+        ListComparator<List<Comparable>> comparator;
         if (orderByPairs != null) {
             OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
-            comparator = new ListComparator<List<Comparable>>(orderByPairs.toArray(orderByPairArr));
+            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
         } else {
             // sort by id asc
-            comparator = new ListComparator<List<Comparable>>(0);
+            comparator = new ListComparator<>(0);
         }
-        Collections.sort(exportJobInfos, comparator);
+        exportJobInfos.sort(comparator);
 
         List<List<String>> results = Lists.newArrayList();
-        for (List<Comparable> list : exportJobInfos) {
-            results.add(list.stream().map(e -> e.toString()).collect(Collectors.toList()));
+        //The maximum return value of Math.min(resultNum, exportJobInfos.size()) is Integer.MAX_VALUE
+        int upperBound = (int) Math.min(resultNum, exportJobInfos.size());
+        for (int i = 0; i < upperBound; i++) {
+            results.add(exportJobInfos.get(i).stream().map(Object::toString).collect(Collectors.toList()));
         }
-
         return results;
     }
 

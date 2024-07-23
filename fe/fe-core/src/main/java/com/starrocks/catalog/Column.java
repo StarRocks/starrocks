@@ -587,7 +587,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         } else if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
@@ -841,6 +841,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public int getUniqueId() {
         return this.uniqueId;
+    }
+
+    // return max unique id of all fields
+    public int getMaxUniqueId() {
+        return Math.max(this.uniqueId, type.getMaxUniqueId());
     }
 
     public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns) {

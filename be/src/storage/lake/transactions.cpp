@@ -185,14 +185,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     // Read base version metadata
-    auto base_version_path = tablet_mgr->tablet_metadata_location(tablet_id, base_version);
-    auto base_metadata_or = tablet_mgr->get_tablet_metadata(base_version_path, false);
+    auto base_metadata_or = tablet_mgr->get_tablet_metadata(tablet_id, base_version, false);
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
 
     if (!base_metadata_or.ok()) {
-        LOG(WARNING) << "Fail to get " << base_version_path << ": " << base_metadata_or.status();
+        LOG(WARNING) << "Fail to get tablet=" << tablet_id << ", version=" << base_version << ": "
+                     << base_metadata_or.status();
         return base_metadata_or.status();
     }
 

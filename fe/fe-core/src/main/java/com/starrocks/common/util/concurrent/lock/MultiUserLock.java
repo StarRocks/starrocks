@@ -46,7 +46,7 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
-    public LockGrantType lock(Locker locker, LockType lockType) {
+    public LockGrantType lock(Locker locker, LockType lockType) throws LockException {
         LockHolder lockHolderRequest = new LockHolder(locker, lockType);
         LockGrantType lockGrantType = tryLock(lockHolderRequest);
         if (lockGrantType == LockGrantType.NEW) {
@@ -58,7 +58,7 @@ public class MultiUserLock extends Lock {
         return lockGrantType;
     }
 
-    private LockGrantType tryLock(LockHolder lockHolderRequest) {
+    private LockGrantType tryLock(LockHolder lockHolderRequest) throws LockException {
         if (ownerNum() == 0) {
             return LockGrantType.NEW;
         }
@@ -91,10 +91,24 @@ public class MultiUserLock extends Lock {
                             lockOwner.getLocker(), lockOwner.getLockType(), lockHolderRequest.getLockType(), this);
                 }
 
-                if (lockHolderRequest.getLockType().equals(lockOwner.getLockType())) {
+                LockType lockOwnerLockType = lockOwner.getLockType();
+                LockType lockRequestLockType = lockHolderRequest.getLockType();
+
+                if (lockRequestLockType.equals(lockOwnerLockType)) {
                     lockOwner.increaseRefCount();
                     return LockGrantType.EXISTING;
                 } else {
+                    /*
+                     * This does not conform to the use of hierarchical locks.
+                     * The outer layer has already obtained the intention lock,
+                     * and the inner layer code should not apply for read-write locks.
+                     */
+                    if ((lockOwnerLockType == LockType.INTENTION_SHARED || lockOwnerLockType == LockType.INTENTION_EXCLUSIVE)
+                            && (lockRequestLockType == LockType.READ || lockRequestLockType == LockType.WRITE)) {
+                        throw new NotSupportLockException("Can't request " + lockRequestLockType
+                                + " in the scope of " + lockOwnerLockType + ", " + lockOwner.getLocker().getLockerStackTrace());
+                    }
+
                     /*
                      * The same Locker can upgrade or degrade locks when it requests different types of locks
                      *
@@ -128,7 +142,7 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
-    public Set<Locker> release(Locker locker, LockType lockType) {
+    public Set<Locker> release(Locker locker, LockType lockType) throws LockException {
         boolean hasOwner = false;
         boolean reentrantLock = false;
         LockHolder lockHolder = new LockHolder(locker, lockType);

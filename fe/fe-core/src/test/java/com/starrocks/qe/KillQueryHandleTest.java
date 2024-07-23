@@ -14,7 +14,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
@@ -26,6 +27,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.spark.internal.config.R;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,14 +63,20 @@ public class KillQueryHandleTest {
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
 
+    public static ConnectContext getConnectContext() {
+        return connectContext;
+    }
+
     @Test
     public void testKillStmt2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query is successfully killed
-        new MockUp(FrontendServiceProxy.class) {
+        new MockUp(ThriftRPCRequestExecutor.class) {
             @Mock
-            public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
-                              FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
                 result.state = "OK";
                 return (T) result;
             }
@@ -109,10 +117,12 @@ public class KillQueryHandleTest {
                 return "query xxx not found";
             }
         };
-        new MockUp(FrontendServiceProxy.class) {
+        new MockUp(ThriftRPCRequestExecutor.class) {
             @Mock
-            public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
-                              FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
                 result.state = "ERR";
                 return (T) result;
             }
@@ -133,7 +143,7 @@ public class KillQueryHandleTest {
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020", ctx.getState().getErrorMessage());
+        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"));
 
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
@@ -141,10 +151,12 @@ public class KillQueryHandleTest {
     @Test
     public void testKillStmtWhenForwardWithUnknownError(@Mocked SocketChannel socketChannel) throws Exception {
         // test killing query is forwarded to fe with unexpected error
-        new MockUp(FrontendServiceProxy.class) {
+        new MockUp(ThriftRPCRequestExecutor.class) {
             @Mock
-            public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
-                              FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+            public <T, SERVER_CLIENT extends org.apache.thrift.TServiceClient> T call(
+                    ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address, int timeoutMs, int retryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<T, R> callable) throws Exception {
                 throw new Exception("Unknown error x");
             }
         };

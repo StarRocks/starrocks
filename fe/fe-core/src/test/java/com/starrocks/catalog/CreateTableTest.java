@@ -1411,9 +1411,9 @@ public class CreateTableTest {
         Assert.assertTrue(table.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
         Assert.assertEquals(1, uniqueConstraint.size());
-        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumns().get(1));
+        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames().size());
+        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames().get(0));
+        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames().get(1));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table2(\n" +
@@ -1434,10 +1434,10 @@ public class CreateTableTest {
         Assert.assertTrue(table2.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
         Assert.assertEquals(2, uniqueConstraint2.size());
-        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumns().get(0));
-        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumns().size());
-        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumns().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames().size());
+        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames().size());
+        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames().get(0));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_primary_key_table1(\n" +
@@ -1760,6 +1760,61 @@ public class CreateTableTest {
                                 "\"storage_format\" = \"DEFAULT\"\n" +
                                 ");"
                 ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_1` (\n" +
+                        "  `day` datetime \n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`day`)\n" +
+                        "PARTITION BY RANGE(cast(substr(day, 1, 10) as datetime))\n" +
+                        "(PARTITION p201704 VALUES LESS THAN (\"20170501\"),\n" +
+                        "PARTITION p201705 VALUES LESS THAN (\"20170601\"),\n" +
+                        "PARTITION p201706 VALUES LESS THAN (\"20170701\"))\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_2` (\n" +
+                        "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`bill_code`)\n" +
+                        "PARTITION BY RANGE(cast(substr(bill_code, '3', 13) as bigint))\n" +
+                        "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                        "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                        "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                        "PARTITION p4 VALUES [('15000000'), ('20000000')),\n" +
+                        "PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_3` (\n" +
+                        "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`bill_code`)\n" +
+                        "PARTITION BY RANGE(cast(substr(bill_code, 3, '13') as bigint))\n" +
+                        "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                        "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                        "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                        "PARTITION p4 VALUES [('15000000'), ('20000000')),\n" +
+                        "PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");"
+        ));
     }
 
     @Test
@@ -2016,6 +2071,26 @@ public class CreateTableTest {
         starRocksAssert.withTable(sql1);
         String createTableSql = starRocksAssert.showCreateTable("show create table news_rt;");
         starRocksAssert.dropTable("news_rt");
+        starRocksAssert.withTable(createTableSql);
+    }
+
+    @Test
+    public void testDefaultValueHasEscapeStringNonPK() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
+        starRocksAssert.dropTable("news_rt_non_pk");
         starRocksAssert.withTable(createTableSql);
     }
 }

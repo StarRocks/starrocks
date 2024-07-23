@@ -60,7 +60,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -90,6 +89,7 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -288,8 +288,8 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+            ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 

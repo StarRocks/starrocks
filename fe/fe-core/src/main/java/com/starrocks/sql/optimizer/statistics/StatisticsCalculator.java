@@ -41,6 +41,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -397,9 +398,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
+            TableVersionRange version;
+            if (node.isLogical()) {
+                version = ((LogicalIcebergScanOperator) node).getTableVersionRange();
+            } else {
+                version = ((PhysicalIcebergScanOperator) node).getTableVersionRange();
+            }
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
-                    node.getPredicate(), node.getLimit());
+                    node.getPredicate(), node.getLimit(), version);
             context.setStatistics(stats);
             if (node.isLogical()) {
                 boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
@@ -427,7 +434,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit());
+                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
             context.setStatistics(stats);
 
             if (node.isLogical()) {
@@ -503,7 +510,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (context.getStatistics() == null) {
             String catalogName = ((PaimonTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), -1, TableVersionRange.empty());
             context.setStatistics(stats);
         }
 
@@ -524,7 +532,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
             context.setStatistics(stats);
         }
         return visitOperator(node, context);
@@ -545,7 +553,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (context.getStatistics() == null) {
             String catalogName = ((KuduTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), -1, TableVersionRange.empty());
             context.setStatistics(stats);
         }
 

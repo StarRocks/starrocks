@@ -35,7 +35,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -122,7 +121,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
-        Map<Table, Expr> tableToExprMap = mv.getTableToPartitionExprMap();
+        Map<Table, Expr> tableToExprMap = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
                 .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvRangePartitionMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
@@ -147,8 +146,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
         // here we should convert date into '%Y%m%d' format
         Expr partitionExpr = mv.getPartitionExpr();
-        Pair<Table, Column> partitionTableAndColumn = mv.getDirectTableAndPartitionColumn();
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
+        if (!partitionTableAndColumn.containsKey(table)) {
+            LOG.warn("Cannot generate mv refresh partition predicate because cannot decide the partition column of table {}," +
+                    "partitionTableAndColumn:{}", table.getName(), partitionTableAndColumn);
+            return null;
+        }
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.get(table));
         if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                 && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
             Optional<FunctionCallExpr> functionCallExprOpt = getStr2DateExpr(partitionExpr);

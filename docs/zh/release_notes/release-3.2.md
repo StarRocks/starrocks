@@ -4,6 +4,45 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.9
+
+发布日期：2024 年 7 月 11 日
+
+### 新增特性
+
+- Paimon 外表支持 DELETE Vector。  [#45866](https://github.com/StarRocks/starrocks/issues/45866)
+- 支持通过 Apache Ranger 实现 Column 级别权限控制。[#47702](https://github.com/StarRocks/starrocks/pull/47702)
+- Stream Load 支持在导入时将 JSON 字符串自动转换成 STRUCT/MAP/ARRAY 类型数据。[#45406](https://github.com/StarRocks/starrocks/pull/45406)
+- JDBC Catalog支持 Oracle 和 SQL Server。[#35691](https://github.com/StarRocks/starrocks/issues/35691)
+
+### 功能优化
+
+- 优化权限管理，限制 `user_admin` 角色的用户修改 root 密码。[#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+- 降低导入时的内存占用。[#47047](https://github.com/StarRocks/starrocks/pull/47047)
+- 在审计日志中对 Files() 函数的认证信息进行脱敏处理。[#46893](https://github.com/StarRocks/starrocks/pull/46893)
+- Hive 外表支持 `skip.header.line.count` 属性。 [#47001](https://github.com/StarRocks/starrocks/pull/47001)
+- JDBC Catalog 支持更多的数据类型。[#47618](https://github.com/StarRocks/starrocks/pull/47618)
+
+### 问题修复
+
+修复了如下问题：
+
+- 存算分离集群从 v3.2.x 升级到 v3.3.0 后回滚，ALTER TABLE ADD COLUMN 导致 BE Crash。[#47826](https://github.com/StarRocks/starrocks/pull/47826)
+- 通过 SUBMIT TASK 发起的任务 QueryDetail 接口显示状态一直为 Running。[#47619](https://github.com/StarRocks/starrocks/pull/47619)
+- 向 FE Leader 节点转发查询导致空指针。[#47559](https://github.com/StarRocks/starrocks/pull/47559)
+- 执行 SHOW MATERIALIZED VIEWS 时带 WHERE 条件导致空指针。[#47811](https://github.com/StarRocks/starrocks/pull/47811)
+- 存算一体集群中主键表 Vertical Compaction 失败。[#47192](https://github.com/StarRocks/starrocks/pull/47192)
+- 写入 Hive 或 Iceberg 表时没有正确处理 I/O Error。[#46979](https://github.com/StarRocks/starrocks/pull/46979)
+- 给表属性赋值时添加空格不生效。[#47119](https://github.com/StarRocks/starrocks/pull/47119)
+- 对主键表并发执行迁移操作和 Index Compaction 时导致 BE Crash。[#46675](https://github.com/StarRocks/starrocks/pull/46675)
+
+### 行为变更
+
+- 修改 `JAVA_OPTS` 参数继承顺序，如果使用 JDK_9 或 JDK_11 以外的版本，用户需直接在 `JAVA_OPTS` 中配置。[#47495](https://github.com/StarRocks/starrocks/pull/47495)
+- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 或 CN 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- 用户创建分区表但未设置分桶数时，当分区数量超过 5 个后，系统自动设置分桶数的规则更改为 `max(2 * BE 或 CN 数量, 根据最大历史分区数据量计算得出的分桶数)`。原来的规则是根据最大历史分区数据量计算分桶数。[#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
 ## 3.2.8
 
 发布日期：2024 年 6 月 7 日

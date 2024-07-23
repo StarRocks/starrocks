@@ -117,7 +117,10 @@ public enum ScalarOperatorEvaluator {
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
-        return new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+
+        Function function = new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+        function.setMetaFunction(true);
+        return function;
     }
 
     public ScalarOperator evaluation(CallOperator root) {
@@ -190,7 +193,8 @@ public enum ScalarOperatorEvaluator {
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
             // check return result type, decimal will change return type
-            if (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
+            if (!operator.isNull() &&
+                    operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
                 operator.setType(fn.getReturnType());

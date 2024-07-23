@@ -322,6 +322,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -329,8 +330,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            numTablets =
-                    physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
+            if (enableTabletCreationOptimization) {
+                numTablets = physicalPartitionIndexMap.size();
+            } else {
+                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                        .mapToLong(List::size).sum();
+            }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
@@ -391,10 +396,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
+                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
+
+                        if (enableTabletCreationOptimization) {
+                            break;
+                        }
                     }
                 }
             }

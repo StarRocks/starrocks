@@ -22,7 +22,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -33,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class Dictionary implements Writable, GsonPostProcessable {
+public class Dictionary implements Writable {
     // Dictionary properties
     public static final String PROPERTIES_DICTIONARY_WARM_UP = "dictionary_warm_up";
     public static final String PROPERTIES_DICTIONARY_MEMORY_LIMIT = "dictionary_memory_limit";
@@ -64,15 +63,29 @@ public class Dictionary implements Writable, GsonPostProcessable {
     private List<String> dictionaryKeys = Lists.newArrayList();
     @SerializedName(value = "dictionaryValues")
     private List<String> dictionaryValues = Lists.newArrayList();
+
+    @SerializedName(value = "nextSchedulableTime")
     private AtomicLong nextSchedulableTime = new AtomicLong(Long.MAX_VALUE); // ms
 
     private Map<String, String> properties = Maps.newHashMap();
 
+    // =============== Runtime parameter ===========================
+    // This parameters are serialized ONLY use for sync refresh state from leader
+    // to follower. When FE restart, all kinds of this runtime parameter will be
+    // reset.
+    @SerializedName(value = "lastSuccessRefreshTime")
     private long lastSuccessRefreshTime = 0;
+    @SerializedName(value = "lastSuccessFinishedTime")
     private long lastSuccessFinishedTime = 0;
+    @SerializedName(value = "state")
     private DictionaryState state = DictionaryState.UNINITIALIZED;
+    @SerializedName(value = "stateBeforeRefresh")
     private DictionaryState stateBeforeRefresh = null;
+    @SerializedName(value = "runtimeErrMsg")
     private String runtimeErrMsg;
+    @SerializedName(value = "lastSuccessVersion")
+    private long lastSuccessVersion = 0;
+    // =============== Runtime parameter ===========================
 
     public Dictionary(long dictionaryId, String dictionaryName, String queryableObject,
                       String catalogName, String dbName, List<String> dictionaryKeys,
@@ -305,6 +318,11 @@ public class Dictionary implements Writable, GsonPostProcessable {
         this.setErrorMsg("");
         this.state = DictionaryState.UNINITIALIZED;
         this.stateBeforeRefresh = null;
+        this.lastSuccessRefreshTime = 0;
+        this.lastSuccessFinishedTime = 0;
+        this.lastSuccessVersion = 0;
+        this.updateNextSchedulableTime(this.getRefreshInterval());
+        this.setLastSuccessVersion(0);
     }
 
     public synchronized void setRefreshing() {
@@ -336,6 +354,19 @@ public class Dictionary implements Writable, GsonPostProcessable {
 
     public synchronized void setErrorMsg(String msg) {
         runtimeErrMsg = msg;
+    }
+
+    public void setLastSuccessVersion(long lastSuccessVersion) {
+        this.lastSuccessVersion = lastSuccessVersion;
+    }
+
+    public long getLastSuccessVersion() {
+        return this.lastSuccessVersion;
+    }
+
+    public boolean isRefreshing() {
+        return this.state == DictionaryState.REFRESHING ||
+                    this.state == DictionaryState.COMMITTING;
     }
 
     public synchronized void resetStateBeforeRefresh() {
@@ -392,12 +423,6 @@ public class Dictionary implements Writable, GsonPostProcessable {
         }
         info.add(runtimeErrMsg);
         return info;
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        this.resetState();
-        this.updateNextSchedulableTime(this.getRefreshInterval());
     }
 
     public static Dictionary read(DataInput in) throws IOException {

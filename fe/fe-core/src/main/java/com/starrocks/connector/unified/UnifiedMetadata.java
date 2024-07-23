@@ -23,10 +23,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -120,6 +122,14 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public TableVersionRange getTableVersionRange(Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableVersionRange(table, startVersion, endVersion);
+    }
+
+    @Override
     public List<String> listDbNames() {
         return hiveMetadata.listDbNames();
     }
@@ -130,9 +140,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange versionRange) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
-        return metadata.listPartitionNames(databaseName, tableName, snapshotId);
+        return metadata.listPartitionNames(databaseName, tableName, versionRange);
     }
 
     @Override
@@ -155,10 +165,10 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+        return metadata.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
     }
 
     @Override
@@ -175,16 +185,17 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getPrunedPartitions(table, predicate, limit);
+        return metadata.getPrunedPartitions(table, predicate, limit, version);
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 
     @Override
@@ -243,9 +254,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
-        metadata.finishSink(dbName, table, commitInfos);
+        metadata.finishSink(dbName, table, commitInfos, branch);
     }
 
     @Override

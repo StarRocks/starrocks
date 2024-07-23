@@ -98,6 +98,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean sys_log_to_console = false;
 
+    @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
+    public static String sys_log_format = "plaintext";
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -890,6 +892,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
+
+    @ConfField(mutable = true)
+    public static boolean lake_enable_tablet_creation_optimization = false;
 
     /**
      * The thrift server max worker threads
@@ -2783,7 +2788,7 @@ public class Config extends ConfigBase {
      * Enable the experimental temporary table feature
      */
     @ConfField(mutable = true)
-    public static boolean enable_experimental_temporary_table = false;
+    public static boolean enable_experimental_temporary_table = true;
 
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
@@ -3052,4 +3057,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
 }

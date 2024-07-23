@@ -100,4 +100,9 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
 }

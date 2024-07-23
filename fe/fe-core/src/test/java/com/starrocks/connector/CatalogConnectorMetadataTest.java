@@ -172,7 +172,7 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
-                connectorMetadata.listPartitionNames("test_db", "test_tbl", -1);
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
@@ -189,16 +189,16 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.alterView(null);
                 connectorMetadata.truncateTable(null, null);
                 connectorMetadata.alterTableComment(null, null, null);
-                connectorMetadata.finishSink("test_db", "test_tbl", null);
+                connectorMetadata.finishSink("test_db", "test_tbl", null, null);
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
                 connectorMetadata.dropDb("test_db", false);
-                connectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
+                connectorMetadata.getRemoteFileInfos(null, null, TableVersionRange.empty(), null, null, -1);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-                connectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+                connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
             }
         };
 
@@ -209,7 +209,7 @@ public class CatalogConnectorMetadataTest {
         );
 
         catalogConnectorMetadata.clear();
-        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", -1);
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
@@ -226,15 +226,15 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.alterView(null);
         catalogConnectorMetadata.truncateTable(null, null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
-        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
+        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null, null);
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
         catalogConnectorMetadata.dropDb("test_db", false);
-        catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
+        catalogConnectorMetadata.getRemoteFileInfos(null, null, TableVersionRange.empty(), null, null, -1);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
     }
 }

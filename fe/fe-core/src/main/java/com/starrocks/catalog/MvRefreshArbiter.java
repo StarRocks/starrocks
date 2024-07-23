@@ -177,6 +177,7 @@ public class MvRefreshArbiter {
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
                 baseUpdatedPartitionNames.addAll(mvUpdateInfo.getMvToRefreshPartitionNames());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getMvPartitionNameToCellMap());
             }
             // update base table's partition info
             baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
@@ -185,7 +186,7 @@ public class MvRefreshArbiter {
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
-            Map<Table, Column> partitionTableAndColumns = mv.getRelatedPartitionTableAndColumn();
+            Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
                 return baseTableUpdateInfo;

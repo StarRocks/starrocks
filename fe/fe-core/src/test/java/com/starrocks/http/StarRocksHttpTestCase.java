@@ -35,6 +35,7 @@
 package com.starrocks.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -51,12 +52,14 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -335,6 +338,7 @@ public abstract class StarRocksHttpTestCase {
         //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
         Database db = new Database(testDbId, "testDb");
         OlapTable table = newTable(TABLE_NAME);
+        table.setTableProperty(new TableProperty(ImmutableMap.of(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1")));
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
@@ -446,59 +450,12 @@ public abstract class StarRocksHttpTestCase {
     @Before
     public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
-        SystemInfoService systemInfoService = new SystemInfoService();
-        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-        NodeMgr nodeMgr = new NodeMgr();
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            SchemaChangeHandler getSchemaChangeHandler() {
-                return new SchemaChangeHandler();
-            }
-
-            @Mock
-            MaterializedViewHandler getRollupHandler() {
-                return new MaterializedViewHandler();
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getNodeMgr();
-                minTimes = 0;
-                result = nodeMgr;
-
-                globalStateMgr.getTabletInvertedIndex();
-                minTimes = 0;
-                result = tabletInvertedIndex;
-            }
-        };
-
-        new Expectations(nodeMgr) {
-            {
-                nodeMgr.getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
-            }
-        };
-
-        assignBackends();
-        doSetUp();
+        setUpWithGlobalStateMgr(globalStateMgr);
     }
 
     public void setUpWithCatalog() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
-        SystemInfoService systemInfoService = new SystemInfoService();
-        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-        NodeMgr nodeMgr = new NodeMgr();
+        setUpWithGlobalStateMgr(globalStateMgr);
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -527,6 +484,24 @@ public abstract class StarRocksHttpTestCase {
                 return new GlobalTransactionMgr(null);
             }
         };
+    }
+
+    private void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        NodeMgr nodeMgr = new NodeMgr();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SchemaChangeHandler getSchemaChangeHandler() {
+                return new SchemaChangeHandler();
+            }
+
+            @Mock
+            MaterializedViewHandler getRollupHandler() {
+                return new MaterializedViewHandler();
+            }
+        };
 
         new Expectations() {
             {
@@ -545,6 +520,14 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
+
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.isSafeMode();
+                minTimes = 0;
+                result = true;
             }
         };
 

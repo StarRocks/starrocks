@@ -3,11 +3,11 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE 配置项
 
@@ -4711,10 +4711,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- 默认值：60
+- 默认值：300
 - 类型：Int
 - 单位：Seconds
-- 是否动态：否
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->

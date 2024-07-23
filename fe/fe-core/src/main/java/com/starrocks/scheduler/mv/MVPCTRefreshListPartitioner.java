@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -70,7 +71,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public boolean syncAddOrDropPartitions() {
+    public boolean syncAddOrDropPartitions() throws LockTimeoutException {
         // collect mv partition items with lock
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -132,25 +133,31 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
+    public Expr generatePartitionPredicate(Table refBaseTable, Set<String> refBaseTablePartitionNames,
                                            Expr mvPartitionSlotRef) throws AnalysisException {
         Map<Table, Map<String, PListCell>> basePartitionMaps = mvContext.getRefBaseTableListPartitionMap();
         if (basePartitionMaps.isEmpty()) {
             return null;
         }
-        Table refBaseTable = mvContext.getRefBaseTable();
         Map<String, PListCell> baseListPartitionMap = basePartitionMaps.get(refBaseTable);
-        if (baseListPartitionMap == null || baseListPartitionMap.isEmpty()) {
+        if (baseListPartitionMap == null) {
+            LOG.warn("Generate incremental partition predicate failed, " +
+                    "basePartitionMaps:{} contains no refBaseTable:{}", basePartitionMaps, refBaseTable);
             return null;
+        }
+        if (baseListPartitionMap.isEmpty()) {
+            return new BoolLiteral(true);
         }
 
         List<Expr> sourceTablePartitionList = Lists.newArrayList();
         List<Column> partitionCols = refBaseTable.getPartitionColumns();
-        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (partitionTableAndColumn == null || !partitionTableAndColumn.containsKey(refBaseTable)) {
+            LOG.warn("Generate incremental partition failed, partitionTableAndColumn {} contains no ref table {}",
+                    partitionTableAndColumn, refBaseTable);
             return null;
         }
-        Column refPartitionColumn = partitionTableAndColumn.get(table);
+        Column refPartitionColumn = partitionTableAndColumn.get(refBaseTable);
         int refIndex = ListPartitionDiffer.getRefBaseTableIdx(refBaseTable, refPartitionColumn);
         Type partitionType = partitionCols.get(refIndex).getType();
 

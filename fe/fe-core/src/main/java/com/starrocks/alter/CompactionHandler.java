@@ -41,6 +41,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CompactionTask;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -78,7 +79,7 @@ public class CompactionHandler extends AlterHandler {
         CompactionClause compactionClause = (CompactionClause) alterClause;
         if (RunMode.isSharedDataMode()) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
@@ -90,14 +91,14 @@ public class CompactionHandler extends AlterHandler {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
         } else {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();
             AgentBatchTask batchTask = new AgentBatchTask();
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
@@ -115,7 +116,7 @@ public class CompactionHandler extends AlterHandler {
             } catch (Exception e) {
                 throw new UserException(e.getMessage());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
 
             for (Long backendId : backendToTablets.keySet()) {

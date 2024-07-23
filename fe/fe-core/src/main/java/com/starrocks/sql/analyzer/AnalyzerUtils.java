@@ -70,11 +70,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -212,28 +209,22 @@ public class AnalyzerUtils {
             return null;
         }
 
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            Function search = new Function(fnName, argTypes, Type.INVALID, false);
-            Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
-            if (fn != null) {
-                try {
-                    Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, fn,
-                            PrivilegeType.USAGE);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
-                }
+        if (fn != null) {
+            try {
+                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, fn,
+                        PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
             }
-
-            return fn;
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
+
+        return fn;
     }
 
     private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
@@ -712,7 +703,7 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation>  allTableAndViewRelations = Maps.newHashMap();
+        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
     }
@@ -763,12 +754,6 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
-    }
-
-    public static List<Pair<Expr, Relation[]>> collectAllJoinPredicatesRelations(StatementBase statementBase) {
-        List<Pair<Expr, Relation[]>> joinPredicates = Lists.newArrayList();
-        new AnalyzerUtils.JoinPredicateRelationCollector(joinPredicates).visit(statementBase);
-        return joinPredicates;
     }
 
     private static class TableAndViewCollector extends TableCollector {
@@ -1040,30 +1025,6 @@ public class AnalyzerUtils {
         }
     }
 
-    private static class JoinPredicateRelationCollector extends TableCollector {
-        private final List<Pair<Expr, Relation[]>> joinPredicates;
-
-        public JoinPredicateRelationCollector(List<Pair<Expr, Relation[]>> joinPredicates) {
-            super(null);
-            this.joinPredicates = joinPredicates;
-        }
-        @Override
-        public Void visitJoin(JoinRelation node, Void context) {
-            Relation[] relations = new Relation[2];
-            relations[0] = node.getLeft();
-            relations[1] = node.getRight();
-            joinPredicates.add(Pair.create(node.getOnPredicate(), relations));
-            visit(node.getLeft());
-            visit(node.getRight());
-            return null;
-        }
-
-        @Override
-        public Void visitTable(TableRelation node, Void context) {
-            return null;
-        }
-    }
-
     private static class SubQueryRelationCollector extends TableCollector {
         Map<TableName, SubqueryRelation> subQueryRelations;
 
@@ -1290,7 +1251,7 @@ public class AnalyzerUtils {
     }
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-                                                                                           List<List<String>> partitionValues)
+                                                                              List<List<String>> partitionValues)
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -1357,11 +1318,11 @@ public class AnalyzerUtils {
         return sb.toString();
     }
 
-    private static AddPartitionClause getAddPartitionClauseForRangePartition(OlapTable olapTable,
-                                                                             List<List<String>> partitionValues,
-                                                                             PartitionMeasure measure,
-                                                               ExpressionRangePartitionInfo expressionRangePartitionInfo)
-            throws AnalysisException {
+    private static AddPartitionClause getAddPartitionClauseForRangePartition(
+            OlapTable olapTable,
+            List<List<String>> partitionValues,
+            PartitionMeasure measure,
+            ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())

@@ -4,7 +4,11 @@ displayed_sidebar: "English"
 
 # Load data using Routine Load
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+
+:::tip
+Try Routine Load out in this [Quick Start](../quick_start/routine-load.md)
+:::
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
@@ -29,7 +33,7 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 
 ## Basic concepts
 
-![routine load](../assets/4.5.2-1.png)
+![routine load](../_assets/4.5.2-1.png)
 
 ### Terminology
 

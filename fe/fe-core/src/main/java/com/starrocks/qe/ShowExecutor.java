@@ -289,6 +289,7 @@ public class ShowExecutor {
     public static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
         private static final ShowExecutor.ShowExecutorVisitor INSTANCE = new ShowExecutor.ShowExecutorVisitor();
+
         public static ShowExecutor.ShowExecutorVisitor getInstance() {
             return INSTANCE;
         }
@@ -1030,15 +1031,16 @@ public class ShowExecutor {
             String dbName = statement.getDb();
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(catalogName, dbName, statement.getTable());
+            if (table == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                        statement.getDb() + "." + statement.getTable());
+            }
+
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             try {
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getTable(catalogName, dbName, statement.getTable());
-                if (table == null) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                            statement.getDb() + "." + statement.getTable());
-                }
                 PatternMatcher matcher = null;
                 if (statement.getPattern() != null) {
                     matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
@@ -1082,7 +1084,7 @@ public class ShowExecutor {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }
@@ -1481,7 +1483,7 @@ public class ShowExecutor {
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                     }
 
-                    Table table = db.getTable(tableName);
+                    Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                     if (table == null) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
@@ -2199,14 +2201,16 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+            Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
+            if (table == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                        db.getOriginName() + "." + statement.getTableName().toString());
+            }
+
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             try {
-                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
-                if (table == null) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                            db.getOriginName() + "." + statement.getTableName().toString());
-                } else if (table instanceof OlapTable) {
+                if (table instanceof OlapTable) {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
                     for (Index index : indexes) {
                         List<String> indexColumnNames = MetaUtils.getColumnNamesByColumnIds(table, index.getColumns());
@@ -2220,7 +2224,7 @@ public class ShowExecutor {
                     // do nothing
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }

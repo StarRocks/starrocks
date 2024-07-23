@@ -136,6 +136,11 @@ struct AggFunctionTypes {
     std::vector<bool> nulls_first;
 
     bool is_distinct = false;
+    bool is_always_nullable_result = false;
+
+    template <bool UseIntermediateAsOutput>
+    bool is_result_nullable() const;
+    bool use_nullable_fn(bool use_intermediate_as_output) const;
 };
 
 struct ColumnType {
@@ -239,8 +244,6 @@ struct AggregatorParams {
     bool has_nullable_key;
 
     void init();
-
-    ChunkUniquePtr create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc);
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
@@ -289,12 +292,13 @@ public:
     bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
-            return hash_set_memory_usage();
+            return hash_set_memory_usage() + agg_state_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
-            return hash_map_memory_usage();
+            return hash_map_memory_usage() + agg_state_memory_usage();
         } else {
             return 0;
         }
@@ -498,6 +502,7 @@ protected:
     SpillProcessChannelPtr _spill_channel;
     bool _is_opened = false;
     bool _is_prepared = false;
+    int64_t _agg_state_mem_usage = 0;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
@@ -505,7 +510,7 @@ public:
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     [[nodiscard]] Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
-                                                   bool* use_intermediate_as_output = nullptr);
+                                                   bool force_use_intermediate_as_output = false);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);

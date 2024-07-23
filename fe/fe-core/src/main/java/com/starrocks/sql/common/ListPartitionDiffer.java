@@ -215,11 +215,11 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param tableRefIdxes result to collect mv's ref indexes to the base table's partition columns
      * @return true if success, otherwise false
      */
-    private static boolean syncBaseTablePartitionInfos(MaterializedView mv,
-                                                       Map<Table, Map<String, PListCell>> basePartitionMaps,
-                                                       Map<String, PListCell> allBasePartitionItems,
-                                                       Map<Table, List<Integer>> tableRefIdxes) {
-        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+    public static boolean syncBaseTablePartitionInfos(MaterializedView mv,
+                                                      Map<Table, Map<String, PListCell>> basePartitionMaps,
+                                                      Map<String, PListCell> allBasePartitionItems,
+                                                      Map<Table, List<Integer>> tableRefIdxes) {
+        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         try {
             for (Map.Entry<Table, Column> e1 : partitionTableAndColumn.entrySet()) {
                 Table refBaseTable = e1.getKey();
@@ -265,6 +265,14 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
             return null;
         }
+        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes);
+    }
+
+    public static ListPartitionDiffResult computeListPartitionDiff(
+            MaterializedView mv,
+            Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
+            Map<String, PListCell> allBasePartitionItems,
+            Map<Table, List<Integer>> tableRefIdxes) {
         // TODO: prune the partitions based on ttl
         Map<String, PListCell> mvPartitionNameToListMap = mv.getListPartitionItems();
         ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(

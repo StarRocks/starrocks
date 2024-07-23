@@ -29,6 +29,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaLakeRemoteFileDesc;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.FileScanTask;
@@ -60,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -136,7 +138,7 @@ public class DeltaLakeScanNode extends ScanNode {
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, deltaLakeTable, null, snapshotId, predicate, fieldNames, -1);
+                catalogName, deltaLakeTable, null, TableVersionRange.withEnd(Optional.of(snapshotId)), predicate, fieldNames, -1);
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
             return;
@@ -257,10 +259,6 @@ public class DeltaLakeScanNode extends ScanNode {
         return output.toString();
     }
 
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
-    }
 
     @Override
     protected void toThrift(TPlanNode msg) {

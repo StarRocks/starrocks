@@ -1208,6 +1208,7 @@ public class DatabaseTransactionMgr {
         transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1875,6 +1876,7 @@ public class DatabaseTransactionMgr {
 
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1941,6 +1943,7 @@ public class DatabaseTransactionMgr {
         // do after transaction finish in batch
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
             GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         }
 
         LOG.info("finish transaction {} batch successfully", stateBatch);

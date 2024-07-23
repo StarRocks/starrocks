@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -61,6 +62,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
+    protected TableVersionRange tableVersionRange;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -70,12 +72,25 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             long limit,
             ScalarOperator predicate,
             Projection projection) {
+        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection, TableVersionRange.empty());
+    }
+
+    public LogicalScanOperator(
+            OperatorType type,
+            Table table,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            long limit,
+            ScalarOperator predicate,
+            Projection projection,
+            TableVersionRange tableVersionRange) {
         super(type, limit, predicate, projection);
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
+        this.tableVersionRange = tableVersionRange;
         buildColumnFilters(predicate);
     }
 
@@ -85,6 +100,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
+        this.tableVersionRange = TableVersionRange.empty();
     }
 
     public Table getTable() {
@@ -119,6 +135,15 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     public ScanOptimzeOption getScanOptimzeOption() {
         return scanOptimzeOption;
     }
+
+    public TableVersionRange getTableVersionRange() {
+        return tableVersionRange;
+    }
+
+    public void setTableVersionRange(TableVersionRange tableVersionRange) {
+        this.tableVersionRange = tableVersionRange;
+    }
+
     // for mark empty partitions/empty tablet
     public boolean isEmptyOutputRows() {
         return false;
@@ -225,6 +250,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
             builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
+            builder.tableVersionRange = scanOperator.tableVersionRange;
             return (B) this;
         }
 
@@ -253,6 +279,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTable(Table table) {
             builder.table = table;
+            return (B) this;
+        }
+
+        public B setTableVersionRange(TableVersionRange tableVersionRange) {
+            builder.tableVersionRange = tableVersionRange;
             return (B) this;
         }
     }

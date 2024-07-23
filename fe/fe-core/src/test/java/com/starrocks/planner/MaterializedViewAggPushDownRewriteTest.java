@@ -630,6 +630,27 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
     }
 
     @Test
+    public void testJoinWithAggPushDown_RollupFunctions_CountDistinct() {
+        // one query contains count(distinct) agg function, it can be rewritten.
+        List<String> mvs = ImmutableList.of(
+                "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS " +
+                        "select LO_ORDERDATE, array_agg_distinct(LO_REVENUE) \n" +
+                        "from lineorder l group by LO_ORDERDATE;",
+                "CREATE MATERIALIZED VIEW mv2 REFRESH MANUAL as " +
+                        "select LO_ORDERDATE, LO_REVENUE, sum(LO_QUANTITY) as quantity_sum\n" +
+                        "from lineorder l group by LO_ORDERDATE,LO_REVENUE"
+        );
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            {
+                String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) " +
+                        "from lineorder l join dates d " +
+                        "on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;";
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
     public void testJoinWithAggPushDown_NotSPJG() {
         String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
                 "select LO_ORDERDATE,lo_orderkey, sum(LO_REVENUE) as c\n" +

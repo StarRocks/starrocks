@@ -36,7 +36,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -45,6 +44,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.connector.hive.HiveWriteUtils.checkedDelete;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
@@ -74,27 +74,36 @@ public class RemoteFileOperations {
         this.conf = conf;
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
-        return getRemoteFiles(partitions, Optional.empty(), true);
+    public static class Options {
+        public static Options DEFAULT = new Options();
+        public String hudiTableLocation = null;
+        public boolean useCache = true;
+
+        public static Options toUseHudiTableLocation(String hudiTableLocation) {
+            Options opt = new Options();
+            opt.hudiTableLocation = hudiTableLocation;
+            return opt;
+        }
+
+        public static Options toUseCache(boolean useCache) {
+            Options opt = new Options();
+            opt.useCache = useCache;
+            return opt;
+        }
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, boolean useCache) {
-        return getRemoteFiles(partitions, Optional.empty(), useCache);
-    }
+    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Options options) {
+        RemoteFileScanContext scanContext = new RemoteFileScanContext();
+        scanContext.hudiTableLocation = options.hudiTableLocation;
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
-        return getRemoteFiles(partitions, hudiTableLocation, true);
-    }
-
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation, boolean useCache) {
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
-            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
             pathKeyToPartition.put(key, partition);
         }
 
         int cacheMissSize = partitions.size();
-        if (enableCatalogLevelCache && useCache) {
+        if (enableCatalogLevelCache && options.useCache) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
         }
@@ -103,15 +112,13 @@ public class RemoteFileOperations {
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
 
-        RemotePathKey.HudiContext hudiContext = new RemotePathKey.HudiContext();
-
         Tracers.count(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES, cacheMissSize);
         try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
             for (Partition partition : partitions) {
-                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
-                pathKey.setHudiContext(hudiContext);
+                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
+                pathKey.setScanContext(scanContext);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = pullRemoteFileExecutor.submit(() ->
-                        remoteFileIO.getRemoteFiles(pathKey, useCache));
+                        remoteFileIO.getRemoteFiles(pathKey, options.useCache));
                 futures.add(future);
             }
 
@@ -132,27 +139,24 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions) {
-        return getPresentFilesInCache(partitions, Optional.empty());
-    }
-
-    public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
         Map<RemotePathKey, Partition> pathKeyToPartition = partitions.stream()
-                .collect(Collectors.toMap(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation),
+                .collect(Collectors.toMap(
+                        partition -> RemotePathKey.of(partition.getFullPath(), isRecursive),
                         Function.identity()));
 
         List<RemotePathKey> paths = partitions.stream()
-                .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation))
+                .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive))
                 .collect(Collectors.toList());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentFiles = remoteFileIO.getPresentRemoteFiles(paths);
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Optional<String> hudiTableLocation) {
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Options options) {
         if (enableCatalogLevelCache) {
-            return getPresentFilesInCache(partitions, hudiTableLocation);
+            return getPresentFilesInCache(partitions);
         } else {
-            return getRemoteFiles(partitions, hudiTableLocation);
+            return getRemoteFiles(partitions, options);
         }
     }
 
@@ -319,7 +323,7 @@ public class RemoteFileOperations {
             RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
                     .setFormat(partition.getInputFormat())
                     .setFullPath(partition.getFullPath())
-                    .setFiles(List.of(fileDesc).stream()
+                    .setFiles(Stream.of(fileDesc)
                             .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
                             .map(desc -> desc.setSplittable(partition.isSplittable()))
                             .collect(Collectors.toList()));

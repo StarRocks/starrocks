@@ -24,6 +24,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -421,7 +422,7 @@ public class MetadataMgrTest {
     @Test(expected = StarRocksConnectorException.class)
     public void testGetPrunedPartition() {
         MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
+        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1, TableVersionRange.empty());
     }
 
     @Test

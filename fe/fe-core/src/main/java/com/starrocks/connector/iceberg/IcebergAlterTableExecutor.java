@@ -30,14 +30,17 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;
+import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
@@ -67,10 +70,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
-    }
-
-    @Override
-    public void checkConflict() throws DdlException {
     }
 
     @Override
@@ -375,4 +374,35 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         });
         return null;
     }
+
+    @Override
+    public Void visitDropBranchClause(DropBranchClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String branchName = clause.getBranch();
+            boolean ifExists = clause.isIfExists();
+            SnapshotRef snapshotRef = table.refs().get(branchName);
+
+            if (snapshotRef != null || !ifExists) {
+                transaction.manageSnapshots().removeBranch(branchName).commit();
+            }
+        });
+
+        return null;
+    }
+
+    @Override
+    public Void visitDropTagClause(DropTagClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String tagName = clause.getTag();
+            boolean ifExists = clause.isIfExists();
+            SnapshotRef snapshotRef = table.refs().get(tagName);
+
+            if (snapshotRef != null || !ifExists) {
+                transaction.manageSnapshots().removeTag(tagName).commit();
+            }
+        });
+
+        return null;
+    }
+
 }

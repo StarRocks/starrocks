@@ -22,10 +22,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -52,15 +54,13 @@ public class ForeignKeyConstraint {
     // table with foreign key, it only used for materialized view.
     private final BaseTableInfo childTableInfo;
 
-    // here id is preferred, but meta of column does not have id.
-    // have to use name here, so column rename is not supported
     // eg: [column1 -> column1', column2 -> column2']
-    private final List<Pair<String, String>> columnRefPairs;
+    private final List<Pair<ColumnId, ColumnId>> columnRefPairs;
 
     public ForeignKeyConstraint(
             BaseTableInfo parentTableInfo,
             BaseTableInfo childTableInfo,
-            List<Pair<String, String>> columnRefPairs) {
+            List<Pair<ColumnId, ColumnId>> columnRefPairs) {
         this.parentTableInfo = parentTableInfo;
         this.childTableInfo = childTableInfo;
         this.columnRefPairs = columnRefPairs;
@@ -74,8 +74,53 @@ public class ForeignKeyConstraint {
         return childTableInfo;
     }
 
-    public List<Pair<String, String>> getColumnRefPairs() {
+    public List<Pair<ColumnId, ColumnId>> getColumnRefPairs() {
         return columnRefPairs;
+    }
+
+    public List<Pair<String, String>> getColumnNameRefPairs(Table defaultChildTable) {
+        Table parentTable = getParentTable();
+        Table childTable = defaultChildTable;
+        if (childTableInfo != null) {
+            childTable = getChildTable();
+        }
+        List<Pair<String, String>> result = new ArrayList<>(columnRefPairs.size());
+        for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
+            Column childColumn = childTable.getColumn(pair.first);
+            if (childColumn == null) {
+                LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
+                        pair.first, childTableInfo);
+                continue;
+            }
+            Column parentColumn = parentTable.getColumn(pair.second);
+            if (parentColumn == null) {
+                LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
+                        pair.second, parentTableInfo);
+                continue;
+            }
+
+            result.add(Pair.create(childColumn.getName(), parentColumn.getName()));
+        }
+
+        return result;
+    }
+
+    private Table getParentTable() {
+        if (parentTableInfo.isInternalCatalog()) {
+            return MetaUtils.getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+        } else {
+            return MetaUtils.getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(),
+                    parentTableInfo.getTableName());
+        }
+    }
+
+    private Table getChildTable() {
+        if (childTableInfo.isInternalCatalog()) {
+            return MetaUtils.getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+        } else {
+            return MetaUtils.getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(),
+                    childTableInfo.getTableName());
+        }
     }
 
     // for olap table, the format is: (column1, column2) REFERENCES default_catalog.dbid.tableid(column1', column2')
@@ -127,10 +172,10 @@ public class ForeignKeyConstraint {
             String targetTablePath = foreignKeyMatcher.group(6);
             String targetColumns = foreignKeyMatcher.group(8);
 
-            List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
-                    map(String::trim).collect(Collectors.toList());
-            List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
-                    map(String::trim).collect(Collectors.toList());
+            List<ColumnId> childColumns = Arrays.stream(sourceColumns.split(",")).
+                    map(colStr -> ColumnId.create(colStr.trim())).collect(Collectors.toList());
+            List<ColumnId> parentColumns = Arrays.stream(targetColumns.split(",")).
+                    map(colStr -> ColumnId.create(colStr.trim())).collect(Collectors.toList());
 
             String[] targetTableParts = targetTablePath.split("\\.");
             Preconditions.checkState(targetTableParts.length == 3);
@@ -160,7 +205,7 @@ public class ForeignKeyConstraint {
                 }
             }
 
-            List<Pair<String, String>> columnRefPairs =
+            List<Pair<ColumnId, ColumnId>> columnRefPairs =
                     Streams.zip(childColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
             foreignKeyConstraints.add(new ForeignKeyConstraint(parentTableInfo, childTableInfo, columnRefPairs));
         }
@@ -194,9 +239,7 @@ public class ForeignKeyConstraint {
         return baseTableInfo;
     }
 
-    public static String getShowCreateTableConstraintDesc(List<ForeignKeyConstraint> constraints) {
-        StringBuilder sb = new StringBuilder();
-
+    public static String getShowCreateTableConstraintDesc(OlapTable baseTable, List<ForeignKeyConstraint> constraints) {
         List<String> constraintStrs = Lists.newArrayList();
         for (ForeignKeyConstraint constraint : constraints) {
             BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
@@ -207,7 +250,7 @@ public class ForeignKeyConstraint {
                 constraintSb.append(childTableInfo.getReadableString());
             }
             constraintSb.append("(");
-            String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+            String baseColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
                     .stream().map(pair -> pair.first).collect(Collectors.toList()));
             constraintSb.append(baseColumns);
             constraintSb.append(")");
@@ -215,14 +258,13 @@ public class ForeignKeyConstraint {
             constraintSb.append(parentTableInfo.getReadableString());
 
             constraintSb.append("(");
-            String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+            String parentColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
                     .stream().map(pair -> pair.second).collect(Collectors.toList()));
             constraintSb.append(parentColumns);
             constraintSb.append(")");
             constraintStrs.add(constraintSb.toString());
         }
 
-        sb.append(Joiner.on(";").join(constraintStrs));
-        return sb.toString();
+        return Joiner.on(";").join(constraintStrs);
     }
 }

@@ -15,13 +15,13 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendServiceImpl;
@@ -118,7 +118,7 @@ public class LeaderOpExecutorTest {
     }
 
     private static void mockFrontendService(MockFrontendServiceClient client) {
-        ClientPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
+        ThriftConnectionPool.frontendPool = new MockGenericPool<FrontendService.Client>("leader-op-mocked-pool") {
             @Override
             public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) {
                 return client;

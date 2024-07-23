@@ -717,6 +717,7 @@ build_arrow() {
     -DARROW_BOOST_USE_SHARED=OFF \
     -DBoost_NO_BOOST_CMAKE=ON \
     -DARROW_FLIGHT=ON \
+    -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
 
@@ -1271,6 +1272,7 @@ build_grpc() {
     rm -rf CMakeCache.txt CMakeFiles/
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR}               \
         -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}            \
         -DgRPC_INSTALL=ON                                   \
         -DgRPC_BUILD_TESTS=OFF                              \
@@ -1289,7 +1291,7 @@ build_grpc() {
         -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a \
         -DgRPC_ABSL_PROVIDER=package                        \
         -Dabsl_DIR=${TP_INSTALL_DIR}/lib/cmake/absl         \
-        -DgRPC_PROTOBUF_PROVIDER=package    \
+        -DgRPC_PROTOBUF_PROVIDER=package                    \
         -DgRPC_RE2_PROVIDER=package                         \
         -DRE2_INCLUDE_DIR=${TP_INSTALL_DIR}/include    \
         -DRE2_LIBRARY=${TP_INSTALL_DIR}/libre2.a \
@@ -1315,6 +1317,17 @@ build_simdutf() {
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
+}
+
+# tenann
+build_tenann() {
+    check_if_source_exist $TENANN_SOURCE
+    rm -rf $TP_INSTALL_DIR/include/tenann
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
 }
 
 # restore cxxflags/cppflags/cflags to default one
@@ -1414,6 +1427,7 @@ build_simdutf
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
     build_libdeflate
+    build_tenann
 fi
 
 # strip unnecessary debug symbol for binaries in thirdparty

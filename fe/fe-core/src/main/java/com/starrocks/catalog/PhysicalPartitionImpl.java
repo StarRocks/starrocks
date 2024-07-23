@@ -41,6 +41,9 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @SerializedName(value = "id")
     private long id;
 
+    @SerializedName(value = "name")
+    private String name;
+
     private long beforeRestoreId;
 
     @SerializedName(value = "parentId")
@@ -92,8 +95,9 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     private volatile long minRetainVersion = 0;
 
-    public PhysicalPartitionImpl(long id, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
+    public PhysicalPartitionImpl(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
+        this.name = name;
         this.parentId = parentId;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
@@ -105,6 +109,16 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @Override
     public long getId() {
         return this.id;
+    }
+
+    @Override
+    public String getName() {
+        return this.name;
+    }
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override
@@ -402,6 +416,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
+        buffer.append("partitionName: ").append(name).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");

@@ -28,6 +28,13 @@ select * from tab1;
 insert into tab1 values (3, row(3, row(3,3), 3));
 select * from tab1;
 
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+function: wait_mv_refresh_count('test_add_drop_field_struct', 'mv1', 1)
+SELECT count(*) FROM mv1;
+select * from tab1;
+
 alter table tab1 modify column c1 drop field v2.v5;
 alter table tab1 modify column c1 drop field v1;
 function: wait_alter_table_finish()
@@ -73,6 +80,13 @@ select * from tab1;
 insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
 select * from tab1;
 
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+function: wait_mv_refresh_count('test_add_drop_field_array', 'mv1', 1)
+SELECT count(*) FROM mv1;
+select * from tab1;
+
 alter table tab1 modify column c1 drop field [*].v1;
 function: wait_alter_table_finish()
 select * from tab1;
@@ -114,3 +128,57 @@ alter table tab1 modify column c1 drop field [*].v1;
 
 drop table tab1;
 drop database test_add_drop_field_not_allowed;
+
+
+-- name: test_drop_last_field
+create database test_drop_last_field;
+use test_drop_last_field;
+
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Struct<v1 int>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+alter table tab1 modify column c1 drop field v1;
+
+drop table tab1;
+drop database test_drop_last_field;
+
+-- name: test_drop_add_same_name_field
+create database test_drop_add_same_name_field;
+use test_drop_add_same_name_field;
+
+CREATE TABLE `t` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` struct<v2_1 int(11)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+insert into t values(1, row(1)),(2,row(2));
+alter table t modify column c2 add field v2_2 string;
+function: wait_alter_table_finish()
+select * from t;
+insert into t values(3, row(3, 'Beijing')),(4,row(4,'Shanghai'));
+alter table t modify column c2 drop field v2_2;
+function: wait_alter_table_finish()
+alter table t modify column c2 add field v2_2 date;
+function: wait_alter_table_finish()
+select * from t;
+
+drop table t;
+drop database test_drop_add_same_name_field;

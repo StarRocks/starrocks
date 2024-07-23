@@ -225,6 +225,7 @@ You can configure Data Cache using the following system variables and BE paramet
 - [enable_populate_datacache](../reference/System_variable.md#enable_populate_datacache)
 - [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../reference/System_variable.md)
 
 ### BE Parameters
 

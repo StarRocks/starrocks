@@ -113,43 +113,38 @@ under the License.
             </activation>
 
             <repositories>
+                <!-- keep the central repository the first one among all repositories -->
+                <repository>
+                    <id>central</id>
+                    <name>central maven repo https</name>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </repository>
+                <!-- for java-cup -->
+                <repository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
+                </repository>
                 <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64-->
                 <repository>
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
 
-                <repository>
-                    <id>central</id>
-                    <name>central maven repo https</name>
-                    <url>https://repo.maven.apache.org/maven2</url>
-                </repository>
-
-                <!-- for java-cup -->
-                <repository>
-                    <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
-                </repository>
-                <repository>
-                    <id>cloudera</id>
-                    <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-                </repository>
-                <!-- for bdb je -->
-                <repository>
-                    <id>oracleReleases</id>
-                    <url>https://download.oracle.com/maven</url>
-                </repository>
             </repositories>
 
             <pluginRepositories>
                 <pluginRepository>
-                    <id>spring-plugins</id>
-                    <url>https://repo.spring.io/plugins-release/</url>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2/</url>
                 </pluginRepository>
                 <!-- for cup-maven-plugin -->
                 <pluginRepository>
                     <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
+                    <url>https://repository.cloudera.com/repository/public/</url>
                 </pluginRepository>
             </pluginRepositories>
         </profile>
@@ -407,6 +402,12 @@ under the License.
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-slf4j-impl</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-layout-template-json</artifactId>
                 <version>${log4j.version}</version>
             </dependency>
 

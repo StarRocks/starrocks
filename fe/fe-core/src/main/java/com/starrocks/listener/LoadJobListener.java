@@ -50,4 +50,11 @@ public interface LoadJobListener {
      * @param table target table that has changed
      */
     void onInsertOverwriteJobCommitFinish(Database db, Table table);
+
+    /**
+     * Listener after `Delete` transaction is finished, which is only triggered without an error.
+     * @param db database of the target table
+     * @param table target table that has changed
+     */
+    void onDeleteJobTransactionFinish(Database db, Table table);
 }

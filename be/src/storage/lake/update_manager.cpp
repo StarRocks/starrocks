@@ -606,8 +606,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
                                           DelVector* delvec) {
-    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tsid.tablet_id, meta_ver, fill_cache));
     RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, delvec));
     return Status::OK();
 }
@@ -941,7 +940,8 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 }
 
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // use tabletid-txnid as update state cache's key, so it can retry safe.
@@ -996,7 +996,8 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // no need to preload if using light compaction publish

@@ -117,6 +117,7 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -200,6 +201,7 @@ public class OlapTable extends Table {
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     protected Map<Long, Long> physicalPartitionIdToPartitionId = new HashMap<>();
+    protected Map<String, Long> physicalPartitionNameToPartitionId = new HashMap<>();
 
     @SerializedName(value = "defaultDistributionInfo")
     protected DistributionInfo defaultDistributionInfo;
@@ -324,8 +326,8 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.type = this.type;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        olapTable.nameToColumn = Maps.newLinkedHashMap(this.nameToColumn);
-        olapTable.idToColumn = Maps.newLinkedHashMap(this.idToColumn);
+        olapTable.nameToColumn = new CaseInsensitiveMap(this.nameToColumn);
+        olapTable.idToColumn = new CaseInsensitiveMap(this.idToColumn);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -363,6 +365,7 @@ public class OlapTable extends Table {
         olapTable.idToPartition = idToPartitions;
         olapTable.nameToPartition = nameToPartitions;
         olapTable.physicalPartitionIdToPartitionId = this.physicalPartitionIdToPartitionId;
+        olapTable.physicalPartitionNameToPartitionId = this.physicalPartitionNameToPartitionId;
         olapTable.tempPartitions = new TempPartitions();
         for (Partition tempPartition : this.getTempPartitions()) {
             olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
@@ -643,7 +646,7 @@ public class OlapTable extends Table {
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
-            maxColUniqueId = Math.max(maxColUniqueId, column.getUniqueId());
+            maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
@@ -788,6 +791,7 @@ public class OlapTable extends Table {
                         .put(newPartId, rangePartitionInfo.idToInMemory.remove(entry.getValue()));
                 idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
                     physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                    physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
                 });
                 idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
                 Partition partition = idToPartition.get(newPartId);
@@ -800,6 +804,7 @@ public class OlapTable extends Table {
                         partition.addSubPartition(physicalPartition);
                     }
                     physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
+                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
                 });
             }
         } else {
@@ -812,6 +817,7 @@ public class OlapTable extends Table {
                 partitionInfo.idToInMemory.put(newPartId, partitionInfo.idToInMemory.remove(entry.getValue()));
                 idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
                     physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                    physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
                 });
                 idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
                 Partition partition = idToPartition.get(newPartId);
@@ -824,6 +830,7 @@ public class OlapTable extends Table {
                         partition.addSubPartition(physicalPartition);
                     }
                     physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
+                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
                 });
             }
         }
@@ -1231,6 +1238,7 @@ public class OlapTable extends Table {
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+            physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
     }
 
@@ -1253,6 +1261,9 @@ public class OlapTable extends Table {
         nameToPartition.remove(partitionName);
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
+                .collect(Collectors.toList()));
+        physicalPartitionNameToPartitionId.keySet().removeAll(partition.getSubPartitions()
+                .stream().map(PhysicalPartition::getName)
                 .collect(Collectors.toList()));
     }
 
@@ -1379,6 +1390,33 @@ public class OlapTable extends Table {
             Partition partition = getPartition(partitionId);
             if (partition != null) {
                 return partition.getSubPartition(physicalPartitionId);
+            }
+        }
+
+        return null;
+    }
+
+    public PhysicalPartition getPhysicalPartition(String physicalPartitionName) {
+        Long partitionId = physicalPartitionNameToPartitionId.get(physicalPartitionName);
+        if (partitionId == null) {
+            for (Partition partition : idToPartition.values()) {
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    if (subPartition.getName().equals(physicalPartitionName)) {
+                        return subPartition;
+                    }
+                }
+            }
+            for (Partition partition : tempPartitions.getAllPartitions()) {
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    if (subPartition.getName().equals(physicalPartitionName)) {
+                        return subPartition;
+                    }
+                }
+            }
+        } else {
+            Partition partition = getPartition(partitionId);
+            if (partition != null) {
+                return partition.getSubPartition(physicalPartitionName);
             }
         }
 
@@ -1849,10 +1887,12 @@ public class OlapTable extends Table {
         // Recover nameToPartition from idToPartition
         nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         physicalPartitionIdToPartitionId = Maps.newHashMap();
+        physicalPartitionNameToPartitionId = Maps.newHashMap();
         for (Partition partition : idToPartition.values()) {
             nameToPartition.put(partition.getName(), partition);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
             }
         }
 
@@ -1936,11 +1976,13 @@ public class OlapTable extends Table {
 
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+            physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
         });
         idToPartition.remove(oldPartition.getId());
         idToPartition.put(newPartition.getId(), newPartition);
         newPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartition.getId());
+            physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartition.getId());
         });
 
         nameToPartition.put(newPartition.getName(), newPartition);
@@ -2462,6 +2504,7 @@ public class OlapTable extends Table {
             tempPartitions.dropPartition(partitionName, needDropTablet);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
             }
         }
     }
@@ -2607,6 +2650,7 @@ public class OlapTable extends Table {
         tempPartitions.addPartition(partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+            physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
     }
 
@@ -2615,6 +2659,7 @@ public class OlapTable extends Table {
             partitionInfo.dropPartition(partition.getId());
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+                physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
             }
         }
         tempPartitions.dropAll();
@@ -2711,8 +2756,8 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
-                    new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
-                            Collectors.toList())));
+                    new UniqueConstraint(this, getKeyColumns()
+                            .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
             uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
@@ -3093,14 +3138,15 @@ public class OlapTable extends Table {
         // unique constraint
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
         if (!Strings.isNullOrEmpty(uniqueConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, uniqueConstraint);
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints()));
         }
 
         // foreign key constraint
         String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
-                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()));
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
         }
 
         // storage type

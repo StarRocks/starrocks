@@ -13,6 +13,12 @@
 // limitations under the License.
 package com.starrocks.encryption;
 
+import com.starrocks.proto.EncryptionAlgorithmPB;
+import org.apache.parquet.crypto.AesGcmDecryptor;
+import org.apache.parquet.crypto.AesGcmEncryptor;
+import org.apache.parquet.crypto.AesMode;
+import org.apache.parquet.crypto.ModuleCipherFactory;
+
 import java.security.SecureRandom;
 
 public class EncryptionUtil {
@@ -23,5 +29,27 @@ public class EncryptionUtil {
         byte[] ret = new byte[len];
         rand.nextBytes(ret);
         return ret;
+    }
+
+    static byte[] wrapKey(byte[] parentPlainKey, EncryptionAlgorithmPB algorithm, byte[] plainKey) {
+        switch (algorithm) {
+            case AES_128:
+                AesGcmEncryptor keyEncryptor =
+                        (AesGcmEncryptor) ModuleCipherFactory.getEncryptor(AesMode.GCM, parentPlainKey);
+                return keyEncryptor.encrypt(false, plainKey, null);
+            default:
+                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
+        }
+    }
+
+    static byte[] unwrapKey(byte[] parentPlainKey, EncryptionAlgorithmPB algorithm, byte[] encryptedKey) {
+        switch (algorithm) {
+            case AES_128:
+                AesGcmDecryptor keyDecryptor =
+                        (AesGcmDecryptor) ModuleCipherFactory.getDecryptor(AesMode.GCM, parentPlainKey);
+                return keyDecryptor.decrypt(encryptedKey, 0, encryptedKey.length, null);
+            default:
+                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
+        }
     }
 }

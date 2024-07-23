@@ -20,6 +20,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
@@ -168,7 +169,7 @@ public class DeltaLakeMetadataTest {
             }
         };
         List<String> partitionNames = deltaLakeMetadata.listPartitionNames("db1", "table1",
-                -1);
+                TableVersionRange.empty());
         Assert.assertEquals(3, partitionNames.size());
         Assert.assertEquals("ts=1999", partitionNames.get(0));
         Assert.assertEquals("ts=2000", partitionNames.get(1));

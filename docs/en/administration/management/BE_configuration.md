@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE Configuration
 
@@ -4768,10 +4768,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: 60
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

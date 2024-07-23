@@ -378,12 +378,9 @@ public class QueryAnalyzer {
 
                     r = viewRelation;
                 } else {
-                    if (tableRelation.getTemporalClause() != null) {
-                        if (table.getType() != Table.TableType.MYSQL && table.getType() != Table.TableType.METADATA) {
-                            throw unsupportedException(
-                                    "Unsupported table type for temporal clauses: " + table.getType() +
-                                            "; only external MYSQL tables support temporal clauses");
-                        }
+                    if (tableRelation.getQueryPeriodString() != null && !table.isTemporal()) {
+                        throw unsupportedException("Unsupported table type for temporal clauses, table type: " +
+                                table.getType());
                     }
 
                     if (table.isSupported()) {

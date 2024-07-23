@@ -41,6 +41,7 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -123,7 +124,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String dbName, String tableName, TableVersionRange version) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
@@ -156,7 +157,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<String> partitionNames = listPartitionNames(databaseName, tableName, -1);
+        List<String> partitionNames = listPartitionNames(databaseName, tableName, TableVersionRange.empty());
         List<String> ret = new ArrayList<>();
         for (String p : partitionNames) {
             if (isPartitionNameValueMatched(p, partitionValues)) {
@@ -184,7 +185,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit) {
+                                         ScalarOperator predicate, long limit, TableVersionRange version) {
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
         String hiveDb = hmsTable.getDbName();
         String tblName = hmsTable.getTableName();
@@ -209,7 +210,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange version, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = partitionKeys.size();

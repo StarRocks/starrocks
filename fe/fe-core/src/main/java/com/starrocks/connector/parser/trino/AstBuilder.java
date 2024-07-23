@@ -335,7 +335,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
         return new CTERelation(
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
-                node.getName().getValue(),
+                node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
                 queryStatement);
     }

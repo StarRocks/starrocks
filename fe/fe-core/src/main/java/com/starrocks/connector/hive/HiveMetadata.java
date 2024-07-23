@@ -34,6 +34,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.credential.CloudConfiguration;
@@ -202,7 +203,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, long snapshotId) {
+    public List<String> listPartitionNames(String dbName, String tblName, TableVersionRange version) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -214,7 +215,7 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
+                                                   TableVersionRange tableVersionRange, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
@@ -240,7 +241,7 @@ public class HiveMetadata implements ConnectorMetadata {
             useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
+        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useRemoteFileCache));
     }
 
     @Override
@@ -252,7 +253,7 @@ public class HiveMetadata implements ConnectorMetadata {
         if (table instanceof HiveTable) {
             useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
         }
-        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
+        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useRemoteFileCache));
     }
 
     @Override
@@ -283,7 +284,8 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange version) {
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -329,7 +331,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
         if (commitInfos.isEmpty()) {
             LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
             return;
@@ -401,7 +403,7 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
         // (FIXME) add this api just for tests of external table
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AddPartitionClause) {
                 addPartition(stmt, alterClause);

@@ -529,7 +529,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ctx->buffer = ByteBuffer::allocate(
+            ctx->buffer = ByteBuffer::allocate_with_tracker(
                     ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
 
         } else if (ctx->buffer->remaining() < len) {
@@ -544,7 +544,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     ctx->status = Status::MemoryLimitExceeded(err_msg);
                     return;
                 }
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(data_sz));
+                ByteBufferPtr buf = ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(data_sz));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
@@ -559,7 +559,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
-                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+                ctx->buffer = ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize));
             }
         }
 

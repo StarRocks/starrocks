@@ -40,12 +40,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.PointerType;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -60,6 +65,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -535,6 +541,17 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
+        QueryPeriod queryPeriod = node.getQueryPeriod();
+        Optional<ConnectorTableVersion> startVersion = Optional.empty();
+        Optional<ConnectorTableVersion> endVersion = Optional.empty();
+        if (queryPeriod != null) {
+            QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+            startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
+            endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+        }
+        TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTableVersionRange(node.getTable(), startVersion, endVersion);
+
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
@@ -576,7 +593,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         catalogName, dbName, node.getTable(), Lists.newArrayList(), true);
             }
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate, tableVersionRange);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
@@ -594,8 +611,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
                 scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
-                if (node.getTemporalClause() != null) {
-                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+                if (node.getQueryPeriodString() != null) {
+                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getQueryPeriodString());
                 }
             } else {
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
@@ -615,8 +632,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-            if (node.getTemporalClause() != null) {
-                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+            if (node.getQueryPeriodString() != null) {
+                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getQueryPeriodString());
             }
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
@@ -653,6 +670,34 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
         return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, List.of());
+    }
+
+    private Optional<ConnectorTableVersion> resolveQueryPeriod(Optional<Expr> version, QueryPeriod.PeriodType type) {
+        if (version.isEmpty()) {
+            return Optional.empty();
+        }
+        ScalarOperator result;
+        try {
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+            ExpressionAnalyzer.analyzeExpression(version.get(), new AnalyzeState(), scope, session);
+            ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+            result = SqlToScalarOperatorTranslator.translate(version.get(), expressionMapping, new ColumnRefFactory());
+        } catch (Exception e) {
+            throw new SemanticException("Failed to resolve query period [type: %s, value: %s]. msg: %s",
+                    type.toString(), version.get().toString(), e.getMessage());
+        }
+
+        if (!(result instanceof ConstantOperator)) {
+            if (version.get() instanceof FunctionCallExpr) {
+                throw new SemanticException("Invalid datetime function: [type: %s, value: %s]. " +
+                        "The function requirement must be inferred in frontend.", type.toString(), version.get().toString());
+            } else {
+                throw new SemanticException("Invalid version value. [type: %s, value: %s]",
+                        type.toString(), version.get().toString());
+            }
+        }
+        PointerType pointerType = type == QueryPeriod.PeriodType.TIMESTAMP ? PointerType.TEMPORAL : PointerType.VERSION;
+        return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
     }
 
     @Override
@@ -737,10 +782,10 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         int relationId = columnRefFactory.getNextRelationId();
         Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
         for (int i = 0; i < outputColumns.size(); i++) {
+            ColumnRefOperator outputColumn = outputColumns.get(i);
             Column column = viewSchema.get(i);
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(),
-                    column.isAllowNull());
+            ColumnRefOperator columnRef =
+                    columnRefFactory.create(column.getName(), outputColumn.getType(), outputColumn.isNullable());
             if (outputVariables != null) {
                 outputVariables.add(columnRef);
             }

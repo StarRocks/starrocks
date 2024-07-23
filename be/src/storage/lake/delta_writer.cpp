@@ -339,6 +339,14 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
+        // When loading memory usage is larger than hard limit, we will reject new loading task.
+        if (!config::enable_new_load_on_memory_limit_exceeded &&
+            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+                                      config::load_process_max_memory_hard_limit_ratio)) {
+            return Status::MemoryLimitExceeded(
+                    "memory limit exceeded, please reduce load frequency or increase config "
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
+        }
         RETURN_IF_ERROR(reset_memtable());
     }
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
@@ -459,7 +467,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     }
 
     // handle partial update
-    bool skip_pk_preload = false;
+    bool skip_pk_preload = config::skip_lake_pk_preload;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {

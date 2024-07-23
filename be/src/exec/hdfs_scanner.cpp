@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner.h"
 
+#include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
@@ -378,6 +379,8 @@ void HdfsScanner::update_counter() {
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
             _runtime_state->update_num_datacache_count(1);
         }
+
+        BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

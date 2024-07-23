@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
@@ -90,7 +91,7 @@ public class KuduScanNode extends ScanNode {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                kuduTable.getCatalogName(), kuduTable, null, -1, predicate, fieldNames, -1);
+                kuduTable.getCatalogName(), kuduTable, null, TableVersionRange.empty(), predicate, fieldNames, -1);
         KuduRemoteFileDesc remoteFileDesc = (KuduRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {
@@ -205,11 +206,6 @@ public class KuduScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
     }
 
     @Override

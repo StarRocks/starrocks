@@ -1,4 +1,10 @@
 -- name: test_mv_refresh_list_partitions_with_nullable
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE t3 (
       id BIGINT,
       province VARCHAR(64),
@@ -70,7 +76,7 @@ function: check_hit_materialized_view("select id, dt, province, age from t3 wher
 -- result:
 None
 -- !result
-select id, dt, province, age from t3 where id > 1 order by 1, 2;
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 -- result:
 2	2024-01-01	guangdong	20
 3	2024-01-02	guangdong	20
@@ -83,7 +89,7 @@ function: check_hit_materialized_view("select id, dt, province, age from t3 wher
 -- result:
 None
 -- !result
-select id, dt, province, age from t3 where id > 1 order by 1, 2;
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 -- result:
 2	2024-01-01	beijing	20
 2	2024-01-01	guangdong	20

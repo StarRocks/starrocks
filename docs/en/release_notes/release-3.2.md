@@ -4,6 +4,45 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.9
+
+Release date: July 11, 2024
+
+### New Features
+
+- Paimon tables now support DELETE Vectors. [#45866](https://github.com/StarRocks/starrocks/issues/45866)
+- Supports Column-level access control through Apache Ranger. [#47702](https://github.com/StarRocks/starrocks/pull/47702)
+- Stream Load can automatically convert JSON strings into STRUCT/MAP/ARRAY types during loading. [#45406](https://github.com/StarRocks/starrocks/pull/45406)
+- JDBC Catalog now supports Oracle and SQL Server. [#35691](https://github.com/StarRocks/starrocks/issues/35691)
+
+### Improvements
+
+- Improved privilege management by restricting `user_admin` role users from resetting the password of the root user. [#47801](https://github.com/StarRocks/starrocks/pull/47801)
+- Stream Load now supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+- Optimized memory usage during data loading. [#47047](https://github.com/StarRocks/starrocks/pull/47047)
+- Supports masking authentication information for the Files() function in audit logs. [#46893](https://github.com/StarRocks/starrocks/pull/46893)
+- Hive tables now support the `skip.header.line.count` property. [#47001](https://github.com/StarRocks/starrocks/pull/47001)
+- JDBC Catalog supports more data types. [#47618](https://github.com/StarRocks/starrocks/pull/47618)
+
+### Behavior Changes
+
+- Changed the value inheritance order of the `JAVA_OPTS` parameters. If versions other than JDK_9 or JDK_11 are used, users need to configure `JAVA_OPTS` directly. [#47495](https://github.com/StarRocks/starrocks/pull/47495)
+- When users create a non-partitioned table without specifying the bucket number, the minimum bucket number the system sets for the table is `16` (instead of `2` based on the formula `2*BE or CN count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- When users create a partitioned table without specifying the bucket number, if the number of partitions exceeds 5, the rule for setting the bucket count is changed to `max(2*BE or CN count, bucket number calculated based on the largest historical partition data volume)`. The previous rule was to calculate the bucket number based on the largest historical partition data volume. [#47949](https://github.com/StarRocks/starrocks/pull/47949)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- BE crash caused by ALTER TABLE ADD COLUMN after upgrading a shared-data cluster from v3.2.x to v3.3.0 and then rolling it back. [#47826](https://github.com/StarRocks/starrocks/pull/47826)
+- Tasks initiated through SUBMIT TASK showed a Running status indefinitely in the QueryDetail interface. [#47619](https://github.com/StarRocks/starrocks/pull/47619)
+- Forwarding queries to the FE Leader node caused a null pointer exception. [#47559](https://github.com/StarRocks/starrocks/pull/47559)
+- SHOW MATERIALIZED VIEWS with WHERE conditions caused a null pointer exception. [#47811](https://github.com/StarRocks/starrocks/pull/47811)
+- Vertical Compaction fails for Primary Key tables in shared-data clusters. [#47192](https://github.com/StarRocks/starrocks/pull/47192)
+- Improper handling of I/O Error when sinking data to Hive or Iceberg tables. [#46979](https://github.com/StarRocks/starrocks/pull/46979)
+- Table properties do not take effect when whitespaces are added to their values. [#47119](https://github.com/StarRocks/starrocks/pull/47119)
+- BE crash caused by concurrent migration and Index Compaction operations on Primary Key tables. [#46675](https://github.com/StarRocks/starrocks/pull/46675)
+
 ## 3.2.8
 
 Release date: June 7, 2024

@@ -14,55 +14,48 @@ CREATE TABLE IF NOT EXISTS prepare_stmt (
     PRIMARY KEY (k1, k2, k3, k4, k5)
     DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
 -- result:
-[]
 -- !result
 insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
 -- result:
-[]
 -- !result
 insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
 -- result:
-[]
 -- !result
 PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
 -- result:
-[]
 -- !result
 PREPARE stmt2 FROM 'select * from prepare_stmt order by k1';
 -- result:
-[]
 -- !result
 PREPARE stmt3 FROM select * from prepare_stmt order by k1;
 -- result:
-[]
+-- !result
+PREPARE cte_stmt_1 FROM with cte as (select * from prepare_stmt where k1 = ?) select * from cte where v9 = ?;
+-- result:
+-- !result
+PREPARE cte_stmt_2 FROM  select *, ? from (with cte as (select * from prepare_stmt where k1 = ?) select * from cte) t where v9 = ?;
+-- result:
 -- !result
 set @i = 1;
 -- result:
-[]
 -- !result
 set @i2 = 2;
 -- result:
-[]
 -- !result
 set @i3 = 3;
 -- result:
-[]
 -- !result
 set @v = '1';
 -- result:
-[]
 -- !result
 set @v2 = '2';
 -- result:
-[]
 -- !result
 set @b = true;
 -- result:
-[]
 -- !result
 set @t = '2021-02-01 00:00:12';
 -- result:
-[]
 -- !result
 execute stmt1 using @i, @i2;
 -- result:
@@ -77,20 +70,31 @@ execute stmt2;
 1	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
 3	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
 -- !result
+execute cte_stmt_1 using @i, @t;
+-- result:
+1	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
+-- !result
+execute cte_stmt_2 using @i3, @i, @t;
+-- result:
+1	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00	3
+-- !result
 drop prepare stmt1;
 -- result:
-[]
 -- !result
 deallocate prepare stmt2; -- deallocate is alias
 drop prepare stmt3;
 -- result:
-[]
+-- !result
+drop prepare cte_stmt_1;
+-- result:
+-- !result
+drop prepare cte_stmt_2;
+-- result:
 -- !result
 DROP TABLE prepare_stmt FORCE;
 -- result:
-[]
 -- !result
-CREATE TABLE `customer_row` (
+CREATE TABLE IF NOT EXISTS `customer_row` (
   `customer_key` bigint(20) NOT NULL COMMENT "",
   `customer_row_value_0` varchar(65533) NULL COMMENT "",
   `customer_row_value_1` varchar(65533) NULL COMMENT "",

@@ -65,6 +65,10 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
     }
 
+    std::string tablet_initial_metadata_location(int64_t tablet_id) const {
+        return join_path(metadata_root_location(tablet_id), tablet_initial_metadata_filename());
+    }
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const {
         return join_path(txn_log_root_location(tablet_id), txn_log_filename(tablet_id, txn_id));
     }

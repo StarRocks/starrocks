@@ -102,6 +102,7 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
@@ -753,14 +754,15 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
-                clearQueryScopeHintContext(sessionVariableBackup);
+                clearQueryScopeHintContext();
             }
 
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
         }
     }
 
-    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
-        context.setSessionVariable(sessionVariableBackup);
+    private void clearQueryScopeHintContext() {
         Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, UserVariable> entry = iterator.next();
@@ -2260,7 +2262,9 @@ public class StmtExecutor {
                     }
                 }
 
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch());
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else if (targetTable.isHiveTable()) {
@@ -2276,7 +2280,7 @@ public class StmtExecutor {
                         }
                     }
                 }
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos, null);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
             } else if (targetTable.isTableFunctionTable()) {

@@ -588,7 +588,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             chunk.append_column(flat_column, 0);
             return state->cast_expr->evaluate_checked(nullptr, &chunk);
         }
-        return flat_column;
+        return flat_column->clone();
     }
 }
 

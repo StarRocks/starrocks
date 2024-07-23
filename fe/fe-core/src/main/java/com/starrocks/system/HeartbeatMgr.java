@@ -39,7 +39,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
@@ -49,17 +48,17 @@ import com.starrocks.common.util.Util;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
-import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TBrokerOperationStatus;
 import com.starrocks.thrift.TBrokerOperationStatusCode;
 import com.starrocks.thrift.TBrokerPingBrokerRequest;
 import com.starrocks.thrift.TBrokerVersion;
-import com.starrocks.thrift.TFileBrokerService;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
@@ -192,9 +191,6 @@ public class HeartbeatMgr extends FrontendDaemon {
         // set sleep time to (heartbeat_timeout - timeUsed),
         // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
         setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
-
-        ClientPool.beHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
-        ClientPool.brokerHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
@@ -219,7 +215,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
-                        ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
+                        ThriftConnectionPool.backendPool.clearPool(
+                                new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
                         if (!isReplay && !computeNode.isAlive()) {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
@@ -249,7 +246,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     boolean isChanged = broker.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
-                        ClientPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));
+                        ThriftConnectionPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));
                     }
                     return isChanged;
                 }
@@ -272,12 +269,9 @@ public class HeartbeatMgr extends FrontendDaemon {
         @Override
         public HeartbeatResponse call() {
             long computeNodeId = computeNode.getId();
-            HeartbeatService.Client client = null;
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
-                client = ClientPool.beHeartbeatPool.borrowObject(beAddr);
-
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = HeartbeatFlags.getHeartbeatFlags();
@@ -290,7 +284,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
                     copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
                 }
-                THeartbeatResult result = client.heartbeat(copiedMasterInfo);
+                THeartbeatResult result = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.beHeartbeatPool,
+                        beAddr,
+                        client -> client.heartbeat(copiedMasterInfo));
 
                 ok = true;
                 if (result.getStatus().getStatus_code() == TStatusCode.OK) {
@@ -337,12 +334,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
                 return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
-            } finally {
-                if (ok) {
-                    ClientPool.beHeartbeatPool.returnObject(beAddr, client);
-                } else {
-                    ClientPool.beHeartbeatPool.invalidateObject(beAddr, client);
-                }
             }
         }
     }
@@ -418,15 +409,13 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         @Override
         public HeartbeatResponse call() {
-            TFileBrokerService.Client client = null;
-            TNetworkAddress addr = new TNetworkAddress(broker.ip, broker.port);
-            boolean ok = false;
             try {
-                client = ClientPool.brokerHeartbeatPool.borrowObject(addr);
                 TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
                         clientId);
-                TBrokerOperationStatus status = client.ping(request);
-                ok = true;
+                TBrokerOperationStatus status = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.brokerHeartbeatPool,
+                        new TNetworkAddress(broker.ip, broker.port),
+                        client -> client.ping(request));
 
                 if (status.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     return new BrokerHbResponse(brokerName, broker.ip, broker.port, status.getMessage());
@@ -437,12 +426,6 @@ public class HeartbeatMgr extends FrontendDaemon {
             } catch (Exception e) {
                 return new BrokerHbResponse(brokerName, broker.ip, broker.port,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
-            } finally {
-                if (ok) {
-                    ClientPool.brokerHeartbeatPool.returnObject(addr, client);
-                } else {
-                    ClientPool.brokerHeartbeatPool.invalidateObject(addr, client);
-                }
             }
         }
     }

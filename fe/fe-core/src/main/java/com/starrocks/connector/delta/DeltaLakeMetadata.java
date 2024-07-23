@@ -31,6 +31,7 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -108,19 +109,19 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator operator,
+                                                   TableVersionRange versionRange, ScalarOperator operator,
                                                    List<String> fieldNames, long limit) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, operator);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, versionRange.end().get(), operator);
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, operator, fieldNames);
 
@@ -138,7 +139,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange versionRange) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getDbName();
@@ -228,6 +230,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         List<FileScanTask> files = Lists.newArrayList();
 
+        long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+
         try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(engine, true)) {
             while (scanFilesAsBatches.hasNext()) {
                 FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
@@ -242,7 +246,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                         if (enableCollectColumnStatistics(connectContext)) {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow);
+                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
@@ -251,7 +255,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
-                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
+                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow, estimateRowSize);
                             files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {

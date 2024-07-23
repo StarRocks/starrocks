@@ -302,7 +302,7 @@ public class StatisticUtils {
             }
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+            Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
             return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
                             plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
         } else {

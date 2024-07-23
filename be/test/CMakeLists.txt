@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
@@ -47,6 +48,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
+        ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
@@ -357,6 +359,7 @@ set(EXEC_FILES
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
+        ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
@@ -376,6 +379,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./types/type_checker_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
@@ -455,6 +459,7 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./block_cache/datacache_utils_test.cpp
+        ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 
