@@ -217,18 +217,58 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     fi
     # force sys_log_to_console = true
     echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
-else
-    # redirect all subsequent commands' stdout/stderr into $LOG_FILE
-    exec &>> $LOG_FILE
 fi
 
-echo "using java version $JAVA_VERSION"
-echo $final_java_opt
-echo "start time: $(date), server uptime: $(uptime)"
+echo "using java version $JAVA_VERSION" >> $LOG_FILE
+echo $final_java_opt >> $LOG_FILE
+echo "start time: $(date), server uptime: $(uptime)" >> $LOG_FILE
+
+process_name="frontend"
+conf_file="$STARROCKS_HOME/conf/fe.conf"
+http_port=$(grep -v ^# $conf_file | grep http_port | sed 's/.*= *//')
+if [ -z "$http_port" ]; then
+    http_port="8030"
+fi
+
+check_health() {
+    response=$(curl -s -w "\n%{http_code}" http://127.0.0.1:${http_port}/api/health)
+    body=$(echo "$response" | sed -e '$d')
+    status_code=$(echo "$response" | tail -n1)
+
+    # check http status code
+    if [ "$status_code" -eq 200 ]
+    then
+        # Parse the JSON response and check the status field
+        status=$(echo "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        if [ "$status" = "OK" ]
+        then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null &
+    echo "The $process_name process is starting!"
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" &> /dev/null &
+    if command -v curl &>/dev/null; then
+        timeout=30
+        end_time=$((SECONDS + timeout))
+        while [ $SECONDS -lt $end_time ]; do
+            if check_health; then
+                echo "The $process_name process has started successfully!"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "The startup time is more than $timeout seconds, the $process_name process may not start successfully!"
+    else
+        echo "This node does not have the curl command, please manually check whether the $process_name process is successfully started"
+    fi
 else
     exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
 fi
