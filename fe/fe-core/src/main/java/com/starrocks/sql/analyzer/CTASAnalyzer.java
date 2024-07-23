@@ -22,12 +22,9 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -46,6 +43,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.ParsingException;
@@ -100,21 +98,14 @@ public class CTASAnalyzer {
             }
         }
 
+        TableName tableNameObject = createTableStmt.getDbTbl();
+        MetaUtils.normalizationTableName(session, tableNameObject);
+        createTableStmt.setEngineName(CreateTableAnalyzer.analyzeEngineName(createTableStmt.getEngineName(),
+                tableNameObject.getCatalog()));
+
         for (int i = 0; i < allFields.size(); i++) {
-            boolean isConnectorTable = false;
-            try {
-                Table connectorTable = tableRefToTable.get(allFields.get(i).getRelationAlias().getTbl());
-                if (connectorTable != null) {
-                    isConnectorTable = connectorTable instanceof HiveTable
-                            || connectorTable instanceof TableFunctionTable
-                            || connectorTable instanceof IcebergTable;
-                }
-            } catch (NullPointerException ignored) {
-                // skip if nullPointer called
-            }
-            Type type = isConnectorTable
-                    ? AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(), false)
-                    : AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
+            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
+                    createTableStmt.isOlapEngine());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");

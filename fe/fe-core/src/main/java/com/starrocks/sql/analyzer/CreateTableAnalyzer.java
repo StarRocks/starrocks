@@ -83,7 +83,7 @@ public class CreateTableAnalyzer {
         GBK,
     }
 
-    private static String analyzeEngineName(String engineName, String catalogName) {
+    protected static String analyzeEngineName(String engineName, String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             if (Strings.isNullOrEmpty(engineName)) {
                 return EngineType.defaultEngine().name();
