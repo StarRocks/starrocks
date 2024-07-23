@@ -116,7 +116,7 @@ public class FileListTableRepo extends FileListRepo {
             List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(batch);
             List<PipeFileRecord> newFiles = ListUtils.subtract(batch, stagedFiles);
             if (CollectionUtils.isEmpty(newFiles)) {
-                return;
+                continue;
             }
             stagingFile.addAll(newFiles);
 

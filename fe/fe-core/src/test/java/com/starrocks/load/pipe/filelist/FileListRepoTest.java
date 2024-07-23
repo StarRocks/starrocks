@@ -352,6 +352,52 @@ public class FileListRepoTest {
     }
 
     @Test
+    public void testStageFileBatch() {
+        FileListTableRepo repo = new FileListTableRepo();
+        repo.setPipeId(new PipeId(1, 1));
+
+        int batchSize = FileListTableRepo.SELECT_BATCH_SIZE;
+        int recordSize = batchSize + 1;
+        List<PipeFileRecord> records = Lists.newArrayList();
+        for (int i = 1; i <= recordSize; ++i) {
+            PipeFileRecord record = new PipeFileRecord();
+            record.pipeId = 1;
+            record.fileName = String.format("%d.parquet", i);
+            record.fileVersion = String.valueOf(i);
+            record.fileSize = i;
+            record.loadState = FileListRepo.PipeFileState.UNLOADED;
+            records.add(record);
+        }
+
+        RepoAccessor accessor = RepoAccessor.getInstance();
+        new Expectations(accessor) {
+            {
+                accessor.selectStagedFiles(records.subList(0, batchSize));
+                times = 1;
+                result = records.subList(0, batchSize);
+
+                accessor.selectStagedFiles(records.subList(batchSize, recordSize));
+                times = 1;
+                result = Lists.newArrayList();
+            }
+        };
+
+        RepoExecutor executor = RepoExecutor.getInstance();
+        new Expectations(executor) {
+            {
+                executor.executeDML(
+                        String.format("INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                "`error_info`, `insert_label`) VALUES (1, '%d.parquet', '%d', %d, 'UNLOADED', NULL, NULL, " +
+                                "NULL, NULL, '{\"errorMessage\":null}', '')", recordSize, recordSize, recordSize));
+                times = 1;
+                result = null;
+            }
+        };
+        repo.stageFiles(records);
+    }
+
+    @Test
     public void testExecutor(@Mocked StmtExecutor stmtExecutor) throws IOException {
         new MockUp<StmtExecutor>() {
             @Mock
