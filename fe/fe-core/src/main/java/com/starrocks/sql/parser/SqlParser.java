@@ -234,11 +234,11 @@ public class SqlParser {
         parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
                 Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
         if (!Config.enable_parser_context_cache) {
-            DFA[] dicisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
-                dicisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
             }
-           parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), dicisionDFA, new PredictionContextCache()));
+           parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
         }
 
         try {
