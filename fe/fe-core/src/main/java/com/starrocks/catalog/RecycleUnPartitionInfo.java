@@ -29,6 +29,6 @@ public class RecycleUnPartitionInfo extends RecyclePartitionInfoV2 {
 
     @Override
     public void recover(OlapTable table) throws DdlException {
-        throw new DdlException("Does not support recover list partition");
+        throw new DdlException("Does not support recover unpartitioned");
     }
 }
