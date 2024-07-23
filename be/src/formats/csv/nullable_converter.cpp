@@ -13,6 +13,14 @@ Status NullableConverter::write_string(OutputStream* os, const Column& column, s
     auto nullable_column = down_cast<const NullableColumn*>(&column);
     auto data_column = nullable_column->data_column().get();
     auto null_column = nullable_column->null_column().get();
+    if (null_column->get_data() == nullptr) {
+        LOG(INFO) << "null_column->get_data() is nullptr";
+        return Status::InternalError("null_column->get_data() is nullptr");
+    }
+    if (data_column == nullptr) {
+        LOG(INFO) << "data column is nullptr";
+        return Status::InternalError("data column is nullptr");
+    }
     if (null_column->get_data()[row_num] != 0) {
         return os->write("\\N");
     } else {

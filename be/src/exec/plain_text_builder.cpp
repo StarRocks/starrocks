@@ -60,7 +60,12 @@ Status PlainTextBuilder::add_chunk(vectorized::Chunk* chunk) {
             return Status::InternalError("Not slot ref column");
         }
         auto column_ref = ((vectorized::ColumnRef*)root);
-        columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
+        const vectorized::Column* c = chunk->get_column_by_slot_id(column_ref->slot_id()).get();
+        if (c == nullptr) {
+            LOG(INFO) << "column in chunk is nullptr. slot_id = " << column_ref->slot_id();
+            return Status::InternalError("get column from chunk failed");
+        }
+        columns_raw_ptr.emplace_back(c);
     }
 
     const std::string& row_delimiter = _options.line_terminated_by;
