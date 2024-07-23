@@ -29,7 +29,6 @@ template<class Base>
 class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<Base>> {
 public:
     ALWAYS_INLINE void* alloc(size_t size) override {
-        // void* result = static_cast<Base*>(this)->alloc(size);
         void* result = Base::alloc(size);
         _memory_usage += malloc_usable_size(result);
         return result;
@@ -42,7 +41,6 @@ public:
 
     void* realloc(void* ptr, size_t size) override {
         int64_t old_size = malloc_usable_size(ptr);
-        // void* result = static_cast<Base*>(this)->realloc(ptr, size);
         void* result = Base::realloc(ptr, size);
         if (LIKELY(result != nullptr)) {
             _memory_usage += malloc_usable_size(result) - old_size;
@@ -51,7 +49,6 @@ public:
     }
 
     void* calloc(size_t n, size_t size) override {
-        // void* result = static_cast<Base*>(this)->calloc(n, size);
         void* result = Base::calloc(n, size);
         _memory_usage += malloc_usable_size(result);
         return result;
@@ -64,34 +61,29 @@ public:
     }
 
     void* memalign(size_t align, size_t size) override {
-        // void* result = static_cast<Base*>(this)->memalign(align, size);
         void* result = Base::memalign(align, size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
     void* aligned_alloc(size_t align, size_t size) override {
-        // void* result = static_cast<Base*>(this)->aligned_alloc(align, size);
         void* result = Base::aligned_alloc(align, size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
 
     void* valloc(size_t size) override {
-        // void* result = static_cast<Base*>(this)->valloc(size);
         void* result = Base::valloc(size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
 
     void* pvalloc(size_t size) override {
-        // void* result = static_cast<Base*>(this)->pvalloc(size);
         void* result = Base::pvalloc(size);
         _memory_usage += malloc_usable_size(result);
         return result;
     }
 
     int posix_memalign(void** ptr, size_t align, size_t size) override {
-        // int result = static_cast<Base*>(this)->posix_memalign(ptr, align, size);
         int result = Base::posix_memalign(ptr, align, size);
         if (LIKELY(result == 0)) {
             _memory_usage += malloc_usable_size(*ptr);

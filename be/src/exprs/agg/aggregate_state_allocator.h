@@ -42,18 +42,11 @@ public:
     ~AggregateStateAllocator() = default;
 
     T* allocate(size_t n) {
-        if (!config::test_allocator) {
-            return static_cast<T*>(malloc(n * sizeof(T)));
-        }
         DCHECK(tls_agg_state_allocator != nullptr);
         return static_cast<T*>(tls_agg_state_allocator->alloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {
-        if (!config::test_allocator) {
-            free(ptr);
-            return;
-        }
         DCHECK(tls_agg_state_allocator != nullptr);
         tls_agg_state_allocator->free(ptr);
     }
