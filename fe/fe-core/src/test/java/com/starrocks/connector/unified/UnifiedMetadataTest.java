@@ -229,7 +229,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                icebergMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null);
+                icebergMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null);
                 result = new IcebergMetaSpec(null, null, false);
                 times = 1;
             }
@@ -281,7 +281,7 @@ public class UnifiedMetadataTest {
         Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1, TableVersionRange.empty()).isEmpty());
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null,
                 -1, TableVersionRange.empty()), null, null));
-        Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null));
+        Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null));
     }
 
     @Test

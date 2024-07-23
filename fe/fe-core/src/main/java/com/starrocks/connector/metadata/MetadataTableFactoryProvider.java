@@ -14,22 +14,14 @@
 
 package com.starrocks.connector.metadata;
 
-public enum MetadataTableType {
-    LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
-    REFS("refs");
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.iceberg.IcebergMetadataTableFactory;
 
-    public final String typeString;
-
-    MetadataTableType(String typeString) {
-        this.typeString = typeString;
-    }
-
-    public static MetadataTableType get(String type) {
-        for (MetadataTableType typeEnum : values()) {
-            if (typeEnum.typeString.equalsIgnoreCase(type)) {
-                return typeEnum;
-            }
+public class MetadataTableFactoryProvider {
+    public static AbstractMetadataTableFactory getFactory(String catalogType) {
+        if (catalogType.equalsIgnoreCase("iceberg")) {
+            return IcebergMetadataTableFactory.INSTANCE;
         }
-        throw new IllegalArgumentException("unknown type " + type);
+        throw new StarRocksConnectorException("not support getting %s metadata table factory", catalogType);
     }
 }
