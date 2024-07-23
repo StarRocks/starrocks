@@ -69,4 +69,5 @@ public:
         return static_cast<Derived*>(this)->posix_memalign(ptr, align, size);
     }
 };
+
 }

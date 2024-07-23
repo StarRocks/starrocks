@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#pragma once
 
 #include "common/compiler_util.h"
 #include "runtime/memory/allocator.h"
@@ -23,7 +24,6 @@ namespace starrocks {
 class MemHookAllocator: public AllocatorFactory<Allocator, MemHookAllocator> {
 public:
     ALWAYS_INLINE void* alloc(size_t size) override {
-        LOG(INFO) << "MemHookAllocator::alloc";
         return ::malloc(size);
     }
 

@@ -18,6 +18,7 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 
 namespace starrocks {
 class FunctionContext;

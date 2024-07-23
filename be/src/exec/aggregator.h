@@ -41,6 +41,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/mem_hook_allocator.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -299,7 +300,6 @@ public:
     }
 
     const int64_t memory_usage() const {
-        // LOG(INFO) << "agg state mem usage: " << agg_state_memory_usage() << ", allocator mem usage: " << allocator_memory_usage();
         if (is_hash_set()) {
             return hash_set_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
@@ -413,6 +413,7 @@ protected:
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
     CountingAllocatorWithHook _allocator;
+    // MemHookAllocator _allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -670,5 +671,6 @@ using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
 using SortedStreamingAggregatorPtr = std::shared_ptr<SortedStreamingAggregator>;
 using StreamingAggregatorFactory = AggregatorFactoryBase<SortedStreamingAggregator>;
 using StreamingAggregatorFactoryPtr = std::shared_ptr<StreamingAggregatorFactory>;
+
 
 } // namespace starrocks
