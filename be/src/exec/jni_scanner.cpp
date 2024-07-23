@@ -448,7 +448,7 @@ Status JniScanner::update_jni_scanner_params() {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            names.insert(column.name());
+            names.insert(column.formatted_name(_scanner_ctx.case_sensitive));
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }
