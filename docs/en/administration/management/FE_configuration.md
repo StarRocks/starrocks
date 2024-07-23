@@ -1342,6 +1342,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+#### enable_materialized_view_spill
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable spill in materialized views' refresh tasks.
+- Introduced in: 3.1.1
+
+
 ##### enable_udf
 
 - Default: false
