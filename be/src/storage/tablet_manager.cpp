@@ -396,7 +396,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         dropped_tablet = it->second;
         dropped_tablet->set_is_dropping(true);
         // we can not erase tablet from tablet map here.
-        // because if tablet is a primary key tablet. If tablet is a primary key table, deleting it may wait for apply
+        // if tablet is a primary key table, deleting it may wait for apply
         // to complete, which can take a while. If a clone occurs in the meantime, a new tablet will be created, and
         // the new tablet and the old tablet may apply at the same time, modifying the primary key index at the same time.
     }
@@ -444,7 +444,9 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
         TabletMap& tablet_map = _get_tablet_map(tablet_id);
         auto it = tablet_map.find(tablet_id);
-        tablet_map.erase(it);
+        if (it != tablet_map.end()) {
+            tablet_map.erase(it);
+        }
         _remove_tablet_from_partition(*dropped_tablet);
     }
     dropped_tablet->deregister_tablet_from_dir();

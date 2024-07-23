@@ -331,7 +331,7 @@ public:
     void remove_all_delta_column_group_cache() const;
     void remove_all_delta_column_group_cache_unlocked() const;
 
-    [[nodiscard]] bool is_dropping() const { return is_dropping; }
+    [[nodiscard]] bool is_dropping() const { return _is_dropping; }
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
