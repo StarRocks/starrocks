@@ -143,7 +143,7 @@ private:
 
     template <bool REMAIN>
     bool _flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
-                       uint32_t* flat_hit);
+                       uint32_t* hit_count);
 
 private:
     bool _has_remain = false;
