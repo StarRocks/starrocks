@@ -70,7 +70,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public boolean syncAddOrDropPartitions() {
+    public boolean syncAddOrDropPartitions() throws LockTimeoutException {
         // collect mv partition items with lock
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.READ, Config.mv_refresh_try_lock_timeout_ms)) {

@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -70,7 +71,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Sync mv and base tables partitions, add if base tables add partitions, drop partitions if base tables drop or changed
      * partitions.
      */
-    public abstract boolean syncAddOrDropPartitions() throws AnalysisException;
+    public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
     /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.

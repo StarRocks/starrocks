@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
-public class IllegalLockStateException extends Exception {
-    public IllegalLockStateException(String msg) {
+public class LockException extends Exception {
+    public LockException(String msg) {
         super(msg);
     }
 
-    public IllegalLockStateException(String msg, Exception e) {
+    public LockException(String msg, Exception e) {
         super(msg, e);
     }
 }
