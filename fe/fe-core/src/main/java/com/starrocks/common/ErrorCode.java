@@ -70,6 +70,9 @@ public enum ErrorCode {
     ERR_INVALID_GROUP_FUNC_USE(1111, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid use of group function"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
+    ERR_TOO_MANY_COLUMNS(1117, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of columns in a table must be less than or equal to %d," +
+                    " Please decrease the number of columns or increase frontend config 'max_column_number_per_table'."),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
             "Host %s is not allowed to connect to this MySQL server"),
     ERR_PASSWORD_NOT_ALLOWED(1132, new byte[] {'4', '2', '0', '0', '0'},
