@@ -28,6 +28,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -616,11 +617,11 @@ public class MaterializedViewTest {
         String bloomfilterSql = "alter table test.index_mv_to_check set (\"bloom_filter_columns\"=\"k2\")";
 
         AlterTableStmt alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        DDLStmtExecutor.execute(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bloomfilterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        DDLStmtExecutor.execute(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         Assert.assertEquals(QueryState.MysqlStateType.OK, connectContext.getState().getStateType());
@@ -659,7 +660,7 @@ public class MaterializedViewTest {
         AlterTableStmt alterViewStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
         Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
                 DdlException.class,
-                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
+                () -> DDLStmtExecutor.execute(alterViewStmt, connectContext));
     }
 
     public void testCreateMV(String mvSql) throws Exception {

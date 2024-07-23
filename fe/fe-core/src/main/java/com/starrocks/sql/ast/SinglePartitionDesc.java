@@ -47,8 +47,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
 
-    protected boolean isAnalyzed;
-
     public SinglePartitionDesc(boolean ifNotExists, String partName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.partName = partName;
@@ -60,7 +58,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.versionInfo = null;
         this.isInMemory = false;
         this.dataCacheInfo = null;
-        this.isAnalyzed = false;
     }
 
     @Override
@@ -106,10 +103,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     @Override
     public DataCacheInfo getDataCacheInfo() {
         return dataCacheInfo;
-    }
-
-    public boolean isAnalyzed() {
-        return isAnalyzed;
     }
 
     protected void analyzeProperties(Map<String, String> tableProperties,
