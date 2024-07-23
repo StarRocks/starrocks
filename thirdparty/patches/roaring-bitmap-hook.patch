@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 --- a/src/memory.c	2024-07-23 16:23:14.008781609 +0800
 +++ b/src/memory.c	2024-07-30 15:00:40.701832586 +0800
 @@ -44,26 +44,26 @@ void roaring_init_memory_hook(roaring_me
@@ -32,4 +33,26 @@
 -void roaring_aligned_free(void* p) {
 +__attribute__((weak)) void roaring_aligned_free(void* p) {
      global_memory_hook.aligned_free(p);
+=======
+--- a/include/roaring/memory.h	2024-07-23 16:24:18.610777683 +0800
++++ b/include/roaring/memory.h	2024-07-23 16:17:15.761688729 +0800
+@@ -25,12 +25,12 @@
+ 
+ void roaring_init_memory_hook(roaring_memory_t memory_hook);
+ 
+-void* roaring_malloc(size_t);
+-void* roaring_realloc(void*, size_t);
+-void* roaring_calloc(size_t, size_t);
+-void roaring_free(void*);
+-void* roaring_aligned_malloc(size_t, size_t);
+-void roaring_aligned_free(void*);
++void* roaring_malloc(size_t) __attribute__((weak));
++void* roaring_realloc(void*, size_t) __attribute__((weak));
++void* roaring_calloc(size_t, size_t) __attribute__((weak));
++void roaring_free(void*) __attribute__((weak));
++void* roaring_aligned_malloc(size_t, size_t) __attribute__((weak));
++void roaring_aligned_free(void*) __attribute__((weak));
+ 
+ #ifdef __cplusplus
+>>>>>>> 44a262685b (change roaring alloc interfaces to weak symbol)
  }
