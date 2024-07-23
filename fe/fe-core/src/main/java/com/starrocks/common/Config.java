@@ -3063,4 +3063,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
+
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
 }
