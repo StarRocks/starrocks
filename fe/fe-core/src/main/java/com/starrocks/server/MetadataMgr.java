@@ -512,11 +512,11 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table, startVersion, endVersion))
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
                 .orElse(TableVersionRange.empty().empty());
     }
 

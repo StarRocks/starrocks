@@ -124,7 +124,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default TableVersionRange getTableVersionRange(Table table,
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
                                                    Optional<ConnectorTableVersion> startVersion,
                                                    Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();

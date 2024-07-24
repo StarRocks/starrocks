@@ -441,7 +441,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    public TableVersionRange getTableVersionRange(Table table,
+    @Override
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         if (startVersion.isPresent()) {
