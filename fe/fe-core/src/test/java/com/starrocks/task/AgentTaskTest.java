@@ -44,8 +44,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
@@ -54,11 +60,14 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -244,13 +253,13 @@ public class AgentTaskTest {
         Assert.assertNotNull(request9.getUpdate_tablet_meta_info_req());
 
         // modify primary index cache
-        TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+        TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask1);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
         Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
         Assert.assertNotNull(request10.getUpdate_tablet_meta_info_req());
 
-        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask2);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
         Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
@@ -300,5 +309,44 @@ public class AgentTaskTest {
         dropTask2.failed();
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
         Assert.assertEquals(2, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, true));
+    }
+
+    @Test
+    public void testBackendNoAlive() {
+        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                null, null);
+        List<CreateReplicaTask> tasks = new ArrayList<>();
+        tasks.add((CreateReplicaTask) createReplicaTask);
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        Assert.assertThrows(RuntimeException.class,
+                () -> Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch));
+        Assert.assertEquals(0, countDownLatch.getCount());
+    }
+
+    @Test
+    public void testConnectionRefused() {
+        Backend be = new Backend(backendId1, "127.0.0.1", 9035);
+        be.setBePort(9036);
+        be.setAlive(true);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long backendId) {
+                return be;
+            }
+        };
+
+        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                null, null);
+        List<CreateReplicaTask> tasks = new ArrayList<>();
+        tasks.add((CreateReplicaTask) createReplicaTask);
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        try {
+            Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Connection refused"));
+            Assert.assertEquals(0, countDownLatch.getCount());
+        }
     }
 }

@@ -68,6 +68,10 @@ public class AgentTaskQueue {
         }
     }
 
+    public static synchronized void addTaskList(List<AgentTask> taskList) {
+        taskList.forEach(AgentTaskQueue::addTask);
+    }
+
     public static synchronized boolean addTask(AgentTask task) {
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();
