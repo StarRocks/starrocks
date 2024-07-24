@@ -687,7 +687,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         std::vector<std::string> target_paths;
         std::vector<LogicalType> target_types;
         if (path != nullptr && !path->children().empty()) {
-            auto field_name = path->path();
+            auto field_name = path->absolute_path();
             path->get_all_leafs(&access_paths);
             for (auto& p : access_paths) {
                 // use absolute path, not relative path
@@ -776,6 +776,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         if (all_iters.empty()) {
             DCHECK(!_sub_readers->empty());
+            DCHECK(source_paths.empty());
             // has none remain and can't hit any column, we read any one
             // why not return null directly, segemnt iterater need ordinal index...
             // it's canbe optimized
@@ -791,6 +792,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             const auto& rd = (*_sub_readers)[index];
             ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
             all_iters.emplace_back(std::move(iter));
+            source_paths.emplace_back(rd->name());
+            source_types.emplace_back(rd->column_type());
         }
 
         return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,

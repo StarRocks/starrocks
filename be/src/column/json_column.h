@@ -83,6 +83,8 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
+    void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+
     void append_default() override;
 
     void append_default(size_t count) override;

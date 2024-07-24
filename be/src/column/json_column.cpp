@@ -89,6 +89,7 @@ MutableColumnPtr JsonColumn::clone() const {
         auto p = this->create_mutable();
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
+        p->_path_to_index = this->_path_to_index;
         for (auto& f : this->_flat_columns) {
             p->_flat_columns.emplace_back(f->clone());
         }
@@ -107,6 +108,7 @@ ColumnPtr JsonColumn::clone_shared() const {
         auto p = this->create_mutable();
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
+        p->_path_to_index = this->_path_to_index;
         for (auto& f : this->_flat_columns) {
             p->_flat_columns.emplace_back(f->clone_shared());
         }
@@ -237,6 +239,41 @@ void JsonColumn::append_default() {
         }
     } else {
         SuperClass::append_default();
+    }
+}
+
+void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    const auto* other_json = down_cast<const JsonColumn*>(&src);
+    if (other_json->is_flat_json() && !is_flat_json()) {
+        // only hit in AggregateIterator (Aggregate mode in storage)
+        DCHECK_EQ(0, this->size());
+        std::vector<ColumnPtr> copy;
+        for (const auto& col : other_json->_flat_columns) {
+            copy.emplace_back(col->clone_empty());
+        }
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+    }
+
+    if (is_flat_json()) {
+        DCHECK(src.is_object());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
+        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
+
+        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
+
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+        }
+
+        for (size_t i = 0; i < _flat_columns.size(); i++) {
+            _flat_columns[i]->append_selective(*other_json->get_flat_field(i), indexes, from, size);
+        }
+    } else {
+        DCHECK(!this->is_flat_json());
+        DCHECK(!other_json->is_flat_json());
+        SuperClass::append_selective(src, indexes, from, size);
     }
 }
 
