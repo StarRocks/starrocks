@@ -13,7 +13,7 @@ Release date: July 18, 2024
 - [Preview] Supports temporary tables.
 - [Preview] JDBC Catalog supports Oracle and SQL Server.
 - [Preview] Unified Catalog supports Kudu.
-- Loading data into Primary Key tables with INSERT INTO supports partial updates in column mode.
+- INSERT INTO on Primary Key tables supports Partial Updates in Column mode by specifying the column list.
 - User-defined variables support the ARRAY type. [#42631](https://github.com/StarRocks/starrocks/pull/42613)
 - Stream Load supports converting JSON-type data and loading it into columns of STRUCT/MAP/ARRAY types. [#45406](https://github.com/StarRocks/starrocks/pull/45406)
 - Supports global dictionary cache.
@@ -44,6 +44,7 @@ Fixed the following issues:
 - Intermediate result spilling is enabled by default when sinking data to Hive and Iceberg. [#47118](https://github.com/StarRocks/starrocks/pull/47118)
 - Changed the default value of the BE configuration item `max_cumulative_compaction_num_singleton_deltas` to `500`. [#47621](https://github.com/StarRocks/starrocks/pull/47621)
 - When users create a partitioned table without specifying the bucket number, if the number of partitions exceeds 5, the rule for setting the bucket count is changed to `max(2*BE or CN count, bucket number calculated based on the largest historical partition data volume)`.  The previous rule was to calculate the bucket number based on the largest historical partition data volume). [#47949](https://github.com/StarRocks/starrocks/pull/47949)
+- Specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates in Column mode instead of Full Upsert in earlier versions.
 
 ### Downgrade notes
 
