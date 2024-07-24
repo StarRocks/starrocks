@@ -1122,9 +1122,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
 CONF_Bool(datacache_tiered_cache_enable, "true");
-// DataCache engines, alternatives: cachelib, starcache.
+// DataCache engines, alternatives: starcache.
+// `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manully configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+// If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
