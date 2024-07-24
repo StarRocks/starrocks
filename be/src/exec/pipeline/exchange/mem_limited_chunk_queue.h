@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <mutex>
 #include <queue>
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "serde/encode_context.h"
+#include "util/bit_mask.h"
+#include "util/phmap/phmap.h"
+#include "util/spinlock.h"
 
 namespace starrocks::pipeline {
 
@@ -32,13 +36,16 @@ private:
     };
 
     struct Block {
+        Block(int32_t consumer_number) : reader_mask(consumer_number) {}
+
         std::vector<Cell> cells;
         bool in_mem = true;
         std::atomic_bool has_load_task = false;
-        // The number of requests pending to be read.
+        // a bit mask to record which consumer is pendind read
         // there may be a flush task between can_pop and pop,
         // we should prevent the block that is about to be read from being flushed.
-        std::atomic_int pending_read_requests = 0;
+        SpinLock lock;
+        BitMask reader_mask;
         size_t memory_usage = 0;
         Block* next = nullptr;
         // spillable block, only used when spill happens
@@ -46,6 +53,19 @@ private:
         size_t flush_chunks = 0;
         size_t flush_rows = 0;
         size_t flush_bytes = 0;
+
+        void add_pending_reader(int32_t consumer_index) {
+            std::lock_guard<SpinLock> l(lock);
+            reader_mask.set_bit(consumer_index);
+        }
+        void remove_pending_reader(int32_t consumer_index) {
+            std::lock_guard<SpinLock> l(lock);
+            reader_mask.clear_bit(consumer_index);
+        }
+        bool has_pending_reader() {
+            std::lock_guard<SpinLock> l(lock);
+            return !reader_mask.all_bits_zero();
+        }
     };
 
     struct Iterator {
@@ -207,7 +227,7 @@ public:
     Status _status;
 
     std::atomic_bool _has_flush_io_task = false;
-    std::queue<Block*> _loaded_blocks;
+    phmap::flat_hash_set<Block*> _loaded_blocks;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_rows_counter = nullptr;

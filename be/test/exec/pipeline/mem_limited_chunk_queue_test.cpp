@@ -536,7 +536,7 @@ TEST_F(MemLimitedChunkQueueTest, test_concurrent_load_flush) {
         SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::flush::after_find_block_to_flush", [&](void* arg) {
             MemLimitedChunkQueue::Block* block = (MemLimitedChunkQueue::Block*)arg;
             // this block is about to be read, won't be flushed
-            ASSERT_GT(block->pending_read_requests, 0);
+            ASSERT_TRUE(block->has_pending_reader());
         });
         int32_t flushed_blocks = 0;
         SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::after_flush_block",

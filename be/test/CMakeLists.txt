@@ -386,6 +386,7 @@ set(EXEC_FILES
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
         ./util/bitmap_test.cpp
+        ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp

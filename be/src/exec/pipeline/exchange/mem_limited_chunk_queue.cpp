@@ -15,6 +15,7 @@
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "common/logging.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -42,7 +43,7 @@ MemLimitedChunkQueue::MemLimitedChunkQueue(RuntimeState* state, int32_t consumer
           _opened_source_opcount(consumer_number),
           _consumer_progress(consumer_number),
           _opts(std::move(opts)) {
-    Block* block = new Block();
+    Block* block = new Block(consumer_number);
     _head = block;
     _tail = block;
     _next_flush_block = block;
@@ -99,7 +100,7 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk) {
 
     // create a new block
     if (_tail->memory_usage >= _opts.block_size) {
-        Block* block = new Block();
+        Block* block = new Block(_consumer_number);
         block->next = nullptr;
         _tail->next = block;
         _tail = block;
@@ -164,6 +165,11 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
         }
         return Status::InternalError("unreachable path");
     }
+    // if the block is flushed forcely between can_pop and pop,
+    // we should return null and trigger load io task in next can_pop
+    if (!iter->next().get_block()->in_mem) {
+        return nullptr;
+    }
     iter->move_to_next();
     DCHECK(iter->get_block()->in_mem);
     Cell* cell = iter->get_cell();
@@ -175,8 +181,7 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
             "accumulated_bytes[{}], used_count[{}]",
             consumer_index, (void*)(iter->get_block()), cell->accumulated_rows, cell->accumulated_bytes,
             cell->used_count);
-    iter->get_block()->pending_read_requests--;
-    DCHECK(iter->get_block()->pending_read_requests >= 0);
+    iter->get_block()->remove_pending_reader(consumer_index);
     auto result = cell->chunk;
 
     _update_progress(iter);
@@ -187,8 +192,17 @@ void MemLimitedChunkQueue::_evict_loaded_block() {
     if (_loaded_blocks.size() < _consumer_number) {
         return;
     }
-    Block* block = _loaded_blocks.front();
-    _loaded_blocks.pop();
+    // because each consumer can only read one block at a time,
+    // we can definitely find a block that no one is reading
+    Block* block = nullptr;
+    for (auto& loaded_block : _loaded_blocks) {
+        if (!loaded_block->has_pending_reader()) {
+            block = loaded_block;
+            break;
+        }
+    }
+    DCHECK(block != nullptr) << "can't find evicted block";
+    _loaded_blocks.erase(block);
     _current_load_rows -= block->flush_rows;
     _current_load_bytes -= block->flush_bytes;
     for (auto& cell : block->cells) {
@@ -209,7 +223,7 @@ bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
     if (iter->has_next()) {
         auto next_iter = iter->next();
         if (next_iter.block->in_mem) {
-            next_iter.block->pending_read_requests++;
+            next_iter.block->add_pending_reader(consumer_index);
             TEST_SYNC_POINT("MemLimitedChunkQueue::can_pop::return_true::1");
             return true;
         }
@@ -359,9 +373,16 @@ Status MemLimitedChunkQueue::_flush() {
         if (block->block != nullptr) {
             return Status::OK();
         }
-        // if this block is about to be read, we should not flush it
-        if (block->pending_read_requests > 0) {
-            return Status::OK();
+        // If a consumer is about to read this block, we should avoid flushing it.
+        // However, there is one exception: when the fatest consumer has no data to consume,
+        // in order to avoid blocking the producer, we must flush it.
+        // In this case, if the consumer reads this block, we will return null and trigger a new load task on the next can_pop
+        if (block->has_pending_reader()) {
+            size_t unconsumed_bytes = _total_accumulated_bytes - _fastest_accumulated_bytes;
+            if (unconsumed_bytes > 0) {
+                return Status::OK();
+            }
+            VLOG_ROW << fmt::format("force flush block [{}] to avoid blocking producer", (void*)block);
         }
     }
 
@@ -502,7 +523,7 @@ Status MemLimitedChunkQueue::_load(Block* block) {
         block->in_mem = true;
         block->has_load_task = false;
         _evict_loaded_block();
-        _loaded_blocks.push(block);
+        _loaded_blocks.insert(block);
         _current_load_rows += block->flush_rows;
         _current_load_bytes += block->flush_bytes;
         VLOG_ROW << fmt::format("load block done, block[{}], current load rows[{}], current load bytes[{}]",
