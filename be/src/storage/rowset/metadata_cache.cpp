@@ -24,11 +24,15 @@ MetadataCache::MetadataCache(size_t capacity) {
 }
 
 void MetadataCache::cache_rowset(Rowset* ptr) {
-    _insert(ptr->rowset_id_str(), ptr, ptr->total_memory_usage());
+    _insert(ptr->rowset_id_str(), ptr, ptr->segment_memory_usage());
 }
 
 void MetadataCache::evict_rowset(Rowset* ptr) {
     _erase(ptr->rowset_id_str());
+}
+
+size_t MetadataCache::get_memory_usage() const {
+    return _cache->get_memory_usage();
 }
 
 void MetadataCache::_insert(const std::string& key, Rowset* ptr, size_t size) {

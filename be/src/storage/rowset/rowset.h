@@ -375,9 +375,7 @@ public:
 
     Status verify();
 
-    size_t total_memory_usage();
-    // For Test only
-    size_t TEST_load_segment_cnt() const { return _segments.size(); }
+    size_t segment_memory_usage();
 
 protected:
     friend class RowsetFactory;

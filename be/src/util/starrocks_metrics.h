@@ -220,6 +220,9 @@ public:
     // Accumulated time that task pends in the queue
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
 
+    // Metrics for metadata lru cache
+    METRIC_DEFINE_INT_GAUGE(metadata_lru_cache_bytes_total, MetricUnit::BYTES);
+
     // Metrics for delta writer
     // Accumulated time that delta writer waits for memtable flush. It's part of
     // async_delta_writer_task_execute_duration_us

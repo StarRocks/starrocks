@@ -40,6 +40,9 @@ public:
     // evict this rowset manually, will be called before rowset destroy.
     void evict_rowset(Rowset* ptr);
 
+    // Memory usage of lru cache
+    size_t get_memory_usage() const;
+
 private:
     void _insert(const std::string& key, Rowset* ptr, size_t size);
     void _erase(const std::string& key);

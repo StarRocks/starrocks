@@ -26,6 +26,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 class MetadataCacheTest : public ::testing::Test {
@@ -110,7 +111,7 @@ TEST_F(MetadataCacheTest, test_auto_evcit) {
         rowsets.push_back(rowset_ptr);
     }
     for (int i = 0; i < 10; i++) {
-        ASSERT_TRUE(rowsets[i]->TEST_load_segment_cnt() == 0);
+        ASSERT_TRUE(rowsets[i]->segment_memory_usage() == 0);
     }
 }
 
@@ -126,14 +127,14 @@ TEST_F(MetadataCacheTest, test_manual_evcit) {
     for (int i = 0; i < 10; i++) {
         auto rowset_ptr = create_rowset(tablet_ptr, keys);
         ASSERT_TRUE(rowset_ptr->load().ok());
-        ASSERT_TRUE(rowset_ptr->total_memory_usage() > 0);
+        ASSERT_TRUE(rowset_ptr->segment_memory_usage() > 0);
         metadata_cache_ptr->cache_rowset(rowset_ptr.get());
         rowsets.push_back(rowset_ptr);
     }
     for (int i = 0; i < 10; i++) {
-        ASSERT_TRUE(rowsets[i]->TEST_load_segment_cnt() > 0);
+        ASSERT_TRUE(rowsets[i]->segment_memory_usage() > 0);
         metadata_cache_ptr->evict_rowset(rowsets[i].get());
-        ASSERT_TRUE(rowsets[i]->TEST_load_segment_cnt() == 0);
+        ASSERT_TRUE(rowsets[i]->segment_memory_usage() == 0);
     }
 }
 
