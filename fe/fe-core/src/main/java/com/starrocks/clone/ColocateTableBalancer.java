@@ -768,13 +768,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         db.readUnlock();
                         db.readLock();
                         lockStart = System.nanoTime();
-<<<<<<< HEAD
                         if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
-                            return new ColocateMatchResult(lockTotalTime, false);
-=======
-                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
->>>>>>> 42325f4a14 ([BugFix] Fixed a bug where a colocation group was marked as unstable when it was first created (#48830))
                         }
                         if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
