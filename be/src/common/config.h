@@ -1372,5 +1372,7 @@ CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
 
 } // namespace starrocks::config
