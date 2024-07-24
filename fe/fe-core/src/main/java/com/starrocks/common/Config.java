@@ -2053,16 +2053,16 @@ public class Config extends ConfigBase {
     public static int max_distribution_pruner_recursion_depth = 100;
 
     /**
-     * Used to limit num of partition for one batch partition clause
+     * Used to limit num of partition for one batch partition clause or one load for expression partition
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, aliases = {"auto_partition_max_creation_number_per_load"})
     public static long max_partitions_in_one_batch = 4096;
 
     /**
      * Used to limit num of partition for automatic partition table automatically created
      */
-    @ConfField(mutable = true)
-    public static long max_automatic_partition_number = 4096;
+    @ConfField(mutable = true, aliases = {"max_automatic_partition_number"})
+    public static long max_partition_number_per_table = 100000;
 
     /**
      * enable automatic bucket for random distribution table
