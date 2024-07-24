@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.RemoteMetaSplit;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,14 +44,14 @@ public class IcebergMetadataScanNode extends ScanNode {
 
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> result = new ArrayList<>();
-    private String temporalClause;
     private String serializedTable;
     private boolean loadColumnStats;
+    private final TableVersionRange version;
 
-    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String temporalClause) {
+    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TableVersionRange version) {
         super(id, desc, planNodeName);
         this.table = (LogicalIcebergMetadataTable) desc.getTable();
-        this.temporalClause = temporalClause;
+        this.version = version;
     }
 
     public void preProcessIcebergPredicate(String icebergPredicate) {
@@ -71,15 +72,7 @@ public class IcebergMetadataScanNode extends ScanNode {
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();
 
-        long snapshotId = -1;
-        // TODO(stephen): parse version by AstBuilder
-        if (!Strings.isNullOrEmpty(temporalClause)) {
-            String kw = "for version as of";
-            temporalClause = temporalClause.substring(kw.length()).trim();
-            snapshotId = Long.parseLong(temporalClause);
-        }
-
-
+        long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getSerializedMetaSpec(catalogName, originDbName, originTableName, snapshotId, icebergPredicate).cast();
 
