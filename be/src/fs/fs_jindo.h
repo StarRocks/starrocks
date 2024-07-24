@@ -52,6 +52,16 @@ private:
     HashMap _configs;
 };
 
+struct JindoClient {
+    JindoClient(std::shared_ptr<JdoStore_t> client, JdoOptions_t opt) {
+        jdo_store = std::move(client);
+        option = opt;
+    }
+
+    std::shared_ptr<JdoStore_t> jdo_store;
+    JdoOptions_t option;
+};
+
 std::unique_ptr<FileSystem> new_fs_jindo(const FSOptions& options);
 
 class JindoClientFactory {
@@ -71,7 +81,7 @@ public:
     bool option_equals(const JdoOptions_t& left, const JdoOptions_t& right);
     StatusOr<std::string> get_local_user();
     JdoOptions_t get_or_create_jindo_opts(const S3URI& uri, const FSOptions& opts);
-    StatusOr<std::shared_ptr<JdoStore_t>> new_client(const S3URI& uri, const FSOptions& opts);
+    StatusOr<std::shared_ptr<JindoClient>> new_client(const S3URI& uri, const FSOptions& opts);
 
 private:
     JindoClientFactory();
@@ -84,9 +94,8 @@ private:
 
     std::mutex _lock;
     int _items{0};
-    // _configs[i] is the client configuration of _clients[i].
-    JdoOptions_t _configs[MAX_CLIENTS_ITEMS];
-    std::shared_ptr<JdoStore_t> _clients[MAX_CLIENTS_ITEMS];
+
+    std::shared_ptr<JindoClient> _jindo_clients[MAX_CLIENTS_ITEMS];
     Random _rand;
 
     HashMap _jindo_config_map;

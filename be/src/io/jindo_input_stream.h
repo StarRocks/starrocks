@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "fs/fs_jindo.h"
 #include "io/seekable_input_stream.h"
 #include "jindo_utils.h"
 #include "jindosdk/jdo_api.h"
@@ -28,8 +29,11 @@ namespace starrocks::io {
 
 class JindoInputStream final : public SeekableInputStream {
 public:
-    explicit JindoInputStream(std::shared_ptr<JdoStore_t> client, std::string file_path)
-            : _jindo_client(std::move(client)), _open_handle(nullptr), _file_path(std::move(file_path)) {}
+    explicit JindoInputStream(std::shared_ptr<JindoClient> client, std::string file_path)
+            : _jindo_client(client->jdo_store),
+              _option(client->option),
+              _open_handle(nullptr),
+              _file_path(std::move(file_path)) {}
 
     ~JindoInputStream() override {
         if (_open_handle != nullptr) {
@@ -63,6 +67,7 @@ public:
 
 private:
     std::shared_ptr<JdoStore_t> _jindo_client;
+    JdoOptions_t _option;
     JdoIOContext_t _open_handle;
     std::string _file_path;
     int64_t _offset{0};

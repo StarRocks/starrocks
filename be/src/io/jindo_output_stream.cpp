@@ -15,14 +15,18 @@
 #include "io/jindo_output_stream.h"
 
 #include "common/logging.h"
+#include "jindosdk/jdo_option_keys.h"
+#include "jindosdk/jdo_options.h"
 
 namespace starrocks::io {
 
 Status JindoOutputStream::write(const void* data, int64_t size) {
     if (_write_handle == nullptr) {
         JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+        // allow open file whose parent dir not exists by set JDO_CREATE_OPTS_IS_CREATE_PARENT true
+        jdo_setOption(_option, JDO_CREATE_OPTS_IS_CREATE_PARENT, "1");
         _write_handle =
-                jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777, nullptr);
+                jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777, _option);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {

@@ -23,7 +23,7 @@ namespace starrocks::io {
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     if (_open_handle == nullptr) {
         JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
-        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777, nullptr);
+        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777, _option);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {

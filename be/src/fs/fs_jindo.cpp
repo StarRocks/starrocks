@@ -206,15 +206,15 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     return jdo_options;
 }
 
-StatusOr<std::shared_ptr<JdoStore_t>> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
+StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
     std::lock_guard l(_lock);
     auto jdo_options = get_or_create_jindo_opts(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
 
     for (size_t i = 0; i < _items; i++) {
-        if (option_equals(_configs[i], jdo_options)) {
+        if (option_equals(_jindo_clients[i]->option, jdo_options)) {
             jdo_freeOptions(jdo_options);
-            return _clients[i];
+            return _jindo_clients[i];
         }
     }
 
@@ -245,8 +245,8 @@ StatusOr<std::shared_ptr<JdoStore_t>> JindoClientFactory::new_client(const S3URI
         int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
 
         LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
-        auto old_client = *_clients[idx];
-        jdo_freeOptions(_configs[idx]);
+        auto old_client = *(_jindo_clients[idx]->jdo_store);
+        jdo_freeOptions(_jindo_clients[idx]->option);
         JdoHandleCtx_t ctx = jdo_createHandleCtx1(old_client);
         jdo_destroyStore(ctx);
         Status destroy_status = io::check_jindo_status(ctx);
@@ -255,16 +255,15 @@ StatusOr<std::shared_ptr<JdoStore_t>> JindoClientFactory::new_client(const S3URI
             return destroy_status;
         }
         jdo_freeStore(old_client);
-
-        _configs[idx] = jdo_options;
-        _clients[idx] = client;
+        _jindo_clients[idx]->jdo_store = client;
+        _jindo_clients[idx]->option = jdo_options;
+        return _jindo_clients[idx];
     } else {
         LOG(INFO) << "Put jindo client for " << uri_prefix << ", index " << _items;
-        _configs[_items] = jdo_options;
-        _clients[_items] = client;
+        auto result = _jindo_clients[_items] = std::make_shared<JindoClient>(client, jdo_options);
         _items++;
+        return result;
     }
-    return client;
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> JindoFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
@@ -305,6 +304,7 @@ StatusOr<std::unique_ptr<WritableFile>> JindoFileSystem::new_writable_file(const
         return Status::InvalidArgument(fmt::format("Invalid OSS URI {}", path));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+
     auto output_stream = std::make_unique<io::JindoOutputStream>(std::move(client), path);
     return std::make_unique<OutputStreamAdapter>(std::move(output_stream), path);
 }
@@ -316,7 +316,7 @@ Status JindoFileSystem::path_exists(const std::string& path) {
     }
 
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     bool result = jdo_exists(jdo_ctx, path.c_str(), nullptr);
     Status status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -342,7 +342,7 @@ Status JindoFileSystem::iterate_dir(const std::string& dir, const std::function<
         ndir.append("/");
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     JdoListDirResult_t listResult = jdo_listDir(jdo_ctx, ndir.c_str(), false, nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -391,7 +391,7 @@ Status JindoFileSystem::iterate_dir2(const std::string& dir, const std::function
         ndir.append("/");
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     JdoListDirResult_t listResult = jdo_listDir(jdo_ctx, ndir.c_str(), false, nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -442,7 +442,7 @@ Status JindoFileSystem::remove_internal(const std::string& path, bool recursive)
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     bool result = jdo_remove(jdo_ctx, path.c_str(), recursive, nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -468,7 +468,7 @@ Status JindoFileSystem::create_dir_internal(const std::string& dirname, bool rec
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", dirname));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     bool result = jdo_mkdir(jdo_ctx, dirname.c_str(), recursive, 0777, nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -533,7 +533,7 @@ StatusOr<JdoFileStatus_t> JindoFileSystem::get_file_status(const std::string& pa
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
 
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     JdoFileStatus_t file_status = jdo_getFileStatus(jdo_ctx, path.c_str(), nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
@@ -580,7 +580,7 @@ Status JindoFileSystem::rename_file(const std::string& src, const std::string& t
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", src));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createHandleCtx1(*client);
+    auto jdo_ctx = jdo_createHandleCtx1(*(client->jdo_store));
     bool result = jdo_rename(jdo_ctx, src.c_str(), target.c_str(), nullptr);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
