@@ -216,7 +216,7 @@ public class AgentBatchTask implements Runnable {
         } // end for compute node
     }
 
-    private TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
+    public static TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
         TAgentTaskRequest tAgentTaskRequest = new TAgentTaskRequest();
         tAgentTaskRequest.setProtocol_version(TAgentServiceVersion.V1);
         tAgentTaskRequest.setSignature(task.getSignature());
