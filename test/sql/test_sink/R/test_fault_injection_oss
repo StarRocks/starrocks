@@ -1,4 +1,4 @@
--- name: test_sink_parquet_fault_injection_oss
+-- name: test_sink_parquet_fault_injection_oss @sequential
 shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:
 0
@@ -101,7 +101,7 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0
 0
 
 -- !result
--- name: test_sink_orc_fault_injection_oss
+-- name: test_sink_orc_fault_injection_oss @sequential
 shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:
 0
@@ -204,7 +204,7 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0
 0
 
 -- !result
--- name: test_sink_textfile_fault_injection_oss
+-- name: test_sink_textfile_fault_injection_oss @sequential
 shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:
 0
