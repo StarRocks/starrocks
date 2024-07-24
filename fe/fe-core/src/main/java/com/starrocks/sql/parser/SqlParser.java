@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
@@ -57,10 +59,12 @@ public class SqlParser {
     }
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
-            return parseWithTrinoDialect(sql, sessionVariable);
-        } else {
-            return parseWithStarRocksDialect(sql, sessionVariable);
+        try (Timer ignored = Tracers.watchScope("Parser")) {
+            if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+                return parseWithTrinoDialect(sql, sessionVariable);
+            } else {
+                return parseWithStarRocksDialect(sql, sessionVariable);
+            }
         }
     }
 
