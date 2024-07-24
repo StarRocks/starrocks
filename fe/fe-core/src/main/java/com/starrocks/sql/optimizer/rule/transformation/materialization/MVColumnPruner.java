@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -80,6 +81,10 @@ public class MVColumnPruner {
                     scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                             .collect(Collectors.toSet());
             outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates()
+                        .forEach(o -> outputColumns.addAll(Utils.extractColumnRef(o)));
+            }
             if (outputColumns.isEmpty()) {
                 outputColumns.add(
                         Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
