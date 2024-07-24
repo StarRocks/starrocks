@@ -59,6 +59,9 @@ public class GroupExecutionPlanTest extends PlanTestBase {
                     " join [broadcast] colocate1 z on z.k1 = tb.k1 ");
             querys.add("select * from (select distinct k1, k2 from colocate1)l join (select k1, k2 from colocate2)r " +
                     " on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "left join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
+
 
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
@@ -131,7 +134,11 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             // table function
             querys.add("select k1,k2 from colocate1, UNNEST([])");
             querys.add("select distinct generate_series from TABLE(generate_series(65530, 65536))");
-
+            // bucket shuffle with right join
+            querys.add("select * from colocate1 l right join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l right semi join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "right join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertNotContains(plan, "colocate exec groups:");
@@ -146,6 +153,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void partialSupported() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -173,6 +181,10 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select distinct tb.k1,tb.k2,tb.k3,tb.k4 from (select l.k1 k1, l.k2 k2,r.k1 k3,r.k2 k4 " +
                     "from (select k1, k2 from colocate1 l) l join [bucket] colocate2 r on l.k1 = r.k1 and l.k2 = r.k2) tb " +
                     "join colocate1 z;");
+            // CTE as probe runtime filter probe side
+            querys.add("with a as (select distinct k1, k2 from colocate1) " +
+                    "select distinct l.k1,r.k2 from colocate1 l join [broadcast] a r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "join [colocate] colocate2 z on l.k1=z.k1 and l.k2=z.k2");
 
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
