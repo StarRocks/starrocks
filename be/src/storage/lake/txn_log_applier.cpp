@@ -52,8 +52,8 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
             // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the
-            // `enable_alter_struct` configuration. Once testing is complete, this configuration will be removed.
-            if (config::enable_alter_struct) {
+            // `lake_enable_alter_struct` configuration. Once testing is complete, this configuration will be removed.
+            if (config::lake_enable_alter_struct) {
                 if (metadata->rowset_schema_id_size() == 0) {
                     metadata->mutable_historical_schema()->clear();
                     auto schema_id = metadata->schema().id();
@@ -228,7 +228,6 @@ private:
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
-        Status st;
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);

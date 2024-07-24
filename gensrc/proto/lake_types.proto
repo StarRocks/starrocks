@@ -141,7 +141,10 @@ message TabletMetadataPB {
     optional TabletSchemaPB source_schema = 14;
     optional PersistentIndexSstableMetaPB sstable_meta = 15;
     optional DeltaColumnGroupMetadataPB dcg_meta = 16;
+    // Keep the tablet schema before each Alter operation
+    // If no rowset use the tablet schema any more, it will be gc by compaction
     map<int64, TabletSchemaPB> historical_schema = 17;
+    // Keep tablet schema id for each rowset
     repeated int64 rowset_schema_id = 18;
 }
 

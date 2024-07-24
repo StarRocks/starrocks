@@ -219,7 +219,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
     // get input rowset index
-    std::set<uint32_t> input_rowset_index;
+    std::unordered_set<uint32_t> input_rowset_index;
     int32_t last_input_rowset_index = 0;
     for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
         auto input_id = op_compaction.input_rowsets(i);

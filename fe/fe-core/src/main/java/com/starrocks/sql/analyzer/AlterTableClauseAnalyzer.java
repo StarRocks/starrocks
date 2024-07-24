@@ -725,7 +725,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!(table instanceof OlapTable)) {
+        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
             throw new SemanticException("Add field only support olap table");
         }
 
@@ -746,7 +746,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!(table instanceof OlapTable)) {
+        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
             throw new SemanticException("Drop field only support olap table");
         }
 
