@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
@@ -494,9 +495,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
-        if (sessionVariable.isEnableRewriteGroupingsetsToUnionAll()) {
-            ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
-        }
+        rewriteGroupingSets(tree, rootTaskContext, sessionVariable);
 
         // No heavy metadata operation before external table partition prune
         prepareMetaOnlyOnce(tree, rootTaskContext);
@@ -607,6 +606,15 @@ public class Optimizer {
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
         return tree.getInputs().get(0);
+    }
+
+    private void rewriteGroupingSets(OptExpression tree, TaskContext rootTaskContext, SessionVariable sessionVariable) {
+        if (sessionVariable.isEnableRewriteGroupingsetsToUnionAll()) {
+            ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
+        }
+        if (sessionVariable.isCboPushDownGroupingSet()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
+        }
     }
 
     private Optional<OptExpression> ruleRewriteForShortCircuit(OptExpression tree, TaskContext rootTaskContext) {

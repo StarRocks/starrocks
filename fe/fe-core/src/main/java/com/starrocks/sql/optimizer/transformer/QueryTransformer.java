@@ -383,7 +383,7 @@ public class QueryTransformer {
     public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
-        if (aggregates.size() == 0 && groupByExpressions.size() == 0) {
+        if (aggregates.isEmpty() && groupByExpressions.isEmpty()) {
             return subOpt;
         }
 
@@ -510,7 +510,7 @@ public class QueryTransformer {
                 // causing the data to be aggregated in advance.
                 // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
                 while (groupingID.contains(gid)) {
-                    gid += Math.pow(2, groupByColumnRefs.size());
+                    gid += (1L << groupByColumnRefs.size());
                 }
                 groupingID.add(gid);
             }
