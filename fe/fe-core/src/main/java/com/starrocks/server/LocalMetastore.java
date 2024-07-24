@@ -178,6 +178,8 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
@@ -233,13 +235,16 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -253,6 +258,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -267,7 +273,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -2026,21 +2034,55 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     private void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
                                         MarkedCountDownLatch<Long, Long> countDownLatch) {
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+        HashMap<Long, List<AgentTask>> backendToBatchTask = new HashMap<>();
+
         for (CreateReplicaTask task : tasks) {
             task.setLatch(countDownLatch);
             countDownLatch.addMark(task.getBackendId(), task.getTabletId());
-            AgentBatchTask batchTask = batchTaskMap.get(task.getBackendId());
-            if (batchTask == null) {
-                batchTask = new AgentBatchTask();
-                batchTaskMap.put(task.getBackendId(), batchTask);
+
+            List<AgentTask> batchTask = backendToBatchTask.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+            batchTask.add(task);
+        }
+
+        try {
+            List<CompletableFuture<Boolean>> futures = new ArrayList<>();
+            for (Map.Entry<Long, List<AgentTask>> entry : backendToBatchTask.entrySet()) {
+                AgentTaskQueue.addTaskList(entry.getValue());
+                futures.add(sendTask(entry.getKey(), entry.getValue()));
             }
-            batchTask.addTask(task);
+
+            for (CompletableFuture<Boolean> future : futures) {
+                if (!future.get()) {
+                    countDownLatch.countDownToZero(Status.internalError("Send Create Replica Task fail"));
+                }
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            countDownLatch.countDownToZero(Status.internalError(e.getMessage()));
+            throw new RuntimeException(e);
         }
-        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
-            AgentTaskQueue.addBatchTask(entry.getValue());
-            AgentTaskExecutor.submit(entry.getValue());
-        }
+    }
+
+    private CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getBackendOrComputeNode(backendId);
+                if (computeNode == null || !computeNode.isAlive()) {
+                    throw new RuntimeException("Can't get backend " + backendId);
+                }
+
+                List<TAgentTaskRequest> agentTaskRequests =
+                        agentBatchTask.stream().map(AgentBatchTask::toAgentTaskRequest).collect(Collectors.toList());
+
+                ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()),
+                        client -> client.submit_tasks(agentTaskRequests));
+                return true;
+            } catch (TException e) {
+                throw new RuntimeException(e);
+            }
+        }, AgentTaskExecutor.EXECUTOR);
     }
 
     // REQUIRE: must set countDownLatch to error stat before throw an exception.
