@@ -808,6 +808,7 @@ public class ConnectProcessor {
                     return null;
                 }
             }.visit(statement);
+            statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = new StmtExecutor(ctx, statement);
             executor.setProxy();
