@@ -627,27 +627,29 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 }
 
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
-    int64_t size = 0;
-    std::shared_lock rdlock(_meta_lock);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        const auto& it = _tablet_in_writing_size.find(tablet_id);
+        if (it != _tablet_in_writing_size.end()) {
+            VLOG(1) << "tablet " << tablet_id << " in writing data size: " << it->second;
+            return it->second;
+        }
+    }
+    return add_in_writing_data_size(tablet_id, 0);
+}
+
+int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
+    std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
     if (it != _tablet_in_writing_size.end()) {
-        size = it->second;
+        it->second += size;
+    } else {
+        // data size is not in cache, get it from tablet meta
+        _tablet_in_writing_size[tablet_id] = get_tablet_data_size(tablet_id, nullptr).value_or(0) + size;
     }
-    VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
-    return size;
-}
-
-void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
-    std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_size[tablet_id] += size;
     VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_size[tablet_id]
             << " size: " << size;
-}
-
-void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
-    std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id << " in writing data size: " << _tablet_in_writing_size[tablet_id];
-    _tablet_in_writing_size.erase(tablet_id);
+    return _tablet_in_writing_size[tablet_id];
 }
 
 void TabletManager::clean_in_writing_data_size() {
