@@ -57,8 +57,6 @@ public:
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
-#else
-        options.engine = "cachelib";
 #endif
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;

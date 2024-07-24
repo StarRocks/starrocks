@@ -69,7 +69,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                      << ", you'd better use the configuration items prefixed `datacache` instead!";
     }
 
-#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
+#if !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
         config::datacache_enable = false;
@@ -113,8 +113,6 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         if (config::datacache_engine == "") {
 #if defined(WITH_STARCACHE)
             config::datacache_engine = "starcache";
-#else
-            config::datacache_engine = "cachelib";
 #endif
         }
         cache_options.meta_path = config::datacache_meta_path;
@@ -325,7 +323,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
-#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+#if defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
