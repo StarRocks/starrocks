@@ -34,7 +34,10 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.ParserATNSimulator;
+import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -225,6 +228,13 @@ public class SqlParser {
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
+        if (!Config.enable_parser_context_cache) {
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
+            }
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
+        }
         try {
             // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
             // try SLL mode with BailErrorStrategy firstly
