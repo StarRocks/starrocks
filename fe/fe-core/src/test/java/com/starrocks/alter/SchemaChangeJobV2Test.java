@@ -118,7 +118,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
@@ -133,7 +133,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
@@ -187,7 +187,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
@@ -293,7 +293,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     public void testModifyDynamicPropertyTrim() throws Exception {
         String sql = "ALTER TABLE testDb1.testTable1 SET(\"dynamic_partition.buckets \"=\"1\")";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals("1", stmt.getOps().get(0).getProperties().get("dynamic_partition.buckets"));
+        Assert.assertEquals("1", stmt.getAlterClauseList().get(0).getProperties().get("dynamic_partition.buckets"));
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
@@ -384,7 +384,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
         String stmt = "alter table testDb1.testTable1 order by (v1, v2)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
+        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getAlterClauseList().get(0);
 
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
@@ -423,7 +423,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();

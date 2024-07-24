@@ -91,7 +91,7 @@ public class AstBuilderTest {
         String sql = "alter table db.test truncate partition p1";
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
-        List<AlterClause> alterClauses = aStmt.getOps();
+        List<AlterClause> alterClauses = aStmt.getAlterClauseList();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }

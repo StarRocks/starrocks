@@ -14,8 +14,11 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.alter.AlterOperations;
+=======
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
@@ -46,14 +49,8 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
         this.context = context;
     }
 
-    public void checkConflict() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-    }
-
     public void applyClauses() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         try {
             for (AlterClause c : alterClauses) {
                 visit(c, context);
@@ -64,7 +61,6 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
     }
 
     public void execute() throws DdlException {
-        checkConflict();
         applyClauses();
     }
 

@@ -167,8 +167,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser("ALTER TABLE t3 ADD COLUMN c1 INT",
                 connectContext);
-        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) handler.analyzeAndCreateJob(stmt.getOps(), db,
-                table);
+        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob)
+                handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
         Assert.assertNotNull(job);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());

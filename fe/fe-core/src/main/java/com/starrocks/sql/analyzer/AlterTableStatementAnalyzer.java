@@ -14,13 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -28,6 +33,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
@@ -35,9 +41,26 @@ public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
+<<<<<<< HEAD
         List<AlterClause> alterClauseList = statement.getOps();
+=======
+        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
+        List<AlterClause> alterClauseList = statement.getAlterClauseList();
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
+        }
+
+        checkAlterOpConflict(alterClauseList);
+
+        Database db = MetaUtils.getDatabase(context, tbl);
+        if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
+            try {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
+                db.checkQuota();
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         Table table = MetaUtils.getSessionAwareTable(context, null, tbl);
@@ -56,6 +79,20 @@ public class AlterTableStatementAnalyzer {
         AlterTableClauseAnalyzerEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerEPack(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
+        }
+    }
+
+    private static void checkAlterOpConflict(List<AlterClause> alterClauses) {
+        Set<AlterOpType> checkedAlterOpTypes = Sets.newHashSet();
+        for (AlterClause alterClause : alterClauses) {
+            AlterOpType opType = alterClause.getOpType();
+            for (AlterOpType currentOp : checkedAlterOpTypes) {
+                if (!AlterOpType.COMPATIBITLITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
+                    throw new SemanticException("Alter operation " + opType + " conflicts with operation " + currentOp);
+                }
+            }
+
+            checkedAlterOpTypes.add(opType);
         }
     }
 

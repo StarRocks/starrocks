@@ -1107,7 +1107,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         if (getClusterAvailableCapacityB() <= 0L) {
-            throw new DdlException("Cluster has no available capacity");
+            throw new SemanticException("Cluster has no available capacity");
         }
     }
 

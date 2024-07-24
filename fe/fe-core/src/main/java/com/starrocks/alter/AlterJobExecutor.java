@@ -310,7 +310,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
         this.db = db;
         this.table = table;
-        for (AlterClause alterClause : statement.getOps()) {
+        for (AlterClause alterClause : statement.getAlterClauseList()) {
             visit(alterClause, context);
         }
         return null;

@@ -68,9 +68,9 @@ public class AlterTableTest extends TableTestBase {
 
         String sql = "alter table iceberg_catalog.db.srTableName create branch test_branch_1";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(stmt.getOps().size(), 1);
-        Assert.assertTrue(stmt.getOps().get(0) instanceof CreateOrReplaceBranchClause);
-        CreateOrReplaceBranchClause clause = (CreateOrReplaceBranchClause) stmt.getOps().get(0);
+        Assert.assertEquals(stmt.getAlterClauseList().size(), 1);
+        Assert.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceBranchClause);
+        CreateOrReplaceBranchClause clause = (CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0);
         Assert.assertTrue(clause.isCreate());
         Assert.assertEquals(clause.getBranchName(), "test_branch_1");
         Assert.assertEquals(clause.getOpType(), AlterOpType.ALTER_BRANCH);
@@ -113,8 +113,13 @@ public class AlterTableTest extends TableTestBase {
                 "with snapshot retention 2 " +
                 "snapshots 2 days", snapshotId);
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getOps().get(0)).isReplace());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt, connectContext);
+=======
+        Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isReplace());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         mockedNativeTableB.refresh();
         Assert.assertEquals(4, mockedNativeTableB.refs().size());
 
@@ -124,8 +129,13 @@ public class AlterTableTest extends TableTestBase {
                 "with snapshot retention 2 " +
                 "snapshots 2 days", snapshotId);
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getOps().get(0)).isIfNotExists());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt, connectContext);
+=======
+        Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         Assert.assertEquals(4, mockedNativeTableB.refs().size());
     }
 
@@ -151,9 +161,9 @@ public class AlterTableTest extends TableTestBase {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         String sql = "alter table iceberg_catalog.db.srTableName create tag test_tag_1";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(stmt.getOps().size(), 1);
-        Assert.assertTrue(stmt.getOps().get(0) instanceof CreateOrReplaceTagClause);
-        CreateOrReplaceTagClause clause = (CreateOrReplaceTagClause) stmt.getOps().get(0);
+        Assert.assertEquals(stmt.getAlterClauseList().size(), 1);
+        Assert.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceTagClause);
+        CreateOrReplaceTagClause clause = (CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0);
         Assert.assertTrue(clause.isCreate());
         Assert.assertEquals(clause.getTagName(), "test_tag_1");
         Assert.assertEquals(clause.getOpType(), AlterOpType.ALTER_TAG);
@@ -184,15 +194,25 @@ public class AlterTableTest extends TableTestBase {
 
         sql = "alter table iceberg_catalog.db.srTableName create or replace tag test_tag_3 ";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getOps().get(0)).isReplace());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt, connectContext);
+=======
+        Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isReplace());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         mockedNativeTableB.refresh();
         Assert.assertEquals(4, mockedNativeTableB.refs().size());
 
         sql = "alter table iceberg_catalog.db.srTableName create tag if not exists test_tag_3 ";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getOps().get(0)).isIfNotExists());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt, connectContext);
+=======
+        Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+>>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         mockedNativeTableB.refresh();
         Assert.assertEquals(4, mockedNativeTableB.refs().size());
     }
