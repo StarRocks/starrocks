@@ -118,9 +118,9 @@ public class RepoExecutor {
             List<StatementBase> parsedStmts = SqlParser.parse(sql, context.getSessionVariable());
             for (var parsedStmt : ListUtils.emptyIfNull(parsedStmts)) {
                 Analyzer.analyze(parsedStmt, context);
-                AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
                 GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
             }
+            AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
             throw new RuntimeException(e);
