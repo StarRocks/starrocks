@@ -194,8 +194,8 @@ TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -229,8 +229,8 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -305,8 +305,8 @@ TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
     ColumnPtr write_nl_col = NullableColumn::create(write_col, null_col);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -339,8 +339,8 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -374,8 +374,8 @@ TEST_F(FlatJsonColumnRWTest, testEmptyFlatObject) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -485,8 +485,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "c", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.c", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -567,8 +567,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     }
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
 
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
@@ -612,23 +612,14 @@ TEST_F(FlatJsonColumnRWTest, testDeepFlatJson) {
         json_col->append(jv);
     }
 
-    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
-    ASSIGN_OR_ABORT(auto b3_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2.b3", 0));
-    ASSIGN_OR_ABORT(auto b4_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b4", 0));
-    ASSIGN_OR_ABORT(auto b5_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b4.b5", 0));
-
-    b4_path->children().emplace_back(std::move(b5_path));
-    b2_path->children().emplace_back(std::move(b3_path));
-    b_path->children().emplace_back(std::move(b4_path));
-    b_path->children().emplace_back(std::move(b2_path));
-    root_path->children().emplace_back(std::move(b_path));
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(4, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
@@ -666,32 +657,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
         json_col->append(jv);
     }
 
-    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
-    ASSIGN_OR_ABORT(auto b3_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2.b3", 0));
-    ASSIGN_OR_ABORT(auto b4_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b4", 0));
-    ASSIGN_OR_ABORT(auto b5_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b4.b5", 0));
-    ASSIGN_OR_ABORT(auto a_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto ff_path, ColumnAccessPath::create(TAccessPathType::FIELD, "ff", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "ff.f1", 0));
-    ASSIGN_OR_ABORT(auto gg_path, ColumnAccessPath::create(TAccessPathType::FIELD, "gg", 0));
-    ASSIGN_OR_ABORT(auto g1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "gg.g1", 0));
-    b4_path->children().emplace_back(std::move(b5_path));
-    b2_path->children().emplace_back(std::move(b3_path));
-    b_path->children().emplace_back(std::move(b4_path));
-    b_path->children().emplace_back(std::move(b2_path));
-    ff_path->children().emplace_back(std::move(f1_path));
-    gg_path->children().emplace_back(std::move(g1_path));
-    root_path->children().emplace_back(std::move(b_path));
-    root_path->children().emplace_back(std::move(a_path));
-    root_path->children().emplace_back(std::move(ff_path));
-    root_path->children().emplace_back(std::move(gg_path));
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(7, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
@@ -766,8 +742,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson) {
     json_col->append(&jv5);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "c", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.c", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -808,8 +784,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2) {
     }
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
 
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
@@ -848,14 +824,14 @@ TEST_F(FlatJsonColumnRWTest, testDeepJson) {
         json_col->append(jv);
     }
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b2.b3");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(0, writer_opts.meta->children_columns_size());
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
@@ -889,17 +865,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperJson) {
         json_col->append(jv);
     }
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b2.b3");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(0, writer_opts.meta->children_columns_size());
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
@@ -933,17 +909,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJson) {
         json_col->append(jv);
     }
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "b.b2.b3");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.gg.g1");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -973,17 +949,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson) {
         json_col->append(jv);
     }
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_DOUBLE, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "b.b2");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1013,17 +989,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson2) {
         json_col->append(jv);
     }
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_DOUBLE, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "b.b2");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1162,8 +1138,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson) {
     ColumnPtr write_col = create_json(jsons, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "c", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.c", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -1234,8 +1210,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
     ColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
 
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
@@ -1275,14 +1251,14 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullFlatJson) {
                                      R"(NULL)", R"({"a": 5, "b": {"b1": 26, "b2": {}, "b4": 23}})"};
 
     ColumnPtr write_col = create_json(json, true);
-    ColumnAccessPath root_path;
-    ColumnAccessPath::insert_json_path(&root_path, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root_path, LogicalType::TYPE_JSON, "b.b2.b3");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root_path);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(5, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
@@ -1315,17 +1291,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
             R"(NULL)"};
     ColumnPtr write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_DOUBLE, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "b.b2");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(8, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
@@ -1408,8 +1384,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson) {
     ColumnPtr write_col = create_json(jsons, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
-    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "c", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.c", 0));
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
@@ -1446,8 +1422,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson2) {
     ColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
-    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b.b2", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
 
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
@@ -1482,14 +1458,14 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullJson) {
 
     ColumnPtr write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b2.b3");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(0, writer_opts.meta->children_columns_size());
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
@@ -1518,17 +1494,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson) {
 
     auto write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b2.b3");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(0, writer_opts.meta->children_columns_size());
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
@@ -1557,17 +1533,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson2) {
 
     auto write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "b.b2.b3");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     EXPECT_EQ(0, writer_opts.meta->children_columns_size());
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
@@ -1595,17 +1571,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeNullJson) {
 
     ColumnPtr write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "b.b2.b3");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1628,17 +1604,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson) {
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {}})", R"(NULL)"};
     ColumnPtr write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_DOUBLE, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "b.b2");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1661,17 +1637,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson2) {
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {}})", R"(NULL)"};
     ColumnPtr write_col = create_json(json, true);
 
-    ColumnAccessPath root;
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_DOUBLE, "b.b4.b5");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "b.b2");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_VARCHAR, "a");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_BIGINT, "ff.f1");
-    ColumnAccessPath::insert_json_path(&root, LogicalType::TYPE_JSON, "gg.g1");
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "root.b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "root.a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "root.ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "root.gg.g1");
 
     ColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, &root);
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
