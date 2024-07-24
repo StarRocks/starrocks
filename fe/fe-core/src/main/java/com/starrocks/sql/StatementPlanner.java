@@ -125,7 +125,7 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
-                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(queryStmt);
+                boolean isOnlyOlapTableQueries = AnalyzerUtils.areTablesCopySafe(queryStmt);
                 needWholePhaseLock = isLockFree(isOnlyOlapTableQueries, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
@@ -171,7 +171,7 @@ public class StatementPlanner {
         boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
         boolean isLeader = GlobalStateMgr.getCurrentState().isLeader() ||
                 Config.enable_planner_optimistic_lock_on_follower;
-        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
+        boolean isOnlyOlapTableQueries = AnalyzerUtils.areTablesCopySafe(insertStmt);
         return isOnlyOlapTableQueries && isSelect && isLeader &&
                 !connectContext.getSessionVariable().isCboUseDBLock();
     }

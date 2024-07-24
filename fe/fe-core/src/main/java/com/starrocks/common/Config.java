@@ -1412,6 +1412,9 @@ public class Config extends ConfigBase {
             "leader node only. If turned on the follower node would also use this optimization")
     public static boolean enable_planner_optimistic_lock_on_follower = false;
 
+    @ConfField(mutable = true, comment = "Whether apply the PlannerOptimisticLock optimizer to Iceberg table")
+    public static boolean enable_planner_optimistic_lock_to_iceberg = false;
+
     /**
      * if this is set to true
      * all pending load job will fail when call begin txn api
