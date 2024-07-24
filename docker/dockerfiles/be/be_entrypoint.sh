@@ -132,10 +132,21 @@ while true; do
       tail -n $nol $STARROCKS_HOME/log/be.out
   fi
 
-  # If coredump is enabled, only catch SIGABRT (6), SIGSEGV(11) and repeat launching be process,
-  # should still exit for rest error codes.
-  if [[ "$COREDUMP_ENABLED" != "true" || ($ret -ne 134 && $ret -ne 139) ]]; then
-    exit $ret
+  # Repeat launching BE process in the two scenarios:
+  #  a. DEBUG_MODE is true;
+  #  b. coredump is enabled, and the error code is SIGABRT(6) or SIGSEGV(11);
+  # otherwise BE process should still exit.
+  should_exit=true
+  if [[ "$DEBUG_MODE" == "true" ]]; then
+    should_exit=false
+  fi
+
+  if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
+    should_exit=false
+  fi
+
+  if [[ "$should_exit" == "true" ]]; then
+    exit  $ret
   fi
 
   # Print a message indicating the failure
