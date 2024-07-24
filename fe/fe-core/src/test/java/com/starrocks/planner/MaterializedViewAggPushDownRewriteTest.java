@@ -46,7 +46,8 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
-        createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
+        createTables("sql/ssb/",
+                Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder", "lineorder0"));
     }
 
     @Test
@@ -644,6 +645,25 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) " +
                         "from lineorder l join dates d " +
                         "on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;";
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testJoinWithAggPushDown_NotSPJG() {
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE,lo_orderkey, sum(LO_REVENUE) as c\n" +
+                "from lineorder l group by LO_ORDERDATE,lo_orderkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            {
+                String query = "select LO_ORDERDATE,lo_orderkey,sum(LO_REVENUE)\n" +
+                        "from lineorder l " +
+                        "where LO_ORDERDATE='2020-05-01' " +
+                        "and lo_orderkey in (" +
+                        "  select lo_orderkey from lineorder0 group by lo_orderkey" +
+                        ") " +
+                        "group by LO_ORDERDATE,lo_orderkey";
                 sql(query).match("mv0");
             }
         });
