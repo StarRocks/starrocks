@@ -215,6 +215,7 @@ if __name__ == "__main__":
         print_help()
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-restartworker"]
 
     # test xml
     if not record:
