@@ -33,8 +33,10 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -183,18 +185,25 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
     /**
      * For List Partition, we can evaluate the MAX(pt) based on the partition values
      */
-    private Pair<ConstantOperator, ConstantOperator> optimizeWithPartitionValues(OlapTable table,
-                                                                                 Pair<Boolean, Boolean> hasMinMax) {
+    private LogicalOperator optimizeWithPartitionValues(OlapTable table,
+                                                        Pair<Boolean, Boolean> hasMinMax) {
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        // Only support single-column partition
+        if (partitionInfo.getPartitionColumnsSize() > 1) {
+            return null;
+        }
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
-        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         List<Long> sorted = partitionInfo.getSortedPartitions();
         sorted.retainAll(nonEmptyPartitionIds);
 
+        ConstantOperator minValue = null;
         if (hasMinMax.first) {
             long minPartition = sorted.get(0);
-            partitionInfo.getPartitionListExpr(minPartition);
+            ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
+            minValue = partitionValues.minValue().toConstant();
         }
+        LogicalValuesOperator.Builder
     }
 
     /**

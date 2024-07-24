@@ -33,7 +33,10 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
@@ -102,6 +105,32 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToIsTempPartition = new HashMap<>();
     }
 
+    public static class ListPartitionValue {
+        public LiteralExpr singleColumnValue;
+        public List<LiteralExpr> multiColumnValues;
+
+        public static ListPartitionValue none() {
+            return null;
+        }
+
+        public static ListPartitionValue of(LiteralExpr single) {
+            ListPartitionValue value = new ListPartitionValue();
+            value.singleColumnValue = single;
+            return value;
+        }
+
+        public static ListPartitionValue of(List<LiteralExpr> multi) {
+            ListPartitionValue value = new ListPartitionValue();
+            value.multiColumnValues = multi;
+            return value;
+        }
+
+        public ConstantOperator toConstant() {
+            Preconditions.checkState(multiColumnValues == null);
+            return (ConstantOperator) SqlToScalarOperatorTranslator.translate(singleColumnValue);
+        }
+    }
+
     /**
      * Represent a partition cell, which can be single-column or multiple-columns
      */
@@ -121,6 +150,16 @@ public class ListPartitionInfo extends PartitionInfo {
             ListPartitionCell res = new ListPartitionCell();
             res.multiColumnValues = multi;
             return res;
+        }
+
+        public ListPartitionValue minValue() {
+            if (singleColumnValues != null) {
+                return ListPartitionValue.of(singleColumnValues.stream().min(LiteralExpr::compareTo).get());
+            }
+//            if (multiColumnValues != null) {
+//                return ListPartitionValue.of(multiColumnValues.stream().min(LiteralExpr::compareTo).get());
+//            }
+            return ListPartitionValue.none();
         }
     }
 
