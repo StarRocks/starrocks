@@ -124,6 +124,15 @@ public interface ConnectorMetadata {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                   Optional<ConnectorTableVersion> startVersion,
+                                                   Optional<ConnectorTableVersion> endVersion) {
+        return TableVersionRange.empty();
+    }
+
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
     default boolean tableExists(String dbName, String tblName) {
         return listTableNames(dbName).contains(tblName);
     }

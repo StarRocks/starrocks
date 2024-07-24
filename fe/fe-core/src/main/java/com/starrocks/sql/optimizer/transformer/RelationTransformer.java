@@ -535,6 +535,20 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
+<<<<<<< HEAD
+=======
+        QueryPeriod queryPeriod = node.getQueryPeriod();
+        Optional<ConnectorTableVersion> startVersion = Optional.empty();
+        Optional<ConnectorTableVersion> endVersion = Optional.empty();
+        if (queryPeriod != null) {
+            QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+            startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
+            endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+        }
+        TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
+
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
@@ -592,10 +606,14 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             MetadataTable metadataTable = (MetadataTable) node.getTable();
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
                 scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+<<<<<<< HEAD
                         columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
                 if (node.getTemporalClause() != null) {
                     ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
                 }
+=======
+                        columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
             } else {
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
                         ErrorType.UNSUPPORTED);

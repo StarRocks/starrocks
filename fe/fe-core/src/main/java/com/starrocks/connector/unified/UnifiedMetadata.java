@@ -120,6 +120,17 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
     public List<String> listDbNames() {
         return hiveMetadata.listDbNames();
     }

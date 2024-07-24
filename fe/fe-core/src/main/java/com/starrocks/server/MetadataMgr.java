@@ -510,6 +510,17 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
+                .orElse(TableVersionRange.empty().empty());
+    }
+
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
     public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(getDb(baseTableInfo.getDbId()));

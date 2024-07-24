@@ -15,10 +15,17 @@
 package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
 
 // TODO(stephen): what's the pretty class name?
 public class TableMetaMetadata implements ConnectorMetadata {
@@ -33,6 +40,7 @@ public class TableMetaMetadata implements ConnectorMetadata {
         this.catalogName = catalogName;
     }
 
+    @Override
     public Table getTable(String dbName, String tblName) {
         MetadataTableName metadataTableName = MetadataTableName.from(tblName);
         MetadataTableType tableType = metadataTableName.getTableType();
@@ -43,6 +51,18 @@ public class TableMetaMetadata implements ConnectorMetadata {
                 return LogicalIcebergMetadataTable.create(catalogName, dbName, tableName);
             default:
                 throw new StarRocksConnectorException("Unrecognized metadata table type {}", tableType);
+        }
+    }
+
+    @Override
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        if (endVersion.isPresent()) {
+            Long snapshotId = endVersion.get().getConstantOperator().castTo(Type.BIGINT).get().getBigint();
+            return TableVersionRange.withEnd(Optional.of(snapshotId));
+        } else {
+            return TableVersionRange.empty();
         }
     }
 

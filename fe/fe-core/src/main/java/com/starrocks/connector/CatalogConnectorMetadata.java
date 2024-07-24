@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -88,6 +89,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return null;
     }
 
+    private ConnectorMetadata metadataOfTable(Table table) {
+        if (table instanceof MetadataTable) {
+            return tableMetadata;
+        }
+
+        return null;
+    }
+
     private ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
@@ -136,6 +145,21 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
     public boolean tableExists(String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(dbName, tblName);

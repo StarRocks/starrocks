@@ -365,6 +365,28 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isPresent()) {
+            throw new StarRocksConnectorException("Read table with start version is not supported");
+        }
+
+        if (endVersion.isEmpty()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                    .map(Snapshot::snapshotId);
+            return TableVersionRange.withEnd(snapshotId);
+        } else {
+            Long snapshotId = getSnapshotIdFromVersion(((IcebergTable) table).getNativeTable(), endVersion.get());
+            return TableVersionRange.withEnd(Optional.of(snapshotId));
+        }
+    }
+
+>>>>>>> c739a51646 ([UT] Distributed metadata plan adaptation table version range (#48764))
     @Override
     public boolean tableExists(String dbName, String tblName) {
         return icebergCatalog.tableExists(dbName, tblName);
