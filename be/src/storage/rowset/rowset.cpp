@@ -625,7 +625,6 @@ void Rowset::do_close() {
 }
 
 size_t Rowset::segment_memory_usage() {
-    std::lock_guard<std::mutex> load_lock(_lock);
     size_t total = 0;
     for (const auto& segment : _segments) {
         total += segment->mem_usage();
