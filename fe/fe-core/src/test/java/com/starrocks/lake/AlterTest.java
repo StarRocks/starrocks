@@ -251,7 +251,7 @@ public class AlterTest {
         String sql = "ALTER TABLE t1 COMPACT p1";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();

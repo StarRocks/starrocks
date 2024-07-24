@@ -32,6 +32,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -936,6 +937,16 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
+
+        if (table instanceof OlapTable) {
+            List<String> partitionNames = clause.getPartitionNames();
+            for (String partitionName : partitionNames) {
+                if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    throw new SemanticException("Replace shadow partitions is not allowed");
+                }
+            }
+        }
+
         return null;
     }
 
@@ -1172,6 +1183,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
         clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
+        if (table instanceof OlapTable) {
+            if (clause.getPartitionName() != null && clause.getPartitionName().startsWith(
+                    ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                throw new SemanticException("Deletion of shadow partitions is not allowed");
+            }
+        }
         return null;
     }
 }

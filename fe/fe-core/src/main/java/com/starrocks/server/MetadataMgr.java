@@ -371,7 +371,7 @@ public class MetadataMgr {
         }
     }
 
-    public void alterTable(AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -386,7 +386,7 @@ public class MetadataMgr {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
-            connectorMetadata.get().alterTable(stmt);
+            connectorMetadata.get().alterTable(context, stmt);
         } else {
             throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }

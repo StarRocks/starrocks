@@ -386,7 +386,6 @@ public class ListPartitionInfo extends PartitionInfo {
                     long partitionId = partition.getId();
                     PartitionDesc partitionDesc = entry.second;
                     Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
-                    Preconditions.checkArgument(((SinglePartitionDesc) partitionDesc).isAnalyzed());
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());

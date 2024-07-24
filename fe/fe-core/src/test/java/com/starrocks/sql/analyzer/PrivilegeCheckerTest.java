@@ -1156,9 +1156,9 @@ public class PrivilegeCheckerTest {
 
         // check alter table: ALTER
         verifyGrantRevoke(
-                "alter table db1.tbl1 drop partition p1",
-                "grant ALTER on db1.tbl1 to test",
-                "revoke ALTER on db1.tbl1 from test",
+                "alter table db2.tbl1 drop partition p1",
+                "grant ALTER on db2.tbl1 to test",
+                "revoke ALTER on db2.tbl1 from test",
                 "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         // check cancel alter table: ALTER
