@@ -25,12 +25,10 @@ import json
 import os
 import re
 import sys
-import time
 import uuid
 from typing import List
 
 from nose import tools
-from nose.tools import timed
 from parameterized import parameterized
 from cup import log
 
@@ -45,8 +43,6 @@ from lib.sr_sql_lib import self_print
 record_mode = os.environ.get("record_mode", "false") == "true"
 
 case_list = choose_cases.choose_cases(record_mode).case_list
-
-process_timeout = int(os.environ.get("process_timeout", 1200))
 
 if len(case_list) == 0:
     print("** INFO: No case! **")
@@ -129,7 +125,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
-    @timed(process_timeout)
+    @sql_annotation.timeout()
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester

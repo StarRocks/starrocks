@@ -34,7 +34,7 @@ if not os.environ.get("version"):
 
 from lib import sr_sql_lib
 
-DEFAULT_TIMEOUT = 1200
+DEFAULT_TIMEOUT = 600
 
 
 def print_help():
@@ -185,7 +185,6 @@ if __name__ == "__main__":
     os.environ["config_path"] = config
     os.environ["keep_alive"] = str(keep_alive)
     os.environ['run_info'] = run_info
-    os.environ['process_timeout'] = str(timeout)
 
     argv = [
         "nosetests",
@@ -211,11 +210,11 @@ if __name__ == "__main__":
     argv += ["--processes=%s" % concurrency]
 
     # timeout setting of each case
-    if not 0 < timeout <= 5 * 60:
-        print("-t|--timeout must be in 0~5min!")
+    if not 0 < timeout <= 10 * 60:
+        print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
-    argv += ["--process-timeout=%s" % DEFAULT_TIMEOUT]
+    argv += ["--process-timeout=%s" % timeout]
 
     # test xml
     if not record:

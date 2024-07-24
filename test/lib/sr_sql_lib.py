@@ -1786,7 +1786,7 @@ class StarrocksSQLApiLib(object):
 
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
-        res = self.execute_sql(sql, "dml")
+        res = self.execute_sql(sql, True)
         tools.assert_true(res["status"], res["msg"])
         url = res["result"][0][20]
 
@@ -1814,9 +1814,9 @@ class StarrocksSQLApiLib(object):
     def wait_analyze_finish(self, database_name, table_name, sql):
         timeout = 300
         analyze_sql = "show analyze status where `Database` = 'default_catalog.%s'" % database_name
-        res = self.execute_sql(analyze_sql, "dml")
+        res = self.execute_sql(analyze_sql, True)
         while timeout > 0:
-            res = self.execute_sql(analyze_sql, "dml")
+            res = self.execute_sql(analyze_sql, True)
             if len(res["result"]) > 0:
                 for table in res["result"]:
                     if table[2] == table_name and table[4] == "FULL" and table[6] == "SUCCESS":
@@ -1831,7 +1831,7 @@ class StarrocksSQLApiLib(object):
         finished = False
         counter = 0
         while True:
-            res = self.execute_sql(sql, "dml")
+            res = self.execute_sql(sql, True)
             tools.assert_true(res["status"], res["msg"])
             if str(res["result"]).find("Decode") > 0:
                 finished = True
@@ -1923,7 +1923,7 @@ class StarrocksSQLApiLib(object):
             )
 
             status = res["result"][0][7]
-            if status != ("REFRESHING") and status != ("COMMITTING"):
+            if status != "REFRESHING" and status != "COMMITTING":
                 break
             time.sleep(0.5)
         tools.assert_equal(check_status, status, "wait refresh dictionary finish error")
@@ -1957,11 +1957,12 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
         """
-        sql = "explain %s" % (query)
+        sql = "explain %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
@@ -1970,7 +1971,7 @@ class StarrocksSQLApiLib(object):
         """
         assert explain result contains expect string
         """
-        sql = "explain %s" % (query)
+        sql = "explain %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
@@ -1979,7 +1980,7 @@ class StarrocksSQLApiLib(object):
         """
         assert explain costs result contains expect string
         """
-        sql = "explain costs %s" % (query)
+        sql = "explain costs %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
@@ -1988,7 +1989,7 @@ class StarrocksSQLApiLib(object):
         """
         assert trace values result contains expect string
         """
-        sql = "trace values %s" % (query)
+        sql = "trace values %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
@@ -2020,7 +2021,7 @@ class StarrocksSQLApiLib(object):
         """
         assert trace times result contains expect string
         """
-        sql = "trace times %s" % (query)
+        sql = "trace times %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
