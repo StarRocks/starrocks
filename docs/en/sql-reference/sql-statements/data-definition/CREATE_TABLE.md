@@ -12,8 +12,8 @@ This operation requires the CREATE TABLE privilege on the destination database.
 
 ## Syntax
 
-```plaintext
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+```SQL
+CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
 [ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
@@ -106,7 +106,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
+For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-an-index).
 
 ### ENGINE type
 
@@ -386,6 +386,14 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
+
+### TEMPORARY
+
+Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
+
+:::note
+When creating a temporary table, you must set `ENGINE` to `olap`.
+:::
 
 ### PROPERTIES
 
@@ -991,6 +999,28 @@ PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
 );
+```
+
+### Create a partitioned temporary table
+
+```SQL
+CREATE TEMPORARY TABLE example_db.temp_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2, k3)
+PARTITION BY RANGE (k1)
+(
+    PARTITION p1 VALUES LESS THAN ("2014-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2014-06-01"),
+    PARTITION p3 VALUES LESS THAN ("2014-12-01")
+)
+DISTRIBUTED BY HASH(k2);
 ```
 
 ## References
