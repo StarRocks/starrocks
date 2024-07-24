@@ -49,6 +49,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.clone.ColocateMatchResult.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -727,12 +728,12 @@ public class ColocateTableBalancer extends FrontendDaemon {
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
         Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
-            return new ColocateMatchResult(lockTotalTime, false);
+            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
         }
 
         List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
         if (backendBucketsSeq.isEmpty()) {
-            return new ColocateMatchResult(lockTotalTime, false);
+            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
         }
 
         boolean isGroupStable = true;
@@ -771,7 +772,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         locker.lockDatabase(db, LockType.READ);
                         lockStart = System.nanoTime();
                         if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
-                            return new ColocateMatchResult(lockTotalTime, false);
+                            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
                         }
                         if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
@@ -887,7 +888,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000, isGroupStable);
+        return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000,
+                isGroupStable ? Status.STABLE : Status.UNSTABLE);
     }
 
     private ColocateMatchResult matchOneGroupUrgent(GroupId groupId,
@@ -925,10 +927,10 @@ public class ColocateTableBalancer extends FrontendDaemon {
             ColocateMatchResult nonUrgentResult = matchOneGroupNonUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
             lockTotalTime += nonUrgentResult.lockTotalTime;
 
-            if (urgentResult.isGroupStable && nonUrgentResult.isGroupStable) {
-                colocateIndex.markGroupStable(groupId, true);
-            } else {
+            if (urgentResult.status == Status.UNSTABLE || nonUrgentResult.status == Status.UNSTABLE) {
                 colocateIndex.markGroupUnstable(groupId, true);
+            } else if (urgentResult.status == Status.STABLE && nonUrgentResult.status == Status.STABLE) {
+                colocateIndex.markGroupStable(groupId, true);
             }
         } // end for groups
 
