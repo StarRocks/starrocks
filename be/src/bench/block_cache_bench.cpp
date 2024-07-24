@@ -50,7 +50,6 @@ void delete_dir_content(const std::string& dir_path) {
 class BlockCacheBenchSuite {
 public:
     struct BenchParams {
-        CacheEngine cache_engine;
         size_t obj_count = 0;
         size_t obj_key_size = 0;
         size_t obj_value_size = 0;
