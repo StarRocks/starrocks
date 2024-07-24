@@ -178,8 +178,8 @@ public class MetaFunctionsTest {
             Exception e = Assert.assertThrows(SemanticException.class, () ->
                     lookupString("t1", "v1", "c1")
             );
-            Assert.assertEquals("Getting analyzing error. Detail message: lookup failed: " +
-                    "Getting analyzing error. Detail message: dict table t1 is not found..", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Unknown table 'test.t1'.",
+                    e.getMessage());
         }
         {
             starRocksAssert.withTable("create table t1(c1 string, c2 bigint) duplicate key(c1) " +
@@ -187,9 +187,8 @@ public class MetaFunctionsTest {
             Exception e = Assert.assertThrows(SemanticException.class, () ->
                     lookupString("t1", "v1", "c1")
             );
-            Assert.assertEquals("Getting analyzing error. Detail message: lookup failed: " +
-                            "Getting analyzing error. Detail message: dict table test.t1 should be primary key table..",
-                    e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                            "Invalid parameter must be PRIMARY_KEY.", e.getMessage());
             starRocksAssert.dropTable("t1");
         }
         {
