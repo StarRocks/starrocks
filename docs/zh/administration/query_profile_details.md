@@ -96,9 +96,13 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 描述：所有计算节点，累计释放内存之和。
 
-##### QueryPeakMemoryUsage
+##### QueryPeakMemoryUsagePerNode
 
 描述：所有计算节点中，峰值内存的最大值。
+
+##### QuerySumMemoryUsage
+
+描述：所有计算节点中，峰值内存的总和。
 
 ##### QueryExecutionWallTime
 
