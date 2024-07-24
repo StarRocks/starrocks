@@ -36,12 +36,20 @@ import org.antlr.v4.runtime.NoViableAltException;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Token;
+<<<<<<< HEAD
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.Vocabulary;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.misc.IntervalSet;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
+=======
+import org.antlr.v4.runtime.atn.ParserATNSimulator;
+import org.antlr.v4.runtime.atn.PredictionContextCache;
+import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.dfa.DFA;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
+>>>>>>> b4826a8707 ([BugFix] fix Memory Leak in PredictionContextCache (#48776))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -312,7 +320,33 @@ public class SqlParser {
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
                 Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+<<<<<<< HEAD
         return parser;
+=======
+        if (!Config.enable_parser_context_cache) {
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
+            }
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
+        }
+
+        try {
+            // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
+            // try SLL mode with BailErrorStrategy firstly
+            parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+            parser.setErrorHandler(new StarRocksBailErrorStrategy());
+            return Pair.create(parseFunction.apply(parser), parser);
+        } catch (ParseCancellationException e) {
+            // if we fail, parse with LL mode with our own error strategy
+            // rewind input stream
+            tokenStream.seek(0);
+            parser.reset();
+            parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+            parser.setErrorHandler(new StarRocksDefaultErrorStrategy());
+            return Pair.create(parseFunction.apply(parser), parser);
+        }
+>>>>>>> b4826a8707 ([BugFix] fix Memory Leak in PredictionContextCache (#48776))
     }
 
     public static String getTokenDisplay(Token t) {
