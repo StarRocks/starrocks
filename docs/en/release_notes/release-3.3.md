@@ -4,9 +4,21 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.3
 
-## 3.3.1
+## 3.3.1 (Yanked)
 
 Release date: July 18, 2024
+
+:::tip
+
+This version has been taken offline due to compatibility issues in Primary Key tables.
+
+- **Problem**: After the cluster is upgraded from versions earlier than v3.1.11 and v3.2.4 to v3.3.1, index decompression failures will lead to failures of queries against Primary Key tables.
+
+- **Impact scope**: This problem only affects queries against Primary Key tables.
+
+- **Temporary workaround**: You can downgrade the cluster to v3.3.0 or earlier to avoid this issue. It will be fixed in v3.3.2.
+
+:::
 
 ### New Features
 
