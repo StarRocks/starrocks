@@ -17,6 +17,7 @@
 
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
+#include <jemalloc/jemalloc.h>
 
 #include <cerrno>
 #include <cstdio>
@@ -121,7 +122,20 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
+static void dontdump_unused_pages() {
+    std::string msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
+    int ret = je_mallctl(msg.c_str(), nullptr, nullptr, nullptr, 0);
+    if (ret != 0) {
+        LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+    } else {
+        LOG(INFO) << "je_mallctl execute dontdump success";
+    }
+}
+
 static void failure_writer(const char* data, int size) {
+    if (config::enable_core_file_size_optimization) {
+        dontdump_unused_pages();
+    }
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
