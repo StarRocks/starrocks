@@ -391,7 +391,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
             });
             return null;
         }
@@ -1095,7 +1095,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateDictionaryStatement(CreateDictionaryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getDictionaryMgr().createDictionary(stmt,
-                                                context.getCurrentCatalog(), context.getDatabase());
+                        context.getCurrentCatalog(), context.getDatabase());
             });
             return null;
         }

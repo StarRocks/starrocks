@@ -23,7 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -33,14 +32,12 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CompactionTask;
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,28 +47,12 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CompactionHandler extends AlterHandler {
+public class CompactionHandler  {
     private static final Logger LOG = LogManager.getLogger(CompactionHandler.class);
 
-    public CompactionHandler() {
-        super("compaction");
-    }
-
-
-    @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
-    }
-
-    @Override
-    public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
-        throw new NotImplementedException();
-    }
-
-    @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
-                                              OlapTable olapTable) throws UserException {
+    public static synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
+                                                     OlapTable olapTable) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         Preconditions.checkState(alterClause instanceof CompactionClause);
@@ -142,7 +123,7 @@ public class CompactionHandler extends AlterHandler {
     }
 
     @NotNull
-    private List<Partition> findAllPartitions(OlapTable olapTable, CompactionClause compactionClause) {
+    private static List<Partition> findAllPartitions(OlapTable olapTable, CompactionClause compactionClause) {
         List<Partition> allPartitions = new ArrayList<>();
         if (compactionClause.getPartitionNames().isEmpty()) {
             allPartitions.addAll(olapTable.getPartitions());
@@ -159,10 +140,4 @@ public class CompactionHandler extends AlterHandler {
         }
         return allPartitions;
     }
-
-    @Override
-    public synchronized void cancel(CancelStmt stmt) throws DdlException {
-        throw new NotImplementedException();
-    }
-
 }

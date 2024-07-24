@@ -237,8 +237,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
-        normal.alterTable(stmt);
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+        normal.alterTable(context, stmt);
     }
 
     @Override
