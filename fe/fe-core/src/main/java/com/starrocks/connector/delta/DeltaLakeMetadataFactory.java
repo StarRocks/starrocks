@@ -71,4 +71,12 @@ public class DeltaLakeMetadataFactory {
 
         return cacheUpdateProcessor;
     }
+
+    public void metastoreCacheInvalidateCache() {
+        if (metastore instanceof CachingDeltaLakeMetastore) {
+            ((CachingDeltaLakeMetastore) metastore).invalidateAll();
+        } else {
+            ((DeltaLakeMetastore) metastore).invalidateAll();
+        }
+    }
 }

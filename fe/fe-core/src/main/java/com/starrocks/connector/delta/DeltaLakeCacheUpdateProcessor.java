@@ -43,9 +43,4 @@ public class DeltaLakeCacheUpdateProcessor implements CacheUpdateProcessor {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         cachingMetastore.refreshTableBackground(deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
     }
-
-    public void invalidateAll() {
-        cachingMetastore.invalidateAll();
-    }
-
 }

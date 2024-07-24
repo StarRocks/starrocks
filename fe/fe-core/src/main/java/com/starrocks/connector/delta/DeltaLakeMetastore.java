@@ -14,25 +14,35 @@
 
 package com.starrocks.connector.delta;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
+import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
@@ -42,11 +52,39 @@ public abstract class DeltaLakeMetastore implements IMetastore {
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
+    protected final DeltaLakeCatalogProperties properties;
 
-    public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration) {
+    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<String, List<JsonNode>> jsonCache;
+
+    public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
+                              DeltaLakeCatalogProperties properties) {
         this.catalogName = catalogName;
         this.delegate = metastore;
         this.hdfsConfiguration = hdfsConfiguration;
+        this.properties = properties;
+
+        this.checkpointCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
+                .maximumSize(properties.getDeltaLakeCheckpointMetaCacheMaxNum())
+                .build(new CacheLoader<>() {
+                    @NotNull
+                    @Override
+                    public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                    }
+                });
+
+        this.jsonCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
+                .maximumSize(properties.getDeltaLakeJsonMetaCacheMaxNum())
+                .build(new CacheLoader<>() {
+                    @NotNull
+                    @Override
+                    public List<JsonNode> load(@NotNull String filePath) throws IOException {
+                        return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                    }
+                });
     }
 
     public List<String> getAllDatabaseNames() {
@@ -70,7 +108,9 @@ public abstract class DeltaLakeMetastore implements IMetastore {
 
         String path = metastoreTable.getTableLocation();
         long createTime = metastoreTable.getCreateTime();
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, hdfsConfiguration, createTime);
+
+        Engine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
+        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
@@ -113,5 +153,10 @@ public abstract class DeltaLakeMetastore implements IMetastore {
 
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
+    }
+
+    public void invalidateAll() {
+        checkpointCache.invalidateAll();
+        jsonCache.invalidateAll();
     }
 }
