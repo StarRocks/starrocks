@@ -3031,4 +3031,21 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+<<<<<<< HEAD
+=======
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
+>>>>>>> 89176f7d49 ([Enhancement] support colocate restore in share nothing mode (#48486))
 }
