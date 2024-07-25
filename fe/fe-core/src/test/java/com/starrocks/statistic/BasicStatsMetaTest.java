@@ -41,6 +41,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
     @Test
     public void testHealthy() {
         {
+            // total row in cached table statistic is 6, the updated row is 100.
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
             Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "region");
             List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
@@ -57,6 +58,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
         }
 
         {
+            // total row in cached table statistic is 10000, the updated row is 15000.
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
             Table tbl =
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "supplier");
