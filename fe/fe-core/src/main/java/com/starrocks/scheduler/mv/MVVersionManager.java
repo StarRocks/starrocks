@@ -125,8 +125,6 @@ public class MVVersionManager {
             }
         }
         if (!changedTablePartitionInfos.isEmpty()) {
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv);
             Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
                     changedTablePartitionInfos
                             .stream()
@@ -134,8 +132,7 @@ public class MVVersionManager {
                             .collect(Collectors.toList());
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
-            mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+            updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
         }
     }
 
@@ -187,8 +184,6 @@ public class MVVersionManager {
             currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
         }
         if (!changedTablePartitionInfos.isEmpty()) {
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv);
             Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
                     changedTablePartitionInfos
                             .stream()
@@ -196,7 +191,7 @@ public class MVVersionManager {
                             .collect(Collectors.toList());
             long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
             mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+            updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
         }
     }
 
@@ -240,5 +235,20 @@ public class MVVersionManager {
             LOG.warn("Update materialized view {} with the associated ref base table partitions failed: ",
                     mv.getName(), e);
         }
+    }
+
+    /**
+     * Sync meta changes to followers by edit log after version meta changed.
+     * @param mv  mv that need to update
+     * @param maxChangedTableRefreshTime max changed table refresh time
+     */
+    public static void updateEditLogAfterVersionMetaChanged(MaterializedView mv,
+                                                            long maxChangedTableRefreshTime) {
+        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+        LOG.info("update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+                mv.getName(), maxChangedTableRefreshTime);
     }
 }

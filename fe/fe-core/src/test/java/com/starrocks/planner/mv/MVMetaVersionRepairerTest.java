@@ -52,7 +52,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testRepairBaseTableVersionChanges() {
+    public void testRepairBaseTableVersionChanges1() {
         starRocksAssert.withTable(m1, () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -105,11 +105,65 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         Map<String, MaterializedView.BasePartitionInfo> newValue =
                                 baseTableVisibleVersionMap.values().iterator().next();
                         Assert.assertEquals(1, newValue.size());
-                        Assert.assertEquals(baseTablePartitionName, value.keySet().iterator().next());
-                        MaterializedView.BasePartitionInfo newBasePartitionInfo = value.get(baseTablePartitionName);
+                        Assert.assertEquals(baseTablePartitionName, newValue.keySet().iterator().next());
+                        MaterializedView.BasePartitionInfo newBasePartitionInfo = newValue.get(baseTablePartitionName);
                         Assert.assertEquals(100L, newBasePartitionInfo.getVersion());
                         Assert.assertEquals(currentTs, newBasePartitionInfo.getLastRefreshTime());
                         Assert.assertEquals(basePartitionInfo.getId(), newBasePartitionInfo.getId());
+                    });
+        });
+    }
+
+    @Test
+    public void testRepairBaseTableVersionChanges2() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT k1, k2, v1, v2 from m1;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView mv1 = getMv("test", mvName);
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[]", mvNames.toString());
+                        MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                                mv1.getRefreshScheme().getAsyncRefreshContext();
+                        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                                asyncRefreshContext.getBaseTableVisibleVersionMap();
+                        System.out.println(baseTableVisibleVersionMap);
+
+                        // check mv version map before
+                        Assert.assertEquals(0, baseTableVisibleVersionMap.size());
+
+                        // repair base table version changes
+                        MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
+                                new MVRepairHandler.PartitionRepairInfo();
+                        long currentTs = System.currentTimeMillis();
+                        partitionRepairInfo.setVersionTime(currentTs);
+                        partitionRepairInfo.setPartitionName("p1");
+                        partitionRepairInfo.setVersion(100L);
+                        partitionRepairInfo.setPartitionId(1000L);
+
+                        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+                        Table baseTable = getTable("test", "m1");
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
+
+                        // check mv version map after
+                        baseTableVisibleVersionMap = asyncRefreshContext.getBaseTableVisibleVersionMap();
+                        Assert.assertEquals(1, baseTableVisibleVersionMap.size());
+                        Map<String, MaterializedView.BasePartitionInfo> newValue =
+                                baseTableVisibleVersionMap.values().iterator().next();
+                        Assert.assertEquals(1, newValue.size());
+                        Assert.assertEquals("p1", newValue.keySet().iterator().next());
+                        MaterializedView.BasePartitionInfo newBasePartitionInfo = newValue.get("p1");
+                        Assert.assertEquals(100L, newBasePartitionInfo.getVersion());
+                        Assert.assertEquals(currentTs, newBasePartitionInfo.getLastRefreshTime());
+                        Assert.assertEquals(1000L, newBasePartitionInfo.getId());
                     });
         });
     }

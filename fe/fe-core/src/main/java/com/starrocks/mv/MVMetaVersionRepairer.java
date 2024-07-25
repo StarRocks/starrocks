@@ -14,12 +14,18 @@
 
 package com.starrocks.mv;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,6 +82,10 @@ public class MVMetaVersionRepairer {
                 .putAll(changedVersions);
         LOG.info("repair base table {} version changes for mv {}, changed versions:{}",
                 table.getName(), mv.getName(), changedVersions);
+        // update edit log
+        long maxChangedTableRefreshTime =
+                MvUtils.getMaxTablePartitionInfoRefreshTime(Lists.newArrayList(changedVersions));
+        MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
     }
 
     private static Map<String, MaterializedView.BasePartitionInfo> toBasePartitionInfoMap(
@@ -88,5 +98,75 @@ public class MVMetaVersionRepairer {
             partitionInfoMap.put(partitionRepairInfo.getPartitionName(), basePartitionInfo);
         }
         return partitionInfoMap;
+    }
+
+    /**
+     * Repair mv's base table info if base table has been dropped and recreated and base table info is changed.
+     * @param mv mv to repair
+     * @param oldBaseTableInfo old base table info
+     * @param newTable new table meta data
+     * @param updatedPartitionNames updated partition names
+     */
+    public static void repairExternalBaseTableInfo(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
+                                                   Table newTable, List<String> updatedPartitionNames) {
+
+        if (oldBaseTableInfo.isInternalCatalog()) {
+            return;
+        }
+
+        Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = mv.getBaseTableRefreshInfo(oldBaseTableInfo);
+        Map<String, MaterializedView.BasePartitionInfo> newPartitionInfoMap = Maps.newHashMap();
+        for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionInfoMap.entrySet()) {
+            if (updatedPartitionNames.contains(entry.getKey())) {
+                newPartitionInfoMap.put(entry.getKey(), entry.getValue());
+            } else {
+                List<String> baseTablePartitionNames = Lists.newArrayList(partitionInfoMap.keySet());
+                Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos =
+                        PartitionUtil.getPartitionNameWithPartitionInfo(newTable, baseTablePartitionNames);
+                if (newPartitionInfos.containsKey(entry.getKey())) {
+                    MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
+                    com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
+                    MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
+                            entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
+                    newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
+                    newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
+                    newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);
+                } else {
+                    // if the partition does not exist in new table,
+                    // keep the partition's last modified time as old
+                    // which will be refreshed
+                    newPartitionInfoMap.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoMapMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
+        // create new base table info with newTable.getTableIdentifier()
+        BaseTableInfo newBaseTableInfo = new BaseTableInfo(
+                oldBaseTableInfo.getCatalogName(),
+                oldBaseTableInfo.getDbName(),
+                oldBaseTableInfo.getTableName(), newTable.getTableIdentifier());
+        baseTableInfoMapMap.remove(oldBaseTableInfo);
+        baseTableInfoMapMap.put(newBaseTableInfo, newPartitionInfoMap);
+
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        baseTableInfos.remove(oldBaseTableInfo);
+        baseTableInfos.add(newBaseTableInfo);
+        // reset mv's state after repair
+        mv.resetMetadataCache();
+
+        ConnectorTableInfo connectorTableInfo = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()
+                .getConnectorTableInfo(oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
+                        oldBaseTableInfo.getTableIdentifier());
+        ConnectorTableInfo newConnectorTableInfo = ConnectorTableInfo.builder()
+                .setRelatedMaterializedViews(connectorTableInfo.getRelatedMaterializedViews())
+                .build();
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().removeConnectorTableInfo(
+                oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
+                oldBaseTableInfo.getTableIdentifier(), connectorTableInfo);
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
+                newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
+        // TODO: update edit log for followers' fe
     }
 }
