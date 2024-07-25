@@ -94,61 +94,7 @@ The URI used to access the files. You can specify a path or a file.
 
 ### data_format
 
-<<<<<<< HEAD
 The format of the data file. Valid values: `parquet` and `orc`.
-=======
-The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
-
-You must set detailed options for specific data file formats.
-
-#### CSV
-
-Example for the CSV format:
-
-```SQL
-"format"="csv",
-"csv.column_separator"="\\t",
-"csv.enclose"='"',
-"csv.skip_header"="1",
-"csv.escape"="\\"
-```
-
-##### csv.column_separator
-
-Specifies the column separator used when the data file is in CSV format. If you do not specify this parameter, this parameter defaults to `\\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality.
-
-Tasks that use Files() are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (`\`) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
-
-> **NOTE**
->
-> - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
-
-##### csv.enclose
-
-Specifies the character that is used to wrap the field values in the data file according to RFC4180 when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).
-
-All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.
-
-If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file.
-
-##### csv.skip_header
-
-Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
-
-In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
-The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
-
-##### csv.escape
-
-Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.
-
-> **NOTE**
->
-> The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.
-> Two examples are as follows:
-> - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
-> - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
 ### schema_detect
 
@@ -175,7 +121,6 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 > **CAUTION**
 >
 > All data files in a single batch must be of the same file format.
->>>>>>> cedce7bbe6 ([Doc] Add Schema Merge examples to Files (#48904))
 
 ### StorageCredentialParams
 
@@ -515,39 +460,3 @@ PROPERTIES (
 ```
 
 The result shows that the `c2` column, which contains both FLOAT and INT data, is merged as a DECIMAL column, and `c3`, which contains both DATE and DATETIME data, is merged as a VARCHAR column.
-
-The above result stays the same when the Parquet files are changed to CSV files that contain the same data:
-
-```Plain
-mysql> CREATE TABLE test_ctas_csv AS
-    -> SELECT * FROM FILES(
-    ->     "path" = "s3://inserttest/csv/*",
-    ->     "format" = "csv",
-    ->     "csv.column_separator"=",",
-    ->     "csv.row_delimiter"="\n",
-    ->     "csv.enclose"='"',
-    ->     "csv.skip_header"="1",
-    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-    ->     "aws.s3.region" = "us-west-2"
-    -> );
-Query OK, 0 rows affected (30.90 sec)
-
-mysql> SHOW CREATE TABLE test_ctas_csv\G
-*************************** 1. row ***************************
-       Table: test_ctas_csv
-Create Table: CREATE TABLE `test_ctas_csv` (
-  `c1` bigint(20) NULL COMMENT "",
-  `c2` decimal(38, 9) NULL COMMENT "",
-  `c3` varchar(1048576) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`c1`, `c2`)
-COMMENT "OLAP"
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"replication_num" = "3"
-);
-1 row in set (0.27 sec)
-```
