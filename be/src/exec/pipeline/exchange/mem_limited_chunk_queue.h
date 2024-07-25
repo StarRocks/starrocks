@@ -183,10 +183,6 @@ private:
         return status == nullptr ? Status::OK() : *status;
     }
 
-#ifdef BE_TEST
-public:
-#endif
-
     RuntimeState* _state = nullptr;
     std::shared_mutex _mutex;
     // an empty chunk, only keep meta
