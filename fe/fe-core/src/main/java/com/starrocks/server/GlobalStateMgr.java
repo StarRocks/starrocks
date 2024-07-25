@@ -1570,6 +1570,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, ((WarehouseManagerEPack) warehouseMgr)::load)
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                 .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1743,6 +1744,7 @@ public class GlobalStateMgr {
                 ((WarehouseManagerEPack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
                 keyMgr.save(dos);
+                pipeManager.getRepo().save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
