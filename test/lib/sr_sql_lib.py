@@ -457,7 +457,7 @@ class StarrocksSQLApiLib(object):
             "host": self.hive_host,
             "port": self.hive_port,
             "user": self.hive_user,
-            "queryTimeout": query_timeout_sec * 1000
+            "queryTimeout": str(query_timeout_sec * 1000)
         }
         self.hive_lib.connect(hive_dict)
 
