@@ -186,7 +186,6 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_cache++;
                 }
-                TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", 1);
             } else {
                 s = ReadBlock(table->rep_->file, options, handle, &contents);
                 if (s.ok()) {
@@ -198,7 +197,6 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_file++;
                 }
-                TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
             }
         } else {
             BlockContents contents;
@@ -209,7 +207,6 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
             if (options.stat != nullptr) {
                 options.stat->block_cnt_from_file++;
             }
-            TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
         }
     }
 
@@ -252,21 +249,29 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
         return false;
     };
 
+    int64_t continue_block_read_cnt = 0;
+    int64_t sst_bloom_filter_rows = 0;
+    int64_t multiget_t1_us = 0;
+    int64_t multiget_t2_us = 0;
+    int64_t multiget_t3_us = 0;
     size_t i = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
         auto& k = keys[*it];
+        int64_t t0 = butil::gettimeofday_us();
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
             ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             if (founded) {
-                TRACE_COUNTER_INCREMENT("continue_block_read", 1);
+                continue_block_read_cnt++;
                 continue;
             } else {
                 current_block_itr_ptr.reset(nullptr);
             }
         }
+        int64_t t1 = butil::gettimeofday_us();
         iiter->Seek(k);
+        int64_t t2 = butil::gettimeofday_us();
         if (iiter->Valid()) {
             Slice handle_value = iiter->value();
             FilterBlockReader* filter = rep_->filter;
@@ -274,20 +279,26 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
-                TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", 1);
+                sst_bloom_filter_rows++;
             } else {
-                auto start_ts = butil::gettimeofday_us();
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
-                auto end_ts = butil::gettimeofday_us();
-                TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             }
         }
+        int64_t t3 = butil::gettimeofday_us();
+        multiget_t1_us += t1 - t0;
+        multiget_t2_us += t2 - t1;
+        multiget_t3_us += t3 - t2;
     }
     if (s.ok()) {
         s = iiter->status();
     }
     delete iiter;
+    TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
+    TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
+    TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
+    TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
+    TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
     return s;
 }
 
