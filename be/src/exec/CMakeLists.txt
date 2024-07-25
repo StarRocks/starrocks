@@ -176,6 +176,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/mem_limited_chunk_queue.cpp
+    pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/sink_buffer.cpp
