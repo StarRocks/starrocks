@@ -22,6 +22,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -34,6 +37,8 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +55,6 @@ public class PipeManager {
 
     @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
-    @SerializedName(value = "nameToId")
     private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
     private final PipeRepo repo;
@@ -310,6 +314,21 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return Optional.ofNullable(getPipeByNameUnlock(name));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        try {
+            lock.readLock().lock();
+            final int cnt = 1 + pipeMap.size();
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.PIPE_MGR, cnt);
+            writer.writeJson(pipeMap.size());
+            for (Pipe pipe : pipeMap.values()) {
+                writer.writeJson(pipe);
+            }
+            writer.close();
         } finally {
             lock.readLock().unlock();
         }
