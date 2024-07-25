@@ -161,7 +161,12 @@ CSV 格式示例：
 
 - 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
 - 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个相对较小的通用数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。
+  - 所有整数列将被统一为更粗粗粒度上的整数类型。
+  - 整数列与 FLOAT 类型列将统一为 DECIMAL 类型。
+  - 其他类型统一为字符串类型用。
 - 一般情况下，STRING 类型可用于统一所有数据类型。
+
+您可以参考[示例六](#示例六)。
 
 如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
 
@@ -366,7 +371,9 @@ unload_data_param::=
 
 ## 示例
 
-示例一：查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
+#### 示例一
+
+查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
 
 ```Plain
 MySQL > SELECT * FROM FILES(
@@ -385,7 +392,9 @@ MySQL > SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-示例二：将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
+#### 示例二
+
+将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
 
 ```Plain
 MySQL > INSERT INTO insert_wiki_edit
@@ -400,7 +409,9 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-示例三：基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
+#### 示例三
+
+基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
 
 ```Plain
 MySQL > CREATE TABLE ctas_wiki_edit AS
@@ -415,7 +426,9 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-示例四：查询 HDFS 集群内 Parquet 文件 **/geo/country=US/city=LA/file1.parquet** 中的数据（其中仅包含两列 - `id` 和 `user`），并提取其路径中的 Key/Value 信息作为返回的列。
+#### 示例四
+
+查询 HDFS 集群内 Parquet 文件 **/geo/country=US/city=LA/file1.parquet** 中的数据（其中仅包含两列 - `id` 和 `user`），并提取其路径中的 Key/Value 信息作为返回的列。
 
 ```Plain
 SELECT * FROM FILES(
@@ -435,7 +448,9 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-示例五：将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
+#### 示例五
+
+将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
 
 ```SQL
 INSERT INTO 
@@ -449,4 +464,117 @@ FILES(
     "partition_by" = "sales_time"
 )
 SELECT * FROM sales_records;
+```
+
+#### 示例六
+
+自动 Schema 检测和 Union 操作
+
+以下示例基于 S3 桶中两个 Parquet 文件 File 1 和 File 2：
+
+- File 1 中包含三列数据 - INT 列 `c1`、FLOAT 列 `c2` 以及 DATE 列 `c3`。
+
+```Plain
+c1,c2,c3
+1,0.71173,2017-11-20
+2,0.16145,2017-11-21
+3,0.80524,2017-11-22
+4,0.91852,2017-11-23
+5,0.37766,2017-11-24
+6,0.34413,2017-11-25
+7,0.40055,2017-11-26
+8,0.42437,2017-11-27
+9,0.67935,2017-11-27
+10,0.22783,2017-11-29
+```
+
+- File 2 中包含三列数据 - INT 列 `c1`、INT 列 `c2` 以及 DATETIME 列 `c3`。
+
+```Plain
+c1,c2,c3
+101,9,2018-05-15T18:30:00
+102,3,2018-05-15T18:30:00
+103,2,2018-05-15T18:30:00
+104,3,2018-05-15T18:30:00
+105,6,2018-05-15T18:30:00
+106,1,2018-05-15T18:30:00
+107,8,2018-05-15T18:30:00
+108,5,2018-05-15T18:30:00
+109,6,2018-05-15T18:30:00
+110,8,2018-05-15T18:30:00
+```
+
+使用 CTAS 语句创建表 `test_ctas_parquet` 并将两个 Parquet 文件中的数据导入表中：
+
+```SQL
+CREATE TABLE test_ctas_parquet AS
+SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/*",
+        "format" = "parquet",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "aws.s3.region" = "us-west-2"
+);
+```
+
+查看 `test_ctas_parquet` 的表结构：
+
+```SQL
+SHOW CREATE TABLE test_ctas_parquet\G
+```
+
+```Plain
+*************************** 1. row ***************************
+       Table: test_ctas_parquet
+Create Table: CREATE TABLE `test_ctas_parquet` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+```
+
+由结果可知，`c2` 列因为包含 FLOAT 和 INT 数据，被合并为 DECIMAL 列，而 `c3` 列因为包含 DATE 和 DATETIME 数据，，被合并为 VARCHAR 列。
+
+将 Parquet 文件替换为含有同样数据的 CSV 文件，以上结果依然成立：
+
+```Plain
+mysql> CREATE TABLE test_ctas_csv AS
+    -> SELECT * FROM FILES(
+    ->     "path" = "s3://inserttest/csv/*",
+    ->     "format" = "csv",
+    ->     "csv.column_separator"=",",
+    ->     "csv.row_delimiter"="\n",
+    ->     "csv.enclose"='"',
+    ->     "csv.skip_header"="1",
+    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    ->     "aws.s3.region" = "us-west-2"
+    -> );
+Query OK, 0 rows affected (30.90 sec)
+
+mysql> SHOW CREATE TABLE test_ctas_csv\G
+*************************** 1. row ***************************
+       Table: test_ctas_csv
+Create Table: CREATE TABLE `test_ctas_csv` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+1 row in set (0.27 sec)
 ```
