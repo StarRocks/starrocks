@@ -94,7 +94,88 @@ The URI used to access the files. You can specify a path or a file.
 
 ### data_format
 
+<<<<<<< HEAD
 The format of the data file. Valid values: `parquet` and `orc`.
+=======
+The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+
+You must set detailed options for specific data file formats.
+
+#### CSV
+
+Example for the CSV format:
+
+```SQL
+"format"="csv",
+"csv.column_separator"="\\t",
+"csv.enclose"='"',
+"csv.skip_header"="1",
+"csv.escape"="\\"
+```
+
+##### csv.column_separator
+
+Specifies the column separator used when the data file is in CSV format. If you do not specify this parameter, this parameter defaults to `\\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality.
+
+Tasks that use Files() are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (`\`) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
+
+> **NOTE**
+>
+> - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+
+##### csv.enclose
+
+Specifies the character that is used to wrap the field values in the data file according to RFC4180 when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).
+
+All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.
+
+If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file.
+
+##### csv.skip_header
+
+Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
+
+In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
+The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
+
+##### csv.escape
+
+Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.
+
+> **NOTE**
+>
+> The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.
+> Two examples are as follows:
+> - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
+> - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
+
+### schema_detect
+
+From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
+
+You can configure the sampling rule using the following parameters:
+
+- `auto_detect_sample_files`: the number of random data files to sample in each batch. Range: [0, + ∞]. Default: `1`.
+- `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [0, + ∞]. Default: `500`.
+
+After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
+
+- For columns with different column names or indices, each column is identified as an individual column, and, eventually, the union of all individual columns is returned.
+- For columns with the same column name but different data types, they are identified as the same column but with a general data type on a relative fine granularity level. For example, if the column `col1` in file A is INT but DECIMAL in file B, DOUBLE is used in the returned column.
+  - All integer columns will be unionized as an integer type on an overall rougher granularity level.
+  - Integer columns together with FLOAT type columns will be unionized as the DECIMAL type.
+  - String types are used for unionizing other types.
+- Generally, the STRING type can be used to unionize all data types.
+
+You can refer to [Example 6](#example-6).
+
+If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
+
+> **CAUTION**
+>
+> All data files in a single batch must be of the same file format.
+>>>>>>> cedce7bbe6 ([Doc] Add Schema Merge examples to Files (#48904))
 
 ### StorageCredentialParams
 
@@ -263,7 +344,9 @@ From v3.2 onwards, FILES() further supports complex data types including ARRAY, 
 
 ## Examples
 
-Example 1: Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
+#### Example 1
+
+Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
 
 ```Plain
 MySQL > SELECT * FROM FILES(
@@ -282,7 +365,9 @@ MySQL > SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-Example 2: Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
+#### Example 2
+
+Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
 ```Plain
 MySQL > INSERT INTO insert_wiki_edit
@@ -297,7 +382,9 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-Example 3: Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
+#### Example 3
+
+Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
 
 ```Plain
 MySQL > CREATE TABLE ctas_wiki_edit AS
@@ -312,7 +399,9 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-Example 4: Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
+#### Example 4
+
+Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
 
 ```Plain
 SELECT * FROM FILES(
@@ -332,7 +421,9 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-Example 5: Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
+#### Example 5
+
+Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
 
 ```SQL
 INSERT INTO 
@@ -346,4 +437,117 @@ FILES(
     "partition_by" = "sales_time"
 )
 SELECT * FROM sales_records;
+```
+
+#### Example 6
+
+Automatic schema detection and Unionization.
+
+The following example is based on two Parquet files in the S3 bucket:
+
+- File 1 contains three columns - INT column `c1`, FLOAT column `c2`, and DATE column `c3`.
+
+```Plain
+c1,c2,c3
+1,0.71173,2017-11-20
+2,0.16145,2017-11-21
+3,0.80524,2017-11-22
+4,0.91852,2017-11-23
+5,0.37766,2017-11-24
+6,0.34413,2017-11-25
+7,0.40055,2017-11-26
+8,0.42437,2017-11-27
+9,0.67935,2017-11-27
+10,0.22783,2017-11-29
+```
+
+- File 2 contains three columns - INT column `c1`, INT column `c2`, and DATETIME column `c3`.
+
+```Plain
+c1,c2,c3
+101,9,2018-05-15T18:30:00
+102,3,2018-05-15T18:30:00
+103,2,2018-05-15T18:30:00
+104,3,2018-05-15T18:30:00
+105,6,2018-05-15T18:30:00
+106,1,2018-05-15T18:30:00
+107,8,2018-05-15T18:30:00
+108,5,2018-05-15T18:30:00
+109,6,2018-05-15T18:30:00
+110,8,2018-05-15T18:30:00
+```
+
+Use a CTAS statement to create a table named `test_ctas_parquet` and insert the data rows from the two Parquet files into the table:
+
+```SQL
+CREATE TABLE test_ctas_parquet AS
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
+View the table schema of `test_ctas_parquet`:
+
+```SQL
+SHOW CREATE TABLE test_ctas_parquet\G
+```
+
+```Plain
+*************************** 1. row ***************************
+       Table: test_ctas_parquet
+Create Table: CREATE TABLE `test_ctas_parquet` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+```
+
+The result shows that the `c2` column, which contains both FLOAT and INT data, is merged as a DECIMAL column, and `c3`, which contains both DATE and DATETIME data, is merged as a VARCHAR column.
+
+The above result stays the same when the Parquet files are changed to CSV files that contain the same data:
+
+```Plain
+mysql> CREATE TABLE test_ctas_csv AS
+    -> SELECT * FROM FILES(
+    ->     "path" = "s3://inserttest/csv/*",
+    ->     "format" = "csv",
+    ->     "csv.column_separator"=",",
+    ->     "csv.row_delimiter"="\n",
+    ->     "csv.enclose"='"',
+    ->     "csv.skip_header"="1",
+    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    ->     "aws.s3.region" = "us-west-2"
+    -> );
+Query OK, 0 rows affected (30.90 sec)
+
+mysql> SHOW CREATE TABLE test_ctas_csv\G
+*************************** 1. row ***************************
+       Table: test_ctas_csv
+Create Table: CREATE TABLE `test_ctas_csv` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+1 row in set (0.27 sec)
 ```
