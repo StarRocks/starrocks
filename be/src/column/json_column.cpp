@@ -185,11 +185,25 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
                                   const Columns& flat_columns) {
     DCHECK_EQ(paths.size(), types.size());
     DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
-    _flat_column_paths.insert(_flat_column_paths.cbegin(), paths.cbegin(), paths.cend());
-    _flat_column_types.insert(_flat_column_types.cbegin(), types.cbegin(), types.cend());
-    _flat_columns.insert(_flat_columns.cbegin(), flat_columns.cbegin(), flat_columns.cend());
-    for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-        _path_to_index[_flat_column_paths[i]] = i;
+
+    if (is_flat_json()) {
+        DCHECK_EQ(_flat_columns.size(), flat_columns.size());
+        DCHECK_EQ(_flat_column_paths.size(), paths.size());
+        DCHECK_EQ(_flat_column_types.size(), types.size());
+        DCHECK_EQ(_path_to_index.size(), paths.size());
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            DCHECK_EQ(_flat_column_paths[i], paths[i]);
+            DCHECK_EQ(_flat_column_types[i], types[i]);
+            DCHECK_EQ(i, _path_to_index[paths[i]]);
+        }
+        _flat_columns = flat_columns;
+    } else {
+        _flat_column_paths = paths;
+        _flat_column_types = types;
+        _flat_columns = flat_columns;
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            _path_to_index[_flat_column_paths[i]] = i;
+        }
     }
 }
 

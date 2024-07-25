@@ -737,6 +737,8 @@ void JsonMerger::set_root_path(const std::string& base_path) {
 
 ColumnPtr JsonMerger::merge(const std::vector<ColumnPtr>& columns) {
     DCHECK_GE(columns.size(), 1);
+    DCHECK(_src_columns.empty());
+
     _result = NullableColumn::create(JsonColumn::create(), NullColumn::create());
     _json_result = down_cast<JsonColumn*>(down_cast<NullableColumn*>(_result.get())->data_column().get());
     _null_result = down_cast<NullColumn*>(down_cast<NullableColumn*>(_result.get())->null_column().get());
@@ -752,6 +754,7 @@ ColumnPtr JsonMerger::merge(const std::vector<ColumnPtr>& columns) {
         _merge_impl<false>(rows);
     }
 
+    _src_columns.clear();
     if (_output_nullable) {
         down_cast<NullableColumn*>(_result.get())->update_has_null();
         return _result;
@@ -1127,6 +1130,10 @@ void HyperJsonTransformer::init_compaction_task(JsonColumn* column) {
 }
 
 Status HyperJsonTransformer::trans(std::vector<ColumnPtr>& columns) {
+    DCHECK(_dst_remain ? _dst_columns.size() == _dst_paths.size() + 1 : _dst_columns.size() == _dst_paths.size());
+    for (auto& col : _dst_columns) {
+        DCHECK_EQ(col->size(), 0);
+    }
     {
         SCOPED_RAW_TIMER(&_cast_ms);
         for (auto& task : _merge_tasks) {
