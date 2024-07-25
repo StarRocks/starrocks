@@ -37,6 +37,9 @@ public class PartitionsMetaSystemTable {
                         .column("VISIBLE_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("VISIBLE_VERSION_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("NEXT_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("DATA_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_EPOCH", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         // corresponding to `Range` or `List` in `SHOW PARTITIONS FROM XXX`
                         .column("PARTITION_VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -55,9 +58,6 @@ public class PartitionsMetaSystemTable {
                         .column("P50_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATA_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION_EPOCH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
