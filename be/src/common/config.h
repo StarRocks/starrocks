@@ -835,6 +835,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+CONF_mBool(s3_use_list_objects_v1, "false");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
