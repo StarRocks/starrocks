@@ -18,6 +18,6 @@
 
 from timeout_decorator import timeout
 
-@timeout_decorator(10)
+@timeout(10)
 def close_conn(conn):
     conn.close()
