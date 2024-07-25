@@ -49,6 +49,7 @@ from cup import shell
 from nose import tools
 from cup import log
 from requests.auth import HTTPBasicAuth
+from timeout_decorator import timeout
 
 from lib import skip
 from lib import data_delete_lib
@@ -74,7 +75,7 @@ if not os.path.exists(CRASH_DIR):
     os.mkdir(CRASH_DIR)
 
 LOG_LEVEL = logging.INFO
-
+QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 30))
 
 class Filter(logging.Filter):
     """
@@ -444,21 +445,19 @@ class StarrocksSQLApiLib(object):
         }
         self.trino_lib.connect(trino_dict)
 
-    def connect_spark(self, query_timeout_sec=30):
+    def connect_spark(self):
         spark_dict = {
             "host": self.spark_host,
             "port": self.spark_port,
-            "user": self.spark_user,
-            "queryTimeout": str(query_timeout_sec * 1000)
+            "user": self.spark_user
         }
         self.spark_lib.connect(spark_dict)
 
-    def connect_hive(self, query_timeout_sec=30):
+    def connect_hive(self):
         hive_dict = {
             "host": self.hive_host,
             "port": self.hive_port,
-            "user": self.hive_user,
-            "queryTimeout": str(query_timeout_sec * 1000)
+            "user": self.hive_user
         }
         self.hive_lib.connect(hive_dict)
 
@@ -622,6 +621,7 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
+    @timeout(QUERY_TIMEOUT)
     def conn_execute_sql(self, conn, sql):
         try:
             cursor = conn.cursor()
