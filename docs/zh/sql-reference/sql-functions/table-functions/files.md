@@ -64,7 +64,6 @@ StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简�
 - 如果您使用简单认证接入访问 HDFS 集群：
 
   ```SQL
-<<<<<<< HEAD
   "hadoop.security.authentication" = "simple",
   "username" = "xxxxxxxxxx",
   "password" = "yyyyyyyyyy"
@@ -75,117 +74,10 @@ StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简�
   | hadoop.security.authentication | 否       | 用于指定待访问 HDFS 集群的认证方式。有效值：`simple`（默认值）。`simple` 表示简单认证，即无认证。 |
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
-=======
-  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
-  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "fs.s3a.endpoint" = "<gcs_endpoint>"
-  ```
-
-  | **参数**          | **必填** | **说明**                                                 |
-  | ----------------- | -------- | -------------------------------------------------------- |
-  | fs.s3a.access.key | 是       | 用于指定访问 GCS 存储空间的 Access Key。              |
-  | fs.s3a.secret.key | 是       | 用于指定访问 GCS 存储空间的 Secret Key。              |
-  | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。 |
-
-- 如果您使用 Shared Key 访问 Azure Blob Storage：
-
-  ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
-  "azure.blob.shared_key" = "<shared_key>"
-  ```
-
-  | **参数**                   | **必填** | **说明**                                                 |
-  | -------------------------- | -------- | ------------------------------------------------------ |
-  | azure.blob.storage_account | 是       | 用于指定 Azure Blob Storage Account 名。                  |
-  | azure.blob.shared_key      | 是       | 用于指定访问 Azure Blob Storage 存储空间的 Shared Key。     |
-
-### columns_from_path
-
-自 v3.2 版本起，StarRocks 支持从文件路径中提取 Key/Value 对中的 Value 作为列的值。
-
-```SQL
-"columns_from_path" = "<column_name> [, ...]"
-```
-
-假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
-
-### unload_data_param
-
-从 v3.2 版本开始，FILES() 支持在远程存储中定义可写入文件以进行数据导出。有关详细说明，请参阅[使用 INSERT INTO FILES 导出数据](../../../unloading/unload_using_insert_into_files.md)。
-
-```sql
--- 自 v3.2 版本起支持。
-unload_data_param::=
-    "compression" = "<compression_method>",
-    "partition_by" = "<column_name> [, ...]",
-    "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
-```
-
-| **参数**          | **必填** | **说明**                                                          |
-| ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
-| partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
-| single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
-| target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
 
 ## 返回
 
 当与 SELECT 语句一同使用时，FILES() 函数会以表的形式返回远端存储文件中的数据。
-
-- 当查询 CSV 文件时，您可以在 SELECT 语句使用 `$1`、`$2` ... 表示文件中不同的列，或使用 `*` 查询所有列。
-
-  ```SQL
-  SELECT * FROM FILES(
-      "path" = "s3://inserttest/csv/file1.csv",
-      "format" = "csv",
-      "csv.column_separator"=",",
-      "csv.row_delimiter"="\n",
-      "csv.enclose"='"',
-      "csv.skip_header"="1",
-      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-      "aws.s3.region" = "us-west-2"
-  )
-  WHERE $1 > 5;
-  +------+---------+------------+
-  | $1   | $2      | $3         |
-  +------+---------+------------+
-  |    6 | 0.34413 | 2017-11-25 |
-  |    7 | 0.40055 | 2017-11-26 |
-  |    8 | 0.42437 | 2017-11-27 |
-  |    9 | 0.67935 | 2017-11-27 |
-  |   10 | 0.22783 | 2017-11-29 |
-  +------+---------+------------+
-  5 rows in set (0.30 sec)
-
-  SELECT $1, $2 FROM FILES(
-      "path" = "s3://inserttest/csv/file1.csv",
-      "format" = "csv",
-      "csv.column_separator"=",",
-      "csv.row_delimiter"="\n",
-      "csv.enclose"='"',
-      "csv.skip_header"="1",
-      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-      "aws.s3.region" = "us-west-2"
-  );
-  +------+---------+
-  | $1   | $2      |
-  +------+---------+
-  |    1 | 0.71173 |
-  |    2 | 0.16145 |
-  |    3 | 0.80524 |
-  |    4 | 0.91852 |
-  |    5 | 0.37766 |
-  |    6 | 0.34413 |
-  |    7 | 0.40055 |
-  |    8 | 0.42437 |
-  |    9 | 0.67935 |
-  |   10 | 0.22783 |
-  +------+---------+
-  10 rows in set (0.38 sec)
-  ```
 
 - 当查询 Parquet 或 ORC 文件时，您可以在 SELECT 语句直接指定对应列名，或使用 `*` 查询所有列。
 
@@ -229,11 +121,6 @@ unload_data_param::=
   +------+---------------------+
   10 rows in set (0.55 sec)
   ```
-
-## 注意事项
-
-自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
->>>>>>> a1095b33d2 ([Doc] Add Returns to Files (#48880))
 
 ## 示例
 
