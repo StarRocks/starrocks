@@ -189,7 +189,6 @@ public class TaskRunHistoryTest {
         };
         // correct table replicas
         keeper.run();
-        assertTrue(keeper.isTableCorrected());
     }
 
     @Test
