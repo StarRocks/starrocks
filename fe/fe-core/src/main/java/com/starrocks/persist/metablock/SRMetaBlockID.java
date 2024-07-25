@@ -92,6 +92,13 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
 
+<<<<<<< HEAD
+=======
+    public static final SRMetaBlockID KEY_MGR = new SRMetaBlockID(31);
+
+    public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
+
+>>>>>>> 8e0183017a ([Enhancement] Persist pipe manager in new json format (#48852))
     @Override
     public String toString() {
         return String.valueOf(id);
