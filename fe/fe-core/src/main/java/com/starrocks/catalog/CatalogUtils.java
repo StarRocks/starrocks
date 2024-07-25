@@ -374,13 +374,7 @@ public class CatalogUtils {
     }
 
     public static int calPhysicalPartitionBucketNum() {
-        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
-
-        if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
-        }
-
-        return divisibleBucketNum(backendNum);
+        return 2;
     }
 
     public static int calBucketNumAccordingToBackends() {
