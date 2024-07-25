@@ -110,6 +110,22 @@ TEST_F(AddNullableColumnTest, test_add_boolean) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ("[1]", column->debug_string());
 
+    column->reset_column();
+    json = R"(  { "f_boolean": 9223372036854775808}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": 18446744073709551616}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
     // string
     column->reset_column();
     json = R"(  { "f_boolean": "TrUe"}  )"_padded;
@@ -121,6 +137,22 @@ TEST_F(AddNullableColumnTest, test_add_boolean) {
 
     column->reset_column();
     json = R"(  { "f_boolean": "1"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "-1"}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), t, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
+    column->reset_column();
+    json = R"(  { "f_boolean": "10"}  )"_padded;
     doc = parser.iterate(json);
     val = doc.find_field("f_boolean");
     st = add_nullable_column(column.get(), t, "f_boolean", &val, false);

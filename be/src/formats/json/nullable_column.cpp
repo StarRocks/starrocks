@@ -114,44 +114,64 @@ static Status add_boolean_column(Column* column, const TypeDescriptor& type_desc
         }
 
         case simdjson::ondemand::json_type::number: {
-            bool success = false;
-            auto s = value->raw_json_token();
-            StringParser::ParseResult r;
-            bool v = implicit_cast<bool>(StringParser::string_to_float<double>(s.data(), s.size(), &r));
-            if (r == StringParser::PARSE_SUCCESS) {
-                bool_column->append(v);
-                success = true;
-            } else if (r == StringParser::PARSE_OVERFLOW || r == StringParser::PARSE_UNDERFLOW) {
-                DecimalV2Value decimal;
-                if (decimal.parse_from_str(s.data(), s.size()) == 0) {
-                    bool_column->append(!decimal.is_zero());
-                    success = true;
+            simdjson::ondemand::number_type nt = value->get_number_type();
+            switch (nt) {
+            case simdjson::ondemand::number_type::signed_integer: {
+                int64_t v = value->get_int64();
+                bool_column->append(v != 0);
+                return Status::OK();
+            }
+            case simdjson::ondemand::number_type::unsigned_integer: {
+                uint64_t v = value->get_uint64();
+                bool_column->append(v != 0);
+                return Status::OK();
+            }
+            case simdjson::ondemand::number_type::big_integer: {
+                auto s = value->raw_json_token();
+                StringParser::ParseResult r;
+                auto v = StringParser::string_to_int<int128_t>(s.data(), s.size(), &r);
+                if (r != StringParser::PARSE_SUCCESS) {
+                    auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
+                    return Status::InvalidArgument(err_msg);
                 }
+                bool_column->append(v != 0);
+                return Status::OK();
             }
-            if (!success) {
-                auto err_msg =
-                        strings::Substitute("Failed to parse number value as boolean, column=$0, value=$1", name, s);
-                return Status::InvalidArgument(err_msg);
+            case simdjson::ondemand::number_type::floating_point_number: {
+                double v = value->get_double();
+                bool_column->append(v != 0);
+                return Status::OK();
             }
-            return Status::OK();
+            default: {
+                std::stringstream ss;
+                ss << "Unsupported number type. column=" << name << ", type=" << nt;
+                return Status::InvalidArgument(ss.str());
+            }
+            }
         }
 
         case simdjson::ondemand::json_type::string: {
             std::string_view s = value->get_string();
             StringParser::ParseResult r;
-            bool v = StringParser::string_to_bool(s.data(), s.size(), &r);
-            if (r != StringParser::PARSE_SUCCESS) {
-                auto err_msg =
-                        strings::Substitute("Failed to parse string value as boolean, column=$0, value=$1", name, s);
-                return Status::InvalidArgument(err_msg);
+            auto v = StringParser::string_to_int<int32_t>(s.data(), s.size(), &r);
+            if (r != StringParser::PARSE_SUCCESS || std::isnan(v) || std::isinf(v)) {
+                bool b = StringParser::string_to_bool(s.data(), s.size(), &r);
+                if (r != StringParser::PARSE_SUCCESS) {
+                    auto err_msg = strings::Substitute("Failed to parse string value as boolean. column=$0, value=$1",
+                                                       name, s);
+                    return Status::InvalidArgument(err_msg);
+                }
+                bool_column->append(b);
+            } else {
+                bool_column->append(v != 0);
             }
-            bool_column->append(v);
             return Status::OK();
         }
 
         default: {
-            auto err_msg = strings::Substitute("Unsupported value type. Boolean type is required. column=$0", name);
-            return Status::InvalidArgument(err_msg);
+            std::stringstream ss;
+            ss << "Unsupported value type to boolean. column=" << name << ", type=" << tp;
+            return Status::InvalidArgument(ss.str());
         }
         }
     } catch (simdjson::simdjson_error& e) {
