@@ -544,7 +544,7 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
 
     // use config::object_storage_request_timeout_ms instead
-    config::object_storage_rename_rename_file_timeout_ms = -1;
+    config::object_storage_rename_file_request_timeout_ms = -1;
     config::object_storage_request_timeout_ms = 1000;
     // only used for generate a new S3 client into global cache
     (void)fs->rename_file(S3Path("/dir/source_name"), S3Path("/dir/target_name"));
