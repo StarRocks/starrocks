@@ -384,10 +384,11 @@ Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<con
 
 class JsonMergeIterator final : public ColumnIterator {
 public:
-    JsonMergeIterator(std::unique_ptr<ColumnIterator> null_iter, std::vector<std::unique_ptr<ColumnIterator>> all_iter,
-                      const std::vector<std::string>& src_paths, const std::vector<LogicalType>& src_types,
-                      bool is_merge)
-            : _null_iter(std::move(null_iter)),
+    JsonMergeIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+                      std::vector<std::unique_ptr<ColumnIterator>> all_iter, const std::vector<std::string>& src_paths,
+                      const std::vector<LogicalType>& src_types, bool is_merge)
+            : _reader(reader),
+              _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
               _src_paths(std::move(src_paths)),
               _src_types(std::move(src_types)),
@@ -603,16 +604,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
-        std::unique_ptr<ColumnIterator> null_iter, std::vector<std::unique_ptr<ColumnIterator>> all_iters,
-        const std::vector<std::string>& merge_paths, const std::vector<LogicalType>& merge_types) {
-    return std::make_unique<JsonMergeIterator>(std::move(null_iter), std::move(all_iters), merge_paths, merge_types,
-                                               true);
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
+        const std::vector<LogicalType>& merge_types) {
+    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
+                                               merge_types, true);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_direct_iterator(
-        std::unique_ptr<ColumnIterator> null_iter, std::vector<std::unique_ptr<ColumnIterator>> all_iters,
-        const std::vector<std::string>& merge_paths, const std::vector<LogicalType>& merge_types) {
-    return std::make_unique<JsonMergeIterator>(std::move(null_iter), std::move(all_iters), merge_paths, merge_types,
-                                               false);
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
+        const std::vector<LogicalType>& merge_types) {
+    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
+                                               merge_types, false);
 }
 } // namespace starrocks
