@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Notes:
+# There're several ENV variables used in the BE entrypoint script:
+# * COREDUMP_ENABLED: when it's set to true and BE process is crashed, a coredump is generated and the BE process would be restarted;
+# * DEBUG_MODE: when it's set to true, BE process is restarted always;
+
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
 PROBE_TIMEOUT=60
