@@ -34,6 +34,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -74,7 +75,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -506,8 +506,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DICTIONARY_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DICTIONARY_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

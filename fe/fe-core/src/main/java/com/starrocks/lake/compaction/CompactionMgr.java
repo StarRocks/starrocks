@@ -20,6 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -32,7 +33,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
@@ -218,8 +218,8 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionManager;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

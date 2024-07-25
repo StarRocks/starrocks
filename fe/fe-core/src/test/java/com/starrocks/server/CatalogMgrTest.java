@@ -23,6 +23,7 @@ import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -149,8 +150,8 @@ public class CatalogMgrTest {
 
         UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        catalogMgr.save(image.getDataOutputStream());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        catalogMgr.save(image.getImageWriter());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
 
         CatalogMgr loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
         loadCatalogMgr.load(reader);
@@ -158,7 +159,7 @@ public class CatalogMgrTest {
 
         // test load with ddl exception
         loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
-        reader = new SRMetaBlockReader(image.getDataInputStream());
+        reader = new SRMetaBlockReaderV2(image.getJsonReader());
         new MockUp<CatalogMgr>() {
             @mockit.Mock
             public void replayCreateCatalog(Catalog catalog) throws DdlException {

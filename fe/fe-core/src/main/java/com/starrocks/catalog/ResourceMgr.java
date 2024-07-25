@@ -44,6 +44,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.DropResourceOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -354,8 +355,8 @@ public class ResourceMgr implements Writable {
         return checksum;
     }
 
-    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+    public void saveResourcesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

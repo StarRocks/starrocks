@@ -61,6 +61,7 @@ public class Storage {
 
     public static final String IMAGE_NEW = "image.ckpt";
     public static final String IMAGE = "image";
+    public static final String CHECKSUM = "checksum";
     public static final String VERSION_FILE = "VERSION";
     public static final String ROLE_FILE = "ROLE";
 
@@ -172,14 +173,6 @@ public class Storage {
         return nodeName;
     }
 
-    public String getMetaDir() {
-        return metaDir;
-    }
-
-    public void setMetaDir(String metaDir) {
-        this.metaDir = metaDir;
-    }
-
     public long getImageJournalId() {
         return imageJournalId;
     }
@@ -246,28 +239,6 @@ public class Storage {
         }
     }
 
-    public void clear() throws IOException {
-        File metaFile = new File(metaDir);
-        if (metaFile.exists()) {
-            String[] children = metaFile.list();
-            if (children != null) {
-                for (String child : children) {
-                    File file = new File(metaFile, child);
-                    if (!file.delete()) {
-                        LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
-                    }
-                }
-            }
-            if (!metaFile.delete()) {
-                LOG.warn("Failed to delete file, filepath={}", metaFile.getAbsolutePath());
-            }
-        }
-
-        if (!metaFile.mkdirs()) {
-            throw new IOException("Cannot create directory " + metaFile);
-        }
-    }
-
     public static void rename(File from, File to) throws IOException {
         if (!from.renameTo(to)) {
             throw new IOException("Failed to rename  " + from.getCanonicalPath()
@@ -287,6 +258,10 @@ public class Storage {
         return new File(dir, IMAGE + "." + version);
     }
 
+    public static File getChecksumFile(File dir, long version) {
+        return new File(dir, CHECKSUM + "." + version);
+    }
+
     public final File getVersionFile() {
         return new File(metaDir, VERSION_FILE);
     }
@@ -294,5 +269,5 @@ public class Storage {
     public final File getRoleFile() {
         return new File(metaDir, ROLE_FILE);
     }
-}
 
+}

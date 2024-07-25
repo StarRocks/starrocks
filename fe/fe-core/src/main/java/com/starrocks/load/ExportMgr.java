@@ -50,6 +50,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -451,10 +452,10 @@ public class ExportMgr implements MemoryTrackable {
         return checksum;
     }
 
-    public void saveExportJobV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveExportJobV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
-        writer.writeJson(idToJob.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.EXPORT_MGR, numJson);
+        writer.writeInt(idToJob.size());
         for (ExportJob job : idToJob.values()) {
             writer.writeJson(job);
         }

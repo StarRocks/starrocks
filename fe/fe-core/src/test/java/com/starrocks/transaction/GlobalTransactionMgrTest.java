@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
@@ -62,7 +63,10 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -84,6 +88,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -761,7 +766,9 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        masterTransMgr.saveTransactionStateV2(dos);
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        imageWriter.setOutputStream(dos);
+        masterTransMgr.saveTransactionStateV2(imageWriter);
         dos.close();
 
         masterTransMgr.removeDatabaseTransactionMgr(dbId);
@@ -770,7 +777,7 @@ public class GlobalTransactionMgrTest {
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(dis)));
         masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
         Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
@@ -847,11 +854,11 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        masterTransMgr.saveTransactionStateV2(pseudoImage.getDataOutputStream());
+        masterTransMgr.saveTransactionStateV2(pseudoImage.getImageWriter());
 
         GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
         followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
         followerTransMgr.loadTransactionStateV2(reader);
         reader.close();
 

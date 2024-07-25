@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -130,10 +131,10 @@ public class ExportMgrTest {
         leaderMgr.replayCreateExportJob(job);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        leaderMgr.saveExportJobV2(image.getDataOutputStream());
+        leaderMgr.saveExportJobV2(image.getImageWriter());
 
         ExportMgr followerMgr = new ExportMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         followerMgr.loadExportJobV2(reader);
         reader.close();
 

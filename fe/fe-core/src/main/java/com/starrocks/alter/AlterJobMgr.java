@@ -80,6 +80,7 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -125,7 +126,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -907,19 +907,19 @@ public class AlterJobMgr {
         return this.clusterHandler;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<Long, AlterJobV2> schemaChangeAlterJobs = schemaChangeHandler.getAlterJobsV2();
         Map<Long, AlterJobV2> materializedViewAlterJobs = materializedViewHandler.getAlterJobsV2();
 
         int cnt = 1 + schemaChangeAlterJobs.size() + 1 + materializedViewAlterJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ALTER_MGR, cnt);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ALTER_MGR, cnt);
 
-        writer.writeJson(schemaChangeAlterJobs.size());
+        writer.writeInt(schemaChangeAlterJobs.size());
         for (AlterJobV2 alterJobV2 : schemaChangeAlterJobs.values()) {
             writer.writeJson(alterJobV2);
         }
 
-        writer.writeJson(materializedViewAlterJobs.size());
+        writer.writeInt(materializedViewAlterJobs.size());
         for (AlterJobV2 alterJobV2 : materializedViewAlterJobs.values()) {
             writer.writeJson(alterJobV2);
         }
@@ -928,7 +928,7 @@ public class AlterJobMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int schemaChangeJobSize = reader.readJson(int.class);
+        int schemaChangeJobSize = reader.readInt();
         for (int i = 0; i != schemaChangeJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
             schemaChangeHandler.addAlterJobV2(alterJobV2);
@@ -942,7 +942,7 @@ public class AlterJobMgr {
             }
         }
 
-        int materializedViewJobSize = reader.readJson(int.class);
+        int materializedViewJobSize = reader.readInt();
         for (int i = 0; i != materializedViewJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
             materializedViewHandler.addAlterJobV2(alterJobV2);

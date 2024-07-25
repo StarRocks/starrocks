@@ -12,17 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.persist;
 
-package com.starrocks.persist.metablock;
-
-import java.io.IOException;
-
-public interface SRMetaBlockWriter {
-    void writeJson(Object object) throws IOException, SRMetaBlockException;
-
-    void writeInt(int value) throws IOException, SRMetaBlockException;
-
-    void writeLong(long value) throws IOException, SRMetaBlockException;
-
-    void close() throws IOException, SRMetaBlockException;
+public enum ImageFormatVersion {
+    v1,
+    v2
 }

@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -333,10 +334,10 @@ public class ColocateTableIndexTest {
         OlapTable table = (OlapTable) db.getTable("tbl1");
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        colocateTableIndex.saveColocateTableIndexV2(image.getDataOutputStream());
+        colocateTableIndex.saveColocateTableIndexV2(image.getImageWriter());
 
         ColocateTableIndex followerIndex = new ColocateTableIndex();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         followerIndex.loadColocateTableIndexV2(reader);
         reader.close();
         Assert.assertEquals(colocateTableIndex.getAllGroupIds(), followerIndex.getAllGroupIds());
