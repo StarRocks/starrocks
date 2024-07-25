@@ -289,7 +289,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
         Database db = getDb(dbName);

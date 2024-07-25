@@ -3017,7 +3017,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
-    public void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         stateMgr.getAlterJobMgr().processAlterTable(stmt, context);
     }
 

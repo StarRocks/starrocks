@@ -293,7 +293,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);

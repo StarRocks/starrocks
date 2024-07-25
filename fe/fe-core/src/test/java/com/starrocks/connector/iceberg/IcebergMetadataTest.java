@@ -1155,7 +1155,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(addColumnClause);
         clauses.add(addColumnsClause);
         AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
-        metadata.alterTable(stmt, connectContext);
+        metadata.alterTable(connectContext, stmt);
         clauses.clear();
 
         // must be default null
@@ -1163,7 +1163,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
-        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4, connectContext));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(connectContext, stmtC4));
         clauses.clear();
 
         // drop/rename/modify column
@@ -1176,13 +1176,13 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(dropColumnClause);
         clauses.add(columnRenameClause);
         clauses.add(modifyColumnClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses), connectContext);
+        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
 
         // rename table
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses), connectContext);
+        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
 
         // modify table properties/comment
         clauses.clear();
@@ -1195,7 +1195,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
         clauses.add(modifyTablePropertiesClause);
         clauses.add(alterTableCommentClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses), connectContext);
+        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
 
         // modify empty properties
         clauses.clear();
@@ -1203,7 +1203,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
         clauses.add(emptyPropertiesClause);
         Assert.assertThrows(DdlException.class, () -> metadata.alterTable(
-                new AlterTableStmt(tableName, clauses), connectContext));
+                connectContext, new AlterTableStmt(tableName, clauses)));
 
         // modify unsupported properties
         clauses.clear();
@@ -1213,7 +1213,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
         Assert.assertThrows(DdlException.class, () -> metadata.alterTable(
-                new AlterTableStmt(tableName, clauses), connectContext));
+                connectContext, new AlterTableStmt(tableName, clauses)));
     }
 
     @Test

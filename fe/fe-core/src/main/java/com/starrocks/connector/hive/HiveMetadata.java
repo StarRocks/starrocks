@@ -396,34 +396,11 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-<<<<<<< HEAD
-    public void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         Table table = getTable(stmt.getDbName(), stmt.getTableName());
         if (table == null) {
             throw new StarRocksConnectorException(
                     "Failed to load hive table: " + stmt.getTbl().toString());
-=======
-    public void alterTable(AlterTableStmt stmt) throws UserException {
-        // (FIXME) add this api just for tests of external table
-        List<AlterClause> alterClauses = stmt.getAlterClauseList();
-        for (AlterClause alterClause : alterClauses) {
-            if (alterClause instanceof AddPartitionClause) {
-                addPartition(stmt, alterClause);
-            } else {
-                throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
-                        alterClause.getOpType());
-            }
-        }
-    }
-
-    private void addPartition(AlterTableStmt stmt, AlterClause alterClause) {
-        HiveTable table = (HiveTable) getTable(stmt.getDbName(), stmt.getTableName());
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterClause;
-        List<String> partitionColumns = table.getPartitionColumnNames();
-        // now do not support to specify location of hive partition in add partition
-        if (!(addPartitionClause.getPartitionDesc() instanceof SingleItemListPartitionDesc)) {
-            return;
->>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         }
         HiveTable hiveTable = (HiveTable) table;
         HiveAlterTableExecutor executor = new HiveAlterTableExecutor(stmt, hiveTable, context, hmsOps);

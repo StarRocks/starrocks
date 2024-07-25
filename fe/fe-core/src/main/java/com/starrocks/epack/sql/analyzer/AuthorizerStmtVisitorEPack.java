@@ -105,7 +105,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
         super.visitAlterTableStatement(statement, context);
-        for (AlterClause alterClause : statement.getOps()) {
+        for (AlterClause alterClause : statement.getAlterClauseList()) {
             checkAlterClausePolicyApply(alterClause, context);
         }
 

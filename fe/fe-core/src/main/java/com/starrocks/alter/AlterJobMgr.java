@@ -631,12 +631,8 @@ public class AlterJobMgr {
             } else if (stmt.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
             } else {
-<<<<<<< HEAD
                 ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt, context);
                 executor.execute();
-=======
-                throw new DdlException("Invalid alter operations: " + stmt.getAlterClauseList());
->>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);

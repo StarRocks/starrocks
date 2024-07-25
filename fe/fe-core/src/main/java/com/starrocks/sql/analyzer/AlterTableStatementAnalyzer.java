@@ -41,12 +41,7 @@ public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
-<<<<<<< HEAD
-        List<AlterClause> alterClauseList = statement.getOps();
-=======
-        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
->>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }

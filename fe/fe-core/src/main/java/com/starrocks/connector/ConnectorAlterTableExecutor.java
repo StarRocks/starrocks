@@ -14,11 +14,7 @@
 
 package com.starrocks.connector;
 
-<<<<<<< HEAD
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.alter.AlterOperations;
-=======
->>>>>>> 607dcf9d8f... [Enhancement] Move alter table clause op conflict check logic from AlterJobMgr to AlterTableStatementAnalyzer (#48603)
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
