@@ -190,7 +190,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.lockDatabase(db, LockType.READ);
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -212,7 +212,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
