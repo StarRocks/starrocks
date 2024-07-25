@@ -3033,4 +3033,9 @@ public class Config extends ConfigBase {
     public static boolean show_execution_groups = true;
     @ConfField
     public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
 }
