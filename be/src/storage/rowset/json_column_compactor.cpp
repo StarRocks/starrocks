@@ -35,9 +35,7 @@
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {
     // compection will reuse column, must copy in there.
-    auto clone = column.clone_empty();
-    clone->append(column);
-    _json_datas.emplace_back(std::move(clone));
+    _json_datas.emplace_back(column.clone());
 
     _estimate_size += column.byte_size();
     return Status::OK();

@@ -196,7 +196,13 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
             DCHECK_EQ(_flat_column_types[i], types[i]);
             DCHECK_EQ(i, _path_to_index[paths[i]]);
         }
-        _flat_columns = flat_columns;
+        if (flat_columns.size() != 0) {
+            for (size_t i = 0; i < _flat_columns.size(); i++) {
+                _flat_columns[i]->append(*flat_columns[i], 0, flat_columns[i]->size());
+            }
+        } else {
+            _flat_columns = flat_columns;
+        }
     } else {
         _flat_column_paths = paths;
         _flat_column_types = types;
@@ -303,10 +309,14 @@ void JsonColumn::append_default(size_t count) {
 
 void JsonColumn::resize(size_t n) {
     if (is_flat_json()) {
+        DCHECK_EQ(0, BaseClass::size());
         for (auto& col : _flat_columns) {
             col->resize(n);
         }
     } else {
+        for (auto& col : _flat_columns) {
+            DCHECK_EQ(0, col->size());
+        }
         BaseClass::resize(n);
     }
 }
