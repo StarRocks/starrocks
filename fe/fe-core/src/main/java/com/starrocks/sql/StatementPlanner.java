@@ -169,21 +169,15 @@ public class StatementPlanner {
     private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
                                                 ConnectContext connectContext) {
         boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader() ||
-                Config.enable_planner_optimistic_lock_on_follower;
         boolean isOnlyOlapTableQueries = AnalyzerUtils.areTablesCopySafe(insertStmt);
-        return isOnlyOlapTableQueries && isSelect && isLeader &&
-                !connectContext.getSessionVariable().isCboUseDBLock();
+        return isOnlyOlapTableQueries && isSelect && !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
     private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
         // condition can use conflict detection to replace db lock
         // 1. all tables are olap table
-        // 2. node is master node
         // 3. cbo_use_lock_db = false
-        return isOnlyOlapTable
-                && (GlobalStateMgr.getCurrentState().isLeader() || Config.enable_planner_optimistic_lock_on_follower)
-                && !session.getSessionVariable().isCboUseDBLock();
+        return isOnlyOlapTable && !session.getSessionVariable().isCboUseDBLock();
     }
 
     /**

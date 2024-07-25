@@ -1408,10 +1408,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long catalog_try_lock_timeout_ms = 5000; // 5 sec
 
-    @ConfField(mutable = true, comment = "By default the PlannerOptimisticLock optimization is only applied to " +
-            "leader node only. If turned on the follower node would also use this optimization")
-    public static boolean enable_planner_optimistic_lock_on_follower = false;
-
     @ConfField(mutable = true, comment = "Whether apply the PlannerOptimisticLock optimizer to Iceberg table")
     public static boolean enable_planner_optimistic_lock_to_iceberg = false;
 
