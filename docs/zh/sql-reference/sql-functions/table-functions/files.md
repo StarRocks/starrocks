@@ -259,6 +259,107 @@ unload_data_param::=
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 | target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
 
+## 返回
+
+当与 SELECT 语句一同使用时，FILES() 函数会以表的形式返回远端存储文件中的数据。
+
+- 当查询 CSV 文件时，您可以在 SELECT 语句使用 `$1`、`$2` ... 表示文件中不同的列。
+
+  ```SQL
+  SELECT $1, $2 FROM FILES(
+    "path" = "s3://inserttest/csv/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+  );
+  +------+---------+
+  | $1   | $2      |
+  +------+---------+
+  |    1 | 0.71173 |
+  |    2 | 0.16145 |
+  |    3 | 0.80524 |
+  |    4 | 0.91852 |
+  |    5 | 0.37766 |
+  |    6 | 0.34413 |
+  |    7 | 0.40055 |
+  |    8 | 0.42437 |
+  |    9 | 0.67935 |
+  |   10 | 0.22783 |
+  +------+---------+
+  10 rows in set (0.38 sec)
+
+  SELECT * FROM FILES(
+    "path" = "s3://inserttest/csv/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+  )
+  WHERE $1 > 5;
+  +------+---------+------------+
+  | $1   | $2      | $3         |
+  +------+---------+------------+
+  |    6 | 0.34413 | 2017-11-25 |
+  |    7 | 0.40055 | 2017-11-26 |
+  |    8 | 0.42437 | 2017-11-27 |
+  |    9 | 0.67935 | 2017-11-27 |
+  |   10 | 0.22783 | 2017-11-29 |
+  +------+---------+------------+
+  5 rows in set (0.30 sec)
+  ```
+
+- 当查询 Parquet 或 ORC 文件时，您可以在 SELECT 语句直接指定对应列名，或使用 `*` 查询所有列。
+
+  ```SQL
+  SELECT c1, c3 FROM FILES(
+    "path" = "s3://inserttest/parquet/file2.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+  );
+  +------+---------------------+
+  | c1   | c3                  |
+  +------+---------------------+
+  |  101 | 2018-05-15T18:30:00 |
+  |  102 | 2018-05-15T18:30:00 |
+  |  103 | 2018-05-15T18:30:00 |
+  |  104 | 2018-05-15T18:30:00 |
+  |  105 | 2018-05-15T18:30:00 |
+  |  106 | 2018-05-15T18:30:00 |
+  |  107 | 2018-05-15T18:30:00 |
+  |  108 | 2018-05-15T18:30:00 |
+  |  109 | 2018-05-15T18:30:00 |
+  |  110 | 2018-05-15T18:30:00 |
+  +------+---------------------+
+  10 rows in set (0.55 sec)
+
+  SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/file2.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+  )
+  WHERE c1 IN (101,105);
+  +------+------+---------------------+
+  | c1   | c2   | c3                  |
+  +------+------+---------------------+
+  |  101 |    9 | 2018-05-15T18:30:00 |
+  |  105 |    6 | 2018-05-15T18:30:00 |
+  +------+------+---------------------+
+  2 rows in set (0.29 sec)
+  ```
+
 ## 注意事项
 
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
