@@ -483,7 +483,7 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[[[NULL,20],[30,40]]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level1) {
@@ -516,7 +516,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[[NULL,NULL,NULL,NULL]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
