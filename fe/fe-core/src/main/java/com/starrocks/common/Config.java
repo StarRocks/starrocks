@@ -1408,9 +1408,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long catalog_try_lock_timeout_ms = 5000; // 5 sec
 
-    @ConfField(mutable = true, comment = "Whether apply the PlannerOptimisticLock optimizer to Iceberg table")
-    public static boolean enable_planner_optimistic_lock_to_iceberg = false;
-
     /**
      * if this is set to true
      * all pending load job will fail when call begin txn api

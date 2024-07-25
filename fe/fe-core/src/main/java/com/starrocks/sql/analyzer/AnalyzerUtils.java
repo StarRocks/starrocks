@@ -809,6 +809,10 @@ public class AnalyzerUtils {
     }
 
     private static class CopyUnsafeTablesCollector extends TableCollector {
+
+        private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
+                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
+
         public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
             super(tables);
         }
@@ -823,11 +827,12 @@ public class AnalyzerUtils {
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            // TODO: not support LakeTable right now
             if ((table.isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 // OlapTable can be copied via copyOnlyForQuery
                 return null;
-            } else if (table.isIcebergTable() && Config.enable_planner_optimistic_lock_to_iceberg) {
-                // Iceberg table is immutable
+            } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
+                // Immutable table
                 return null;
             } else {
                 tables.put(node.getName(), node.getTable());
