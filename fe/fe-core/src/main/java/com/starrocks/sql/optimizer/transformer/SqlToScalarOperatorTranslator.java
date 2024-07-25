@@ -199,6 +199,12 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
+    public static ScalarOperator translateWithSlotRef(Expr expr,
+                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
+        return visitor.visit(expr, new Context());
+    }
+
     private static final class Context {
 
         public final boolean hasSubquery;
@@ -866,6 +872,32 @@ public final class SqlToScalarOperatorTranslator {
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
                     node.getDictionaryTxnId(), node.getKeySize());
             return op;
+        }
+    }
+
+    /**
+     * Resolve the SlotRef
+     */
+    static class ResolveSlotVisitor extends Visitor {
+
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
+
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.resolver = resolver;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                ColumnRefOperator ref = resolver.apply(node);
+                if (ref != null) {
+                    return ref;
+                }
+            }
+            throw unsupportedException("unknown slot: " + node.toSql());
         }
     }
 
