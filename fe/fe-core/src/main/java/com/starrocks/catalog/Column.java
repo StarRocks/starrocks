@@ -516,8 +516,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public Expr getGeneratedColumnExpr() {
+        generatedColumnExpr.setType(type);
         return generatedColumnExpr;
     }
+
     public void setGeneratedColumnExpr(Expr expr) {
         generatedColumnExpr = expr;
     }
