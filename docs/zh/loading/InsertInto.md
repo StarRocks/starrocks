@@ -192,6 +192,10 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+:::note
+自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。
+:::
+
 | 参数        | 说明                                                         |
 | ----------- | ------------------------------------------------------------ |
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
