@@ -1141,11 +1141,6 @@ public class EditLog {
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);
                     break;
                 }
-                case OperationType.OP_AUTH_UPGRADE_V2: {
-                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
-                    globalStateMgr.replayAuthUpgrade(info);
-                    break;
-                }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
                     MaterializedViewMgr.getInstance().replay(job);

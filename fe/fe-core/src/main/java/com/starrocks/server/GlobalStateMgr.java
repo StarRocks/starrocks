@@ -184,10 +184,8 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
@@ -1354,13 +1352,6 @@ public class GlobalStateMgr {
             nodeMgr.setLeaderInfo();
 
             if (USING_NEW_PRIVILEGE) {
-                if (needUpgradedToNewPrivilege()) {
-                    reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-                    // upgrade metadata in old privilege framework to the new one
-                    upgrader.upgradeAsLeader();
-                    this.domainResolver.setAuthenticationManager(authenticationMgr);
-                }
                 LOG.info("set usingNewPrivilege to true after transfer to leader");
                 usingNewPrivilege.set(true);
                 auth = null;  // remove references to useless objects to release memory
@@ -4147,26 +4138,6 @@ public class GlobalStateMgr {
                 throw new DdlException("unknown code " + code);
         }
 
-    }
-
-    private void reInitializeNewPrivilegeOnUpgrade() {
-        // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
-        // we may already load the image from last upgrade, in this case we should
-        // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
-        // instance here
-        LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationMgr = new AuthenticationMgr();
-        this.authorizationMgr = new AuthorizationMgr(this, null);
-    }
-
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-        upgrader.replayUpgrade(info.getRoleNameToId());
-        LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
-        usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationMgr);
     }
 
     // entry of checking tablets operation
