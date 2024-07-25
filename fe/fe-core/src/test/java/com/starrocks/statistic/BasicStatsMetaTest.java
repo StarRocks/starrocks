@@ -44,10 +44,12 @@ public class BasicStatsMetaTest extends PlanTestBase {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
             Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "region");
             List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
-            new Expectations(partitions.get(0)) {{
-                partitions.get(0).getRowCount();
-                result = 100L;
-            }};
+            new Expectations(partitions.get(0)) {
+                {
+                    partitions.get(0).getRowCount();
+                    result = 100L;
+                }
+            };
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 100);
@@ -56,12 +58,15 @@ public class BasicStatsMetaTest extends PlanTestBase {
 
         {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
-            Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "supplier");
+            Table tbl =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "supplier");
             List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
-            new Expectations(partitions.get(0)) {{
-                partitions.get(0).getRowCount();
-                result = 10000L;
-            }};
+            new Expectations(partitions.get(0)) {
+                {
+                    partitions.get(0).getRowCount();
+                    result = 10000L;
+                }
+            };
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 15000);
