@@ -153,6 +153,7 @@ static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
     case TYPE_INT:
     case TYPE_SMALLINT:
     case TYPE_TINYINT:
+    case TYPE_BOOLEAN:
     case TYPE_CHAR:
     case TYPE_VARCHAR:
     case TYPE_JSON: {
