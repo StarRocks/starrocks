@@ -12,17 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <vector>
+#include <cstring>
 
 namespace starrocks {
 
 class BitMask {
 public:
-    BitMask(size_t size) : _bits((size + 7 / 8), 0) {}
-    ~BitMask() = default;
+    BitMask(size_t size) {
+        _size = (size + 7) / 8;
+        _bits = new uint8_t[_size];
+        memset(_bits, 0, _size);
+    }
+    ~BitMask() {
+        if (_bits) {
+            delete[] _bits;
+        }
+    }
 
     void set_bit(size_t pos) { _bits[pos >> 3] |= (1 << (pos & 7)); }
     void clear_bit(size_t pos) { _bits[pos >> 3] &= ~(1 << (pos & 7)); }
@@ -30,8 +37,8 @@ public:
     bool is_bit_set(size_t pos) { return (_bits[pos >> 3] & (1 << (pos & 7))) != 0; }
 
     bool all_bits_zero() const {
-        for (uint8_t byte : _bits) {
-            if (byte != 0) {
+        for (size_t i = 0; i < _size; i++) {
+            if (_bits[i] != 0) {
                 return false;
             }
         }
@@ -39,6 +46,7 @@ public:
     }
 
 private:
-    std::vector<uint8_t> _bits;
+    size_t _size;
+    uint8_t* _bits;
 };
 } // namespace starrocks
