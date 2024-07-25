@@ -305,7 +305,7 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 26: {
-                // TRACKING_SQL
+                // WAREHOUSE
                 if (info.__isset.warehouse) {
                     Slice warehouse = Slice(info.warehouse);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);

@@ -232,7 +232,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 20: {
-                // other_msg
+                // warehouse
                 if (info.__isset.warehouse) {
                     Slice warehouse = Slice(info.warehouse);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);

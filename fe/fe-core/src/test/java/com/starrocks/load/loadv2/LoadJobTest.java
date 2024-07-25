@@ -47,6 +47,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
@@ -68,6 +69,9 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class LoadJobTest {
+
+    @Mocked
+    private ConnectContext context;
 
     @BeforeClass
     public static void start() {
@@ -120,6 +124,34 @@ public class LoadJobTest {
             Assert.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
             Assert.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
             Assert.assertTrue(Deencapsulation.getField(loadJob, "strictMode"));
+        } catch (DdlException e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSetJobPropertiesForWarehouse() {
+        new Expectations() {
+            {
+                ConnectContext.get();
+                result = context;
+
+                context.getCurrentWarehouseId();
+                result = 1000L;
+            }
+        };
+
+        try {
+            LoadJob loadJob1 = new BrokerLoadJob();
+            // no jobProperties provided
+            loadJob1.setJobProperties(null);
+            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
+
+            LoadJob loadJob2 = new BrokerLoadJob();
+            // with jobProperties set, but no warehouse property
+            Map<String, String> jobProperties = Maps.newHashMap();
+            loadJob2.setJobProperties(jobProperties);
+            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
         } catch (DdlException e) {
             Assert.fail(e.getMessage());
         }

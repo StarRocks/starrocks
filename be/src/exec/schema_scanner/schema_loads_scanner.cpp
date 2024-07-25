@@ -267,7 +267,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 24: {
-                // rejected record path
+                // warehouse
                 if (info.__isset.warehouse) {
                     Slice warehouse = Slice(info.warehouse);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);

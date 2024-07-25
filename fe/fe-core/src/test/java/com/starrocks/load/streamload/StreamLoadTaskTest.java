@@ -23,15 +23,23 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
@@ -40,6 +48,15 @@ public class StreamLoadTaskTest {
 
     @Mocked
     private DefaultCoordinator coord;
+
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    @Mocked
+    private Warehouse warehouse;
 
     private StreamLoadTask streamLoadTask;
 
@@ -112,5 +129,61 @@ public class StreamLoadTaskTest {
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
         ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+    }
+
+    @Test
+    public void testGetShowInfo() {
+        List<String> showInfo = streamLoadTask.getShowInfo();
+        Assert.assertNotNull(showInfo);
+        // warehouse
+        Assert.assertEquals("", showInfo.get(showInfo.size() - 1));
+        List<String> showBriefInfo = streamLoadTask.getShowBriefInfo();
+        Assert.assertNotNull(showBriefInfo);
+        // warehouse
+        Assert.assertEquals("", showBriefInfo.get(showInfo.size() - 1));
+        TStreamLoadInfo tStreamLoadInfo = streamLoadTask.toThrift();
+        Assert.assertNotNull(tStreamLoadInfo);
+        // warehouse
+        Assert.assertEquals("", tStreamLoadInfo.getWarehouse());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = warehouse;
+
+                warehouse.getName();
+                minTimes = 0;
+                result = "test_warehouse";
+            }
+        };
+
+        showInfo = streamLoadTask.getShowInfo();
+        Assert.assertNotNull(showInfo);
+        // warehouse
+        Assert.assertEquals("test_warehouse", showInfo.get(showInfo.size() - 1));
+        showBriefInfo = streamLoadTask.getShowBriefInfo();
+        Assert.assertNotNull(showBriefInfo);
+        // warehouse
+        Assert.assertEquals("test_warehouse", showBriefInfo.get(showInfo.size() - 1));
+        tStreamLoadInfo = streamLoadTask.toThrift();
+        Assert.assertNotNull(tStreamLoadInfo);
+        // warehouse
+        Assert.assertEquals("test_warehouse", tStreamLoadInfo.getWarehouse());
     }
 }
