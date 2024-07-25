@@ -119,7 +119,12 @@ ON (sr_member);
 
 :::tip
 StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+<<<<<<< HEAD:docs/en/administration/Backup_and_restore.md
 - Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+=======
+
+- Partition level: You need to specify the ON clause in the format `ON (<table_name> PARTITION (<partition_name>, ...))`.
+>>>>>>> 4f9cb6f843 ([Doc] Fix Backup and Restore tips (#48869)):docs/en/administration/management/Backup_and_restore.md
 - Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
 - Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
 :::
@@ -168,7 +173,12 @@ PROPERTIES (
 
 :::tip
 StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+<<<<<<< HEAD:docs/en/administration/Backup_and_restore.md
 - Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+=======
+
+- Partition level: You need to specify the ON clause in the format `ON (<table_name> PARTITION (<partition_name>, ...))`.
+>>>>>>> 4f9cb6f843 ([Doc] Fix Backup and Restore tips (#48869)):docs/en/administration/management/Backup_and_restore.md
 - Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
 - Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
 :::
