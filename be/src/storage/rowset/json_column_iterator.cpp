@@ -479,10 +479,11 @@ Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
     if (_is_merge) {
         SCOPED_RAW_TIMER(&_opts.stats->json_merge_ns);
         auto json = _merger->merge(all_columns);
-        dst->swap_column(*json);
+        dst->append(*json, 0, json->size());
     } else {
         dst->set_flat_columns(_src_paths, _src_types, all_columns);
     }
+    dst->check_or_die();
     return Status::OK();
 }
 
