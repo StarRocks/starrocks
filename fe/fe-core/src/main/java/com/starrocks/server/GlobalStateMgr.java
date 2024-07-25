@@ -41,7 +41,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
@@ -607,8 +606,7 @@ public class GlobalStateMgr {
         this.alterJobMgr = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();

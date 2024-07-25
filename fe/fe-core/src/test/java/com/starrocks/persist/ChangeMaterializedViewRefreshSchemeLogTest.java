@@ -16,7 +16,6 @@
 package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
@@ -117,8 +116,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         AlterJobMgr alterJobMgr = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
         alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 
