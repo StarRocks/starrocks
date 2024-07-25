@@ -3031,4 +3031,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
 }
