@@ -315,7 +315,13 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         auto* upstream_source = context->source_operator(prev_operators);
         size_t upstream_plan_node_id = upstream->plan_node_id();
         // === create exchange ===
-        auto mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
+        std::shared_ptr<MultiCastLocalExchanger> mcast_local_exchanger;
+        if (runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill()) {
+            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size(),
+                                                                                       upstream_plan_node_id);
+        } else {
+            mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
+        }
 
         // === create sink op ====
         OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(

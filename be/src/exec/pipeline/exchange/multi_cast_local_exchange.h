@@ -113,4 +113,27 @@ private:
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
 };
 
+class MemLimitedChunkQueue;
+
+class SpillableMultiCastLocalExchanger : public MultiCastLocalExchanger {
+public:
+    SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id);
+    ~SpillableMultiCastLocalExchanger() override = default;
+
+    Status init_metrics(RuntimeProfile* profile) override;
+    bool can_pull_chunk(int32_t mcast_consumer_index) const override;
+    bool can_push_chunk() const override;
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) override;
+    void open_source_operator(int32_t mcast_consumer_index) override;
+    void close_source_operator(int32_t mcast_consumer_index) override;
+    void open_sink_operator() override;
+    void close_sink_operator() override;
+    bool releaseable() const override { return true; }
+    void enter_release_memory_mode() override;
+
+private:
+    std::shared_ptr<MemLimitedChunkQueue> _queue;
+};
+
 } // namespace starrocks::pipeline
