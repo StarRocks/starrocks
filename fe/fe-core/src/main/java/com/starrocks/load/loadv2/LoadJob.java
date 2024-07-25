@@ -375,89 +375,88 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
 
         // job properties
-        if (properties == null) {
-            // set warehouse
-            warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            return;
-        }
-
-        if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
-            try {
-                timeoutSecond = Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
-            } catch (NumberFormatException e) {
-                throw new DdlException("Timeout is not INT", e);
+        if (properties != null) {
+            if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+                try {
+                    timeoutSecond = Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+                } catch (NumberFormatException e) {
+                    throw new DdlException("Timeout is not INT", e);
+                }
             }
-        }
 
-        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
-            try {
-                maxFilterRatio = Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
-            } catch (NumberFormatException e) {
-                throw new DdlException("Max filter ratio is not DOUBLE", e);
+            if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+                try {
+                    maxFilterRatio = Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+                } catch (NumberFormatException e) {
+                    throw new DdlException("Max filter ratio is not DOUBLE", e);
+                }
             }
-        }
 
-        if (properties.containsKey(LoadStmt.LOAD_DELETE_FLAG_PROPERTY)) {
-            throw new DdlException("delete flag is not supported");
-        }
-        if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
-            partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
-        }
-        if (properties.containsKey(LoadStmt.PARTIAL_UPDATE_MODE)) {
-            partialUpdateMode = properties.get(LoadStmt.PARTIAL_UPDATE_MODE);
-        }
-        if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
-            mergeCondition = properties.get(LoadStmt.MERGE_CONDITION);
-        }
-
-        if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
-            try {
-                loadMemLimit = Long.parseLong(properties.get(LoadStmt.LOAD_MEM_LIMIT));
-            } catch (NumberFormatException e) {
-                throw new DdlException("Execute memory limit is not Long", e);
+            if (properties.containsKey(LoadStmt.LOAD_DELETE_FLAG_PROPERTY)) {
+                throw new DdlException("delete flag is not supported");
             }
-        }
-
-        if (properties.containsKey(LoadStmt.STRICT_MODE)) {
-            strictMode = Boolean.valueOf(properties.get(LoadStmt.STRICT_MODE));
-        }
-
-        if (properties.containsKey(LoadStmt.TIMEZONE)) {
-            timezone = properties.get(LoadStmt.TIMEZONE);
-        } else if (ConnectContext.get() != null) {
-            // get timezone for session variable
-            timezone = ConnectContext.get().getSessionVariable().getTimeZone();
-        }
-
-        if (properties.containsKey(LoadStmt.PRIORITY)) {
-            priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
-        }
-
-        if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
-            logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
-        }
-
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-            if (warehouse == null) {
-                throw new DdlException("Warehouse " + warehouseName + " not exists.");
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
+                partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
             }
-            warehouseId = warehouse.getId();
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE_MODE)) {
+                partialUpdateMode = properties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+            }
+            if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
+                mergeCondition = properties.get(LoadStmt.MERGE_CONDITION);
+            }
+
+            if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
+                try {
+                    loadMemLimit = Long.parseLong(properties.get(LoadStmt.LOAD_MEM_LIMIT));
+                } catch (NumberFormatException e) {
+                    throw new DdlException("Execute memory limit is not Long", e);
+                }
+            }
+
+            if (properties.containsKey(LoadStmt.STRICT_MODE)) {
+                strictMode = Boolean.valueOf(properties.get(LoadStmt.STRICT_MODE));
+            }
+
+            if (properties.containsKey(LoadStmt.TIMEZONE)) {
+                timezone = properties.get(LoadStmt.TIMEZONE);
+            } else if (ConnectContext.get() != null) {
+                // get timezone for session variable
+                timezone = ConnectContext.get().getSessionVariable().getTimeZone();
+            }
+
+            if (properties.containsKey(LoadStmt.PRIORITY)) {
+                priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
+            }
+
+            if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
+                logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
+            }
+
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                if (warehouse == null) {
+                    throw new DdlException("Warehouse " + warehouseName + " not exists.");
+                }
+                warehouseId = warehouse.getId();
+            } else {
+                warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            }
+
+            if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
+                jsonOptions.stripOuterArray = Boolean.parseBoolean(properties.get(LoadStmt.STRIP_OUTER_ARRAY));
+            }
+
+            if (properties.containsKey(LoadStmt.JSONPATHS)) {
+                jsonOptions.jsonPaths = properties.get(LoadStmt.JSONPATHS);
+            }
+
+            if (properties.containsKey(LoadStmt.JSONROOT)) {
+                jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
         } else {
+            // if no properties set, we should still set warehouse here
             warehouseId = ConnectContext.get().getCurrentWarehouseId();
-        }
-
-        if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
-            jsonOptions.stripOuterArray = Boolean.parseBoolean(properties.get(LoadStmt.STRIP_OUTER_ARRAY));
-        }
-
-        if (properties.containsKey(LoadStmt.JSONPATHS)) {
-            jsonOptions.jsonPaths = properties.get(LoadStmt.JSONPATHS);
-        }
-
-        if (properties.containsKey(LoadStmt.JSONROOT)) {
-            jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
         }
     }
 
