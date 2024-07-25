@@ -94,62 +94,7 @@ displayed_sidebar: "Chinese"
 
 ### data_format
 
-<<<<<<< HEAD
 数据文件的格式。有效值：`parquet` 和 `orc`。
-=======
-数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
-
-特定数据文件格式需要额外参数指定细节选项。
-
-#### CSV
-
-CSV 格式示例：
-
-```SQL
-"format"="csv",
-"csv.column_separator"="\\t",
-"csv.enclose"='"',
-"csv.skip_header"="1",
-"csv.escape"="\\"
-```
-
-##### csv.column_separator
-
-用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败。
-
-需要注意的是，Files() 任务通过 MySQL 协议提交请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (`\`)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
-
-> **说明**
->
-> - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
-> - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
-
-##### csv.enclose
-
-根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。
-
-被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。
-
-如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。
-
-##### csv.skip_header
-
-用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。
-
-在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。
-
-这里的行所使用的分隔符须与您在导入语句中所设定的行分隔符一致。
-
-##### csv.escape
-
-指定 CSV 文件用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。
-
-> **说明**
->
-> `escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。
-> 以下为两个示例：
-> - 当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。
-> - 假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。
 
 ### schema_detect
 
@@ -176,7 +121,6 @@ CSV 格式示例：
 > **注意**
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
->>>>>>> cedce7bbe6 ([Doc] Add Schema Merge examples to Files (#48904))
 
 ### StorageCredentialParams
 
@@ -516,39 +460,3 @@ PROPERTIES (
 ```
 
 由结果可知，`c2` 列因为包含 FLOAT 和 INT 数据，被合并为 DECIMAL 列，而 `c3` 列因为包含 DATE 和 DATETIME 数据，，被合并为 VARCHAR 列。
-
-将 Parquet 文件替换为含有同样数据的 CSV 文件，以上结果依然成立：
-
-```Plain
-mysql> CREATE TABLE test_ctas_csv AS
-    -> SELECT * FROM FILES(
-    ->     "path" = "s3://inserttest/csv/*",
-    ->     "format" = "csv",
-    ->     "csv.column_separator"=",",
-    ->     "csv.row_delimiter"="\n",
-    ->     "csv.enclose"='"',
-    ->     "csv.skip_header"="1",
-    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-    ->     "aws.s3.region" = "us-west-2"
-    -> );
-Query OK, 0 rows affected (30.90 sec)
-
-mysql> SHOW CREATE TABLE test_ctas_csv\G
-*************************** 1. row ***************************
-       Table: test_ctas_csv
-Create Table: CREATE TABLE `test_ctas_csv` (
-  `c1` bigint(20) NULL COMMENT "",
-  `c2` decimal(38, 9) NULL COMMENT "",
-  `c3` varchar(1048576) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`c1`, `c2`)
-COMMENT "OLAP"
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"replication_num" = "3"
-);
-1 row in set (0.27 sec)
-```
