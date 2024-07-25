@@ -64,6 +64,11 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
+    void rollback_inc_fragments() {
+        _num_fragments.fetch_sub(1);
+        _num_active_fragments.fetch_sub(1);
+    }
+
     void count_down_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
@@ -74,14 +79,16 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline;
+        return now > _delivery_deadline || _is_cancelled;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _query_deadline;
     }
 
-    bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
+    bool is_cancelled() const { return _is_cancelled; }
+
+    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -261,6 +268,7 @@ private:
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
+    std::atomic_bool _is_cancelled = false;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -302,6 +310,7 @@ private:
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 };
 
+// TODO: use brpc::TimerThread refactor QueryContext
 class QueryContextManager {
 public:
     QueryContextManager(size_t log2_num_slots);

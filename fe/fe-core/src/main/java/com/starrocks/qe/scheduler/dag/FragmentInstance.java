@@ -132,9 +132,15 @@ public class FragmentInstance {
             }
 
             node2ScanRanges.forEach((scanId, scanRanges) -> {
-                ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
-                builder.addValue(scanId + ":" + scanNode.getPlanNodeName(),
-                        () -> explainScanRanges(builder, scanRanges, 0));
+                String nodeName;
+                PlanNodeId nodeId = new PlanNodeId(scanId);
+                if (nodeId.equals(PlanNodeId.DUMMY_PLAN_NODE_ID)) {
+                    nodeName = "CAPTURE_ROWSET";
+                } else {
+                    ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
+                    nodeName = scanNode.getPlanNodeName();
+                }
+                builder.addValue(scanId + ":" + nodeName, () -> explainScanRanges(builder, scanRanges, 0));
             });
         });
     }
