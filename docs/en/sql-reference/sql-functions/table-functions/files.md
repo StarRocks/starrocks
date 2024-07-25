@@ -161,9 +161,12 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
 
 - For columns with different column names or indices, each column is identified as an individual column, and, eventually, the union of all individual columns is returned.
 - For columns with the same column name but different data types, they are identified as the same column but with a general data type on a relative fine granularity level. For example, if the column `col1` in file A is INT but DECIMAL in file B, DOUBLE is used in the returned column.
+  - All integer columns will be unionized as an integer type on an overall rougher granularity level.
+  - Integer columns together with FLOAT type columns will be unionized as the DECIMAL type.
+  - String types are used for unionizing other types.
 - Generally, the STRING type can be used to unionize all data types.
 
-You can refer to [Example 6](#examples).
+You can refer to [Example 6](#example-6).
 
 If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
 
@@ -267,7 +270,9 @@ From v3.2 onwards, FILES() further supports complex data types including ARRAY, 
 
 ## Examples
 
-Example 1: Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
+#### Example 1
+
+Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
 
 ```Plain
 MySQL > SELECT * FROM FILES(
@@ -286,7 +291,9 @@ MySQL > SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-Example 2: Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
+#### Example 2
+
+Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
 ```Plain
 MySQL > INSERT INTO insert_wiki_edit
@@ -301,7 +308,9 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-Example 3: Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
+#### Example 3
+
+Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
 
 ```Plain
 MySQL > CREATE TABLE ctas_wiki_edit AS
@@ -316,7 +325,9 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-Example 4: Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
+#### Example 4
+
+Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
 
 ```Plain
 SELECT * FROM FILES(
@@ -336,7 +347,9 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-Example 5: Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
+#### Example 5
+
+Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
 
 ```SQL
 INSERT INTO 
@@ -352,14 +365,16 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-Example 6: Automatic schema detection and Unionization.
+#### Example 6
+
+Automatic schema detection and Unionization.
 
 The following example is based on two Parquet files in the S3 bucket:
 
-- File 1 contains three columns - INT column `$1`, FLOAT column `$2`, and DATE column `$3`.
+- File 1 contains three columns - INT column `c1`, FLOAT column `c2`, and DATE column `c3`.
 
 ```Plain
-$1,$2,$3
+c1,c2,c3
 1,0.71173,2017-11-20
 2,0.16145,2017-11-21
 3,0.80524,2017-11-22
@@ -372,10 +387,10 @@ $1,$2,$3
 10,0.22783,2017-11-29
 ```
 
-- File 2 contains three columns - INT column `$1`, INT column `$2`, and DATETIME column `$3`.
+- File 2 contains three columns - INT column `c1`, INT column `c2`, and DATETIME column `c3`.
 
 ```Plain
-$1,$2,$3
+c1,c2,c3
 101,9,2018-05-15T18:30:00
 102,3,2018-05-15T18:30:00
 103,2,2018-05-15T18:30:00
@@ -388,16 +403,16 @@ $1,$2,$3
 110,8,2018-05-15T18:30:00
 ```
 
-Create a table named `test_ctas_parquet` and insert the data rows from the two Parquet files into the table:
+Use a CTAS statement to create a table named `test_ctas_parquet` and insert the data rows from the two Parquet files into the table:
 
 ```SQL
 CREATE TABLE test_ctas_parquet AS
 SELECT * FROM FILES(
-        "path" = "s3://inserttest/parquet/*",
-        "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
-        "aws.s3.region" = "us-west-2"
+    "path" = "s3://inserttest/parquet/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -411,11 +426,11 @@ SHOW CREATE TABLE test_ctas_parquet\G
 *************************** 1. row ***************************
        Table: test_ctas_parquet
 Create Table: CREATE TABLE `test_ctas_parquet` (
-  `$1` bigint(20) NULL COMMENT "",
-  `$2` decimal(38, 9) NULL COMMENT "",
-  `$3` varchar(1048576) NULL COMMENT ""
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
 ) ENGINE=OLAP 
-DUPLICATE KEY(`$1`, `$2`)
+DUPLICATE KEY(`c1`, `c2`)
 COMMENT "OLAP"
 DISTRIBUTED BY RANDOM
 PROPERTIES (
@@ -425,76 +440,22 @@ PROPERTIES (
 );
 ```
 
-The result shows that the `$2` column, which contains both FLOAT and INT data, is merged as a DECIMAL column, and `$3`, which contains both DATE and DATETIME data, is merged as a VARCHAR column.
+The result shows that the `c2` column, which contains both FLOAT and INT data, is merged as a DECIMAL column, and `c3`, which contains both DATE and DATETIME data, is merged as a VARCHAR column.
 
 The above result stays the same when the Parquet files are changed to CSV files that contain the same data:
 
 ```Plain
-mysql> SELECT * FROM FILES(
-    ->         "path" = "s3://inserttest/csv/file1.csv",
-    ->         "format" = "csv",
-    ->         "csv.column_separator"=",",
-    ->         "csv.row_delimiter"="\r\n",
-    ->         "csv.enclose"='"',
-    ->         "csv.skip_header"="1",
-    ->         "aws.s3.access_key" = "XXXXXXXXXX",
-    ->         "aws.s3.secret_key" = "YYYYYYYYYY",
-    ->         "aws.s3.region" = "us-west-2"
-    -> );
-+------+---------+--------------+
-| $1   | $2      | $3           |
-+------+---------+--------------+
-|    1 | 0.71173 | 2017-11-20   |
-|    2 | 0.16145 | 2017-11-21   |
-|    3 | 0.80524 | 2017-11-22   |
-|    4 | 0.91852 | 2017-11-23   |
-|    5 | 0.37766 | 2017-11-24   |
-|    6 | 0.34413 | 2017-11-25   |
-|    7 | 0.40055 | 2017-11-26   |
-|    8 | 0.42437 | 2017-11-27   |
-|    9 | 0.67935 | 2017-11-27   |
-|   10 | 0.22783 | 2017-11-29   |
-+------+---------+--------------+
-10 rows in set (0.33 sec)
-
-mysql> SELECT * FROM FILES(
-    ->         "path" = "s3://inserttest/csv/file2.csv",
-    ->         "format" = "csv",
-    ->         "csv.column_separator"=",",
-    ->         "csv.row_delimiter"="\r\n",
-    ->         "csv.enclose"='"',
-    ->         "csv.skip_header"="1",
-    ->         "aws.s3.access_key" = "XXXXXXXXXX",
-    ->         "aws.s3.secret_key" = "YYYYYYYYYY",
-    ->         "aws.s3.region" = "us-west-2"
-    -> );
-+------+------+-----------------------+
-| $1   | $2   | $3                    |
-+------+------+-----------------------+
-|  101 |    9 | 2018-05-15T18:30:00   |
-|  102 |    3 | 2018-05-15T18:30:00   |
-|  103 |    2 | 2018-05-15T18:30:00   |
-|  104 |    3 | 2018-05-15T18:30:00   |
-|  105 |    6 | 2018-05-15T18:30:00   |
-|  106 |    1 | 2018-05-15T18:30:00   |
-|  107 |    8 | 2018-05-15T18:30:00   |
-|  108 |    5 | 2018-05-15T18:30:00   |
-|  109 |    6 | 2018-05-15T18:30:00   |
-|  110 |    8 | 2018-05-15T18:30:00   |
-+------+------+-----------------------+
-10 rows in set (0.36 sec)
-
 mysql> CREATE TABLE test_ctas_csv AS
     -> SELECT * FROM FILES(
-    ->         "path" = "s3://inserttest/csv/*",
-    ->         "format" = "csv",
-    ->         "csv.column_separator"=",",
-    ->         "csv.row_delimiter"="\r\n",
-    ->         "csv.enclose"='"',
-    ->         "csv.skip_header"="1",
-    ->         "aws.s3.access_key" = "XXXXXXXXXX",
-    ->         "aws.s3.secret_key" = "YYYYYYYYYY",
-    ->         "aws.s3.region" = "us-west-2"
+    ->     "path" = "s3://inserttest/csv/*",
+    ->     "format" = "csv",
+    ->     "csv.column_separator"=",",
+    ->     "csv.row_delimiter"="\n",
+    ->     "csv.enclose"='"',
+    ->     "csv.skip_header"="1",
+    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    ->     "aws.s3.region" = "us-west-2"
     -> );
 Query OK, 0 rows affected (30.90 sec)
 
@@ -502,11 +463,11 @@ mysql> SHOW CREATE TABLE test_ctas_csv\G
 *************************** 1. row ***************************
        Table: test_ctas_csv
 Create Table: CREATE TABLE `test_ctas_csv` (
-  `$1` bigint(20) NULL COMMENT "",
-  `$2` decimal(38, 9) NULL COMMENT "",
-  `$3` varchar(1048576) NULL COMMENT ""
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
 ) ENGINE=OLAP 
-DUPLICATE KEY(`$1`, `$2`)
+DUPLICATE KEY(`c1`, `c2`)
 COMMENT "OLAP"
 DISTRIBUTED BY RANDOM
 PROPERTIES (
