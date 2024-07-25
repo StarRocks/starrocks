@@ -14,7 +14,6 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
@@ -53,7 +52,6 @@ public class PipeManager {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
     private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
