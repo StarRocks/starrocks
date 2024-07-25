@@ -34,6 +34,7 @@
 
 package com.starrocks.backup;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
@@ -1767,6 +1768,11 @@ public class RestoreJob extends AbstractJob {
         sb.append(", backup ts: ").append(backupTimestamp);
         sb.append(", state: ").append(state.name());
         return sb.toString();
+    }
+
+    @VisibleForTesting
+    public void setState(RestoreJobState state) {
+        this.state = state;
     }
 }
 

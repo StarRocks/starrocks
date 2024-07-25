@@ -629,6 +629,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             job.replayRun();
         }
         if (isJobExpired(job, System.currentTimeMillis())) {
+            AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
+            // remove the existed job info if the job is expired
+            if (existingJob != null) {
+                dbIdToBackupOrRestoreJob.remove(job.getDbId());
+                mvRestoreContext.discardExpiredBackupTableInfo(job);
+            }
             LOG.warn("skip expired job {}", job);
             return;
         }

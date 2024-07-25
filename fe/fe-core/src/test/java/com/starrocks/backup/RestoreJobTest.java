@@ -54,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -555,5 +556,31 @@ public class RestoreJobTest {
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
-}
+    @Test
+    public void testReplayAddExpiredJob() {
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        RestoreJob job2 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        backupHandler.replayAddJob(job1);
+        job2.setState(RestoreJob.RestoreJobState.COMMIT);
+        backupHandler.replayAddJob(job2);
+        int oldVal = Config.history_job_keep_max_second;
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        backupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
+    }
+}
