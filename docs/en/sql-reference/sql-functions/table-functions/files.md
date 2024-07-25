@@ -192,8 +192,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
 - Use the IAM user-based authentication to access AWS S3:
 
   ```SQL
-  "aws.s3.access_key" = "xxxxxxxxxx",
-  "aws.s3.secret_key" = "yyyyyyyyyy",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   "aws.s3.region" = "<s3_region>"
   ```
 
@@ -206,8 +206,8 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
 - Use the IAM user-based authentication to access GCS:
 
   ```SQL
-  "fs.s3a.access.key" = "xxxxxxxxxx",
-  "fs.s3a.secret.key" = "yyyyyyyyyy",
+  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
+  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
   "fs.s3a.endpoint" = "<gcs_endpoint>"
   ```
 
@@ -273,8 +273,8 @@ When used with SELECT, FILES() returns the data in the file as a table.
       "csv.row_delimiter"="\n",
       "csv.enclose"='"',
       "csv.skip_header"="1",
-      "aws.s3.access_key" = "XXXXXXXXXX",
-      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
       "aws.s3.region" = "us-west-2"
   )
   WHERE $1 > 5;
@@ -296,8 +296,8 @@ When used with SELECT, FILES() returns the data in the file as a table.
       "csv.row_delimiter"="\n",
       "csv.enclose"='"',
       "csv.skip_header"="1",
-      "aws.s3.access_key" = "XXXXXXXXXX",
-      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
       "aws.s3.region" = "us-west-2"
   );
   +------+---------+
@@ -323,8 +323,8 @@ When used with SELECT, FILES() returns the data in the file as a table.
   SELECT * FROM FILES(
       "path" = "s3://inserttest/parquet/file2.parquet",
       "format" = "parquet",
-      "aws.s3.access_key" = "XXXXXXXXXX",
-      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
       "aws.s3.region" = "us-west-2"
   )
   WHERE c1 IN (101,105);
@@ -339,8 +339,8 @@ When used with SELECT, FILES() returns the data in the file as a table.
   SELECT c1, c3 FROM FILES(
       "path" = "s3://inserttest/parquet/file2.parquet",
       "format" = "parquet",
-      "aws.s3.access_key" = "XXXXXXXXXX",
-      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
       "aws.s3.region" = "us-west-2"
   );
   +------+---------------------+
@@ -372,8 +372,8 @@ Example 1: Query the data from the Parquet file **parquet/par-dup.parquet** with
 MySQL > SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
-     "aws.s3.access_key" = "XXXXXXXXXX",
-     "aws.s3.secret_key" = "YYYYYYYYYY",
+     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
      "aws.s3.region" = "us-west-2"
 );
 +------+---------------------------------------------------------+
@@ -392,8 +392,8 @@ MySQL > INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (23.03 sec)
@@ -407,8 +407,8 @@ MySQL > CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (22.09 sec)
