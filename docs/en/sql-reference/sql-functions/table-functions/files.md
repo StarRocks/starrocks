@@ -263,19 +263,42 @@ unload_data_param::=
 
 When used with SELECT, FILES() returns the data in the file as a table.
 
-- When querying CSV files, you can use `$1`, `$2` ... to represent each column in the SELECT statement.
+- When querying CSV files, you can use `$1`, `$2` ... to represent each column in the SELECT statement, or specify `*` to obtain data from all columns.
 
   ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/csv/file1.csv",
+      "format" = "csv",
+      "csv.column_separator"=",",
+      "csv.row_delimiter"="\n",
+      "csv.enclose"='"',
+      "csv.skip_header"="1",
+      "aws.s3.access_key" = "XXXXXXXXXX",
+      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE $1 > 5;
+  +------+---------+------------+
+  | $1   | $2      | $3         |
+  +------+---------+------------+
+  |    6 | 0.34413 | 2017-11-25 |
+  |    7 | 0.40055 | 2017-11-26 |
+  |    8 | 0.42437 | 2017-11-27 |
+  |    9 | 0.67935 | 2017-11-27 |
+  |   10 | 0.22783 | 2017-11-29 |
+  +------+---------+------------+
+  5 rows in set (0.30 sec)
+
   SELECT $1, $2 FROM FILES(
-    "path" = "s3://inserttest/csv/file1.csv",
-    "format" = "csv",
-    "csv.column_separator"=",",
-    "csv.row_delimiter"="\r\n",
-    "csv.enclose"='"',
-    "csv.skip_header"="1",
-    "aws.s3.access_key" = "XXXXXXXXXX",
-    "aws.s3.secret_key" = "YYYYYYYYYY",
-    "aws.s3.region" = "us-west-2"
+      "path" = "s3://inserttest/csv/file1.csv",
+      "format" = "csv",
+      "csv.column_separator"=",",
+      "csv.row_delimiter"="\n",
+      "csv.enclose"='"',
+      "csv.skip_header"="1",
+      "aws.s3.access_key" = "XXXXXXXXXX",
+      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.region" = "us-west-2"
   );
   +------+---------+
   | $1   | $2      |
@@ -292,40 +315,33 @@ When used with SELECT, FILES() returns the data in the file as a table.
   |   10 | 0.22783 |
   +------+---------+
   10 rows in set (0.38 sec)
-
-  SELECT * FROM FILES(
-    "path" = "s3://inserttest/csv/file1.csv",
-    "format" = "csv",
-    "csv.column_separator"=",",
-    "csv.row_delimiter"="\r\n",
-    "csv.enclose"='"',
-    "csv.skip_header"="1",
-    "aws.s3.access_key" = "XXXXXXXXXX",
-    "aws.s3.secret_key" = "YYYYYYYYYY",
-    "aws.s3.region" = "us-west-2"
-  )
-  WHERE $1 > 5;
-  +------+---------+------------+
-  | $1   | $2      | $3         |
-  +------+---------+------------+
-  |    6 | 0.34413 | 2017-11-25 |
-  |    7 | 0.40055 | 2017-11-26 |
-  |    8 | 0.42437 | 2017-11-27 |
-  |    9 | 0.67935 | 2017-11-27 |
-  |   10 | 0.22783 | 2017-11-29 |
-  +------+---------+------------+
-  5 rows in set (0.30 sec)
   ```
 
 - When querying Parquet or ORC files, you can directly specify the name of the desired columns in the SELECT statement, or specify `*` to obtain data from all columns.
 
   ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "XXXXXXXXXX",
+      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE c1 IN (101,105);
+  +------+------+---------------------+
+  | c1   | c2   | c3                  |
+  +------+------+---------------------+
+  |  101 |    9 | 2018-05-15T18:30:00 |
+  |  105 |    6 | 2018-05-15T18:30:00 |
+  +------+------+---------------------+
+  2 rows in set (0.29 sec)
+
   SELECT c1, c3 FROM FILES(
-    "path" = "s3://inserttest/parquet/file2.parquet",
-    "format" = "parquet",
-    "aws.s3.access_key" = "XXXXXXXXXX",
-    "aws.s3.secret_key" = "YYYYYYYYYY",
-    "aws.s3.region" = "us-west-2"
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "XXXXXXXXXX",
+      "aws.s3.secret_key" = "YYYYYYYYYY",
+      "aws.s3.region" = "us-west-2"
   );
   +------+---------------------+
   | c1   | c3                  |
@@ -342,22 +358,6 @@ When used with SELECT, FILES() returns the data in the file as a table.
   |  110 | 2018-05-15T18:30:00 |
   +------+---------------------+
   10 rows in set (0.55 sec)
-
-  SELECT * FROM FILES(
-    "path" = "s3://inserttest/parquet/file2.parquet",
-    "format" = "parquet",
-    "aws.s3.access_key" = "XXXXXXXXXX",
-    "aws.s3.secret_key" = "YYYYYYYYYY",
-    "aws.s3.region" = "us-west-2"
-  )
-  WHERE c1 IN (101,105);
-  +------+------+---------------------+
-  | c1   | c2   | c3                  |
-  +------+------+---------------------+
-  |  101 |    9 | 2018-05-15T18:30:00 |
-  |  105 |    6 | 2018-05-15T18:30:00 |
-  +------+------+---------------------+
-  2 rows in set (0.29 sec)
   ```
 
 ## Usage notes
