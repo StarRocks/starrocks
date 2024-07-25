@@ -143,5 +143,7 @@ while true; do
   echo "Restarting starrocks_be ..."
 
   # Wait for a few seconds before restarting
-  sleep 5
+  sleep_interval=${BE_RESTART_WAIT_SECONDS:-5}
+  echo "wait for $sleep_interval seconds ..."
+  sleep $sleep_interval
 done
