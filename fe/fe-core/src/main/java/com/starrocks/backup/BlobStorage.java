@@ -155,6 +155,9 @@ public class BlobStorage implements Writable {
 
         long start = System.currentTimeMillis();
 
+        // 1. get a proper broker
+        TNetworkAddress brokerAddress = getBrokerAddress();
+
         // 2. open file reader with broker
         TBrokerFD fd = null;
         try {
@@ -163,7 +166,7 @@ public class BlobStorage implements Writable {
 
             TBrokerOpenReaderResponse rep = ThriftRPCRequestExecutor.callNoRetry(
                     ThriftConnectionPool.brokerPool,
-                    getBrokerAddress(),
+                    brokerAddress,
                     client -> client.openReader(req));
 
             TBrokerOperationStatus opst = rep.getOpStatus();
@@ -224,7 +227,7 @@ public class BlobStorage implements Writable {
 
                         rep = ThriftRPCRequestExecutor.callNoRetry(
                                 ThriftConnectionPool.brokerPool,
-                                getBrokerAddress(),
+                                brokerAddress,
                                 client -> client.pread(req));
 
                         if (rep.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
@@ -302,7 +305,7 @@ public class BlobStorage implements Writable {
             return new Status(ErrCode.COMMON_ERROR, "Got exception: " + e.getMessage() + ", broker: " + brokerName);
         } finally {
             // close broker reader
-            Status closeStatus = closeReader(getBrokerAddress(), fd);
+            Status closeStatus = closeReader(brokerAddress, fd);
             if (!closeStatus.ok()) {
                 LOG.warn(closeStatus.getErrMsg());
                 if (status.ok()) {
@@ -396,11 +399,13 @@ public class BlobStorage implements Writable {
             return directUploadWithoutBroker(content, remoteFile);
         }
         Status status = Status.OK;
+        // 1. get a proper broker
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         TBrokerFD fd = new TBrokerFD();
         try {
             // 2. open file writer with broker
-            status = openWriter(getBrokerAddress(), remoteFile, fd);
+            status = openWriter(brokerAddress, remoteFile, fd);
             if (!status.ok()) {
                 return status;
             }
@@ -412,7 +417,7 @@ public class BlobStorage implements Writable {
 
                 TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
                         ThriftConnectionPool.brokerPool,
-                        getBrokerAddress(),
+                        brokerAddress,
                         client -> client.pwrite(req));
 
                 if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
@@ -425,7 +430,7 @@ public class BlobStorage implements Writable {
                         + ", broker: " + brokerName);
             }
         } finally {
-            closeWriter(getBrokerAddress(), fd);
+            closeWriter(brokerAddress, fd);
         }
 
         return status;
@@ -448,10 +453,12 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         Status status = Status.OK;
+        // 1. get a proper broker
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // 2. open file write with broker
         TBrokerFD fd = new TBrokerFD();
-        status = openWriter(getBrokerAddress(), remotePath, fd);
+        status = openWriter(brokerAddress, remotePath, fd);
         if (!status.ok()) {
             return status;
         }
@@ -479,7 +486,7 @@ public class BlobStorage implements Writable {
 
                         TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
                                 ThriftConnectionPool.brokerPool,
-                                getBrokerAddress(),
+                                brokerAddress,
                                 client -> client.pwrite(req));
 
                         if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
@@ -545,7 +552,7 @@ public class BlobStorage implements Writable {
                     + ", broker: " + brokerName);
         } finally {
             // close write
-            Status closeStatus = closeWriter(getBrokerAddress(), fd);
+            Status closeStatus = closeWriter(brokerAddress, fd);
             if (!closeStatus.ok()) {
                 LOG.warn(closeStatus.getErrMsg());
                 if (status.ok()) {
@@ -621,13 +628,16 @@ public class BlobStorage implements Writable {
         }
         long start = System.currentTimeMillis();
 
+        // 1. get a proper broker
+        TNetworkAddress brokerAddress = getBrokerAddress();
+
         // 2. rename
         try {
             TBrokerRenamePathRequest req = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE, origFilePath,
                     destFilePath, properties);
             TBrokerOperationStatus ost = ThriftRPCRequestExecutor.callNoRetry(
                     ThriftConnectionPool.brokerPool,
-                    getBrokerAddress(),
+                    brokerAddress,
                     client -> client.renamePath(req));
             if (ost.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
@@ -665,13 +675,15 @@ public class BlobStorage implements Writable {
             return deleteWithoutBroker(remotePath);
         }
 
+        TNetworkAddress brokerAddress = getBrokerAddress();
+
         // delete
         try {
             TBrokerDeletePathRequest req = new TBrokerDeletePathRequest(TBrokerVersion.VERSION_ONE, remotePath,
                     properties);
             TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
                     ThriftConnectionPool.brokerPool,
-                    getBrokerAddress(),
+                    brokerAddress,
                     client -> client.deletePath(req));
 
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
@@ -708,6 +720,8 @@ public class BlobStorage implements Writable {
             return listWithoutBroker(remotePath, result);
         }
 
+        TNetworkAddress brokerAddress = getBrokerAddress();
+
         // list
         try {
             TBrokerListPathRequest req = new TBrokerListPathRequest(TBrokerVersion.VERSION_ONE, remotePath,
@@ -716,7 +730,7 @@ public class BlobStorage implements Writable {
 
             TBrokerListResponse rep = ThriftRPCRequestExecutor.callNoRetry(
                     ThriftConnectionPool.brokerPool,
-                    getBrokerAddress(),
+                    brokerAddress,
                     client -> client.listPath(req));
 
             TBrokerOperationStatus opst = rep.getOpStatus();
@@ -762,6 +776,7 @@ public class BlobStorage implements Writable {
         if (!hasBroker) {
             return checkPathExistWithoutBroker(remotePath);
         }
+        TNetworkAddress address = getBrokerAddress();
 
         // check path
         try {
@@ -770,7 +785,7 @@ public class BlobStorage implements Writable {
 
             TBrokerCheckPathExistResponse rep = ThriftRPCRequestExecutor.callNoRetry(
                     ThriftConnectionPool.brokerPool,
-                    getBrokerAddress(),
+                    address,
                     client -> client.checkPathExist(req));
 
             TBrokerOperationStatus opst = rep.getOpStatus();
