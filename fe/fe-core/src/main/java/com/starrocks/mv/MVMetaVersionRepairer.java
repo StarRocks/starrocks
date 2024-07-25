@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.scheduler.mv.MVVersionManager;
@@ -65,7 +67,17 @@ public class MVMetaVersionRepairer {
                 LOG.warn("mv {} not found", mvId.getId());
                 continue;
             }
-            repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
+
+            // acquire db write lock to modify meta of mv
+            Locker locker = new Locker();
+            if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
+                continue;
+            }
+            try {
+                repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+            }
         }
     }
 
