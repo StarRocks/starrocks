@@ -92,6 +92,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
 
+    public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
+
     @Override
     public String toString() {
         return String.valueOf(id);
