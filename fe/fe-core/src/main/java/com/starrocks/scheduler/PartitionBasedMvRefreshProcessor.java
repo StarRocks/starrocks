@@ -137,7 +137,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     private RuntimeProfile runtimeProfile;
     private MVPCTRefreshPartitioner mvRefreshPartitioner;
-    private MVTraceUtils mvTraceUtils;
 
     // represents the refresh job final job status
     public enum RefreshJobStatus {
@@ -445,22 +444,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         Set<String> mvToRefreshedPartitions = null;
-        try (Timer ignored = Tracers.watchScope("MVRefreshSyncAndCheckPartitions")) {
+        Map<TableSnapshotInfo, Set<String>> refTableRefreshPartitions = null;
+        Map<String, Set<String>> refTablePartitionNames = null;
+        try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             mvToRefreshedPartitions = checkMvToRefreshedPartitions(context, false);
             if (CollectionUtils.isEmpty(mvToRefreshedPartitions)) {
                 return RefreshJobStatus.EMPTY;
             }
+            // ref table of materialized view : refreshed partition names
+            refTableRefreshPartitions = getRefTableRefreshPartitions(mvToRefreshedPartitions);
+            // ref table of materialized view : refreshed partition names
+            refTablePartitionNames = refTableRefreshPartitions.entrySet().stream()
+                    .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue));
+            LOG.info("materialized:{}, mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
+                    materializedView.getName(), mvToRefreshedPartitions, refTableRefreshPartitions);
+            // add a message into information_schema
+            logMvToRefreshInfoIntoTaskRun(mvToRefreshedPartitions, refTablePartitionNames);
+            updateBaseTablePartitionSnapshotInfos(refTableRefreshPartitions);
         }
-        // ref table of materialized view : refreshed partition names
-        Map<TableSnapshotInfo, Set<String>> refTableRefreshPartitions = getRefTableRefreshPartitions(mvToRefreshedPartitions);
-        // ref table of materialized view : refreshed partition names
-        Map<String, Set<String>> refTablePartitionNames = refTableRefreshPartitions.entrySet().stream()
-                .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue));
-        LOG.info("materialized:{}, mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
-                materializedView.getName(), mvToRefreshedPartitions, refTableRefreshPartitions);
-        // add a message into information_schema
-        logMvToRefreshInfoIntoTaskRun(mvToRefreshedPartitions, refTablePartitionNames);
-        updateBaseTablePartitionSnapshotInfos(refTableRefreshPartitions);
 
         ///// 2. execute the ExecPlan of insert stmt
         InsertStmt insertStmt = null;
@@ -810,7 +811,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             try {
                 MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
                 Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
-                        mvTraceUtils.getBaseTableRefreshedPartitionsByExecPlan(execPlan);
+                        MVTraceUtils.getBaseTableRefreshedPartitionsByExecPlan(materializedView, execPlan);
                 extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
             } catch (Exception e) {
                 // just log warn and no throw exceptions for an updating task runs message.
@@ -873,7 +874,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
         // prepare mv refresh partitioner
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(materializedView, context);
-        this.mvTraceUtils = new MVTraceUtils(materializedView, mvContext);
 
         LOG.info("finish prepare refresh of mv:{}, mv name:{}, jobId: {}", mvId, materializedView.getName(), jobId);
     }

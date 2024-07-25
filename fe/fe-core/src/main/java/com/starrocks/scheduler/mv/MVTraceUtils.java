@@ -26,7 +26,6 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,20 +45,12 @@ public class MVTraceUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVTraceUtils.class);
 
-    private final MaterializedView mv;
-    private final MvTaskRunContext mvTaskRunContext;
-
-    public MVTraceUtils(MaterializedView mv,
-                        MvTaskRunContext mvTaskRunContext) {
-        this.mv = mv;
-        this.mvTaskRunContext = mvTaskRunContext;
-    }
-
     /**
      * Extract refreshed/scanned base table and its refreshed partition names
      * NOTE: this is used to trace in task_runs.
      */
-    public Map<String, Set<String>> getBaseTableRefreshedPartitionsByExecPlan(ExecPlan execPlan) {
+    public static Map<String, Set<String>> getBaseTableRefreshedPartitionsByExecPlan(MaterializedView mv,
+                                                                                     ExecPlan execPlan) {
         Map<String, Set<String>> baseTableRefreshPartitionNames = Maps.newHashMap();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         for (ScanNode scanNode : scanNodes) {
