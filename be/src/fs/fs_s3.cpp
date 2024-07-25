@@ -22,6 +22,8 @@
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/ListObjectsRequest.h>
+#include <aws/s3/model/ListObjectsResult.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -409,6 +411,13 @@ public:
     StatusOr<SpaceInfo> space(const std::string& path) override;
 
 private:
+    Status iterate_dir_v1(const std::string& dir, const std::function<bool(std::string_view)>& cb);
+    Status iterate_dir2_v1(const std::string& dir, const std::function<bool(DirEntry)>& cb);
+    StatusOr<bool> is_directory_v1(const std::string& path);
+    Status delete_dir_v1(const std::string& dirname);
+    Status delete_dir_recursive_v1(const std::string& dirname);
+
+private:
     FSOptions _options;
 };
 
@@ -519,6 +528,10 @@ StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
 }
 
 Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    if (config::s3_use_list_objects_v1) {
+        return iterate_dir_v1(dir, cb);
+    }
+
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -577,7 +590,70 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
+Status S3FileSystem::iterate_dir_v1(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+#ifdef BE_TEST
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
+#endif
+    do {
+        auto outcome = client->ListObjects(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetMarker(result.GetNextMarker());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+            std::string_view obj_key(obj.GetKey());
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+            }
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
 Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    if (config::s3_use_list_objects_v1) {
+        return iterate_dir2_v1(dir, cb);
+    }
+
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -600,6 +676,75 @@ Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bo
         }
         result = outcome.GetResultWithOwnership();
         request.SetContinuationToken(result.GetNextContinuationToken());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            DirEntry entry{.name = name, .is_dir = {true}};
+            if (!cb(entry)) {
+                return Status::OK();
+            }
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+
+            std::string_view obj_key(obj.GetKey());
+            DirEntry entry;
+            if (obj.LastModifiedHasBeenSet()) {
+                entry.mtime = obj.GetLastModified().Seconds();
+            }
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+                entry.is_dir = true;
+            } else {
+                DCHECK(obj.SizeHasBeenSet());
+                entry.is_dir = false;
+                if (obj.SizeHasBeenSet()) {
+                    entry.size = obj.GetSize();
+                }
+            }
+
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            entry.name = name;
+
+            if (!cb(entry)) {
+                return Status::OK();
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
+Status S3FileSystem::iterate_dir2_v1(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+
+    do {
+        auto outcome = client->ListObjects(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetMarker(result.GetNextMarker());
         directory_exist |= !result.GetCommonPrefixes().empty();
         directory_exist |= !result.GetContents().empty();
         for (auto&& cp : result.GetCommonPrefixes()) {
@@ -692,6 +837,10 @@ Status S3FileSystem::create_dir_recursive(const std::string& dirname) {
 }
 
 StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
+    if (config::s3_use_list_objects_v1) {
+        return is_directory_v1(path);
+    }
+
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
@@ -709,6 +858,36 @@ StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
     }
     result = outcome.GetResultWithOwnership();
     request.SetContinuationToken(result.GetNextContinuationToken());
+    std::string dirname = uri.key() + "/";
+    for (auto&& obj : result.GetContents()) {
+        if (HasPrefixString(obj.GetKey(), dirname)) {
+            return true;
+        }
+        if (obj.GetKey() == uri.key()) {
+            return false;
+        }
+    }
+    return Status::NotFound(path);
+}
+
+StatusOr<bool> S3FileSystem::is_directory_v1(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+    }
+    if (uri.key().empty()) { // root directory '/'
+        return true;
+    }
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithMaxKeys(1);
+    auto outcome = client->ListObjects(request);
+    if (!outcome.IsSuccess()) {
+        return Status::IOError(fmt::format("fail to list {}: {}", path, outcome.GetError().GetMessage()));
+    }
+    result = outcome.GetResultWithOwnership();
+    request.SetMarker(result.GetNextMarker());
     std::string dirname = uri.key() + "/";
     for (auto&& obj : result.GetContents()) {
         if (HasPrefixString(obj.GetKey(), dirname)) {
@@ -803,6 +982,10 @@ Status S3FileSystem::delete_files(std::span<const std::string> paths) {
 }
 
 Status S3FileSystem::delete_dir(const std::string& dirname) {
+    if (config::s3_use_list_objects_v1) {
+        return delete_dir_v1(dirname);
+    }
+
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
@@ -846,6 +1029,50 @@ Status S3FileSystem::delete_dir(const std::string& dirname) {
     }
 }
 
+Status S3FileSystem::delete_dir_v1(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported("Cannot delete root directory of S3");
+    }
+    if (!HasSuffixString(uri.key(), "/")) {
+        uri.key().push_back('/');
+    }
+
+    auto client = new_s3client(uri, _options);
+
+    // Check if the directory is empty
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/").WithMaxKeys(2);
+    auto outcome = client->ListObjects(request);
+    if (!outcome.IsSuccess()) {
+        return to_status(outcome.GetError().GetErrorType(), outcome.GetError().GetMessage());
+    }
+    result = outcome.GetResultWithOwnership();
+    if (!result.GetCommonPrefixes().empty()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+    if (result.GetContents().empty()) {
+        return Status::NotFound(fmt::format("directory {} not exist", dirname));
+    }
+    if (result.GetContents().size() > 1 || result.GetContents()[0].GetKey() != uri.key()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+
+    // The directory is empty, delete it now
+    Aws::S3::Model::DeleteObjectRequest del_request;
+    del_request.WithBucket(uri.bucket()).WithKey(uri.key());
+    auto del_outcome = client->DeleteObject(del_request);
+    if (del_outcome.IsSuccess()) {
+        return Status::OK();
+    } else {
+        return to_status(del_outcome.GetError().GetErrorType(), del_outcome.GetError().GetMessage());
+    }
+}
+
 Status S3FileSystem::sync_dir(const std::string& dirname) {
     // The only thing we need to do is check whether the directory exist or not.
     ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
@@ -854,6 +1081,10 @@ Status S3FileSystem::sync_dir(const std::string& dirname) {
 }
 
 Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
+    if (config::s3_use_list_objects_v1) {
+        return delete_dir_recursive_v1(dirname);
+    }
+
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
@@ -882,6 +1113,63 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     delete_request.SetBucket(uri.bucket());
     do {
         auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        directory_exist |= !result.GetContents().empty();
+        Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+        objects.reserve(result.GetContents().size());
+        for (auto&& obj : result.GetContents()) {
+            objects.emplace_back().SetKey(obj.GetKey());
+        }
+        if (!objects.empty()) {
+            Aws::S3::Model::Delete d;
+            d.WithObjects(std::move(objects)).WithQuiet(true);
+            delete_request.SetDelete(std::move(d));
+            auto delete_outcome = client->DeleteObjects(delete_request);
+            if (!delete_outcome.IsSuccess()) {
+                return Status::IOError(
+                        fmt::format("fail to batch delete {}: {}", dirname, delete_outcome.GetError().GetMessage()));
+            }
+            if (!delete_outcome.GetResult().GetErrors().empty()) {
+                auto&& e = delete_outcome.GetResult().GetErrors()[0];
+                return Status::IOError(fmt::format("fail to delete {}: {}", e.GetKey(), e.GetMessage()));
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dirname);
+}
+
+Status S3FileSystem::delete_dir_recursive_v1(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported(fmt::format("S3 URI with an empty key: {}", dirname));
+    }
+    if (uri.key().back() != '/') {
+        uri.key().push_back('/');
+    }
+    bool directory_exist = false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key());
+#ifdef BE_TEST
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
+#endif
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    do {
+        auto outcome = client->ListObjects(request);
         if (!outcome.IsSuccess()) {
             return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
         }
