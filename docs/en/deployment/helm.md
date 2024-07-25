@@ -52,6 +52,7 @@ displayed_sidebar: "English"
       TEST SUITE: None
       ```
 
+<<<<<<< HEAD
    2. Deployment with custom configurations
       - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
@@ -59,20 +60,48 @@ displayed_sidebar: "English"
         ```Bash
         helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
         ```
+=======
+3. Deployment with custom configurations
+   - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
+   - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
+
+     ```bash
+     helm install -f my-values.yaml starrocks starrocks/kube-starrocks
+     ```
+>>>>>>> 5833705daf ([Doc] Update helm.md (#48803))
 
     Deployment takes a while. During this period, you can check the deployment status by using the prompt command in the returned result of the deployment command above. The default prompt command is as follows:
 
+<<<<<<< HEAD
     ```Bash
     $ kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
     # If the following result is returned, the deployment has been successfully completed.
     NAME             FESTATUS   CNSTATUS   BESTATUS
     kube-starrocks   running               running
+=======
+    ```bash
+    kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
+    ```
+    If the following result is returned, the deployment has been successfully completed.
+   
+    ```bash
+    NAME             PHASE     FESTATUS   BESTATUS   CNSTATUS   FEPROXYSTATUS
+    kube-starrocks   running   running    running
+>>>>>>> 5833705daf ([Doc] Update helm.md (#48803))
     ```
 
     You can also run `kubectl get pods` to check the deployment status. If all Pods are in the `Running` state and all containers within the Pods are `READY`, the deployment has been successfully completed.
 
+<<<<<<< HEAD
     ```Bash
     $ kubectl get pods
+=======
+    ```bash
+    kubectl get pods
+    ```
+
+    ```bash
+>>>>>>> 5833705daf ([Doc] Update helm.md (#48803))
     NAME                                       READY   STATUS    RESTARTS   AGE
     kube-starrocks-be-0                        1/1     Running   0          2m50s
     kube-starrocks-fe-0                        1/1     Running   0          4m31s
