@@ -31,6 +31,9 @@ class HiveLib(object):
                 host=query_dict["host"],
                 port=query_dict["port"],
                 username=query_dict["user"],
+                configuration={
+                    "queryTimeout": query_dict["queryTimeout"]
+                }
             )
 
     def close(self):

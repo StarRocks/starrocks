@@ -187,6 +187,7 @@ Start to run: %s
 
                 actual_res = self.trino_execute_sql(sql)
                 self_print("[TRINO]: %s" % sql)
+                log.info("[%s] TRINO: %s" % (sql_id, sql))
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
@@ -203,6 +204,7 @@ Start to run: %s
 
                 actual_res = self.spark_execute_sql(sql)
                 self_print("[SPARK]: %s" % sql)
+                log.info("[%s] SPARK: %s" % (sql_id, sql))
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
@@ -219,6 +221,7 @@ Start to run: %s
 
                 actual_res = self.hive_execute_sql(sql)
                 self_print("[HIVE]: %s" % sql)
+                log.info("[%s] HIVE: %s" % (sql_id, sql))
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
@@ -235,7 +238,6 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
                 self_print("[SHELL]: %s" % sql)
-
                 log.info("[%s] SHELL: %s" % (sql_id, sql))
                 actual_res = self.execute_shell(sql)
 
@@ -249,7 +251,6 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
                 self_print("[FUNCTION]: %s" % sql)
-
                 log.info("[%s] FUNCTION: %s" % (sql_id, sql))
                 actual_res = eval("self.%s" % sql)
 
