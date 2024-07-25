@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -161,6 +162,40 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
             return OptExpression.create(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()),
                     optExpression);
+        }
+
+        @Override
+        public OptExpression visitLogicalTopN(OptExpression optExpression, Context context) {
+            if (context.pushDownExprRefs.isEmpty()) {
+                return visit(optExpression, context);
+            }
+
+            LogicalTopNOperator topN = optExpression.getOp().cast();
+
+            ColumnRefSet topNColumns = new ColumnRefSet();
+            topN.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(topNColumns::union);
+            if (topN.getPartitionByColumns() != null) {
+                topN.getPartitionByColumns().forEach(topNColumns::union);
+            }
+
+            Context localContext = new Context();
+            Context childContext = new Context();
+            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
+            for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
+                ScalarOperator expr = entry.getKey();
+                ColumnRefSet useColumns = entry.getValue();
+
+                if (topNColumns.isIntersect(useColumns)) {
+                    localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                } else {
+                    childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                    childSubfieldOutputs.union(context.pushDownExprRefsIndex.get(expr));
+                }
+            }
+            if (!localContext.pushDownExprRefs.isEmpty()) {
+                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            }
+            return visitChildren(optExpression, childContext);
         }
 
         @Override
