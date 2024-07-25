@@ -39,7 +39,7 @@ public class Tracers {
     // [empty tracer, real tracer]
     private final Tracer[] allTracer = new Tracer[] {EMPTY_TRACER, EMPTY_TRACER};
 
-    // mark enable module, default enable parser module.
+    // mark enable module, default enable parser module
     private int moduleMask = 1 << Module.PARSER.ordinal();
 
     // mark enable mode, default enable timer mode
