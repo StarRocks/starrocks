@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.optimizer.rewrite.SystemOperatorEvaluator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,6 +49,10 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+        if (call.isSystemFunction()) {
+            return SystemOperatorEvaluator.INSTANCE.evaluation(call);
+        }
+
         if (call.isAggregate()) {
             return call;
         }

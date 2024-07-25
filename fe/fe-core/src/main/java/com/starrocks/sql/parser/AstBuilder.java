@@ -73,6 +73,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TaskName;
@@ -6206,10 +6207,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
         String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
-        NodePosition pos = createPos(context);
-
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
+
+        if (!functionName.startsWith("system$")) {
+            return visitSimpleFunction(fnName, context);
+        } else {
+            return visitSystemFunction(fnName, context);
+        }
+    }
+
+    public ParseNode visitSimpleFunction(FunctionName fnName, StarRocksParser.SimpleFunctionCallContext context) {
+        String functionName = fnName.getFunction();
+        NodePosition pos = createPos(context);
+
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
@@ -6398,6 +6409,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
         return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    public ParseNode visitSystemFunction(FunctionName fnName, StarRocksParser.SimpleFunctionCallContext context) {
+        NodePosition pos = createPos(context);
+        //system functions do not support the db.$system format
+        if (fnName.getDb() != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidSystemFunctionName(String.format("%s.%s",
+                    fnName.getDb(), fnName.getFunction())), pos);
+        }
+
+        SystemFunctionCallExpr systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
+        return SyntaxSugars.parse(systemFunctionCallExpr);
     }
 
     @Override

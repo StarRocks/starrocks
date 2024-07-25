@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -46,12 +47,14 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -105,6 +108,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -693,6 +697,35 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            return callOperator;
+        }
+
+        @Override
+        public ScalarOperator visitSystemFunctionCall(SystemFunctionCallExpr node, Context context) {
+            // check privilege
+            GenericFunction genericFunc = Expr.getGenericFunction(node.getFn());
+            if (genericFunc == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        node.getFn().getFunctionName(),
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(node.getFn().getArgs()).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+            genericFunc.prepare(node, session);
+
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+
+            CallOperator callOperator = new CallOperator(
+                    node.getFnName().getFunction(),
+                    node.getType(),
+                    arguments,
+                    node.getFn(),
+                    node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            callOperator.setIsSystemFunction(true);
             return callOperator;
         }
 

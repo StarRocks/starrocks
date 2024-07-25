@@ -44,6 +44,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
@@ -1261,6 +1262,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, argNames, Type.INVALID, false);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static GenericFunction getGenericFunction(Function fn) {
+        return GlobalStateMgr.getCurrentState().getBuiltinGenericFunction(fn);
     }
 
     /**

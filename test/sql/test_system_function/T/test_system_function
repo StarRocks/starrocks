@@ -1,0 +1,5 @@
+-- name: test_system_function
+create database  test_system_function;
+select system$cbo_stats_show_exclusion();
+select test_system_function.system$cbo_stats_show_exclusion();
+select system$cbo_stats_show_exclusion(1);
