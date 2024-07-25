@@ -64,22 +64,55 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
         List<SetListItem> setVars = setStmt.getSetListItems();
-        for (SetListItem var : setVars) {
-            if (var instanceof SystemVariable) {
-                analyzeSystemVariable((SystemVariable) var);
-            } else if (var instanceof UserVariable) {
-                analyzeUserVariable((UserVariable) var);
-            } else if (var instanceof SetUserPropertyVar) {
-                analyzeSetUserPropertyVar((SetUserPropertyVar) var);
-            } else if (var instanceof SetNamesVar) {
-                analyzeSetNames((SetNamesVar) var);
-            } else if (var instanceof SetPassVar) {
-                analyzeSetPassVar((SetPassVar) var, session);
+        HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
+        boolean hasUserVar = setVars.stream().anyMatch(var -> var instanceof UserVariable);
+        //Record the order in which user variables appear in SQL
+        //set @a = 1, @b = @c+1, @c = 1; var b shouldn't be reanalyzed.
+        List<String> userVarSequenceInSql = new ArrayList<>();
+        if (hasUserVar) {
+            cloneUserVars.putAll(session.getUserVariables());
+        }
+        try {
+            for (SetListItem var : setVars) {
+                if (var instanceof SystemVariable) {
+                    analyzeSystemVariable((SystemVariable) var);
+                } else if (var instanceof UserVariable) {
+                    UserVariable userVar = (UserVariable) var;
+                    UserVariable userVariableExisted = session.getUserVariable(userVar.getVariable());
+                    if (userVariableExisted != null) {
+                        session.removeUserVariable(userVar.getVariable());
+                    }
+
+                    analyzeUserVariable(userVar);
+                    List<String> varDependencies = ExpressionAnalyzer.
+                            analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());
+                    boolean hasPreDependency = varDependencies.stream().anyMatch(varDep -> userVarSequenceInSql.contains(varDep));
+                    if (!varDependencies.isEmpty() && hasPreDependency) {
+                        userVar.setUserVariableDependencyNotInConnContext(varDependencies);
+                    }
+
+                    userVarSequenceInSql.add(userVar.getVariable());
+                } else if (var instanceof SetUserPropertyVar) {
+                    analyzeSetUserPropertyVar((SetUserPropertyVar) var);
+                } else if (var instanceof SetNamesVar) {
+                    analyzeSetNames((SetNamesVar) var);
+                } else if (var instanceof SetPassVar) {
+                    analyzeSetPassVar((SetPassVar) var, session);
+                }
+            }
+        } catch (Throwable e) {
+            throw e;
+        } finally {
+            //If SetStmtAnalyzer encounters an exception, restore the UserVariables in the session.
+            //SetStmtAnalyzer can't modify session vars, only Executor can modify it.
+            if (hasUserVar) {
+                session.setUserVariables(cloneUserVars);
             }
         }
     }

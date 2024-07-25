@@ -776,7 +776,6 @@ public class StmtExecutor {
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
     private void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
-        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
         UUID queryId = context.getQueryId();
         final TUniqueId executionId = context.getExecutionId();
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
@@ -811,7 +810,7 @@ public class StmtExecutor {
                             context.getState().reset();
                         }
                     }
-                    userVariablesFromHint.put(entry.getKey(), entry.getValue());
+                    context.userVariables.put(entry.getKey(), entry.getValue());
                 }
             }
         }
@@ -819,7 +818,6 @@ public class StmtExecutor {
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
         }
-        context.userVariables.putAll(userVariablesFromHint);
     }
 
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {

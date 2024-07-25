@@ -149,6 +149,14 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
+    public void analyzeUserVarDependency(Expr expression, Scope scope,
+                                         List<String> userVariableDependencyNotInConnContext) {
+        CheckUserVariableDependencyVisitor visitor =
+                new CheckUserVariableDependencyVisitor(session,
+                        userVariableDependencyNotInConnContext);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
     public void analyzeWithoutUpdateState(Expr expression, AnalyzeState analyzeState, Scope scope) {
         Visitor visitor = new Visitor(analyzeState, session) {
             @Override
@@ -192,7 +200,7 @@ public class ExpressionAnalyzer {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
-    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
+    private void rewriteHighOrderFunction(Expr expr, AstVisitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
@@ -251,7 +259,7 @@ public class ExpressionAnalyzer {
     }
 
     // only high-order functions can use lambda functions.
-    void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
+    void analyzeHighOrderFunction(AstVisitor visitor, Expr expression, Scope scope) {
         if (!isHighOrderFunction(expression)) {
             String funcName = "";
             if (expression instanceof FunctionCallExpr) {
@@ -354,7 +362,7 @@ public class ExpressionAnalyzer {
         scope.clearLambdaInputs();
     }
 
-    private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
+    private void bottomUpAnalyze(AstVisitor visitor, Expr expression, Scope scope) {
         boolean hasLambdaFunc = false;
         try {
             hasLambdaFunc = expression.hasLambdaFunction(expression);
@@ -2066,6 +2074,34 @@ public class ExpressionAnalyzer {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
                 new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
+    public static class CheckUserVariableDependencyVisitor implements AstVisitor<Void, Scope> {
+        private final ConnectContext session;
+        private List<String> userVariableDependencyNotInConnContext;
+
+        public CheckUserVariableDependencyVisitor(ConnectContext session,
+                                                  List<String> userVariableDependencyNotInConnContext) {
+            this.session = session;
+            this.userVariableDependencyNotInConnContext = userVariableDependencyNotInConnContext;
+        }
+
+        public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariable userVariable = session.getUserVariable(node.getName());
+            if (userVariable == null) {
+                userVariableDependencyNotInConnContext.add(node.getName());
+            }
+            return null;
+        }
+
+    }
+
+    public static List<String> analyzeUserVariableExprDependency(Expr expression, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+        List<String> userVariableDependencyNotInConnContext = new ArrayList<>();
+        expressionAnalyzer.analyzeUserVarDependency(expression, scope, userVariableDependencyNotInConnContext);
+        return userVariableDependencyNotInConnContext;
     }
 
 }

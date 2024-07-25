@@ -38,12 +38,15 @@ import com.starrocks.thrift.TResultSinkType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 public class UserVariable extends SetListItem {
     private final String variable;
     private Expr unevaluatedExpression;
     private Expr evaluatedExpression;
+    private List<String> userVariableDependencyNotInConnContext = new ArrayList<>();
+
 
     private final boolean isFromHint;
     public UserVariable(String variable, Expr unevaluatedExpression, NodePosition pos) {
@@ -80,6 +83,14 @@ public class UserVariable extends SetListItem {
 
     public void setEvaluatedExpression(Expr evaluatedExpression) {
         this.evaluatedExpression = evaluatedExpression;
+    }
+
+    public List<String> getUserVariableDependencyNotInConnContext() {
+        return this.userVariableDependencyNotInConnContext;
+    }
+
+    public void setUserVariableDependencyNotInConnContext(List<String> userVariableDependencyNotInConnContext) {
+        this.userVariableDependencyNotInConnContext = userVariableDependencyNotInConnContext;
     }
 
     public boolean isFromHint() {

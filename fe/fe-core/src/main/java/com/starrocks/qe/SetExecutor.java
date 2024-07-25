@@ -38,11 +38,14 @@ import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
+
+import java.util.HashMap;
 
 // Set executor
 public class SetExecutor {
@@ -61,6 +64,11 @@ public class SetExecutor {
             UserVariable userVariable = (UserVariable) var;
             if (userVariable.getEvaluatedExpression() == null) {
                 userVariable.deriveUserVariableExpressionResult(ctx);
+            }
+
+            //reanalyze UserVariable
+            if (userVariable.getUserVariableDependencyNotInConnContext().size() > 0) {
+                SetStmtAnalyzer.analyzeUserVariable(userVariable);
             }
 
             ctx.modifyUserVariable(userVariable);
@@ -89,8 +97,22 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
-        for (SetListItem var : stmt.getSetListItems()) {
-            setVariablesOfAllType(var);
+        HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        if (hasUserVar) {
+            cloneUserVars.putAll(ctx.getUserVariables());
+        }
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            //If the set sql contains more than one user variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            if (hasUserVar) {
+                ctx.setUserVariables(cloneUserVars);
+            }
+            throw e;
         }
     }
 }
