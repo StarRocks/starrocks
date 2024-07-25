@@ -733,7 +733,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                 all_iters.emplace_back(std::move(iter));
             }
             // access whole json
-            return create_json_merge_iterator(std::move(null_iter), std::move(all_iters), source_paths, source_types);
+            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
+                                              source_types);
         }
 
         bool need_remain = false;
