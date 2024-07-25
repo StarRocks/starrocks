@@ -1083,7 +1083,10 @@ public class StmtExecutor {
             context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
             return;
         }
-        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
+        if (killCtx == null) {
+            killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        }
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
         }
