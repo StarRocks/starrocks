@@ -1597,9 +1597,9 @@ public class GlobalStateMgr {
     public void saveImage() throws IOException {
         try {
             saveImage(ImageFormatVersion.v1);
-        } catch (Exception e) {
+        } catch (Throwable t) {
             // image v1 may fail because of byte[] size overflow, ignore
-            LOG.warn("save image v1 failed, ignore", e);
+            LOG.warn("save image v1 failed, ignore", t);
         }
         saveImage(ImageFormatVersion.v2);
     }
