@@ -152,7 +152,7 @@ ON (sr_member);
 
 :::tip
 StarRocks 支持以下粒度的备份还原操作：
-- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name> PARTITION (<partition_name>, ...))`。
 - 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
@@ -201,7 +201,7 @@ PROPERTIES (
 
 :::tip
 StarRocks 支持以下粒度的备份还原操作：
-- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name> PARTITION (<partition_name>, ...))`。
 - 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
