@@ -278,7 +278,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
-        google::InstallFailureFunction(failure_function);
+        google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
     }
 
     logging_initialized = true;
