@@ -80,6 +80,14 @@ public:
         return obj;
     }
 
+    // Indicates the different S3 operation of using the client.
+    // This class is used to set different configuration for clients
+    // with different purposes.
+    enum class OperationType {
+        UNKNOWN,
+        RENAME_FILE,
+    };
+
     ~S3ClientFactory() = default;
 
     S3ClientFactory(const S3ClientFactory&) = delete;
@@ -87,7 +95,8 @@ public:
     S3ClientFactory(S3ClientFactory&&) = delete;
     void operator=(S3ClientFactory&&) = delete;
 
-    S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
+    S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration,
+                           S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
     void close();
@@ -100,6 +109,11 @@ public:
         // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
         static ClientConfiguration instance;
         return instance;
+    }
+
+    // Only use for UT
+    bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config) {
+        return _find_client_cache_keys_by_config_TEST(config);
     }
 
 private:
@@ -119,6 +133,14 @@ private:
     };
 
     constexpr static int kMaxItems = 8;
+
+    // Only use for UT
+    bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config) {
+        for (size_t i = 0; i < _items; i++) {
+            if (_client_cache_keys[i] == ClientCacheKey{config, AWSCloudConfiguration{}}) return true;
+        }
+        return false;
+    }
 
     std::mutex _lock;
     int _items{0};
@@ -171,7 +193,8 @@ void S3ClientFactory::close() {
     }
 }
 
-S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
+S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration,
+                                                         S3ClientFactory::OperationType operation_type) {
     const AWSCloudConfiguration aws_cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
 
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
@@ -194,7 +217,12 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     if (config::object_storage_connect_timeout_ms > 0) {
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
-    if (config::object_storage_request_timeout_ms >= 0) {
+
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
 
@@ -280,7 +308,9 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 // If you find yourself change this code, see also `bool operator==(const Aws::Client::ClientConfiguration&, const Aws::Client::ClientConfiguration&)`
-static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
+static std::shared_ptr<Aws::S3::S3Client> new_s3client(
+        const S3URI& uri, const FSOptions& opts,
+        S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
@@ -326,10 +356,15 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
     if (config::object_storage_connect_timeout_ms > 0) {
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
-    // 0 is meaningful for object_storage_request_timeout_ms
-    if (config::object_storage_request_timeout_ms >= 0) {
+
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
+
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
@@ -501,7 +536,7 @@ Status S3FileSystem::rename_file(const std::string& src, const std::string& targ
     if (!dest_uri.parse(target)) {
         return Status::InvalidArgument(fmt::format("Invalid target S3 URI: {}", target));
     }
-    auto client = new_s3client(src_uri, _options);
+    auto client = new_s3client(src_uri, _options, S3ClientFactory::OperationType::RENAME_FILE);
     Aws::S3::Model::CopyObjectRequest copy_request;
     copy_request.WithCopySource(src_uri.bucket() + "/" + src_uri.key());
     copy_request.WithBucket(dest_uri.bucket());

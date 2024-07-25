@@ -853,6 +853,9 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage specialized for rename_file operation.
+// if this parameter is 0, use object_storage_request_timeout_ms instead.
+CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
