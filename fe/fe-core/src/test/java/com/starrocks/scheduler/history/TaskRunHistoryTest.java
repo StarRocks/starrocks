@@ -72,7 +72,7 @@ public class TaskRunHistoryTest {
                         "task_state, create_time, finish_time, expire_time, history_content_json) " +
                         "VALUES(0, 'aaa', 't1', 'SUCCESS', '1970-01-01 08:00:00', " +
                         "'1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
-                        "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
+                        "'{\"queryId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
                         "\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\"," +
                         "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\"," +
                         "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
@@ -84,7 +84,7 @@ public class TaskRunHistoryTest {
 
         TaskRunHistoryTable history = new TaskRunHistoryTable();
         TaskRunStatus status = new TaskRunStatus();
-        status.setStartTaskRunId("aaa");
+        status.setQueryId("aaa");
         status.setTaskName("t1");
         status.setState(Constants.TaskRunState.SUCCESS);
         history.addHistory(status);
@@ -224,7 +224,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDML(
                         "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, task_state, " +
-                                "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'null', 't2'," +
+                                "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'q2', 't2'," +
                                 " 'SUCCESS', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', " +
                                 "'{\"queryId\":\"q2\",\"taskId\":0,\"taskName\":\"t2\",\"createTime\":0," +
                                 "\"expireTime\":1720165080904,\"priority\":0,\"mergeRedundant\":false," +

@@ -121,7 +121,7 @@ public class TaskRunHistoryTable {
 
                 return MessageFormat.format(INSERT_SQL_VALUE,
                         String.valueOf(status.getTaskId()),
-                        Strings.quote(status.getStartTaskRunId()),
+                        Strings.quote(status.getQueryId()),
                         Strings.quote(status.getTaskName()),
                         Strings.quote(status.getState().toString()),
                         createTime,
