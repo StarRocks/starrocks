@@ -25,6 +25,7 @@ mysql_lib.py
 import pymysql as _mysql
 from pymysql.constants import CLIENT
 
+from lib import close_conn
 
 class MysqlLib(object):
     """MysqlLib class"""
@@ -52,4 +53,9 @@ class MysqlLib(object):
 
     def close(self):
         if self.connector != "":
-            self.connector.close()
+            try:
+                close_conn(self.connector)
+            except Exception as e:
+                log.info("Close MySQL connection error: %s" % e)
+            finally:
+                self.connector = ""

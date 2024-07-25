@@ -18,6 +18,8 @@
 
 from pyhive import hive
 
+from lib import close_conn
+
 
 class HiveLib(object):
     """HiveLib class"""
@@ -38,5 +40,9 @@ class HiveLib(object):
 
     def close(self):
         if self.connector is not None:
-            self.connector.close()
-            self.connector = None
+            try:
+                close_conn(self.connector)
+            except Exception as e:
+                log.info("Close hive connection error: %s" % e)
+            finally:
+                self.connector = None

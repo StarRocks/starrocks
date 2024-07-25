@@ -18,6 +18,9 @@
 
 from pyhive import hive
 
+from lib import close_conn
+
+
 class SparkLib(object):
     """SparkLib class"""
 
@@ -37,5 +40,9 @@ class SparkLib(object):
 
     def close(self):
         if self.connector is not None:
-            self.connector.close()
-            self.connector = None
+            try:
+                close_conn(self.connector)
+            except Exception as e:
+                log.info("Close spark connection error: %s" % e)
+            finally:
+                self.connector = None
