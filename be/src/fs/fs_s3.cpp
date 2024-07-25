@@ -23,13 +23,10 @@
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
-<<<<<<< HEAD
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
-=======
 #include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/ListObjectsResult.h>
->>>>>>> ed41b64793 ([Enhancement] Support list objects v1 for s3 (#48781))
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
