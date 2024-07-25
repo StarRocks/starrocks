@@ -46,6 +46,7 @@
 #include "roaring/roaring.h"
 #include "roaring/roaring_array.h"
 #include "util/coding.h"
+#include "util/phmap/btree.h"
 
 namespace starrocks {
 
@@ -913,6 +914,7 @@ public:
 
 private:
     std::map<uint32_t, Roaring> roarings;
+    // phmap::btree_map<uint32_t, Roaring> roarings;
     bool copyOnWrite = false;
     static uint32_t highBytes(const uint64_t in) { return uint32_t(in >> 32); }
     static uint32_t lowBytes(const uint64_t in) { return uint32_t(in); }

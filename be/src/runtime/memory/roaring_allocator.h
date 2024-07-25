@@ -17,7 +17,7 @@
 
 namespace starrocks {
 
-static MemHookAllocator kDefaultRoaringAllocator = MemHookAllocator{};
+static NoInlineMemHookAllocator kDefaultRoaringAllocator = NoInlineMemHookAllocator{};
 inline thread_local Allocator* tls_roaring_allocator = &kDefaultRoaringAllocator;
 
 class ThreadLocalRoaringAllocatorSetter {

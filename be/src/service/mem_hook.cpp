@@ -23,6 +23,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "runtime/memory/roaring_allocator.h"
+#include "runtime/memory/counting_allocator.h"
 
 #ifndef BE_TEST
 #include "runtime/exec_env.h"
@@ -270,6 +271,12 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 #define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal) (void)0
 #endif
 
+
+#define SET_DELTA_MEMORY(value) \
+    do { \
+        starrocks::tls_delta_memory = value; \
+    } while (0)
+
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
@@ -284,6 +291,7 @@ void* my_malloc(size_t size) __THROW {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
         }
+        // SET_DELTA_MEMORY(STARROCKS_NALLOX(size, 0));
         return ptr;
     } else {
         void* ptr = STARROCKS_MALLOC(size);
@@ -291,6 +299,7 @@ void* my_malloc(size_t size) __THROW {
         // call the `my_malloc`, and result in a deadloop.
         if (LIKELY(ptr != nullptr)) {
             MEMORY_CONSUME_SIZE(STARROCKS_NALLOX(size, 0));
+            // SET_DELTA_MEMORY(STARROCKS_NALLOX(size, 0));
         }
         return ptr;
     }
@@ -506,28 +515,34 @@ void* __libc_memalign(size_t alignment, size_t size) {
 }
 
 void* my_roaring_malloc(size_t bytes) {
-    return starrocks::tls_roaring_allocator->alloc(bytes);
+    return malloc(bytes);
+    // return starrocks::tls_roaring_allocator->alloc(bytes);
 }
 void* my_roaring_realloc(void* ptr, size_t size) {
-    return starrocks::tls_roaring_allocator->realloc(ptr, size);
+    return realloc(ptr, size);
+    // return starrocks::tls_roaring_allocator->realloc(ptr, size);
 }
 void* my_roaring_calloc(size_t n, size_t size) {
-    return starrocks::tls_roaring_allocator->calloc(n, size);
+    return calloc(n, size);
+    // return starrocks::tls_roaring_allocator->calloc(n, size);
 }
 void my_roaring_free(void* ptr) {
-    starrocks::tls_roaring_allocator->free(ptr);
+    return free(ptr);
+    // starrocks::tls_roaring_allocator->free(ptr);
 }
 void* my_roaring_aligned_malloc(size_t align, size_t size) {
-    return starrocks::tls_roaring_allocator->aligned_alloc(align, size);
+    return aligned_alloc(align, size);
+    // return starrocks::tls_roaring_allocator->aligned_alloc(align, size);
 }
 void my_roaring_aligned_free(void* ptr) {
-    starrocks::tls_roaring_allocator->free(ptr);
+    return free(ptr);
+    // starrocks::tls_roaring_allocator->free(ptr);
 }
 
-void* roaring_malloc(size_t size) __THROW ALIAS(my_roaring_malloc);
-void* roaring_realloc(void* ptr, size_t size) __THROW ALIAS(my_roaring_realloc);
-void* roaring_calloc(size_t n, size_t size) __THROW ALIAS(my_roaring_calloc);
-void roaring_free(void* ptr) __THROW ALIAS(my_roaring_free);
-void* roaring_aligned_malloc(size_t align, size_t size) __THROW ALIAS(my_roaring_aligned_malloc);
-void roaring_aligned_free(void* ptr) __THROW ALIAS(my_roaring_aligned_free);
+// void* roaring_malloc(size_t size) __THROW ALIAS(my_roaring_malloc);
+// void* roaring_realloc(void* ptr, size_t size) __THROW ALIAS(my_roaring_realloc);
+// void* roaring_calloc(size_t n, size_t size) __THROW ALIAS(my_roaring_calloc);
+// void roaring_free(void* ptr) __THROW ALIAS(my_roaring_free);
+// void* roaring_aligned_malloc(size_t align, size_t size) __THROW ALIAS(my_roaring_aligned_malloc);
+// void roaring_aligned_free(void* ptr) __THROW ALIAS(my_roaring_aligned_free);
 }

@@ -25,6 +25,8 @@
 
 namespace starrocks {
 
+inline thread_local int64_t tls_delta_memory = 0;
+
 template<class Base>
 class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<Base>> {
 public:

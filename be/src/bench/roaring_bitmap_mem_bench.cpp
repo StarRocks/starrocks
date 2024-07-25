@@ -96,6 +96,7 @@ static void bench_func(benchmark::State& state) {
     perf.do_bench(state);
 }
 
+
 static void process_args(benchmark::internal::Benchmark* b) {
     b->Args({10000, 1, 5000000000})->Iterations(1);
     b->Args({100000, 1, 5000000000})->Iterations(1);

@@ -296,7 +296,8 @@ public:
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
     const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
     const int64_t allocator_memory_usage() const {
-        return _allocator.memory_usage();
+        return 0;
+        // return _allocator->memory_usage();
     }
 
     const int64_t memory_usage() const {
@@ -412,7 +413,8 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
-    CountingAllocatorWithHook _allocator;
+    // CountingAllocatorWithHook _allocator;
+    std::unique_ptr<Allocator> _allocator;
     // MemHookAllocator _allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
