@@ -444,11 +444,12 @@ class StarrocksSQLApiLib(object):
         }
         self.trino_lib.connect(trino_dict)
 
-    def connect_spark(self):
+    def connect_spark(self, query_timeout_sec=30):
         spark_dict = {
             "host": self.spark_host,
             "port": self.spark_port,
             "user": self.spark_user,
+            "queryTimeout": str(query_timeout_sec * 1000)
         }
         self.spark_lib.connect(spark_dict)
 
