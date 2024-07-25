@@ -228,8 +228,7 @@ public class SqlParser {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        int exprLimit = Math.max(MIN_TOKEN_LIMIT,
-                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit()));
+        int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
         StarRocksParser parser = new StarRocksParser(tokenStream);
         parser.removeErrorListeners();
