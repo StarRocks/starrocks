@@ -56,7 +56,20 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
+
+    /**
+     * Normal path of analyzer
+     */
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
+        analyzeWithDeferredLock(insertStmt, session, () -> {
+        });
+    }
+
+    /**
+     * An optimistic path of analyzer for INSERT-SELECT, whose SELECT doesn't need a lock
+     * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
@@ -64,6 +77,9 @@ public class InsertAnalyzer {
         AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
         tables.stream().map(table -> (HiveTable) table)
                 .forEach(table -> table.useMetadataCache(false));
+
+        // Take the PlannerMetaLock
+        takeLock.run();
 
         /*
          *  Target table
