@@ -374,6 +374,10 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
         }
+
+        partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
+        partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
+        partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
     }
 
     // tables
