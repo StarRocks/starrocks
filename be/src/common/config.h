@@ -1394,4 +1394,6 @@ CONF_mString(try_release_resource_before_core_dump, "storage_page_cache")
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
 
+CONF_mBool(enable_crash, "false");
+
 } // namespace starrocks::config

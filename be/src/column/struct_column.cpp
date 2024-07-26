@@ -45,8 +45,11 @@ void StructColumn::check_field_rows() {
             _fields[i]->check_field_rows();
         }
         if (row_num != _fields[i]->size()) {
-            LOG(ERROR) << "struct column: " << get_name() << " field[" << i << "]: " << _fields[i]->get_name() <<" size: " << _fields[i]->size() << " is not equal to " <<  row_num;
-            CHECK(false);
+            if (config::enable_crash) {
+                CHECK(false);
+            }
+            LOG(FATAL) << "struct column: " << get_name() << " field[" << i << "]: " << _fields[i]->get_name() <<" size: " << _fields[i]->size() << " is not equal to " <<  row_num;
+            sleep(3);
         }
     }
 }

@@ -445,6 +445,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueueForPipeline::get_chunk");
     }
+    LOG(INFO) << "get_chunk";
     size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
     auto& chunk_queue = _chunk_queues[index];
     auto& chunk_queue_state = _chunk_queue_states[index];
@@ -477,6 +478,9 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
         *chunk = chunk_ptr.release();
     } else {
         *chunk = item.chunk_ptr.release();
+    }
+    for (auto& col : (*chunk)->columns()) {
+        col->check_field_rows();
     }
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
 
