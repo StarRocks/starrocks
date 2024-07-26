@@ -33,17 +33,25 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
     private Map<Long, Long> partitionVersions; // The version of partitions
 
+    @SerializedName("partitionVersionEpochs")
+    private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
+
     public ReplicationTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.REPLICATION);
     }
 
-    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions) {
+    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions, Map<Long, Long> partitionVersionEpochs) {
         super(TransactionState.LoadJobSourceType.REPLICATION);
         this.partitionVersions = partitionVersions;
+        this.partitionVersionEpochs = partitionVersionEpochs;
     }
 
     public Map<Long, Long> getPartitionVersions() {
         return partitionVersions;
+    }
+
+    public Map<Long, Long> getPartitionVersionEpochs() {
+        return partitionVersionEpochs;
     }
 
     @Override

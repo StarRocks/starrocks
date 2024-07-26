@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionType;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -67,6 +68,13 @@ public class PhysicalPartitionImplTest {
         p.setNextVersion(6);
         Assert.assertEquals(6, p.getNextVersion());
         Assert.assertEquals(5, p.getCommittedVersion());
+
+        p.setDataVersion(5);
+        Assert.assertEquals(5, p.getDataVersion());
+
+        p.setNextDataVersion(6);
+        Assert.assertEquals(6, p.getNextDataVersion());
+        Assert.assertEquals(5, p.getCommittedDataVersion());
 
         p.createRollupIndex(new MaterializedIndex(1));
         p.createRollupIndex(new MaterializedIndex(2, IndexState.SHADOW));
@@ -122,6 +130,16 @@ public class PhysicalPartitionImplTest {
         Assert.assertEquals(1, p.getMinRetainVersion());
         p.setLastVacuumTime(1);
         Assert.assertEquals(1, p.getLastVacuumTime());
+
+        p.setDataVersion(0);
+        p.setNextDataVersion(0);
+        p.setVersionEpoch(0);
+        p.setVersionTxnType(null);
+        p.gsonPostProcess();
+        Assert.assertEquals(p.getDataVersion(), p.getVisibleVersion());
+        Assert.assertEquals(p.getNextDataVersion(), p.getNextVersion());
+        Assert.assertTrue(p.getVersionEpoch() > 0);
+        Assert.assertEquals(p.getVersionTxnType(), TransactionType.TXN_NORMAL);
     }
 
     @Test

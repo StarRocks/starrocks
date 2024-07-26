@@ -51,9 +51,14 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
+                if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                    partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+                }
             }
         }
     }
@@ -80,6 +85,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
 
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());

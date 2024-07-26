@@ -52,6 +52,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -125,6 +126,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
 

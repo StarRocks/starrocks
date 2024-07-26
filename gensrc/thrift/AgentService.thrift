@@ -72,11 +72,6 @@ enum TTabletType {
     TABLET_TYPE_LAKE = 2
 }
 
-enum TTxnType {
-    TXN_NORMAL = 0,
-    TXN_REPLICATION = 1
-}
-
 struct TBinlogConfig {
     // Version of the configuration, and FE should deliver it to
     // the BE when executing 'ALTER TABLE'. The configuration with
@@ -352,7 +347,7 @@ struct TPublishVersionRequest {
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
-    7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    7: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
     8: optional i64 gtid
     9: optional bool is_version_overwrite = false
 }
@@ -365,7 +360,7 @@ struct TClearAlterTaskRequest {
 struct TClearTransactionTaskRequest {
     1: required Types.TTransactionId transaction_id
     2: required list<Types.TPartitionId> partition_id
-    3: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    3: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
 }
 
 struct TRecoverTabletReq {
