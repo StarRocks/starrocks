@@ -586,7 +586,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
 StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<RowsetPtr>& input_rowset,
                                                                   VersionedTablet& tablet) {
     const auto& metadata = tablet.metadata();
-    if (metadata->rowset_schema_id_size() == 0 || input_rowset.size() <= 0) {
+    if (metadata->rowset_schema_id().empty() || input_rowset.size() <= 0) {
         return tablet.get_schema();
     }
     struct Finder {
@@ -599,8 +599,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<Ro
     if (UNLIKELY(iter == metadata->rowsets().end())) {
         return Status::InternalError(fmt::format("input rowset {} not found", input_id));
     }
-    auto idx = static_cast<uint32_t>(iter - metadata->rowsets().begin());
-    auto schema_id = metadata->rowset_schema_id(idx);
+    auto schema_id = metadata->rowset_schema_id().at(input_id);
     if (schema_id == -1) {
         return tablet.get_schema();
     }

@@ -46,10 +46,11 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
           _metadata(&tablet_metadata->rowsets(rowset_index)),
           _index(rowset_index),
           _tablet_metadata(std::move(tablet_metadata)) {
-    if (_tablet_metadata->rowset_schema_id_size() == 0 || _tablet_metadata->rowset_schema_id(rowset_index) == -1) {
+    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
+    if (_tablet_metadata->rowset_schema_id().empty() || _tablet_metadata->rowset_schema_id().at(rowset_id) == -1) {
         _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
     } else {
-        auto schema_id = _tablet_metadata->rowset_schema_id(rowset_index);
+        auto schema_id = _tablet_metadata->rowset_schema_id().at(rowset_id);
         CHECK(_tablet_metadata->historical_schema().count(schema_id) > 0);
         _tablet_schema =
                 GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schema().at(schema_id)).first;

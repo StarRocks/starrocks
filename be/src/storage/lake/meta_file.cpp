@@ -135,8 +135,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         file_meta.set_name(orphan_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
-    if (_tablet_meta->rowset_schema_id_size() != 0) {
-        _tablet_meta->add_rowset_schema_id(-1);
+    if (!_tablet_meta->rowset_schema_id().empty()) {
+        (*_tablet_meta->mutable_rowset_schema_id())[rowset->id()] = -1;
     }
 }
 
@@ -218,19 +218,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         int64_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
-    // get input rowset index
-    std::unordered_set<uint32_t> input_rowset_index;
-    int32_t last_input_rowset_index = 0;
-    for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
-        auto input_id = op_compaction.input_rowsets(i);
-        auto it = std::find_if(_tablet_meta->mutable_rowsets()->begin(), _tablet_meta->mutable_rowsets()->end(),
-                               RowsetFinder{input_id});
-        if (it != _tablet_meta->mutable_rowsets()->end()) {
-            auto idx = static_cast<uint32_t>(it - _tablet_meta->mutable_rowsets()->begin());
-            input_rowset_index.insert(idx);
-            last_input_rowset_index = idx;
-        }
-    }
 
     // Only used for cloud native persistent index.
     std::vector<DelfileWithRowsetId> collect_del_files;
@@ -280,6 +267,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
     // add output rowset
     bool has_output_rowset = false;
+    uint32_t output_rowset_id = 0;
     if (op_compaction.has_output_rowset() &&
         (op_compaction.output_rowset().segments_size() > 0 || !collect_del_files.empty())) {
         // NOTICE: we need output rowset in two scenarios:
@@ -295,34 +283,36 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         }
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
         has_output_rowset = true;
+        output_rowset_id = rowset->id();
     }
 
     // update rowset schema id
-    if (_tablet_meta->rowset_schema_id_size() > 0) {
-        auto output_rowset_schema_id = _tablet_meta->rowset_schema_id(last_input_rowset_index);
-        std::set<int64_t> erase_id;
-        std::vector<int64_t> schema_ids;
-        for (int32_t i = 0; i < _tablet_meta->rowset_schema_id_size(); i++) {
-            if (input_rowset_index.count(i) > 0) {
-                erase_id.insert(_tablet_meta->rowset_schema_id(i));
-            } else {
-                schema_ids.emplace_back(_tablet_meta->rowset_schema_id(i));
-            }
-        }
-
-        for (int32_t i = 0; i < schema_ids.size() && !erase_id.empty(); i++) {
-            if (erase_id.count(schema_ids[i]) > 0) {
-                erase_id.erase(schema_ids[i]);
-            }
-        }
-
-        _tablet_meta->clear_rowset_schema_id();
-        for (auto id : schema_ids) {
-            _tablet_meta->add_rowset_schema_id(id);
-        }
+    if (!_tablet_meta->rowset_schema_id().empty()) {
+        int64_t output_rowset_schema_id = -1;
         if (has_output_rowset) {
-            _tablet_meta->add_rowset_schema_id(output_rowset_schema_id);
-            erase_id.erase(output_rowset_schema_id);
+            auto last_rowset_id = op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1);
+            output_rowset_schema_id = _tablet_meta->rowset_schema_id().at(last_rowset_id);
+        }
+
+        for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
+            auto input_id = op_compaction.input_rowsets(i);
+            _tablet_meta->mutable_rowset_schema_id()->erase(input_id);
+        }
+
+        if (has_output_rowset) {
+            (*_tablet_meta->mutable_rowset_schema_id())[output_rowset_id] = output_rowset_schema_id;
+        }
+
+        std::set<int64_t> erase_id;
+        std::set<int64_t> schema_id;
+        for (auto& pair : _tablet_meta->rowset_schema_id()) {
+            schema_id.insert(pair.second);
+        }
+
+        for (auto& pair : _tablet_meta->historical_schema()) {
+            if (schema_id.find(pair.first) == schema_id.end()) {
+                erase_id.insert(pair.first);
+            }
         }
 
         for (auto id : erase_id) {
