@@ -14,7 +14,7 @@ The following fields are provided in `task_runs`:
 | TASK_NAME     | Name of the task.                                            |
 | CREATE_TIME   | Time when the task was created.                               |
 | FINISH_TIME   | Time when the task finished.                                 |
-| STATE         | State of the task. Valid values: `PENDING`, `RUNNING`, `FAILED`, and `SUCCESS`. |
+| STATE         | State of the task. Valid values: `PENDING`, `RUNNING`, `FAILED`, and `SUCCESS`. From v3.1.12, a new state `MERGED` is added especially for materialized view refresh tasks. When a new refresh task is submitted and the old task is still in the pending queue, these tasks will be merged and their priority level will be maintained.  |
 | DATABASE      | Database where the task belongs.                             |
 | DEFINITION    | SQL definition of the task.                                  |
 | EXPIRE_TIME   | Time when the task expires.                                  |
