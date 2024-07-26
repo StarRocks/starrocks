@@ -1001,6 +1001,16 @@ public class OlapTable extends Table {
         dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
+    // check input partition has temporary partition
+    public boolean inputHasTempPartition(List<Long> partitionIds) {
+        for (Long pid : partitionIds) {
+            if (tempPartitions.getPartition(pid) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /*
      * A table may contain both formal and temporary partitions.
      * There are several methods to get the partition of a table.
