@@ -474,6 +474,8 @@ public class HiveMetadataTest {
 
     @Test
     public void testAppendPartition() {
+        Config.update_statistics_after_insert = true;
+
         assertThrows(StarRocksConnectorException.class, () -> {
             String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
             THiveFileInfo fileInfo = new THiveFileInfo();
@@ -509,6 +511,7 @@ public class HiveMetadataTest {
             };
             hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
         });
+        Config.update_statistics_after_insert = false;
     }
 
     @Test

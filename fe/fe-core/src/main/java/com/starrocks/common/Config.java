@@ -2396,6 +2396,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_agent_tasks_send_per_be = 10000;
 
+
+    @ConfField(mutable = true)
+    public static boolean update_statistics_after_insert = false;
+
     /**
      * min num of thread to refresh hive meta
      */

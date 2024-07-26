@@ -21,6 +21,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
@@ -192,12 +193,14 @@ public class HiveCommitter {
         if (!pu.isS3Url()) {
             fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, pu.getWritePath(), pu.getTargetPath(), pu.getFileNames());
         }
-        updateStatisticsTasks.add(new UpdateStatisticsTask(
-                table.getCatalogDBName(),
-                table.getCatalogTableName(),
-                Optional.empty(),
-                updateStats,
-                true));
+        if (Config.update_statistics_after_insert) {
+            updateStatisticsTasks.add(new UpdateStatisticsTask(
+                    table.getCatalogDBName(),
+                    table.getCatalogTableName(),
+                    Optional.empty(),
+                    updateStats,
+                    true));
+        }
     }
 
     private void prepareOverwriteTable(PartitionUpdate pu, HivePartitionStats updateStats) {
@@ -214,9 +217,11 @@ public class HiveCommitter {
         fileOps.renameDirectory(writePath, targetPath,
                 () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
 
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
-                Optional.empty(), updateStats, false);
-        updateStatisticsTasks.add(updateStatsTask);
+        if (Config.update_statistics_after_insert) {
+            UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                    Optional.empty(), updateStats, false);
+            updateStatisticsTasks.add(updateStatsTask);
+        }
     }
 
     private void prepareAddPartition(PartitionUpdate pu, HivePartitionStats updateStats) {
@@ -268,10 +273,12 @@ public class HiveCommitter {
                     fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, writePath, targetPath, pu.getFileNames());
                 }
 
-                UpdateStatisticsTask updateStatsTask =
-                        new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
-                                Optional.of(pu.getName()), updateStats, true);
-                updateStatisticsTasks.add(updateStatsTask);
+                if (Config.update_statistics_after_insert) {
+                    UpdateStatisticsTask updateStatsTask =
+                            new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                                    Optional.of(pu.getName()), updateStats, true);
+                    updateStatisticsTasks.add(updateStatsTask);
+                }
             }
         }
     }
@@ -300,9 +307,11 @@ public class HiveCommitter {
         }
 
         remoteFilesCacheToRefresh.add(targetPath);
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
-                Optional.of(pu.getName()), updateStats, false);
-        updateStatisticsTasks.add(updateStatsTask);
+        if (Config.update_statistics_after_insert) {
+            UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                    Optional.of(pu.getName()), updateStats, false);
+            updateStatisticsTasks.add(updateStatsTask);
+        }
     }
 
     private void waitAsyncFsTasks() {
