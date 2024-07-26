@@ -97,6 +97,17 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
+option(WITH_TENANN "Build with TENANN" OFF)
+
+# Only support tenann on x86
+if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    add_definitions(-DWITH_TENANN)
+else()
+    set(WITH_TENANN "OFF")
+endif()
+
+message(STATUS "WITH TENANN is: ${WITH_TENANN}")
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -390,6 +401,15 @@ add_library(ZLIB::ZLIB ALIAS libz)
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
     set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
+endif()
+
+if (${WITH_TENANN} STREQUAL "ON")
+    add_library(tenann STATIC IMPORTED GLOBAL)
+    if(${USE_AVX2})
+        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle-avx2.a)
+    else()
+        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle.a)
+    endif()
 endif()
 
 # cachelib
@@ -941,6 +961,13 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         ${STARROCKS_DEPENDENCIES}
         breakpad
         libdeflate
+    )
+endif()
+
+if (${WITH_TENANN} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        tenann
     )
 endif()
 

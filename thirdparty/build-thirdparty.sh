@@ -1319,6 +1319,17 @@ build_simdutf() {
     ${BUILD_SYSTEM} install
 }
 
+# tenann
+build_tenann() {
+    check_if_source_exist $TENANN_SOURCE
+    rm -rf $TP_INSTALL_DIR/include/tenann
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle.a
+    rm -rf $TP_INSTALL_DIR/lib/libtenann-bundle-avx2.a
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/include/tenann $TP_INSTALL_DIR/include/tenann
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle.a $TP_INSTALL_DIR/lib/
+    cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1416,6 +1427,7 @@ build_simdutf
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
     build_libdeflate
+    build_tenann
 fi
 
 # strip unnecessary debug symbol for binaries in thirdparty
