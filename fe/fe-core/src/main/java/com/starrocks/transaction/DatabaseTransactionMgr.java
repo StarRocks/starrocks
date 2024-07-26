@@ -1223,11 +1223,58 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+<<<<<<< HEAD
                     Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment()).getPartitionVersions();
                     partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
                 } else {
                     partitionCommitInfo.setVersion(partition.getNextVersion());
+=======
+                    ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment();
+                    Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long versionDiff = newVersion - partition.getVisibleVersion();
+                    partitionCommitInfo.setVersion(newVersion);
+                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
+                    Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
+                    if (partitionVersionEpochs != null) {
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        partitionCommitInfo.setVersionEpoch(newVersionEpoch);
+                    }
+                } else if (transactionState.isVersionOverwrite()) {
+                    partitionCommitInfo.setVersion(((InsertTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment()).getPartitionVersion());
+                    // reset data version to visible version
+                    partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
+                    if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
+                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                    }
+                } else {
+                    Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
+                    if (doubleWritePartitions != null && !doubleWritePartitions.isEmpty()) {
+                        // double write source partition
+                        if (doubleWritePartitions.containsKey(partitionId)) {
+                            doubleWritePartitionVersions.put(doubleWritePartitions.get(partitionId), partition.getNextVersion());
+                            partitionCommitInfo.setVersion(partition.getNextVersion());
+                        // double write target partition
+                        } else if (doubleWritePartitions.containsValue(partitionId)) {
+                            doubleWritePartitionCommitInfos.put(partitionId, partitionCommitInfo);
+                        } else {
+                            partitionCommitInfo.setVersion(partition.getNextVersion());
+                        }
+                    } else {
+                        partitionCommitInfo.setVersion(partition.getNextVersion());
+                    }
+                    // update data version
+                    partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
+                            partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) { 
+                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                    }
+                    LOG.debug("set partition {} version to {} in transaction {}",
+                            partitionId, partitionCommitInfo.getVersion(), transactionState);
+>>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
                 }
                 // versionTime has different meanings in shared data and shared nothing mode.
                 // In shared nothing mode, versionTime is the time when the transaction was

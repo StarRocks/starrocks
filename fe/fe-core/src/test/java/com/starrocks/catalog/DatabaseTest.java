@@ -40,6 +40,7 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -89,6 +90,17 @@ public class DatabaseTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+>>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
             }
         };
     }

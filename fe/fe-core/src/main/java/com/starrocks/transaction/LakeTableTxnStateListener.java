@@ -29,8 +29,12 @@ import com.starrocks.common.Config;
 import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
+<<<<<<< HEAD
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
+=======
+import com.starrocks.proto.TxnInfoPB;
+>>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -172,7 +176,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
             PartitionCommitInfo partitionCommitInfo;
-            long version = -1;
             if (isFirstPartition) {
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
@@ -182,25 +185,15 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     validDictCacheColumnVersions.add(dictVersion);
                 });
 
-                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0,
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0,
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
-                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
-        }
-
-        // The new versions in a replication transaction depend on the versions in ReplicationTxnCommitAttachment
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
-                    .getTxnCommitAttachment();
-            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
-            }
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
