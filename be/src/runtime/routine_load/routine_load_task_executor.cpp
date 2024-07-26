@@ -116,6 +116,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     }
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
+    // if get partition meta failed, should not return consumer because the KafkaConsumer may be closed.
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }

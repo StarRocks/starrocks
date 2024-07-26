@@ -4,9 +4,7 @@ displayed_sidebar: "English"
 
 # CREATE TABLE
 
-## Description
-
-Creates a new table in StarRocks.
+Create a new table in StarRocks.
 
 > **NOTE**
 >

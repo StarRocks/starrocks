@@ -135,11 +135,13 @@ public:
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
-              typename NestedFunctionPtr = AggregateFunctionPtr>
-    static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function);
+              typename NestedFunctionPtr = AggregateFunctionPtr, typename AggNullPred = AggNonNullPred<NestedState>>
+    static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function,
+                                                                   AggNullPred null_pred = AggNullPred());
 
-    template <typename NestedState>
-    static AggregateFunctionPtr MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function);
+    template <typename NestedState, typename AggNullPred = AggNonNullPred<NestedState>>
+    static AggregateFunctionPtr MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
+                                                                      AggNullPred null_pred = AggNullPred());
 
     template <LogicalType LT>
     static auto MakeSumAggregateFunction();
@@ -148,16 +150,16 @@ public:
     static auto MakeDecimalSumAggregateFunction();
 
     template <LogicalType LT, bool is_sample>
-    static AggregateFunctionPtr MakeVarianceAggregateFunction();
+    static auto MakeVarianceAggregateFunction();
 
     template <LogicalType LT, bool is_sample>
-    static AggregateFunctionPtr MakeStddevAggregateFunction();
+    static auto MakeStddevAggregateFunction();
 
     template <LogicalType LT, bool is_sample>
-    static AggregateFunctionPtr MakeCovarianceAggregateFunction();
+    static auto MakeCovarianceAggregateFunction();
 
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeCorelationAggregateFunction();
+    static auto MakeCorelationAggregateFunction();
 
     template <LogicalType LT>
     static auto MakeSumDistinctAggregateFunction();
@@ -301,18 +303,21 @@ AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
             AnyValueAggregateFunction<LT, AnyValueAggregateData<LT>, AnyValueElement<LT, AnyValueAggregateData<LT>>>>();
 }
 
-template <typename NestedState, bool IsWindowFunc, bool IgnoreNull, typename NestedFunctionPtr>
-AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function) {
+template <typename NestedState, bool IsWindowFunc, bool IgnoreNull, typename NestedFunctionPtr, typename AggNullPred>
+AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function,
+                                                                          AggNullPred null_pred) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, IsWindowFunc>;
-    return std::make_shared<
-            NullableAggregateFunctionUnary<NestedFunctionPtr, AggregateDataType, IsWindowFunc, IgnoreNull>>(
-            nested_function);
+    return std::make_shared<NullableAggregateFunctionUnary<NestedFunctionPtr, AggregateDataType, IsWindowFunc,
+                                                           IgnoreNull, AggNullPred>>(nested_function,
+                                                                                     std::move(null_pred));
 }
 
-template <typename NestedState>
-AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function) {
+template <typename NestedState, typename AggNullPred>
+AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
+                                                                             AggNullPred null_pred) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, false>;
-    return std::make_shared<NullableAggregateFunctionVariadic<AggregateDataType>>(nested_function);
+    return std::make_shared<NullableAggregateFunctionVariadic<AggregateDataType, AggNullPred>>(nested_function,
+                                                                                               std::move(null_pred));
 }
 
 template <LogicalType LT>
@@ -326,22 +331,22 @@ auto AggregateFactory::MakeDecimalSumAggregateFunction() {
 }
 
 template <LogicalType LT, bool is_sample>
-AggregateFunctionPtr AggregateFactory::MakeVarianceAggregateFunction() {
+auto AggregateFactory::MakeVarianceAggregateFunction() {
     return std::make_shared<VarianceAggregateFunction<LT, is_sample>>();
 }
 
 template <LogicalType LT, bool is_sample>
-AggregateFunctionPtr AggregateFactory::MakeStddevAggregateFunction() {
+auto AggregateFactory::MakeStddevAggregateFunction() {
     return std::make_shared<StddevAggregateFunction<LT, is_sample>>();
 }
 
 template <LogicalType LT, bool is_sample>
-AggregateFunctionPtr AggregateFactory::MakeCovarianceAggregateFunction() {
+auto AggregateFactory::MakeCovarianceAggregateFunction() {
     return std::make_shared<CorVarianceAggregateFunction<LT, is_sample>>();
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeCorelationAggregateFunction() {
+auto AggregateFactory::MakeCorelationAggregateFunction() {
     return std::make_shared<CorelationAggregateFunction<LT>>();
 }
 

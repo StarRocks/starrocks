@@ -126,7 +126,7 @@ View all bitmap indexes for a specified table. For detailed parameters and retur
 SHOW INDEXES FROM lineorder_partial;
 ```
 
-:::NOTE
+:::note
 
 Creating a bitmap index is an asynchronous process. Using the above statement, you can only view indexes that have been created successfully.
 

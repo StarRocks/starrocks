@@ -4,6 +4,10 @@ displayed_sidebar: "English"
 
 # STREAM LOAD
 
+:::tip
+The [StarRocks in Docker](../../../quick_start/shared-nothing.md) quick start features Stream Load. Give it a try for hands-on experience and a detailed explanation of a realistic ETL flow.
+:::
+
 ## Description
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Loading from a local file system via Stream Load](../../../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).

@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE Configuration
 
@@ -157,7 +157,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the `slow_query` module and the `query` module. The `connection` module is supported from v3.0. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ##### qe_slow_log_ms
@@ -1135,16 +1135,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
-<!--
 ##### enable_materialized_view_spill
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
+- Introduced in: v3.1.1
 
 <!--
 ##### skip_whole_phase_lock_mv_limit
@@ -2818,11 +2816,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_autovacuum_grace_period_minutes
 
-- Default: 5
+- Default: 30
 - Type: Long
 - Unit: Minutes
 - Is mutable: Yes
-- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold

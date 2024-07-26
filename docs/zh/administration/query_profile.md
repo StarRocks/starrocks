@@ -42,11 +42,11 @@ Runtime Profile 与普通 Query Profile 显示的信息相同。您可以像分�
 2. 在显示的页面上，单击顶部导航中的 **queries**。
 3. 在 **Finished Queries** 列表中，选择您要分析的查询并单击 **Profile** 列中的链接。
 
-![img](../assets/profile-1.png)
+![img](../_assets/profile-1.png)
 
 页面将跳转至相应 Query Profile。
 
-![img](../assets/profile-2.png)
+![img](../_assets/profile-2.png)
 
 ## 分析 Query Profile
 
@@ -81,7 +81,7 @@ Query:
 - Pipeline：执行链。执行链没有分支。一个 Fragment 可分为多个 Pipeline。
 - Operator：算子。一个 Pipeline 由多个 Operator 组成。
 
-![img](../assets/profile-3.png)
+![img](../_assets/profile-3.png)
 
 ### 重要指标
 
@@ -316,17 +316,17 @@ ANALYZE PROFILE FROM '<QueryId>' [, <plan_node_id>, ...]
 
 示例一：分析 Profile 时不指定计划节点 ID：
 
-![img](../assets/profile-21.png)
+![img](../_assets/profile-21.png)
 
 示例二：分析 Profile 时指定计划节点 ID：
 
-![img](../assets/profile-17.png)
+![img](../_assets/profile-17.png)
 
 ANALYZE PROFILE 可用于分析正在进行的查询的 Profile。其返回值会显示 Operator 的不同状态，例如阻塞（Blocked）、正在运行（Running）和已完成（Finished）。此外，该语句还可以根据处理的数据行数全面分析整个进度以及各个 Operator 的进度。您可以根据该语句的返回结果更深入地了解查询执行和性能，并进一步分析和优化查询。
 
 示例三：分析正在进行的查询的 Runtime Profile：
 
-![img](../assets/profile-20.png)
+![img](../_assets/profile-20.png)
 
 ### 分析模拟查询
 
@@ -340,11 +340,11 @@ EXPLAIN ANALYZE <sql>
 
 示例一：模拟给定查询语句并分析其 Query Profile：
 
-![img](../assets/profile-18.png)
+![img](../_assets/profile-18.png)
 
 示例二：模拟给定 INSERT INTO 语句并分析其 Query Profile：
 
-![img](../assets/profile-19.png)
+![img](../_assets/profile-19.png)
 
 ## 可视化 Query Profile
 
@@ -352,7 +352,7 @@ EXPLAIN ANALYZE <sql>
 
 **执行概览**页面显示了一些 Summary 指标，包括总执行时间`ExecutionWallTime`、I/O 指标、网络传输大小以及 CPU 和 I/O 耗时比例。
 
-![img](../assets/profile-4.png)
+![img](../_assets/profile-4.png)
 
 单击 Operator（节点）的卡片，可以在页面右侧的选项卡中查看其详细信息。共有三个选项卡：
 
@@ -360,41 +360,41 @@ EXPLAIN ANALYZE <sql>
 - **节点详情**: 该 Operator 的所有指标。
 - **Pipeline**: 该 Operator 所属 Pipeline 指标。该选项卡中的指标仅与调度相关，您无需过多关注。
 
-![img](../assets/profile-5.png)
+![img](../_assets/profile-5.png)
 
 ### 确认查询瓶颈
 
 Operator 花费的时间比例越大，其对应卡片的颜色就越深。您可借此轻松确认查询的瓶颈。
 
-![img](../assets/profile-6.png)
+![img](../_assets/profile-6.png)
 
 ### 确认数据是否倾斜
 
 点击占用时间占比较大的 Operator 卡片，查看其 `MaxTime` 和 `MinTime` 指标。通常，`MaxTime` 和 `MinTime` 之间如果存在明显差异，则表示数据存在倾斜。
 
-![img](../assets/profile-7.png)
+![img](../_assets/profile-7.png)
 
 然后，单击**节点详情**选项卡，并查看是否有任何异常指标。在以下示例中，聚合运算符的指标 `PushRowNum` 显示数据倾斜。
 
-![img](../assets/profile-8.png)
+![img](../_assets/profile-8.png)
 
 ### 确认分桶或分区裁剪是否生效
 
 您可以通过 `EXPLAIN <sql_statement>` 语句查看查询对应的 Query Plan 以查看分区或分桶裁剪是否生效。
 
-![img](../assets/profile-9.png)
+![img](../_assets/profile-9.png)
 
 ### 确认物化视图选择是否正确
 
 单击相应的 Scan Operator 的卡片并查看**节点详情**选项卡上的 `Rollup` 字段。
 
-![img](../assets/profile-10.png)
+![img](../_assets/profile-10.png)
 
 ### 确认 Join 左右表 Plan 是否合理
 
 通常，StarRocks 会选择较小的表作为 Join 的右表。如果 Query Profile 显示右表的数据量明显大于左表，则该 Join Plan 异常。
 
-![img](../assets/profile-11.png)
+![img](../_assets/profile-11.png)
 
 ### 确认 Join 分布方式是否正确
 
@@ -408,19 +408,19 @@ Operator 花费的时间比例越大，其对应卡片的颜色就越深。您�
 
 在以下示例中，Exchange Operator 的类型是 Broadcast，但是该 Operator 传输的数据量远远超过了阈值。
 
-![img](../assets/profile-12.png)
+![img](../_assets/profile-12.png)
 
 ### 确认 JoinRuntimeFilter 是否生效
 
 当 Join 的右孩子构建 Hash Table 时，会构建 Runtime Filter，该 Runtime Filter 会被投递到左子树，并尽可能地下推到 Scan Operator。您可以在 Scan Operator 的**节点详情**选项卡上查看与 JoinRuntimeFilter 相关的指标。
 
-![img](../assets/profile-13.png)
+![img](../_assets/profile-13.png)
 
 ## FAQ
 
 ### 为什么 Exchange Operator 时间异常？
 
-![img](../assets/profile-14.png)
+![img](../_assets/profile-14.png)
 
 Exchange Operator 的耗时由两部分组成：CPU 时间和网络时间。网络时间依赖于系统时钟。网络时间计算方式如下：
 
@@ -438,6 +438,6 @@ Exchange Operator 的耗时由两部分组成：CPU 时间和网络时间。网�
 
 从 Pipeline Profile 中可以看到 `ExecutionWallTime` 大约为 463 毫秒。但是，所有 Operator 的总耗时却不足 20 毫秒，明显小于 `ExecutionWallTime`。
 
-![img](../assets/profile-16.png)
+![img](../_assets/profile-16.png)
 
-![img](../assets/profile-15.png)
+![img](../_assets/profile-15.png)

@@ -253,11 +253,9 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
             return chunk;
         }
         if (should_spill_hash_table) {
-            bool use_intermediate_as_output = true;
             if (!_aggregator->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk,
-                                                                       &use_intermediate_as_output));
+                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
                 return chunk;
             }
             COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());

@@ -6,7 +6,7 @@ keywords: ['Broker Load']
 
 # Load data from Microsoft Azure Storage
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks allows you to load data in bulk from Microsoft Azure Storage by using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
@@ -22,7 +22,7 @@ Broker Load supports the Parquet, ORC, and CSV file formats.
 
 ## Data flow
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BEs) or compute nodes (CNs).

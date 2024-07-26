@@ -200,7 +200,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
             "      <AppenderRef ref=\"SysWF\"/>\n" +
             "    </Logger>\n" +
-            "    <!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->\n" +
+            "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
             "</Configuration>";
 
@@ -209,7 +209,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"ConsoleErr\"/>\n" +
             "    </Root>\n" +
-            "    <!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->\n" +
+            "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
             "</Configuration>";
     private static StrSubstitutor strSub;
@@ -295,30 +295,35 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static String generateXmlConfTemplate() {
+        boolean log2Console = Config.sys_log_to_console;
         // verbose modules and audit log modules
         StringBuilder sb = new StringBuilder();
 
         for (String s : internalModules) {
-            sb.append("<Logger name='internal.").append(s).append("' level=\"INFO\" additivity=\"false\"> \n");
-            sb.append("   <AppenderRef ref=\"InternalFile\"/>\n");
-            sb.append("</Logger>\n");
+            sb.append("    <Logger name='internal.").append(s).append("' level=\"INFO\" additivity=\"false\"> \n");
+            if (log2Console) {
+                sb.append("      <AppenderRef ref=\"ConsoleErr\"/>\n");
+            } else {
+                sb.append("      <AppenderRef ref=\"InternalFile\"/>\n");
+            }
+            sb.append("    </Logger>\n");
         }
 
         for (String s : verboseModules) {
-            sb.append("<Logger name='").append(s).append("' level='DEBUG'/>");
+            sb.append("    <Logger name='").append(s).append("' level='DEBUG'/>\n");
         }
         for (String s : auditModules) {
-            sb.append("<Logger name='audit.").append(s).append("' level='INFO'/>");
+            sb.append("    <Logger name='audit.").append(s).append("' level='INFO'/>\n");
         }
         for (String s : dumpModules) {
-            sb.append("<Logger name='dump.").append(s).append("' level='INFO'/>");
+            sb.append("    <Logger name='dump.").append(s).append("' level='INFO'/>\n");
         }
         for (String s : bigQueryModules) {
-            sb.append("<Logger name='big_query.").append(s).append("' level='INFO'/>");
+            sb.append("    <Logger name='big_query.").append(s).append("' level='INFO'/>\n");
         }
 
         String newXmlConfTemplate = APPENDER_TEMPLATE;
-        newXmlConfTemplate += Config.sys_log_to_console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
+        newXmlConfTemplate += log2Console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
         newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
                 sb.toString());
         return newXmlConfTemplate;
