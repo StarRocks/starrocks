@@ -15,10 +15,12 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
@@ -27,9 +29,16 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.persist.gson.GsonUtils.GSON;
 
 public class BasicStatsMetaTest extends PlanTestBase {
 
@@ -58,7 +67,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
         }
 
         {
-            // total row in cached table statistic is 10000, the updated row is 15000.
+            // total row in cached table statistic is 10000, the updated row is 10000, the delta row is 5000.
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
             Table tbl =
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "supplier");
@@ -71,15 +80,77 @@ public class BasicStatsMetaTest extends PlanTestBase {
             };
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
                     StatsConstants.AnalyzeType.FULL,
-                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 15000);
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+            basicStatsMeta.increaseDeltaRows(5000L);
+            basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
         }
+    }
 
+    @Test
+    public void testSerialization() throws IOException {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "test");
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "test", "region");
+        {
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+            String s = "{\"dbId\":10001,\"tableId\":10177,\"columns\":[],\"type\":\"FULL\",\"updateTime\":1721650800," +
+                    "\"properties\":{},\"updateRows\":10000}";
+            Text.writeString(dataOutputStream, s);
+
+            byte[] bytes = byteArrayOutputStream.toByteArray();
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
+            DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
+            String deserializedString = Text.readString(dataInputStream);
+            BasicStatsMeta deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMeta.class);
+            Assert.assertEquals(db.getId(), deserializedMeta.getDbId());
+
+        }
+
+        {
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                    StatsConstants.AnalyzeType.FULL,
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+            String s = GSON.toJson(basicStatsMeta);
+            Text.writeString(dataOutputStream, s);
+            dataOutputStream.close();
+            byte[] bytes = byteArrayOutputStream.toByteArray();
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
+            DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
+            String deserializedString = Text.readString(dataInputStream);
+            BasicStatsMetaDemo deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMetaDemo.class);
+            Assert.assertEquals(db.getId(), deserializedMeta.dbId);
+        }
     }
 
     @After
     public void after() {
         FeConstants.runningUnitTest = false;
+    }
+
+    private static class BasicStatsMetaDemo {
+        @SerializedName("dbId")
+        public long dbId;
+
+        @SerializedName("tableId")
+        public long tableId;
+
+        @SerializedName("columns")
+        public List<String> columns;
+
+        @SerializedName("type")
+        public StatsConstants.AnalyzeType type;
+
+        @SerializedName("updateTime")
+        public LocalDateTime updateTime;
+
+        @SerializedName("properties")
+        public Map<String, String> properties;
+
+        @SerializedName("updateRows")
+        public long updateRows;
     }
 
 }

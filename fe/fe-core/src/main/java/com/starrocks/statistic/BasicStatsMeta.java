@@ -58,6 +58,9 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("updateRows")
     private long updateRows;
 
+    @SerializedName("deltaRows")
+    private long deltaRows;
+
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
@@ -144,7 +147,7 @@ public class BasicStatsMeta implements Writable {
                 updatePartitionCount++;
             }
         }
-        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount, updateRows) - cachedTableRowCount);
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, updateRows) - cachedTableRowCount);
 
         double updateRatio;
         // 1. If none updated partitions, health is 1
@@ -170,8 +173,9 @@ public class BasicStatsMeta implements Writable {
         this.updateRows = updateRows;
     }
 
-    public void increaseUpdateRows(Long delta) {
+    public void increaseDeltaRows(Long delta) {
         updateRows += delta;
+        deltaRows += delta;
     }
 
     public boolean isInitJobMeta() {
