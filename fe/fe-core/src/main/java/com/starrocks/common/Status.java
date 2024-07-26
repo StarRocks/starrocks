@@ -105,9 +105,17 @@ public class Status {
         this.errorMsg = status.getErrorMsg();
     }
 
+<<<<<<< HEAD
     public void setStatus(String msg) {
         this.errorCode = TStatusCode.INTERNAL_ERROR;
         this.errorMsg = msg;
+=======
+    public void setInternalErrorStatus(String msg) {
+        if (this.errorCode != TStatusCode.GLOBAL_DICT_ERROR) {
+            this.errorCode = TStatusCode.INTERNAL_ERROR;
+            this.errorMsg = msg;
+        }
+>>>>>>> c38336e2ae ([BugFix] Fix always collect dictionary for no-lowcardinality column (#48938))
     }
 
     public void setPstatus(StatusPB status) {
