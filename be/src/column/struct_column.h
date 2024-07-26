@@ -188,6 +188,8 @@ public:
 
     Status unfold_const_children(const TypeDescriptor& type) override;
 
+    void check_field_rows() override;
+
 private:
     // A collection that contains StructType's subfield column.
     Columns _fields;

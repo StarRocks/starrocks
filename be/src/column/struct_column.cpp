@@ -38,6 +38,19 @@ size_t StructColumn::size() const {
     return _fields[0]->size();
 }
 
+void StructColumn::check_field_rows() {
+    auto row_num = _fields[0]->size();
+    for (int i = 0; i < _fields.size(); i++) {
+        if (_fields[i]->is_struct()) {
+            _fields[i]->check_field_rows();
+        }
+        if (row_num != _fields[i]->size()) {
+            LOG(ERROR) << "struct column: " << get_name() << " field[" << i << "]: " << _fields[i]->get_name() <<" size: " << _fields[i]->size() << " is not equal to " <<  row_num;
+            CHECK(false);
+        }
+    }
+}
+
 size_t StructColumn::capacity() const {
     return _fields[0]->capacity();
 }

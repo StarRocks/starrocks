@@ -1280,6 +1280,22 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     result->swap_chunk(*chunk);
 
+    auto idx = 0;
+    auto row_num = 0;
+    for (auto& col : result->columns()) {
+        LOG(INFO) << "chunk column[" <<  idx << "] row num is: " <<  col->size();
+        if (idx != 0 && row_num != col->size()) {
+            LOG(ERROR) << "col " << idx << " row num not equal";
+            CHECK(false);
+        }
+        if (col->is_struct()) {
+            col->check_field_rows();
+        }
+        idx++;
+        row_num = col->size();
+    }
+
+
     if (need_switch_context) {
         RETURN_IF_ERROR(_switch_context(_context->_next));
     }

@@ -411,6 +411,8 @@ public:
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
 
+    virtual void check_field_rows() {}
+
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
     static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
