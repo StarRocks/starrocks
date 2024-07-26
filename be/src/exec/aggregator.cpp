@@ -24,7 +24,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
@@ -304,8 +306,8 @@ Status Aggregator::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(check_has_error());
 
-    _buffer_mem_manager = std::make_unique<pipeline::ChunkBufferMemoryManager>(
-            1, config::local_exchange_buffer_mem_limit_per_driver,
+    _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<AggStatistics>>(
+            _agg_stat, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
 
     return Status::OK();
@@ -520,7 +522,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _num_pass_through_rows = 0;
     _num_rows_returned = 0;
 
-    _buffer = {};
+    _limited_buffer->clear();
 
     _tmp_agg_states.assign(_tmp_agg_states.size(), nullptr);
     _streaming_selection.assign(_streaming_selection.size(), 0);
@@ -585,8 +587,8 @@ void Aggregator::close(RuntimeState* state) {
 
     _is_closed = true;
     // Clear the buffer
-    while (!_buffer.empty()) {
-        _buffer.pop();
+    if (_limited_buffer != nullptr) {
+        _limited_buffer->clear();
     }
 
     auto agg_close = [this, state]() {
@@ -626,45 +628,19 @@ void Aggregator::close(RuntimeState* state) {
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    return _buffer.empty();
+    return _limited_buffer->is_empty();
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
-    ChunkPtr chunk;
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        if (_buffer.empty()) {
-            return nullptr;
-        }
-        chunk = _buffer.front();
-        _buffer.pop();
-    }
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(-mem_usage, -num_rows);
-
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, -mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, -1);
-
-    return chunk;
+    return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        _buffer.push(chunk);
-    }
-
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(mem_usage, num_rows);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, 1);
+    _limited_buffer->push(chunk);
 }
 
 bool Aggregator::is_chunk_buffer_full() {
-    return _buffer_mem_manager->is_full();
+    return _limited_buffer->is_full();
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,

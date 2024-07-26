@@ -36,7 +36,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
           _partition_limit(partition_limit),
           _topn_type(topn_type) {}
 
-Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
+Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
@@ -56,7 +56,7 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     }
 
     _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
-    return _chunks_partitioner->prepare(state);
+    return _chunks_partitioner->prepare(state, runtime_profile);
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
