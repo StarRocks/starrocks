@@ -161,6 +161,15 @@ static void dontdump_unused_pages() {
 static void failure_writer(const char* data, int size) {
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+
+    if (config::enable_core_file_size_optimization) {
+        // TODO: If page cache releases crash due to memory problem,
+        //  the stack of be.out will be incomplete.
+        //  Glog needs to add a new interface to first write the log of stach and then optimize core file size.
+        //  I will and the interface later.
+        release_cache_mem();
+        dontdump_unused_pages();
+    }
 }
 
 static void failure_function() {
