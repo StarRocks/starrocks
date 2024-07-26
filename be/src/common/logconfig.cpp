@@ -160,10 +160,6 @@ static void dontdump_unused_pages() {
 
 static void failure_writer(const char* data, int size) {
     dump_trace_info();
-    if (config::enable_core_file_size_optimization) {
-        release_cache_mem();
-        dontdump_unused_pages();
-    }
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
 
