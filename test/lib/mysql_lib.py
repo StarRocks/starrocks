@@ -54,9 +54,5 @@ class MysqlLib(object):
 
     def close(self):
         if self.connector != "":
-            try:
-                close_conn(self.connector)
-            except Exception as e:
-                log.info("Close MySQL connection error: %s" % e)
-            finally:
-                self.connector = ""
+            close_conn(self.connector, "MySQL")
+            self.connector = ""

@@ -49,7 +49,7 @@ from cup import shell
 from nose import tools
 from cup import log
 from requests.auth import HTTPBasicAuth
-from timeout_decorator import timeout
+from timeout_decorator import timeout, TimeoutError
 
 from lib import skip
 from lib import data_delete_lib
@@ -621,9 +621,7 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
-    @timeout(QUERY_TIMEOUT,
-             exception_message=f"QUERY TIMEOUT: {QUERY_TIMEOUT}!",
-             timeout_exception=AssertionError(TimeoutError))
+    @timeout(QUERY_TIMEOUT, exception_message=f"QUERY TIMEOUT: {QUERY_TIMEOUT}!")
     def conn_execute_sql(self, conn, sql):
         try:
             cursor = conn.cursor()

@@ -16,8 +16,19 @@
 # limitations under the License.
 ###########################################################################
 
+from cup import log
 from timeout_decorator import timeout
 
+def close_conn(conn, conn_type):
+    log.info(f"Try to close {conn_type} connection...")
+
+    try:
+        __close_conn(conn)
+    except TimeoutError as e:
+        log.info("[ERROR] Close %s connection error: %s" % (conn_type, e))
+
+
 @timeout(10)
-def close_conn(conn):
+def __close_conn(conn):
     conn.close()
+

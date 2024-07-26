@@ -38,9 +38,5 @@ class SparkLib(object):
 
     def close(self):
         if self.connector is not None:
-            try:
-                close_conn(self.connector)
-            except Exception as e:
-                log.info("Close spark connection error: %s" % e)
-            finally:
-                self.connector = None
+            close_conn(self.connector, "spark")
+            self.connector = None

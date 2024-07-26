@@ -38,9 +38,5 @@ class HiveLib(object):
 
     def close(self):
         if self.connector is not None:
-            try:
-                close_conn(self.connector)
-            except Exception as e:
-                log.info("Close hive connection error: %s" % e)
-            finally:
-                self.connector = None
+            close_conn(self.connector, "hive")
+            self.connector = None

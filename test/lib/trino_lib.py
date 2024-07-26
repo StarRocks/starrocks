@@ -37,9 +37,5 @@ class TrinoLib(object):
 
     def close(self):
         if self.connector is not None:
-            try:
-                close_conn(self.connector)
-            except TimeoutError as e:
-                log.info("Close trino connection error: %s" % e)
-            finally:
-                self.connector = None
+            close_conn(self.connector, "trino")
+            self.connector = None
