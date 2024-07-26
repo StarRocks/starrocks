@@ -530,6 +530,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
+        if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
+            return DecodeInfo.EMPTY;
+        }
 
         // check dict column
         DecodeInfo info = new DecodeInfo();

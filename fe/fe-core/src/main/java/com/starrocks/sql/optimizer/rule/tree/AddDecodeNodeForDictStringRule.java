@@ -939,6 +939,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (table.hasForbiddenGlobalDict()) {
                 continue;
             }
+            // skip low-cardinality optimize for temp partition
+            // our dict collection won't collect temp partition we could support it later
+            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
+                continue;
+            }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
