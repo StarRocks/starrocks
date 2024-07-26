@@ -41,7 +41,13 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setUser(ctx.getQualifiedUser())
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
+<<<<<<< HEAD
             ctx.getPlannerProfile().reset();
+=======
+            Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+
+>>>>>>> d7dadc6887 ([BugFix] fix Planner trace when submitting task (#48925))
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));
             //Build View SQL without Policy Rewrite
