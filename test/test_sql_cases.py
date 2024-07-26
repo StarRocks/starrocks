@@ -114,13 +114,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             # save case result into db
             res = self.save_r_into_db(self.case_info.file, self.case_info.name, self.res_log, self.version)
 
-        log.info("[TeadDown] close starrocks...")
         self.close_starrocks()
-        log.info("[TeadDown] close trino...")
         self.close_trino()
-        log.info("[TeadDown] close spark...")
         self.close_spark()
-        log.info("[TeadDown] close hive...")
         self.close_hive()
 
         if record_mode:
