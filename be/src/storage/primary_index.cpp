@@ -1527,6 +1527,9 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
+    if (_persistent_index) {
+        return _persistent_index->memory_usage();
+    }
     return _memory_usage.load();
 }
 
@@ -1609,13 +1612,7 @@ Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dum
 }
 
 void PrimaryIndex::_calc_memory_usage() {
-    size_t memory_usage = 0;
-    if (_persistent_index) {
-        memory_usage = _persistent_index->memory_usage();
-    } else {
-        memory_usage = _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
-    }
-    _memory_usage.store(memory_usage);
+    _memory_usage.store(_pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0);
 }
 
 } // namespace starrocks
