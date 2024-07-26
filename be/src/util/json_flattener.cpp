@@ -1158,7 +1158,7 @@ Status HyperJsonTransformer::trans(std::vector<ColumnPtr>& columns) {
     }
 
     size_t rows = columns[0]->size();
-    for (size_t i = 0; i < _dst_columns.size() - 1; i++) {
+    for (size_t i = 0; i < _dst_columns.size(); i++) {
         if (_dst_columns[i]->size() == 0) {
             _dst_columns[i]->append_default(rows);
         } else {
