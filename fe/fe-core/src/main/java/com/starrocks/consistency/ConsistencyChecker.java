@@ -68,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConsistencyChecker extends FrontendDaemon {
@@ -94,6 +95,8 @@ public class ConsistencyChecker extends FrontendDaemon {
     private int startTime;
     private int endTime;
     private long lastTabletMetaCheckTime = 0;
+
+    private final Map<Long, Integer> creatingTableIds = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
         super("consistency checker");
@@ -137,7 +140,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private void checkTabletMetaConsistency() {
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableIds);
     }
 
     @Override
@@ -458,5 +461,19 @@ public class ConsistencyChecker extends FrontendDaemon {
             CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
             addJob(job);
         }
+    }
+
+    public void addCreatingTableId(long tableId) {
+        creatingTableIds.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
+    }
+
+    public void deleteCreatingTableId(long tabletId) {
+        creatingTableIds.compute(tabletId, (k, v) -> {
+            if (v == null || v <= 1) {
+                return null;
+            } else {
+                return v - 1;
+            }
+        });
     }
 }

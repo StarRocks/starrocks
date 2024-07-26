@@ -1806,14 +1806,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             numReplicas += partition.storageReplicaCount();
         }
 
-        if (numReplicas > Config.create_table_max_serial_replicas) {
-            LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
-                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
-        } else {
-            LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
-                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+        try {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
+            if (numReplicas > Config.create_table_max_serial_replicas) {
+                LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+            } else {
+                LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
         }
     }
 
