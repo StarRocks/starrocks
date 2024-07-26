@@ -14,7 +14,9 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -143,5 +145,24 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    /**
+     * For external table, the partition name is normalized which should convert it into original partition name.
+     * <p>
+     * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
+     * of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * partition columns problem.
+     * eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public Set<String> getExternalTableRealPartitionName(Table table, String mvPartitionName) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            Preconditions.checkState(externalRefBaseTableMVPartitionMap.containsKey(table));
+            return externalRefBaseTableMVPartitionMap.get(table).get(mvPartitionName);
+        } else {
+            return Sets.newHashSet(mvPartitionName);
+        }
     }
 }
