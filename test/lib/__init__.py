@@ -16,7 +16,6 @@
 # limitations under the License.
 ###########################################################################
 
-from cup import log
 from timeout_decorator import timeout
 
 @timeout(10)

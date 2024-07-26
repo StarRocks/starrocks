@@ -17,6 +17,7 @@
 ###########################################################################
 
 import trino
+from cup import log
 
 from lib import close_conn
 

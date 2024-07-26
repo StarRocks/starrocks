@@ -17,6 +17,7 @@
 ###########################################################################
 
 from pyhive import hive
+from cup import log
 
 from lib import close_conn
 
