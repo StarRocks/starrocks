@@ -1694,7 +1694,13 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
-            UserVariable userVariable = session.getUserVariable(node.getName());
+            UserVariable userVariable;
+            if (session.getUserVariablesCopyInWrite() == null) {
+                userVariable = session.getUserVariable(node.getName());
+            } else {
+                userVariable = session.getUserVariableCopyInWrite(node.getName());
+            }
+
             if (userVariable == null) {
                 node.setValue(NullLiteral.create(Type.STRING));
                 node.setType(Type.STRING);

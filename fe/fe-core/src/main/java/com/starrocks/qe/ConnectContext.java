@@ -81,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -156,7 +157,8 @@ public class ConnectContext {
     // all the modified session variables, will forward to leader
     protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
-    protected HashMap<String, UserVariable> userVariables;
+    protected Map<String, UserVariable> userVariables;
+    protected Map<String, UserVariable> userVariablesCopyInWrite;
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -253,7 +255,7 @@ public class ConnectContext {
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
-        userVariables = new HashMap<>();
+        userVariables = new ConcurrentHashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
 
@@ -394,6 +396,56 @@ public class ConnectContext {
         userVariables.put(userVariable.getVariable(), userVariable);
     }
 
+    /**
+     * 1. The {@link ConnectContext#userVariables} in the current session should not be modified
+     * until you are sure that the set sql was executed successfully.
+     * 2. Changes to user variables during set sql execution should
+     * be effected in the {@link ConnectContext#userVariablesCopyInWrite}.
+     * */
+    public void modifyUserVariableCopyInWrite(UserVariable userVariable) {
+        if (userVariablesCopyInWrite != null) {
+            if (userVariablesCopyInWrite.size() > 1024) {
+                throw new SemanticException("User variable exceeds the maximum limit of 1024");
+            }
+            userVariablesCopyInWrite.put(userVariable.getVariable(), userVariable);
+        }
+    }
+
+    /**
+     * The SQL execution that sets the variable must reset userVariablesCopyInWrite when it finishes,
+     * either normally or abnormally.
+     *
+     * This method needs to be called at the time of setting the user variable.
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void resetUserVariableCopyInWrite() {
+        userVariablesCopyInWrite = null;
+    }
+
+    /**
+     * After the successful execution of the SQL that set the variable,
+     * the result of the change to the copy of userVariables is set back to the current session.
+     *
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void modifyUserVariables(Map<String, UserVariable> userVarCopyInWrite) {
+        if (userVarCopyInWrite.size() > 1024) {
+            throw new SemanticException("User variable exceeds the maximum limit of 1024");
+        }
+        this.userVariables = userVarCopyInWrite;
+    }
+
+    /**
+     * Instead of using {@link ConnectContext#userVariables} when set userVariables,
+     * use a copy of it, the purpose of which is to ensure atomicity/isolation of modifications to userVariables
+     *
+     * This method needs to be called at the time of setting the user variable.
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void modifyUserVariablesCopyInWrite(Map<String, UserVariable> userVariables) {
+        this.userVariablesCopyInWrite = userVariables;
+    }
+
     public SetStmt getModifiedSessionVariables() {
         List<SetListItem> sessionVariables = new ArrayList<>();
         if (MapUtils.isNotEmpty(modifiedSessionVariables)) {
@@ -428,6 +480,22 @@ public class ConnectContext {
     public void resetSessionVariable() {
         this.sessionVariable = VariableMgr.newSessionVariable();
         modifiedSessionVariables.clear();
+    }
+
+    public UserVariable getUserVariableCopyInWrite(String variable) {
+        if (userVariablesCopyInWrite == null) {
+            return null;
+        }
+
+        return userVariablesCopyInWrite.get(variable);
+    }
+
+    public Map<String, UserVariable> getUserVariablesCopyInWrite() {
+        if (userVariablesCopyInWrite == null) {
+            return null;
+        }
+
+        return userVariablesCopyInWrite;
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {

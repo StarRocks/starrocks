@@ -161,6 +161,39 @@ set @test = ["abc\\'"];
 select @test = ["abc\\'"];
 
 
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
 
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
+
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+select @aVar, @bVar, @cVar;
+
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+select @xVar, @yVar, @zVar;
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+select @xVar, @yVar, @zVar;
+
+create table cities (
+    city_id int NOT NULL,
+     population int NOT NULL,
+    city string NOT NULL
+   ) PRIMARY KEY (city_id)
+DISTRIBUTED BY HASH(city_id);
+
+insert into cities(city_id, population, city) values(1, 2000,"beijing");
+insert into cities(city_id, population, city) values(2, 2000,"shanghai");
+insert into cities(city_id, population, city) values(3, 2000,"guangzhou");
+insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
+insert into cities(city_id, population, city) values(5, 2000, "chengdu");
+
+select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
+select @aVarHint, @bVarHint;
+set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
+select @secondVar,@thirdVar;
 
 
