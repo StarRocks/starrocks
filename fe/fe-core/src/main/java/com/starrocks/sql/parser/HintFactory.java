@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.HintNode;
@@ -121,6 +122,51 @@ public class HintFactory {
                 new SetVarHint(new NodePosition(token), valueMap, token.getText()) : null;
     }
 
+<<<<<<< HEAD
+=======
+    private static UserVariableHint buildUserVariableHint(String text, Token token, SessionVariable sessionVariable) {
+        text = trimWithSpace(text);
+
+        // To ensure that the dependency sequence of the User-defined hint variable.
+        ImmutableMap.Builder<String, UserVariable> builder = new ImmutableMap.Builder<String, UserVariable>();
+        if (text.startsWith("(") && text.endsWith(")")) {
+            List<Expr> exprs;
+            try {
+                exprs = SqlParser.parseSqlToExprs(text.substring(1, text.length() - 1), sessionVariable);
+            } catch (Exception e) {
+                return null;
+            }
+
+            for (Expr expr : exprs) {
+                if (!(expr instanceof BinaryPredicate)) {
+                    return null;
+                }
+
+                BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
+                if (binaryPredicate.getOp() != BinaryType.EQ) {
+                    return null;
+                }
+
+                if (binaryPredicate.getChild(0) instanceof UserVariableExpr) {
+                    UserVariableExpr variableExpr = (UserVariableExpr) binaryPredicate.getChild(0);
+                    builder.put(variableExpr.getName(),
+                            new UserVariable(variableExpr.getName(), binaryPredicate.getChild(1),
+                                    true, binaryPredicate.getPos()));
+
+                } else {
+                    return null;
+                }
+            }
+
+        } else {
+            return null;
+        }
+        return new UserVariableHint(new NodePosition(token), builder.build(), token.getText());
+    }
+
+
+
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
     private static boolean isWhiteSpace(char c) {
         return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == '\u3000';
     }

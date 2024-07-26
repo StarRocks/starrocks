@@ -1689,6 +1689,26 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariable userVariable;
+            if (session.getUserVariablesCopyInWrite() == null) {
+                userVariable = session.getUserVariable(node.getName());
+            } else {
+                userVariable = session.getUserVariableCopyInWrite(node.getName());
+            }
+
+            if (userVariable == null) {
+                node.setValue(NullLiteral.create(Type.STRING));
+            } else {
+                node.setValue(userVariable.getEvaluatedExpression());
+            }
+            return null;
+        }
+
+        @Override
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
         public Void visitDefaultValueExpr(DefaultValueExpr node, Scope context) {
             node.setType(Type.VARCHAR);
             return null;

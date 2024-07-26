@@ -311,6 +311,7 @@ public class SetStmtAnalyzer {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
         }
+<<<<<<< HEAD
 
         Expr expression = var.getUnevaluatedExpression();
         if (expression instanceof NullLiteral) {
@@ -349,6 +350,8 @@ public class SetStmtAnalyzer {
                 var.setUnevaluatedExpression(subquery);
             }
         }
+=======
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
     }
 
     private static void analyzeSetUserPropertyVar(SetUserPropertyVar setUserPropertyVar) {
@@ -401,6 +404,47 @@ public class SetStmtAnalyzer {
 
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
+        }
+    }
+
+    public static void calcuteUserVariable(UserVariable userVariable) {
+        Expr expression = userVariable.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+        } else {
+            Expr foldedExpression;
+            foldedExpression = Expr.analyzeAndCastFold(expression);
+
+            if (foldedExpression.isLiteral()) {
+                userVariable.setEvaluatedExpression(foldedExpression);
+            } else {
+                SelectList selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
+
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<List<Expr>> rows = new ArrayList<>();
+                rows.add(row);
+                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
+                valuesRelation.setNullValues(true);
+
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
+                QueryStatement queryStatement = new QueryStatement(selectRelation);
+                Analyzer.analyze(queryStatement, ConnectContext.get());
+
+                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
+
+                Type type = variableResult.getType();
+                // can not apply to metric types or complex type except array type
+                if (!checkUserVariableType(type)) {
+                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                }
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
+                Subquery subquery = new Subquery(queryStatement);
+                subquery.setType(variableResult.getType());
+                userVariable.setUnevaluatedExpression(subquery);
+            }
         }
     }
 }
