@@ -16,6 +16,10 @@ package com.starrocks.common.util;
 import com.starrocks.common.Config;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -30,6 +34,7 @@ public class ProfileManagerTest {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, queryType);
+        summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
 
         profile.addChild(summaryProfile);
 
@@ -79,13 +84,46 @@ public class ProfileManagerTest {
         ProfileManager manager = ProfileManager.getInstance();
         assertTrue(manager.getAllProfileElements().isEmpty());
 
-        RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
-        manager.pushProfile(null, profile1);
+        RuntimeProfile queryProfile1 = buildRuntimeProfile("123", "Query");
+        RuntimeProfile loadProfile1 = buildRuntimeProfile("124", "Load");
+        RuntimeProfile queryProfile2 = buildRuntimeProfile("125", "Query");
+        RuntimeProfile loadProfile2 = buildRuntimeProfile("126", "Load");
+        RuntimeProfile loadProfile3 = buildRuntimeProfile("127", "Load");
 
-        RuntimeProfile profile2 = buildRuntimeProfile("124", "Load");
-        manager.pushProfile(null, profile2);
+        manager.pushProfile(null, queryProfile1);
+        manager.pushProfile(null, loadProfile1);
+        manager.pushProfile(null, queryProfile2);
+        manager.pushProfile(null, loadProfile2);
+        manager.pushProfile(null, loadProfile3);
 
-        assertEquals(2, manager.getAllQueries().size());
+        List<String> queryIds =
+                manager.getAllQueries().stream().map(queryRows -> queryRows.get(0)).collect(Collectors.toList());
+        assertThat(queryIds).containsExactly("127", "126", "125", "124", "123");
+
+        manager.clearProfiles();
+    }
+
+    @Test
+    public void testGetAllProfileElements() {
+        ProfileManager manager = ProfileManager.getInstance();
+        assertTrue(manager.getAllProfileElements().isEmpty());
+
+        RuntimeProfile queryProfile1 = buildRuntimeProfile("123", "Query");
+        RuntimeProfile loadProfile1 = buildRuntimeProfile("124", "Load");
+        RuntimeProfile queryProfile2 = buildRuntimeProfile("125", "Query");
+        RuntimeProfile loadProfile2 = buildRuntimeProfile("126", "Load");
+        RuntimeProfile loadProfile3 = buildRuntimeProfile("127", "Load");
+
+        manager.pushProfile(null, queryProfile1);
+        manager.pushProfile(null, loadProfile1);
+        manager.pushProfile(null, queryProfile2);
+        manager.pushProfile(null, loadProfile2);
+        manager.pushProfile(null, loadProfile3);
+
+        List<String> queryIds =
+                manager.getAllProfileElements().stream().map(ele -> ele.infoStrings.get(ProfileManager.QUERY_ID))
+                        .collect(Collectors.toList());
+        assertThat(queryIds).containsExactly("123", "124", "125", "126", "127");
 
         manager.clearProfiles();
     }
