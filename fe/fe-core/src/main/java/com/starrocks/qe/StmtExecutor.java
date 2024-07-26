@@ -784,7 +784,7 @@ public class StmtExecutor {
         boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
                 .stream().anyMatch(hint -> hint instanceof UserVariableHint);
         if (hasUserVariableHint) {
-            context.modifyUserVariablesCpoyInWrite(clonedUserVars);
+            context.modifyUserVariablesCopyInWrite(clonedUserVars);
         }
         boolean executeSuccess = true;
         try {

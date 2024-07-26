@@ -456,7 +456,7 @@ public class ConnectContext {
      * This method needs to be called at the time of setting the user variable.
      * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
      * */
-    public void modifyUserVariablesCpoyInWrite(Map<String, UserVariable> userVariables) {
+    public void modifyUserVariablesCopyInWrite(Map<String, UserVariable> userVariables) {
         this.userVariablesCopyInWrite = userVariables;
     }
 

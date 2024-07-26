@@ -100,7 +100,7 @@ public class SetExecutor {
         boolean executeSuccess = true;
         if (hasUserVar) {
             clonedUserVars.putAll(ctx.getUserVariables());
-            ctx.modifyUserVariablesCpoyInWrite(clonedUserVars);
+            ctx.modifyUserVariablesCopyInWrite(clonedUserVars);
         }
         try {
             for (SetListItem var : stmt.getSetListItems()) {
