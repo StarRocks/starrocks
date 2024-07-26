@@ -43,6 +43,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
             Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
 
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));

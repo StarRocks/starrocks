@@ -49,6 +49,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase());
 
             Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
             executor = ctx.executeSql(context.getDefinition());
 
             if (ctx.getState().isError()) {
