@@ -59,66 +59,66 @@ public class DataCacheAutomaticPopulateTest extends PlanTestBase {
     @Test
     public void testCompatibleWithOldParameter() throws Exception {
         String sql = "select age from hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03' and l_orderkey=1";
-        assertPlanContains(sql, "dataCacheOptions={populate: true}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: true}");
 
         connectContext.getSessionVariable().setEnablePopulateDataCache(false);
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
     }
 
     @Test
     public void testAlwaysMode() throws Exception {
         String sql = "select * from hive0.datacache_db.multi_partition_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
 
         connectContext.getSessionVariable().setDataCachePopulateMode(DataCachePopulateMode.ALWAYS.modeName());
 
         sql = "select * from hive0.datacache_db.multi_partition_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: true}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: true}");
     }
 
     @Test
     public void testAllColumnsScan() throws Exception {
         // two columns, not populate
         String sql = "select * from hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03' and l_orderkey=1";
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
 
         // specific one column, should not ignore it
         sql = "select age from hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03' and l_orderkey=1";
-        assertPlanContains(sql, "dataCacheOptions={populate: true}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: true}");
     }
 
     @Test
     public void testAllPartitionScan() throws Exception {
         // all partitions scan
         String sql = "select age from hive0.datacache_db.multi_partition_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
     }
 
     @Test
     public void testOneColumnOnePartitionScan() throws Exception {
         // normal_table has only one column, should not ignore it
         String sql = "select * from hive0.datacache_db.normal_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: true}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: true}");
     }
 
     @Test
     public void testNoneQueryStatement() throws Exception {
         connectContext.setExecutor(new StmtExecutor(connectContext, new InsertStmt(null, NodePosition.ZERO)));
         String sql = "select * from hive0.datacache_db.normal_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
     }
 
     @Test
     public void testStatisticsCollectSQL() throws Exception {
         connectContext.setStatisticsContext(true);
         String sql = "select * from hive0.datacache_db.normal_table";
-        assertPlanContains(sql, "dataCacheOptions={populate: false}");
+        assertVerbosePlanContains(sql, "dataCacheOptions={populate: false}");
     }
 
     @Test
     public void testDisableDataCache() throws Exception {
         connectContext.getSessionVariable().setEnableScanDataCache(false);
         String sql = "select * from hive0.datacache_db.normal_table";
-        Assert.assertFalse(getFragmentPlan(sql).contains("dataCacheOptions"));
+        Assert.assertFalse(getVerboseExplain(sql).contains("dataCacheOptions"));
     }
 }
