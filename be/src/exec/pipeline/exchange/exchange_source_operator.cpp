@@ -47,8 +47,10 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_unique<Chunk>();
     RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
-    for (auto& col : chunk->columns()) {
-        col->check_field_rows();
+    if (chunk.get() != nullptr) {
+        for (auto& col : chunk->columns()) {
+            col->check_field_rows();
+        }
     }
     RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
     eval_runtime_bloom_filters(chunk.get());
