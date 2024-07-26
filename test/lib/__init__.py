@@ -17,7 +17,7 @@
 ###########################################################################
 
 from cup import log
-from timeout_decorator import timeout
+from timeout_decorator import timeout, TimeoutError
 
 def close_conn(conn, conn_type):
     log.info(f"Try to close {conn_type} connection...")
