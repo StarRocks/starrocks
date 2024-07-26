@@ -391,10 +391,7 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
             LOG(WARNING) << "failed to find column in schema: " << root;
             continue;
         }
-        // field maybe modified, so we need to deep copy
-        auto new_field = std::make_shared<Field>(*field);
-        schema->set_field_by_name(new_field, root);
-        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+        RETURN_IF_ERROR(prune_field_by_access_paths(field.get(), path.get()));
     }
 
     return Status::OK();
