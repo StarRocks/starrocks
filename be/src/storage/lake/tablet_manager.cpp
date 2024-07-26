@@ -586,11 +586,11 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
 StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<RowsetPtr>& input_rowset,
                                                                   VersionedTablet& tablet) {
     const auto& metadata = tablet.metadata();
-    if (metadata->rowset_schema_id().empty() || input_rowset.size() <= 0) {
+    if (metadata->rowset_to_schema().empty() || input_rowset.size() <= 0) {
         return tablet.get_schema();
     }
     struct Finder {
-        int64_t id;
+        uint32_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
 
@@ -599,12 +599,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<Ro
     if (UNLIKELY(iter == metadata->rowsets().end())) {
         return Status::InternalError(fmt::format("input rowset {} not found", input_id));
     }
-    auto schema_id = metadata->rowset_schema_id().at(input_id);
-    if (schema_id == -1) {
-        return tablet.get_schema();
-    }
-
-    return GlobalTabletSchemaMap::Instance()->emplace(metadata->historical_schema().at(schema_id)).first;
+    auto schema_id = metadata->rowset_to_schema().at(input_id);
+    return GlobalTabletSchemaMap::Instance()->emplace(metadata->historical_schemas().at(schema_id)).first;
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {

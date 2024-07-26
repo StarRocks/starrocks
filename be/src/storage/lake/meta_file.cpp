@@ -135,8 +135,13 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         file_meta.set_name(orphan_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
-    if (!_tablet_meta->rowset_schema_id().empty()) {
-        (*_tablet_meta->mutable_rowset_schema_id())[rowset->id()] = -1;
+    if (!_tablet_meta->rowset_to_schema().empty()) {
+        auto schema_id = _tablet_meta->schema().id();
+        (*_tablet_meta->mutable_rowset_to_schema())[rowset->id()] = schema_id;
+        if (_tablet_meta->historical_schemas().count(schema_id) <= 0) {
+            auto& item = (*_tablet_meta->mutable_historical_schemas())[schema_id];
+            item.CopyFrom(_tablet_meta->schema());
+        }
     }
 }
 
@@ -215,7 +220,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     };
 
     struct RowsetFinder {
-        int64_t id;
+        uint32_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
     };
 
@@ -287,36 +292,33 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     }
 
     // update rowset schema id
-    if (!_tablet_meta->rowset_schema_id().empty()) {
-        int64_t output_rowset_schema_id = -1;
+    if (!_tablet_meta->rowset_to_schema().empty()) {
+        int64_t output_rowset_schema_id = _tablet_meta->schema().id();
         if (has_output_rowset) {
             auto last_rowset_id = op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1);
-            output_rowset_schema_id = _tablet_meta->rowset_schema_id().at(last_rowset_id);
+            output_rowset_schema_id = _tablet_meta->rowset_to_schema().at(last_rowset_id);
         }
 
         for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
-            auto input_id = op_compaction.input_rowsets(i);
-            _tablet_meta->mutable_rowset_schema_id()->erase(input_id);
+            _tablet_meta->mutable_rowset_to_schema()->erase(op_compaction.input_rowsets(i));
         }
 
         if (has_output_rowset) {
-            (*_tablet_meta->mutable_rowset_schema_id())[output_rowset_id] = output_rowset_schema_id;
+            _tablet_meta->mutable_rowset_to_schema()->insert({output_rowset_id, output_rowset_schema_id});
         }
 
-        std::set<int64_t> erase_id;
-        std::set<int64_t> schema_id;
-        for (auto& pair : _tablet_meta->rowset_schema_id()) {
+        std::unordered_set<int64_t> schema_id;
+        for (auto& pair : _tablet_meta->rowset_to_schema()) {
             schema_id.insert(pair.second);
         }
 
-        for (auto& pair : _tablet_meta->historical_schema()) {
-            if (schema_id.find(pair.first) == schema_id.end()) {
-                erase_id.insert(pair.first);
+        for (auto it = _tablet_meta->mutable_historical_schemas()->begin();
+             it != _tablet_meta->mutable_historical_schemas()->end();) {
+            if (schema_id.find(it->first) == schema_id.end()) {
+                it = _tablet_meta->mutable_historical_schemas()->erase(it);
+            } else {
+                it++;
             }
-        }
-
-        for (auto id : erase_id) {
-            _tablet_meta->mutable_historical_schema()->erase(id);
         }
     }
 

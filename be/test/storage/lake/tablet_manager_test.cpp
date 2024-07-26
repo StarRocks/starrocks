@@ -745,18 +745,20 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
 
     // set historical schema
     auto schema_id1 = next_id();
-    auto& schema_pb1 = (*tablet_metadata->mutable_historical_schema())[schema_id1];
+    auto& schema_pb1 = (*tablet_metadata->mutable_historical_schemas())[schema_id1];
     schema_pb1.set_id(schema_id1);
 
     auto schema_id2 = next_id();
-    auto& schema_pb2 = (*tablet_metadata->mutable_historical_schema())[schema_id2];
+    auto& schema_pb2 = (*tablet_metadata->mutable_historical_schemas())[schema_id2];
     schema_pb2.set_id(schema_id2);
 
-    (*_tablet_meta->mutable_rowset_schema_id())[_tablet_meta->rowsets(0).id()] = -1;
-    (*_tablet_meta->mutable_rowset_schema_id())[_tablet_meta->rowsets(1).id()] = schema_id1;
-    (*_tablet_meta->mutable_rowset_schema_id())[_tablet_meta->rowsets(2).id()] = -1;
-    (*_tablet_meta->mutable_rowset_schema_id())[_tablet_meta->rowsets(3).id()] = schema_id2;
-    (*_tablet_meta->mutable_rowset_schema_id())[_tablet_meta->rowsets(4).id()] = -1;
+    auto schema_id3 = tablet_metadata->schema().id();
+
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(2).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(3).id()] = schema_id2;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(4).id()] = schema_id3;
     lake::VersionedTablet tablet(_tablet_manager, tablet_metadata);
 
     {
@@ -766,10 +768,7 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
             input_rowsets.emplace_back(std::move(rs));
             auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet);
             ASSERT_TRUE(res.ok());
-            auto schema_id = tablet_metadata->rowset_schema_id().at(_tablet_meta->rowsets(i).id());
-            if (schema_id == -1) {
-                schema_id = tablet_metadata->schema().id();
-            }
+            auto schema_id = tablet_metadata->rowset_to_schema().at(tablet_metadata->rowsets(i).id());
             ASSERT_EQ(res.value()->id(), schema_id);
         }
     }
@@ -795,7 +794,7 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     }
 
     {
-        tablet_metadata->mutable_rowset_schema_id().clear();
+        tablet_metadata->mutable_rowset_to_schema()->clear();
         for (int i = 0; i < 5; i++) {
             std::vector<lake::RowsetPtr> input_rowsets;
             auto rs = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, i);

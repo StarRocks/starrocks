@@ -205,8 +205,8 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
                 new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version);
 
         ASSERT_OK(log_applier->apply(log));
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 0);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 0);
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
     }
 
@@ -229,11 +229,11 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
 
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 2);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 1);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 1);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
     }
 
     // add rowset
@@ -256,12 +256,13 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         auto rowset_id2 = tablet_metadata->rowsets(2).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 3);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 3);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 1);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id2) == -1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 3);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id2) == schema_id2);
     }
 
     // update meta
@@ -283,13 +284,13 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         auto rowset_id2 = tablet_metadata->rowsets(2).id();
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 3);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id2) > 0);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id2) == schema_id2);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 3);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id2) == schema_id2);
     }
 
     // compaction
@@ -313,12 +314,12 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id2) > 0);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id2);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
     }
 
     // compaction one rowset
@@ -347,19 +348,20 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id2) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id2);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
         } else {
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
         }
     }
 
+    auto schema_id3 = tablet_metadata->schema().id();
     {
         TxnLogPB log;
         auto op_write_meta = log.mutable_op_write();
@@ -382,18 +384,18 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         auto rowset_id2 = tablet_metadata->rowsets(2).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 3);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 3);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id2) > 0);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 3);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 3);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id2);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
         } else {
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
         }
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id2) == -1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id2) == schema_id3);
     }
 
     {
@@ -423,16 +425,16 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id0 = tablet_metadata->rowsets(0).id();
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
-        ASSERT_TRUE(tablet_metadata->rowset_schema_id().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schema().size() == 1);
+        ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
+        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id2) > 0);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id2);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == -1);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
         } else {
-            ASSERT_TRUE(tablet_metadata->historical_schema().count(schema_id1) > 0);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id0) == schema_id1);
-            ASSERT_TRUE(tablet_metadata->rowset_schema_id().at(rowset_id1) == -1);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
         }
     }
 }
