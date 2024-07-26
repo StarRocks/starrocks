@@ -159,20 +159,20 @@ static void dontdump_unused_pages() {
 }
 
 static void failure_writer(const char* data, int size) {
+    dump_trace_info();
     if (config::enable_core_file_size_optimization) {
         release_cache_mem();
         dontdump_unused_pages();
     }
-    dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
 
 static void failure_function() {
+    dump_trace_info();
     if (config::enable_core_file_size_optimization) {
         release_cache_mem();
         dontdump_unused_pages();
     }
-    dump_trace_info();
     std::abort();
 }
 
