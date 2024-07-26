@@ -1563,6 +1563,15 @@ class StarrocksSQLApiLib(object):
                 return ""
             time.sleep(1)
 
+    def try_collect_dict_N_times(self, column_name, table_name, N):
+        """
+        try to collect dictionary for N times
+        """
+        for i in range(N):
+            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            time.sleep(1)
+
     def assert_has_global_dict(self, column_name, table_name):
         """
         assert table_name:column_name has global dict
@@ -1580,6 +1589,29 @@ class StarrocksSQLApiLib(object):
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         res = self.execute_sql(sql, True)
         tools.assert_true(str(res["result"]).find("Decode") <= 0, "assert dictionary error")
+
+    def assert_never_collect_dicts(self, column_name, table_name, db_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        sql = """
+admin execute on frontend '
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.catalog.ColumnId;
+
+var tid = GlobalStateMgr.getCurrentState().getMetadata().getDb(\"{db}\").getTable(\"{tb}\").getId();
+var dictMgr = CacheDictManager.getInstance();
+var columnId = new ColumnId("{col}");
+var cid = new ColumnIdentifier(tid, columnId)
+
+out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
+';      """.format(db=db_name, tb=table_name, col=column_name)
+        res = self.execute_sql(sql, True)
+        print("scirpt output:" + str(res))
+        tools.assert_true(str(res["result"][0][0]).strip() == "true", "column still could collect dictionary")
 
     def wait_submit_task_ready(self, task_name):
         """
