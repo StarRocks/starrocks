@@ -113,44 +113,52 @@ static void BM_mem_hook_allocator(benchmark::State& state) {
     size_t start = state.range(0);
     size_t end = state.range(1);
     size_t shift_width = state.range(2);
+    int num_threads = state.threads;
     for (auto _ : state) {
-        RoaringBitmapPerfTest perf(start, end, shift_width);
-        perf.do_bench<MemHookAllocator>(state);
-    }
+        std::vector<std::thread> threads;
+        for (int i = 0;i < num_threads;i++) {
+            threads.emplace_back([&]() {
+                RoaringBitmapPerfTest perf(start, end, shift_width);
+                perf.do_bench<MemHookAllocator>(state);
+            });
+        }
+        for (auto& thread: threads) {
+            thread.join();
+        }
+   }
 }
 
-static void BM_no_inline_mem_hook_allocator(benchmark::State& state) {
-    size_t start = state.range(0);
-    size_t end = state.range(1);
-    size_t shift_width = state.range(2);
-    for (auto _ : state) {
-        RoaringBitmapPerfTest perf(start, end, shift_width);
-        perf.do_bench<NoInlineMemHookAllocator>(state);
-    }
-}
 static void BM_counting_allocator(benchmark::State& state) {
     size_t start = state.range(0);
     size_t end = state.range(1);
     size_t shift_width = state.range(2);
+    int num_threads = state.threads;
     for (auto _ : state) {
-        RoaringBitmapPerfTest perf(start, end, shift_width);
-        perf.do_bench<CountingAllocatorWithHook>(state);
-    }
+        std::vector<std::thread> threads;
+        for (int i = 0;i < num_threads;i++) {
+            threads.emplace_back([&] () {
+                RoaringBitmapPerfTest perf(start, end, shift_width);
+                perf.do_bench<CountingAllocatorWithHook>(state);
+            });
+        }
+        for(auto& thread: threads) {
+            thread.join();
+        }
+   }
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
-    b->Args({0, 1 << 27, 0})->Iterations(1);
-    b->Args({0, 1 << 27, 1})->Iterations(1);
-    b->Args({0, 1 << 27, 2})->Iterations(1);
-    b->Args({0, 1 << 27, 4})->Iterations(1);
-    b->Args({0, 1 << 27, 8})->Iterations(1);
-    b->Args({0, 1 << 27, 16})->Iterations(1);
-    b->Args({0, 1 << 27, 32})->Iterations(1);
+    // b->Args({0, 1 << 26, 0})->Iterations(1);
+    // b->Args({0, 1 << 26, 1})->Iterations(1);
+    // b->Args({0, 1 << 26, 2})->Iterations(1);
+    // b->Args({0, 1 << 26, 4})->Iterations(1);
+    // b->Args({0, 1 << 26, 8})->Iterations(1);
+    // b->Args({0, 1 << 26, 16})->Iterations(1);
+    b->Args({0, 1 << 26, 32})->Iterations(1);
 }
 
-BENCHMARK(BM_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond);
-BENCHMARK(BM_no_inline_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond);
-BENCHMARK(BM_counting_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(2)->Threads(4);
+BENCHMARK(BM_counting_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8);
 
 } // namespace starrocks
 

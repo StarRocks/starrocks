@@ -216,11 +216,11 @@ private:
 
 
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {
-    if (config::test_allocator) {
+    // if (config::test_allocator) {
         _allocator = std::make_unique<CountingAllocatorWithHook>();
-    } else {
-        _allocator = std::make_unique<MemHookAllocator>();
-    }
+    // } else {
+    //     _allocator = std::make_unique<MemHookAllocator>();
+    // }
 }
 
 Status Aggregator::open(RuntimeState* state) {

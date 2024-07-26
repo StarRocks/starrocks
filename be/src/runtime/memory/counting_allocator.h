@@ -19,6 +19,7 @@
 #include <iostream>
 #include <memory>
 
+#include "common/compiler_util.h"
 #include "exprs/expr_context.h"
 #include "runtime/memory/allocator.h"
 #include "runtime/memory/mem_hook_allocator.h"
@@ -32,63 +33,60 @@ class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<
 public:
     ALWAYS_INLINE void* alloc(size_t size) override {
         void* result = Base::alloc(size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
     ALWAYS_INLINE void free(void* ptr) override {
-        size_t size = malloc_usable_size(ptr);
         Base::free(ptr);
-        _memory_usage -= size;
+        _memory_usage -= tls_delta_memory;
     }
 
     void* realloc(void* ptr, size_t size) override {
-        int64_t old_size = malloc_usable_size(ptr);
         void* result = Base::realloc(ptr, size);
         if (LIKELY(result != nullptr)) {
-            _memory_usage += malloc_usable_size(result) - old_size;
+            _memory_usage += tls_delta_memory;
         }
         return result;
     }
 
     void* calloc(size_t n, size_t size) override {
         void* result = Base::calloc(n, size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
     void cfree(void* ptr) override {
-        size_t size = malloc_usable_size(ptr);
         Base::cfree(ptr);
-        _memory_usage -= size;
+        _memory_usage -= tls_delta_memory;
     }
 
     void* memalign(size_t align, size_t size) override {
         void* result = Base::memalign(align, size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
     void* aligned_alloc(size_t align, size_t size) override {
         void* result = Base::aligned_alloc(align, size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
     void* valloc(size_t size) override {
         void* result = Base::valloc(size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
     void* pvalloc(size_t size) override {
         void* result = Base::pvalloc(size);
-        _memory_usage += malloc_usable_size(result);
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
     int posix_memalign(void** ptr, size_t align, size_t size) override {
         int result = Base::posix_memalign(ptr, align, size);
         if (LIKELY(result == 0)) {
-            _memory_usage += malloc_usable_size(*ptr);
+            _memory_usage += tls_delta_memory;
         }
         return result;
     }
