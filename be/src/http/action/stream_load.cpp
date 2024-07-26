@@ -291,9 +291,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
-            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the
-            // end.
-            ctx->buffer = ByteBuffer::allocate(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
+            ctx->buffer = ByteBuffer::allocate_with_tracker(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
         }
     } else {
 #ifndef BE_TEST
@@ -361,14 +359,15 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ctx->buffer = ByteBuffer::allocate(
+            ctx->buffer = ByteBuffer::allocate_with_tracker(
                     ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
                 // For json format, we need build a complete json before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len));
+                ByteBufferPtr buf =
+                        ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
@@ -383,7 +382,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
-                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+                ctx->buffer = ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize));
             }
         }
 

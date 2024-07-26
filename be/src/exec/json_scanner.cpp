@@ -672,7 +672,7 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        auto buf = ByteBuffer::allocate(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        auto buf = ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
         std::swap(buf, _file_stream_buffer);
