@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
@@ -148,7 +149,8 @@ public class HintFactory {
     private static UserVariableHint buildUserVariableHint(String text, Token token, SessionVariable sessionVariable) {
         text = trimWithSpace(text);
 
-        Map<String, UserVariable> userVariables = Maps.newHashMap();
+        // To ensure that the dependency sequence of the User-defined hint variable.
+        ImmutableMap.Builder<String, UserVariable> builder = new ImmutableMap.Builder<String, UserVariable>();
         if (text.startsWith("(") && text.endsWith(")")) {
             List<Expr> exprs;
             try {
@@ -169,7 +171,7 @@ public class HintFactory {
 
                 if (binaryPredicate.getChild(0) instanceof UserVariableExpr) {
                     UserVariableExpr variableExpr = (UserVariableExpr) binaryPredicate.getChild(0);
-                    userVariables.put(variableExpr.getName(),
+                    builder.put(variableExpr.getName(),
                             new UserVariable(variableExpr.getName(), binaryPredicate.getChild(1),
                                     true, binaryPredicate.getPos()));
 
@@ -181,7 +183,7 @@ public class HintFactory {
         } else {
             return null;
         }
-        return new UserVariableHint(new NodePosition(token), userVariables, token.getText());
+        return new UserVariableHint(new NodePosition(token), builder.build(), token.getText());
     }
 
 
