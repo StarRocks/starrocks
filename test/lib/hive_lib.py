@@ -32,10 +32,7 @@ class HiveLib(object):
             self.connector = hive.Connection(
                 host=query_dict["host"],
                 port=query_dict["port"],
-                username=query_dict["user"],
-                configuration={
-                    "queryTimeout": query_dict["queryTimeout"]
-                }
+                username=query_dict["user"]
             )
 
     def close(self):
