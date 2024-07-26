@@ -117,6 +117,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -142,6 +143,10 @@ public class ExpressionAnalyzer {
 
     public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
         IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
+    public void analyzeWithVisitor(Expr expression, AnalyzeState analyzeState, Scope scope, Visitor visitor) {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -1895,6 +1900,23 @@ public class ExpressionAnalyzer {
         }
     }
 
+    static class ResolveSlotVisitor extends Visitor {
+
+        private java.util.function.Consumer<SlotRef> resolver;
+
+        public ResolveSlotVisitor(AnalyzeState state, ConnectContext session,
+                                  java.util.function.Consumer<SlotRef> slotResolver) {
+            super(state, session);
+            resolver = slotResolver;
+        }
+
+        @Override
+        public Void visitSlot(SlotRef node, Scope scope) {
+            resolver.accept(node);
+            return null;
+        }
+    }
+
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
@@ -1906,5 +1928,14 @@ public class ExpressionAnalyzer {
                 new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
+    public static void analyzeExpressionResolveSlot(Expr expression, ConnectContext session,
+                                                    Consumer<SlotRef> slotRefConsumer) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        AnalyzeState state = new AnalyzeState();
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(new AnalyzeState(), ConnectContext.get(), slotRefConsumer);
+        expressionAnalyzer.analyzeWithVisitor(expression, state, scope, visitor);
+    }
 }
 

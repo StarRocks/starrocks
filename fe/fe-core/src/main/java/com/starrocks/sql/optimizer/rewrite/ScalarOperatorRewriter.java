@@ -55,6 +55,10 @@ public class ScalarOperatorRewriter {
             ConsolidateLikesRule.INSTANCE
     );
 
+    public static final List<ScalarOperatorRewriteRule> FOLD_CONSTANT_RULES = Lists.newArrayList(
+            new FoldConstantsRule()
+    );
+
     private static final List<ScalarOperatorRewriteRule> CASE_WHEN_PREDICATE_RULE = Lists.newArrayList(
             SimplifiedCaseWhenRule.INSTANCE,
             PruneTediousPredicateRule.INSTANCE
