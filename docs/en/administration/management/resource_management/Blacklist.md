@@ -97,7 +97,7 @@ The SQL shown in `Forbidden SQL` is escaped for all SQL semantic characters.
 DELETE SQLBLACKLIST <sql_index_number>
 ~~~
 
-<sql_index_number> is a list of SQL IDs separated by comma (,).
+`<sql_index_number>` is a list of SQL IDs separated by comma (,).
 
 For example, delete the No.3 and No.4 SQLs in the above blacklist:
 
