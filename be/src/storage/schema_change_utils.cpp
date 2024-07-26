@@ -135,7 +135,7 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
-        _convert_type_set.emplace(std::make_pair(from_type, to_type));
+        _convert_type_set.emplace(from_type, to_type);
     }
 
 private:

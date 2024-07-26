@@ -34,7 +34,7 @@ const Connector* ConnectorManager::get(const std::string& name) {
 }
 
 void ConnectorManager::put(const std::string& name, std::unique_ptr<Connector> connector) {
-    _connectors.emplace(std::make_pair(name, std::move(connector)));
+    _connectors.emplace(name, std::move(connector));
 }
 
 ConnectorManager* ConnectorManager::default_instance() {
