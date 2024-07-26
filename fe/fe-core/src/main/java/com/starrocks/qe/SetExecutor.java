@@ -29,12 +29,18 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetNamesVar;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetListItem;
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
@@ -53,6 +59,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 // Set executor
 public class SetExecutor {
     private final ConnectContext ctx;
@@ -63,8 +72,24 @@ public class SetExecutor {
         this.stmt = stmt;
     }
 
+<<<<<<< HEAD
     private void setVariablesOfAllType(SetVar var) throws DdlException {
         if (var instanceof SetPassVar) {
+=======
+    private void setVariablesOfAllType(SetListItem var) throws DdlException {
+        if (var instanceof SystemVariable) {
+            ctx.modifySystemVariable((SystemVariable) var, false);
+        } else if (var instanceof UserVariable) {
+            UserVariable userVariable = (UserVariable) var;
+            SetStmtAnalyzer.calcuteUserVariable(userVariable);
+
+            if (userVariable.getEvaluatedExpression() == null) {
+                userVariable.deriveUserVariableExpressionResult(ctx);
+            }
+
+            ctx.modifyUserVariableCopyInWrite(userVariable);
+        } else if (var instanceof SetPassVar) {
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
             ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
@@ -100,8 +125,36 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
+<<<<<<< HEAD
         for (SetVar var : stmt.getSetVars()) {
             setVariablesOfAllType(var);
+=======
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        boolean executeSuccess = true;
+        if (hasUserVar) {
+            clonedUserVars.putAll(ctx.getUserVariables());
+            ctx.modifyUserVariablesCopyInWrite(clonedUserVars);
+        }
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            if (hasUserVar) {
+                executeSuccess = false;
+            }
+            throw e;
+        } finally {
+            //If the set sql contains more than one user variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            if (hasUserVar) {
+                ctx.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    ctx.modifyUserVariables(clonedUserVars);
+                }
+            }
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
         }
     }
 

@@ -6,6 +6,11 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserVariable;
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -108,7 +113,16 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt originStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(originStmt, AnalyzeTestUtil.getConnectContext());
+<<<<<<< HEAD
         Assert.assertEquals("SET `time_zone` = 'Asia/Shanghai',`allow_default_partition` = TRUE," +
+=======
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(2));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(3));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(4));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(5));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) originStmt.getSetListItems().get(6));
+        Assert.assertEquals("SET SESSION `time_zone` = 'Asia/Shanghai',SESSION `allow_default_partition` = TRUE," +
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
                 "@`var1` = cast (1 as tinyint(4))," +
                 "@`var2` = cast ('2020-01-01' as date)," +
                 "@`var3` = cast ('foo' as varchar)," +
@@ -120,6 +134,11 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(1, statementBase.size());
         SetStmt convertStmt = (SetStmt) statementBase.get(0);
         Analyzer.analyze(convertStmt, AnalyzeTestUtil.getConnectContext());
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(2));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(3));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(4));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(5));
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) convertStmt.getSetListItems().get(6));
 
         Assert.assertEquals(7, convertStmt.getSetVars().size());
         Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(0).getType());

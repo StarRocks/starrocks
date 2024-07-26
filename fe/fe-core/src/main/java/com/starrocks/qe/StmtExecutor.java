@@ -158,6 +158,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -638,6 +639,112 @@ public class StmtExecutor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void clearQueryScopeHintContext() {
+        Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, UserVariable> entry = iterator.next();
+            if (entry.getValue().isFromHint()) {
+                iterator.remove();
+            }
+        }
+    }
+
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    @VisibleForTesting
+    public void processQueryScopeHint() throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        UUID queryId = context.getQueryId();
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        clonedUserVars.putAll(context.getUserVariables());
+        boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
+                .stream().anyMatch(hint -> hint instanceof UserVariableHint);
+        if (hasUserVariableHint) {
+            context.modifyUserVariablesCopyInWrite(clonedUserVars);
+        }
+        boolean executeSuccess = true;
+        try {
+            for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+                if (hint instanceof SetVarHint) {
+                    if (clonedSessionVariable == null) {
+                        clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                    }
+                    for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(clonedSessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                    }
+                }
+
+                if (hint instanceof UserVariableHint) {
+                    UserVariableHint userVariableHint = (UserVariableHint) hint;
+                    for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
+                        if (context.userVariables.containsKey(entry.getKey())) {
+                            throw new SemanticException(PARSER_ERROR_MSG.invalidUserVariableHint(entry.getKey(),
+                                    "the user variable name in the hint must not match any existing variable names"));
+                        }
+                        SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
+                        SetStmtAnalyzer.calcuteUserVariable(entry.getValue());
+                        if (entry.getValue().getEvaluatedExpression() == null) {
+                            try {
+                                final UUID uuid = UUIDUtil.genUUID();
+                                context.setQueryId(uuid);
+                                context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+                                entry.getValue().deriveUserVariableExpressionResult(context);
+                            } finally {
+                                context.setQueryId(queryId);
+                                context.resetReturnRows();
+                                context.getState().reset();
+                            }
+                        }
+                        clonedUserVars.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            executeSuccess = false;
+            throw t;
+        } finally {
+            if (hasUserVariableHint) {
+                context.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    context.modifyUserVariables(clonedUserVars);
+                }
+            }
+        }
+
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
+        }
+    }
+
+    private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
+        try {
+            if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
+                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                createTemporaryTableStmt.setSessionId(context.getSessionId());
+                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
+            } else {
+                return context.getGlobalStateMgr().getMetadataMgr().createTable(stmt.getCreateTableStmt());
+            }
+        } catch (DdlException e) {
+            throw new AnalysisException(e.getMessage());
+        }
+    }
+
+    private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
+        if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
+            DropTemporaryTableStmt dropTemporaryTableStmt =
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+            dropTemporaryTableStmt.setSessionId(context.getSessionId());
+            DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
+        } else {
+            DDLStmtExecutor.execute(new DropTableStmt(
+                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+        }
+    }
+
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
