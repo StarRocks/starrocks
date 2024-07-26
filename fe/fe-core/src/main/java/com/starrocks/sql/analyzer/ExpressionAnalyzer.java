@@ -1459,6 +1459,7 @@ public class ExpressionAnalyzer {
                         return null;
                     }
 
+<<<<<<< HEAD
                     Type variableType = userVariable.getEvaluatedExpression().getType();
                     node.setType(variableType);
 
@@ -1477,6 +1478,21 @@ public class ExpressionAnalyzer {
                 }
             } catch (AnalysisException | DdlException e) {
                 throw new SemanticException(e.getMessage());
+=======
+        @Override
+        public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariable userVariable;
+            if (session.getUserVariablesCopyInWrite() == null) {
+                userVariable = session.getUserVariable(node.getName());
+            } else {
+                userVariable = session.getUserVariableCopyInWrite(node.getName());
+            }
+
+            if (userVariable == null) {
+                node.setValue(NullLiteral.create(Type.STRING));
+            } else {
+                node.setValue(userVariable.getEvaluatedExpression());
+>>>>>>> dc40504bac ([BugFix] fix an issue that user-defined variables sql unable to handle variable dependencies. (#48483))
             }
             return null;
         }
