@@ -12,7 +12,8 @@ For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration
 
 :::tip
 
-This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+- This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+- Currently, StarRocks supports adding SELECT statements to the SQL Blacklist.
 
 :::
 
