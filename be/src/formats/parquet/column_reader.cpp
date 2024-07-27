@@ -1051,7 +1051,6 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 
         auto it = field_name_2_pos.find(formatted_subfield_name);
         if (it == field_name_2_pos.end()) {
-            LOG(WARNING) << "Struct subfield name: " + formatted_subfield_name + " not found.";
             pos[i] = -1;
             continue;
         }
