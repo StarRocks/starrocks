@@ -92,10 +92,15 @@ public class BrokerUtil {
      */
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
             throws UserException {
+        parseFile(path, brokerDesc, fileStatuses, true, false);
+    }
+
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses,
+                                 boolean skipDir, boolean isRecursive) throws UserException {
         TNetworkAddress address = getAddress(brokerDesc);
         try {
             TBrokerListPathRequest request = new TBrokerListPathRequest(
-                    TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+                    TBrokerVersion.VERSION_ONE, path, isRecursive, brokerDesc.getProperties());
             TBrokerListResponse tBrokerListResponse = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.brokerPool,
                     address,
@@ -106,7 +111,7 @@ public class BrokerUtil {
                         + ",broker=" + address + ",msg=" + tBrokerListResponse.getOpStatus().getMessage());
             }
             for (TBrokerFileStatus tBrokerFileStatus : tBrokerListResponse.getFiles()) {
-                if (tBrokerFileStatus.isDir) {
+                if (skipDir && tBrokerFileStatus.isDir) {
                     continue;
                 }
                 fileStatuses.add(tBrokerFileStatus);

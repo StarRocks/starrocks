@@ -26,5 +26,6 @@ public enum EtlJobType {
     SPARK,
     ROUTINE_LOAD,
     STREAM_LOAD,
+    SEGMENT_LOAD,
     UNKNOWN
 }

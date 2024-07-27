@@ -87,6 +87,7 @@ public class LoadStmtAnalyzer {
             }
             try {
                 boolean isLoadFromTable = false;
+                String fileFormat = null;
                 for (DataDescription dataDescription : dataDescriptions) {
                     if (brokerDesc == null && resourceDesc == null) {
                         dataDescription.setIsHadoopLoad(true);
@@ -96,6 +97,7 @@ public class LoadStmtAnalyzer {
                     if (dataDescription.isLoadFromTable()) {
                         isLoadFromTable = true;
                     }
+                    fileFormat = dataDescription.getFileFormat();
                 }
                 if (isLoadFromTable) {
                     if (dataDescriptions.size() > 1) {
@@ -113,11 +115,20 @@ public class LoadStmtAnalyzer {
                     resourceDesc.analyze();
                     etlJobType = resourceDesc.getEtlJobType();
                 } else if (brokerDesc != null) {
-                    etlJobType = EtlJobType.BROKER;
+                    if (fileFormat != null && fileFormat.equalsIgnoreCase("starrocks")) {
+                        etlJobType = EtlJobType.SEGMENT_LOAD;
+                    } else {
+                        etlJobType = EtlJobType.BROKER;
+                    }
                 } else {
                     // if cluster is null, use default hadoop cluster
                     // if cluster is not null, use this hadoop cluster
                     etlJobType = EtlJobType.HADOOP;
+                }
+
+                if (etlJobType == EtlJobType.SEGMENT_LOAD && dataDescriptions.size() > 1) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Segment load currently supports only one data_desc");
                 }
 
                 String database = ConnectContext.get().getDatabase();

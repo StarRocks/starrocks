@@ -758,7 +758,7 @@ public class BlobStorage implements Writable {
     public Status listWithoutBroker(String remotePath, List<RemoteFile> result) {
         try {
             List<TBrokerFileStatus> fileStatus = Lists.newArrayList();
-            HdfsUtil.parseFile(remotePath, this.brokerDesc, fileStatus, false, true);
+            HdfsUtil.parseFile(remotePath, this.brokerDesc, fileStatus, false, true, false);
             for (TBrokerFileStatus tFile : fileStatus) {
                 RemoteFile file = new RemoteFile(tFile.path, !tFile.isDir, tFile.size);
                 result.add(file);

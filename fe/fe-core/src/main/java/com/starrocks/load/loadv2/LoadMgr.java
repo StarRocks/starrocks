@@ -492,10 +492,15 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     // only for those jobs which load by PushTask
     public void processLoadingStateJobs() {
-        idToLoadJob.values().stream().filter(job -> (job.jobType == EtlJobType.SPARK && job.state == JobState.LOADING))
+        idToLoadJob.values().stream().filter(job -> ((job.jobType == EtlJobType.SPARK
+                        || job.jobType == EtlJobType.SEGMENT_LOAD) && job.state == JobState.LOADING))
                 .forEach(job -> {
                     try {
-                        ((SparkLoadJob) job).updateLoadingStatus();
+                        if (job instanceof SparkLoadJob) {
+                            ((SparkLoadJob) job).updateLoadingStatus();
+                        } else if (job instanceof SegmentLoadJob) {
+                            ((SegmentLoadJob) job).updateLoadingStatus();
+                        }
                     } catch (UserException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);

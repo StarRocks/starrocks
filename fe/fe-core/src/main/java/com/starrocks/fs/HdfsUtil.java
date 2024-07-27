@@ -65,21 +65,24 @@ public class HdfsUtil {
     }
 
     /**
-     * Parse file status in path with broker, except directory
+     * Parse file status in path with broker
      *
      * @param path
      * @param brokerDesc
      * @param fileStatuses: file path, size, isDir, isSplitable
+     * @param skipDir
+     * @param fileNameOnly
+     * @param isRecursive
      * @throws UserException if broker op failed
      */
-    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
-                                 boolean fileNameOnly) throws UserException {
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses,
+                                 boolean skipDir, boolean fileNameOnly, boolean isRecursive) throws UserException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
             return;
         }
         TBrokerListPathRequest request = new TBrokerListPathRequest(
-                TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+                TBrokerVersion.VERSION_ONE, path, isRecursive, brokerDesc.getProperties());
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
@@ -94,7 +97,7 @@ public class HdfsUtil {
 
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
             throws UserException {
-        parseFile(path, brokerDesc, fileStatuses, true, false);
+        parseFile(path, brokerDesc, fileStatuses, true, false, false);
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)

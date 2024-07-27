@@ -222,7 +222,8 @@ public class BrokerFileGroup implements Writable {
         fileFormat = dataDescription.getFileFormat();
         if (fileFormat != null) {
             String format = fileFormat.toLowerCase();
-            if (!format.equals("parquet") && !format.equals("csv") && !format.equals("orc") && !format.equals("json")) {
+            if (!format.equals("parquet") && !format.equals("csv") && !format.equals("orc") && !format.equals("json")
+                    && !format.equals("starrocks")) {
                 throw new DdlException("File Format Type " + fileFormat + " is invalid.");
             }
         }

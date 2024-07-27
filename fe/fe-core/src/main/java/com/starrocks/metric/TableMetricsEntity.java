@@ -74,6 +74,10 @@ public final class TableMetricsEntity {
     public LongCounterMetric counterSparkLoadRowsTotal;
     public LongCounterMetric counterSparkLoadFinishedTotal;
 
+    public LongCounterMetric counterSegmentLoadBytesTotal;
+    public LongCounterMetric counterSegmentLoadRowsTotal;
+    public LongCounterMetric counterSegmentLoadFinishedTotal;
+
     public TableMetricsEntity() {
         initTableMetrics();
     }
@@ -162,6 +166,19 @@ public final class TableMetricsEntity {
                 new LongCounterMetric(TABLE_LOAD_FINISHED, MetricUnit.REQUESTS, TABLE_LOAD_FINISHED_COMMENT);
         counterSparkLoadFinishedTotal.addLabel(new MetricLabel("type", "spark_load"));
         metrics.add(counterSparkLoadFinishedTotal);
+
+        counterSegmentLoadBytesTotal =
+                new LongCounterMetric(TABLE_LOAD_BYTES, MetricUnit.BYTES, TABLE_LOAD_BYTES_COMMENT);
+        counterSegmentLoadBytesTotal.addLabel(new MetricLabel("type", "segment_load"));
+        metrics.add(counterSegmentLoadBytesTotal);
+        counterSegmentLoadRowsTotal =
+                new LongCounterMetric(TABLE_LOAD_ROWS, MetricUnit.ROWS, TABLE_LOAD_ROWS_COMMENT);
+        counterSegmentLoadRowsTotal.addLabel(new MetricLabel("type", "segment_load"));
+        metrics.add(counterSparkLoadRowsTotal);
+        counterSegmentLoadFinishedTotal =
+                new LongCounterMetric(TABLE_LOAD_FINISHED, MetricUnit.REQUESTS, TABLE_LOAD_FINISHED_COMMENT);
+        counterSegmentLoadFinishedTotal.addLabel(new MetricLabel("type", "segment_load"));
+        metrics.add(counterSegmentLoadFinishedTotal);
 
         counterInsertLoadBytesTotal =
                 new LongCounterMetric(TABLE_LOAD_BYTES, MetricUnit.BYTES, TABLE_LOAD_BYTES_COMMENT);

@@ -81,6 +81,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
+import com.starrocks.load.loadv2.SegmentLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -587,7 +588,8 @@ public class LeaderImpl {
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }
-            } else if (pushTask.getPushType() == TPushType.LOAD_V2) {
+            } else if (pushTask.getPushType() == TPushType.LOAD_V2
+                    || pushTask.getPushType() == TPushType.LOAD_SEGMENT) {
                 long loadJobId = pushTask.getLoadJobId();
                 com.starrocks.load.loadv2.LoadJob job =
                         GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(loadJobId);
@@ -602,7 +604,11 @@ public class LeaderImpl {
                             findRelatedReplica(olapTable, partition, backendId, tabletId, tabletMeta.getIndexId());
                     // if the replica is under schema change, could not find the replica with aim schema hash
                     if (replica != null) {
-                        ((SparkLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
+                        if (pushTask.getPushType() == TPushType.LOAD_V2) {
+                            ((SparkLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
+                        } else if (pushTask.getPushType() == TPushType.LOAD_SEGMENT) {
+                            ((SegmentLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
+                        }
                     }
                 }
             }

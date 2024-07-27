@@ -82,10 +82,9 @@ public class PushTask extends AgentTask {
     private final long transactionId;
     private boolean isSchemaChanging;
 
-    // for load v2 (spark load)
+    // for spark load and segment load
     private TBrokerScanRange tBrokerScanRange;
     private TDescriptorTable tDescriptorTable;
-    private boolean useVectorized;
     private String timezone;
 
     private TTabletType tabletType;
@@ -113,7 +112,6 @@ public class PushTask extends AgentTask {
         this.transactionId = transactionId;
         this.tBrokerScanRange = null;
         this.tDescriptorTable = null;
-        this.useVectorized = true;
         this.columnsDesc = columnsDesc;
     }
 
@@ -127,7 +125,7 @@ public class PushTask extends AgentTask {
         this.signature = signature;
     }
 
-    // for load v2 (SparkLoadJob)
+    // for SparkLoadJob and SegmentLoadJob
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                     long replicaId, int schemaHash, long version, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
@@ -137,7 +135,6 @@ public class PushTask extends AgentTask {
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature, columnsDesc);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
-        this.useVectorized = true;
         this.timezone = timezone;
         this.tabletType = tabletType;
     }
@@ -199,6 +196,7 @@ public class PushTask extends AgentTask {
                 }
                 request.setDelete_conditions(tConditions);
                 break;
+            case LOAD_SEGMENT:
             case LOAD_V2:
                 request.setBroker_scan_range(tBrokerScanRange);
                 request.setDesc_tbl(tDescriptorTable);
