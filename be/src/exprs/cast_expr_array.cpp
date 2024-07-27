@@ -137,6 +137,36 @@ Status CastStringToArray::open(RuntimeState* state, ExprContext* context, Functi
     return Status::OK();
 }
 
+// Cast array<ANY> to string
+StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
+    LOG(INFO) << "Converting array to string";
+
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
+    if (ColumnHelper::count_nulls(column) == column->size()) {
+        LOG(WARNING) << "Returning null for converting array to string";
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+    ColumnPtr cast_column = column->clone_shared();
+    ArrayColumn::Ptr array_col = nullptr;
+    NullableColumn::Ptr nullable_col = nullptr;
+    ColumnPtr src_col = cast_column;
+
+    if (src_col->is_nullable()) {
+        nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col));
+        src_col = nullable_col->data_column();
+    }
+    auto result = BinaryColumn::create();
+    while (src_col->is_array()) {
+        array_col = (ColumnHelper::as_column<ArrayColumn>(src_col));
+        src_col = array_col->elements_column();
+
+        LOG(INFO) << "Returning string value. ";
+        result->append(Slice(array_col->debug_string()));
+    }
+
+    return result;
+}
+
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     if (_constant_res != nullptr && _constant_res->is_constant()) {

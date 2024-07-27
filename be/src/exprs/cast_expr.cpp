@@ -1703,6 +1703,38 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
                                                                             const TypeDescriptor& from_type,
                                                                             const TypeDescriptor& to_type,
                                                                             bool allow_throw_exception) {
+    if (to_type.is_string_type() && from_type.is_array_type()) {
+        LOG(INFO) << "Cast from array to varchar. ";
+        TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
+        TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
+
+        while (from_type.is_array_type() && to_type.is_string_type()) {
+            array_field_type_cast_from = array_field_type_cast_from.children[0];
+        }
+
+        TExprNode cast;
+        cast.type = array_field_type_cast_to.to_thrift();
+        cast.child_type = to_thrift(array_field_type_cast_from.type);
+
+        //A new slot_id is created here, which has no practical meaning and is used for placeholders
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
+                                                array_field_type_cast_to.debug_string());
+            return nullptr;
+        }
+        auto* child = new ColumnRef(cast);
+        cast_element_expr->add_child(child);
+        if (pool) {
+            pool->add(cast_element_expr);
+            pool->add(child);
+        }
+
+        return new CastArrayToString(cast_element_expr, node);
+    }
     if (from_type.is_array_type() && to_type.is_array_type()) {
         ASSIGN_OR_RETURN(auto child_cast,
                          create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));

@@ -52,6 +52,22 @@ private:
                                        LogicalType to_type, bool allow_throw_exception);
 };
 
+// Cast array<ANY> to string
+class CastArrayToString final : public Expr {
+    public:
+        CastArrayToString(Expr* cast_element_expr, const TExprNode& node)
+                : Expr(node), _cast_element_expr(cast_element_expr) {}
+
+        ~CastArrayToString() override = default;
+
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
+
+        Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayToString(*this)); }
+
+    private:
+        Expr* _cast_element_expr;
+};
+
 // Cast string to array<ANY>
 class CastStringToArray final : public Expr {
 public:
