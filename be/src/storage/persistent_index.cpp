@@ -3308,7 +3308,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                     index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
-            _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+            _l2_versions.emplace_back(index_meta.l2_versions(i), index_meta.l2_version_merged(i));
             _l2_vec.emplace_back(std::move(l2_index));
         }
     }
@@ -4902,7 +4902,7 @@ void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l
             }
         }
         if (!need_remove) {
-            new_l2_versions.emplace_back(EditVersion(index_meta.l2_versions(i)));
+            new_l2_versions.emplace_back(index_meta.l2_versions(i));
             new_l2_version_merged.push_back(index_meta.l2_version_merged(i));
         }
     }

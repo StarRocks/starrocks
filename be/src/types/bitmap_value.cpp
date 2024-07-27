@@ -961,10 +961,10 @@ std::vector<BitmapValue> BitmapValue::split_bitmap(size_t batch_size) const {
 
     switch (_type) {
     case EMPTY:
-        results.emplace_back(BitmapValue());
+        results.emplace_back();
         break;
     case SINGLE:
-        results.emplace_back(BitmapValue(*this));
+        results.emplace_back(*this);
         break;
     case SET: {
         std::vector values(_set->begin(), _set->end());

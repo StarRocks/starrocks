@@ -434,12 +434,12 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     {
         const auto it = nodes_to_frag_insts.find(local);
         if (it != nodes_to_frag_insts.end()) {
-            targets.emplace_back(make_pair(it->first, it->second));
+            targets.emplace_back(it->first, it->second);
         }
     }
     for (const auto& it : nodes_to_frag_insts) {
         if (it.first != local) {
-            targets.emplace_back(make_pair(it.first, it.second));
+            targets.emplace_back(it.first, it.second);
         }
     }
 
