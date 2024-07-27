@@ -23,7 +23,7 @@ MetaChunkSource::MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profi
                                  const MetaScanContextPtr& scan_ctx)
         : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
 
-MetaChunkSource::~MetaChunkSource() {}
+MetaChunkSource::~MetaChunkSource() = default;
 
 Status MetaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
