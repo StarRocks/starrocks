@@ -46,6 +46,9 @@
 
 namespace starrocks {
 
+class AggStateDesc;
+using AggStateDescPtr = std::shared_ptr<AggStateDesc>;
+
 class TypeInfo;
 
 // Describes a type. Includes the enum, children types, and any type-specific metadata
@@ -77,6 +80,9 @@ struct TypeDescriptor {
 
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+
+    /// @brief Only set if type contains extra type desc, eg: agg_state_desc for aggregate function combinator.
+    AggStateDescPtr agg_state_desc = nullptr;
 
     TypeDescriptor() = default;
 
@@ -212,12 +218,8 @@ struct TypeDescriptor {
             return TypeDescriptor(type);
         }
     }
-    static TypeDescriptor from_thrift(const TTypeDesc& t) {
-        int idx = 0;
-        TypeDescriptor result(t.types, &idx);
-        DCHECK_EQ(idx, t.types.size());
-        return result;
-    }
+
+    static TypeDescriptor from_thrift(const TTypeDesc& t);
 
     static TypeDescriptor from_storage_type_info(TypeInfo* type_info);
 
@@ -264,6 +266,8 @@ struct TypeDescriptor {
     }
 
     bool operator!=(const TypeDescriptor& other) const { return !(*this == other); }
+
+    inline bool has_agg_state_desc() const { return agg_state_desc != nullptr; }
 
     TTypeDesc to_thrift() const {
         TTypeDesc thrift_type;
@@ -348,7 +352,6 @@ struct TypeDescriptor {
 
     static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
 
-private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
     ///
     /// 'idx' is an in/out parameter that is initially set to the index of the type in

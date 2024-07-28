@@ -357,21 +357,25 @@ public class ColumnDef implements ParseNode {
             }
             defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
-
         if (type.isBitmapType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
             defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
-
-        // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
-        // If default value is not set, we set it NULL
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
+            // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
+            // If default value is not set, we set it NULL
             isAllowNull = true;
             if (!defaultValueDef.isSet) {
                 defaultValueDef = DefaultValueDef.NULL_DEFAULT_VALUE;
             }
+        }
+        if (type.hasAggStateDesc()) {
+            if (defaultValueDef.isSet) {
+                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
+            }
+            // not set default value
         }
 
         if (!isAllowNull && defaultValueDef == DefaultValueDef.NULL_DEFAULT_VALUE) {

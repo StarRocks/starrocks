@@ -37,6 +37,7 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/agg_state_desc.h"
 #include "runtime/datetime_value.h"
 #include "runtime/string_value.h"
 #include "storage/types.h"
@@ -70,8 +71,8 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         type = TYPE_STRUCT;
         ++(*idx);
         for (const auto& struct_field : node.struct_fields) {
-            field_names.push_back(struct_field.name);
-            children.push_back(TypeDescriptor(types, idx));
+            field_names.emplace_back(struct_field.name);
+            children.emplace_back(types, idx);
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
@@ -80,15 +81,15 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         DCHECK_LT(*idx, types.size() - 1);
         type = TYPE_ARRAY;
         ++(*idx);
-        children.push_back(TypeDescriptor(types, idx));
+        children.emplace_back(types, idx);
         break;
     case TTypeNodeType::MAP:
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 2);
         type = TYPE_MAP;
         ++(*idx);
-        children.push_back(TypeDescriptor(types, idx));
-        children.push_back(TypeDescriptor(types, idx));
+        children.emplace_back(types, idx);
+        children.emplace_back(types, idx);
         break;
     }
 }
@@ -123,9 +124,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type.__set_len(len);
-        }
+        scalar_type.__set_len(len);
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -159,9 +158,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
-        if (len != -1) {
-            scalar_type->set_len(len);
-        }
+        scalar_type->set_len(len);
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }
@@ -199,8 +196,8 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         type = TYPE_STRUCT;
         ++(*idx);
         for (int i = 0; i < node.struct_fields().size(); ++i) {
-            children.push_back(TypeDescriptor(types, idx));
-            field_names.push_back(node.struct_fields(i).name());
+            children.emplace_back(types, idx);
+            field_names.emplace_back(node.struct_fields(i).name());
         }
         break;
     case TTypeNodeType::ARRAY:
@@ -208,15 +205,15 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         DCHECK_LT(*idx, types.size() - 1);
         ++(*idx);
         type = TYPE_ARRAY;
-        children.push_back(TypeDescriptor(types, idx));
+        children.emplace_back(types, idx);
         break;
     case TTypeNodeType::MAP:
         DCHECK(!node.has_scalar_type());
         DCHECK_LT(*idx, types.size() - 2);
         ++(*idx);
         type = TYPE_MAP;
-        children.push_back(TypeDescriptor(types, idx));
-        children.push_back(TypeDescriptor(types, idx));
+        children.emplace_back(types, idx);
+        children.emplace_back(types, idx);
         break;
     }
 }
@@ -441,6 +438,18 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
     }
     // treat other conflicted types as varchar.
     return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+TypeDescriptor TypeDescriptor::from_thrift(const TTypeDesc& t) {
+    int idx = 0;
+    TypeDescriptor result(t.types, &idx);
+    DCHECK_EQ(idx, t.types.size());
+
+    if (t.__isset.agg_state_desc) {
+        auto desc = AggStateDesc::from_thrift(t.agg_state_desc);
+        result.agg_state_desc = std::make_shared<AggStateDesc>(std::move(desc));
+    }
+    return result;
 }
 
 } // namespace starrocks

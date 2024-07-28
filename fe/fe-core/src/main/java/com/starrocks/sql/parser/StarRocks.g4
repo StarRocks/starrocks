@@ -373,7 +373,7 @@ createTableStatement
 
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    : identifier type charsetName? KEY? aggDesc? columnNullable?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     comment?
     ;
@@ -416,6 +416,15 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -425,6 +434,7 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+    | AGG_STATE_UNION
     ;
 
 rollupDesc
@@ -2615,6 +2625,7 @@ type
     | arrayType
     | structType
     | mapType
+    | aggStateType
     ;
 
 arrayType
@@ -2623,6 +2634,10 @@ arrayType
 
 mapType
     : MAP '<' type ',' type '>'
+    ;
+
+aggStateType
+    : AGG_STATE '<' identifier '(' typeWithNullable (',' typeWithNullable)* ')' '>'
     ;
 
 subfieldDesc
@@ -2731,7 +2746,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | AGG_STATE | AGG_STATE_UNION
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS

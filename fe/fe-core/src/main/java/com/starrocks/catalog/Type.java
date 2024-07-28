@@ -39,11 +39,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -65,6 +68,8 @@ import java.util.stream.Collectors;
 public abstract class Type implements Cloneable {
     // used for nested type such as map and struct
     protected Boolean[] selectedFields;
+    @SerializedName("aggStateDesc")
+    protected AggStateDesc aggStateDesc = null;
 
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
@@ -559,7 +564,11 @@ public abstract class Type implements Cloneable {
      * The string must match exactly.
      */
     public final String toSql() {
-        return toSql(0);
+        if (hasAggStateDesc()) {
+            return aggStateDesc.toString();
+        } else {
+            return toSql(0);
+        }
     }
 
     /**
@@ -1008,6 +1017,10 @@ public abstract class Type implements Cloneable {
         TTypeDesc container = new TTypeDesc();
         container.setTypes(new ArrayList<TTypeNode>());
         toThrift(container);
+        if (this.hasAggStateDesc()) {
+            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            container.setAgg_state_desc(tAggStateDesc);
+        }
         return container;
     }
 
@@ -1697,10 +1710,28 @@ public abstract class Type implements Cloneable {
         return Type.VARCHAR.getPrimitiveType().toMysqlType();
     }
 
+    public Type withAggStateDesc(AggStateDesc desc) {
+        Type cloned = this.clone();
+        cloned.aggStateDesc = desc;
+        return cloned;
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return this.aggStateDesc;
+    }
+
+    public boolean hasAggStateDesc() {
+        return this.aggStateDesc != null;
+    }
+
     @Override
     public Type clone() {
         try {
-            return (Type) super.clone();
+            Type cloned = (Type) super.clone();
+            if (this.hasAggStateDesc()) {
+                cloned.aggStateDesc = this.aggStateDesc.clone();
+            }
+            return cloned;
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }

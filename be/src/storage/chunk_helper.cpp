@@ -141,6 +141,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
 
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
+    f.set_agg_state_desc(c.get_agg_state_desc());
     return f;
 }
 

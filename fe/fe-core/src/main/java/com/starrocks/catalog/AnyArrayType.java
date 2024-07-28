@@ -27,6 +27,11 @@ public class AnyArrayType extends PseudoType {
     }
 
     @Override
+    public Type clone() {
+        return new AnyArrayType();
+    }
+
+    @Override
     public String toString() {
         return "PseudoType.AnyArrayType";
     }
