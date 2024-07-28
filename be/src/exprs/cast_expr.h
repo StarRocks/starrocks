@@ -60,7 +60,7 @@ class CastArrayToString final : public Expr {
 
         ~CastArrayToString() override = default;
 
-        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
         Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayToString(*this)); }
 
