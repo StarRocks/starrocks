@@ -1733,7 +1733,7 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
             pool->add(child);
         }
 
-        return new CastArrayToString(cast_element_expr, node);
+        return std::make_unique<CastArrayToString>(cast_element_expr, node);
     }
     if (from_type.is_array_type() && to_type.is_array_type()) {
         ASSIGN_OR_RETURN(auto child_cast,
