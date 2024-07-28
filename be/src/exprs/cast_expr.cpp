@@ -1722,8 +1722,6 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
 
         Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
-            LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
-                                                array_field_type_cast_to.debug_string());
             return nullptr;
         }
         auto* child = new ColumnRef(cast);

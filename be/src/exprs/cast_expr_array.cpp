@@ -138,7 +138,7 @@ Status CastStringToArray::open(RuntimeState* state, ExprContext* context, Functi
 }
 
 // Cast array<ANY> to string
-StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Chunk* ptr) {
     LOG(INFO) << "Converting array to string";
 
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
