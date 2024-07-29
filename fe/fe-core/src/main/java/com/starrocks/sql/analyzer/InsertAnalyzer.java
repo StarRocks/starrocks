@@ -71,15 +71,18 @@ public class InsertAnalyzer {
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
-
         List<Table> tables = new ArrayList<>();
-        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-        tables.stream().map(table -> (HiveTable) table)
-                .forEach(table -> table.useMetadataCache(false));
+        try {
+            new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
-        // Take the PlannerMetaLock
-        takeLock.run();
+            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+            tables.stream().map(table -> (HiveTable) table)
+                    .forEach(table -> table.useMetadataCache(false));
+        } finally {
+            // Take the PlannerMetaLock
+            takeLock.run();
+        }
+
 
         /*
          *  Target table
