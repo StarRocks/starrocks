@@ -680,8 +680,8 @@ public class AnalyzerUtils {
             }
 
             olapTables.add(table);
-            idMap.put(tableIndexId, table);
             table.copyOnlyForQuery(copied);
+            idMap.put(tableIndexId, copied);
             return copied;
         }
     }
