@@ -437,6 +437,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Types.StructType schema = nativeTbl.schema().asStruct();
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        String uuid = icebergTable.getUUID();
 
         if (!tasks.containsKey(key)) {
             org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -474,7 +475,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             while (fileScanTaskIterator.hasNext()) {
                 FileScanTask scanTask = fileScanTaskIterator.next();
                 statisticProvider.updateIcebergFileStats(
-                        icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                        icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key, uuid);
 
                 FileScanTask icebergSplitScanTask = scanTask;
                 if (enableCollectColumnStatistics()) {

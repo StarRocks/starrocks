@@ -132,9 +132,7 @@ public class IcebergStatisticProvider {
     public void updateIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
                                      Map<Integer, Type.PrimitiveType> idToTypeMapping,
                                      List<Types.NestedField> nonPartitionPrimitiveColumns,
-                                     IcebergFilter key) {
-        String uuid = icebergTable.getUUID();
-
+                                     IcebergFilter key, String uuid) {
         Table nativeTable = icebergTable.getNativeTable();
         List<PartitionField> partitionFields = nativeTable.spec().fields();
 
