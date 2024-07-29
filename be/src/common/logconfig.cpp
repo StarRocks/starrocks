@@ -158,26 +158,21 @@ static void dontdump_unused_pages() {
     start_dump = true;
 }
 
-static void failure_writer(const char* data, size_t size) {
-    dump_trace_info();
-    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
-
+static void failure_handler_after_output_log() {
     if (config::enable_core_file_size_optimization) {
-        // TODO: If page cache releases crash due to memory problem,
-        //  the stack of be.out will be incomplete.
-        //  Glog needs to add a new interface to first write the log of stach and then optimize core file size.
-        //  I will and the interface later.
         release_cache_mem();
         dontdump_unused_pages();
     }
 }
 
+static void failure_writer(const char* data, size_t size) {
+    dump_trace_info();
+    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+}
+
 static void failure_function() {
     dump_trace_info();
-    if (config::enable_core_file_size_optimization) {
-        release_cache_mem();
-        dontdump_unused_pages();
-    }
+    failure_handler_after_output_log();
     std::abort();
 }
 
@@ -279,6 +274,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+        google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
     }
 
     logging_initialized = true;
