@@ -123,7 +123,7 @@ public class ComputeNode implements IComputable, Writable {
     private volatile boolean isSetStoragePath = false;
 
     @SerializedName("location")
-    private Map<String, String> location;
+    private Map<String, String> location = new HashMap<>();
 
     // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
     @SerializedName("status")
