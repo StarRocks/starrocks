@@ -42,7 +42,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,16 +62,21 @@ public class ListPartitionInfo extends PartitionInfo {
     @SerializedName("colIds")
     protected List<ColumnId> partitionColumnIds = Lists.newArrayList();
 
+    // NOTE: In optimizer the access to these maps is not protected under DbLock, so it's crucial to make themselves
+    // thread-safe.
     //serialize values for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
     @SerializedName("idToMultiValues")
-    private Map<Long, List<List<String>>> idToMultiValues;
-    private Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
+    private Map<Long, List<List<String>>> idToMultiValues = Maps.newConcurrentMap();
+    private Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues = Maps.newConcurrentMap();
+
     //serialize values for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
     @SerializedName("idToValues")
-    private Map<Long, List<String>> idToValues;
-    private Map<Long, List<LiteralExpr>> idToLiteralExprValues;
+    private Map<Long, List<String>> idToValues = Maps.newConcurrentMap();
+    private Map<Long, List<LiteralExpr>> idToLiteralExprValues = Maps.newConcurrentMap();
+
     @SerializedName("idToTemp")
-    private Map<Long, Boolean> idToIsTempPartition;
+    private Map<Long, Boolean> idToIsTempPartition = Maps.newConcurrentMap();
+
     @SerializedName(value = "automaticPartition")
     private Boolean automaticPartition = false;
 
@@ -82,23 +86,6 @@ public class ListPartitionInfo extends PartitionInfo {
         this.deprecatedColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
         this.partitionColumnIds = partitionColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         this.setIsMultiColumnPartition();
-
-        this.idToValues = new HashMap<>();
-        this.idToLiteralExprValues = new HashMap<>();
-        this.idToMultiValues = new HashMap<>();
-        this.idToMultiLiteralExprValues = new HashMap<>();
-        this.idToIsTempPartition = new HashMap<>();
-    }
-
-    public ListPartitionInfo() {
-        super();
-        this.idToValues = new HashMap<>();
-        this.idToLiteralExprValues = new HashMap<>();
-        this.idToMultiValues = new HashMap<>();
-        this.idToMultiLiteralExprValues = new HashMap<>();
-        this.deprecatedColumns = new ArrayList<>();
-        this.partitionColumnIds = new ArrayList<>();
-        this.idToIsTempPartition = new HashMap<>();
     }
 
     public void setValues(long partitionId, List<String> values) {
@@ -133,15 +120,6 @@ public class ListPartitionInfo extends PartitionInfo {
             }
         });
         return partitionIds;
-    }
-
-    public void setBatchLiteralExprValues(Map<ColumnId, Column> idToColumn,
-                                          Map<Long, List<String>> batchValues) throws AnalysisException {
-        for (Map.Entry<Long, List<String>> entry : batchValues.entrySet()) {
-            long partitionId = entry.getKey();
-            List<String> values = entry.getValue();
-            this.setLiteralExprValues(idToColumn, partitionId, values);
-        }
     }
 
     public Map<Long, List<LiteralExpr>> getLiteralExprValues() {
