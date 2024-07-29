@@ -67,15 +67,13 @@ public:
     void TearDown() {}
 
     RoaringBitmapPerfTest(size_t start, size_t end, size_t shift_width):
-        _start(start), _end(end), _shift_width(shift_width) {
-        }
+        _start(start), _end(end), _shift_width(shift_width) {}
     template<class Alloc>
     void do_bench(benchmark::State& state);
 private:
     std::unique_ptr<detail::Roaring64Map> _bitmap;
     std::unique_ptr<Allocator> _allocator;
 
-    // size_t _value_count = 0;
     size_t _start = 0;
     size_t _end = 0;
     size_t _shift_width = 0;
@@ -91,23 +89,7 @@ void RoaringBitmapPerfTest::do_bench(benchmark::State& state) {
         _bitmap->add(i << _shift_width);
     }
     state.PauseTiming();
-    // for (auto [k, v]: _allocator->_malloc_counter) {
-    //     std::cout << "malloc " << k << " bytes, " << v << ", times" << std::endl;
-    // }
-    // for (auto [k, v]: _allocator->_free_counter) {
-    //     std::cout << "free " << k << " bytes, " << v << ", times" << std::endl;
-    // }
 }
-
-// static void bench_func(benchmark::State& state) {
-//     size_t start = state.range(0);
-//     size_t end = state.range(1);
-//     size_t shift_width = state.range(2);
-//     for (auto _ : state) {
-//         RoaringBitmapPerfTest perf(start, end, shift_width);
-//         perf.do_bench(state);
-//     }
-// }
 
 static void BM_mem_hook_allocator(benchmark::State& state) {
     size_t start = state.range(0);
@@ -148,17 +130,16 @@ static void BM_counting_allocator(benchmark::State& state) {
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
-    // b->Args({0, 1 << 26, 0})->Iterations(1);
-    // b->Args({0, 1 << 26, 1})->Iterations(1);
-    // b->Args({0, 1 << 26, 2})->Iterations(1);
-    // b->Args({0, 1 << 26, 4})->Iterations(1);
-    // b->Args({0, 1 << 26, 8})->Iterations(1);
-    // b->Args({0, 1 << 26, 16})->Iterations(1);
-    b->Args({0, 1 << 26, 32})->Iterations(1);
+    int64_t start = 0;
+    int64_t end = 1 << 20;
+    int64_t iterations = 2;
+    for (auto i : {0, 1, 2, 4, 8, 16,  32}) {
+        b->Args({start, end, i})->Iterations(iterations);
+    }
 }
 
-BENCHMARK(BM_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(2)->Threads(4);
-BENCHMARK(BM_counting_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8);
+BENCHMARK(BM_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8)->Threads(16)->Threads(32);
+BENCHMARK(BM_counting_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8)->Threads(16)->Threads(32);
 
 } // namespace starrocks
 
