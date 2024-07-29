@@ -937,9 +937,7 @@ public class Utils {
                 }
             }
         } else {
-            if (map.containsKey(key)) {
-                value = map.get(key);
-            }
+            value = map.get(key);
         }
 
         return value;
