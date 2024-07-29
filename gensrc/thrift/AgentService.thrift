@@ -345,13 +345,7 @@ struct TPublishVersionRequest {
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
-<<<<<<< HEAD
-    7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
-=======
     7: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
-    8: optional i64 gtid
-    9: optional bool is_version_overwrite = false
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
 }
 
 struct TClearAlterTaskRequest {

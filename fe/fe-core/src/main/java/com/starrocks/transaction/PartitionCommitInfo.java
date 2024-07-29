@@ -141,8 +141,6 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
-<<<<<<< HEAD
-=======
     public long getDataVersion() {
         return dataVersion;
     }
@@ -159,15 +157,6 @@ public class PartitionCommitInfo implements Writable {
         this.versionEpoch = versionEpoch;
     }
 
-    public void setIsDoubleWrite(boolean isDoubleWrite) {
-        this.isDoubleWrite = isDoubleWrite;
-    }
-
-    public boolean isDoubleWrite() {
-        return isDoubleWrite;
-    }
-
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
     public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }

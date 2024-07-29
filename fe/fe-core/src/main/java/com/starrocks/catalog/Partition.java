@@ -593,14 +593,8 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
             }
         }
 
-<<<<<<< HEAD
         buffer.append("committedVersion: ").append(visibleVersion).append("; ");
         buffer.append("committedVersionHash: ").append(0).append("; ");
-=======
-        buffer.append("visibleVersion: ").append(visibleVersion).append("; ");
-        buffer.append("committedVersion: ").append(getCommittedVersion()).append("; ");
-        buffer.append("nextVersion: ").append(nextVersion).append("; ");
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
 
         buffer.append("dataVersion: ").append(dataVersion).append("; ");
         buffer.append("committedDataVersion: ").append(getCommittedDataVersion()).append("; ");
