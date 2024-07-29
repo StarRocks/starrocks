@@ -89,7 +89,7 @@ Currently, column comments cannot be modified.
 
 ### Modify partition
 
-#### Add a partition
+#### ADD PARTITION(S)
 
 You can choose to add range partitions or list partitions.
 
@@ -183,9 +183,9 @@ Examples:
     );
     ```
 
-#### Drop a partition
+#### DROP PARTITION(S)
 
-Syntax:
+- Drop a single partition:
 
 ```sql
 -- Before 2.0
@@ -196,11 +196,26 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 ```
 
-Note:
+- Drop partitions in batch (Supported from v3.3.1):
 
-1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
-3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally, this operation is not recommended.
+```sql
+-- Drop partitions by names.
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [IF EXISTS] (<partition_name>, ...) [FORCE]
+-- Drop partitions by time range.
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [IF EXISTS] START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> ) [FORCE]
+```
+
+For parameters involved, refer to [Add a partition](#add-partitions).
+
+:::note
+
+- Keep at least one partition for partitioned tables.
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
+
+:::
 
 #### Add a temporary partition
 
