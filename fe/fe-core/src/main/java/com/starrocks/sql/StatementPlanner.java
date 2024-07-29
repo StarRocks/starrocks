@@ -41,6 +41,8 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.InsertAnalyzer;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -111,13 +113,9 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         try (ConnectContext.ScopeGuard guard = session.bindScope()) {
-            try (Timer ignored = Tracers.watchScope("Lock")) {
-                lock(dbs);
-            }
-            try (Timer ignored = Tracers.watchScope("Analyzer")) {
-                Analyzer.analyze(stmt, session);
-            }
+            analyzeStatement(stmt, session, dbs);
 
+            // Authorization check
             Authorizer.check(stmt, session);
             if (stmt instanceof QueryStatement) {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
@@ -160,6 +158,40 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    /**
+     * Analyze the statement.
+     * 1. Optimization for INSERT-SELECT: if the SELECT doesn't need the lock, we can defer the lock acquisition
+     * after analyzing the SELECT. That can help the case which SELECT is a time-consuming external table access.
+     */
+    private static void analyzeStatement(StatementBase statement, ConnectContext session,
+                                         Map<String, Database> lockDatabases) {
+        boolean deferredLock = false;
+        Runnable takeLock = () -> {
+            try (Timer lockerTime = Tracers.watchScope("Lock")) {
+                lock(lockDatabases);
+            }
+        };
+        try (Timer ignored = Tracers.watchScope("Analyzer")) {
+            if (statement instanceof InsertStmt) {
+                InsertStmt insertStmt = (InsertStmt) statement;
+                Map<Long, Database> dbs = Maps.newHashMap();
+                Map<Long, Set<Long>> tables = Maps.newHashMap();
+                PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
+
+                if (tables.isEmpty()) {
+                    deferredLock = true;
+                }
+            }
+
+            if (deferredLock) {
+                InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+            } else {
+                takeLock.run();
+                Analyzer.analyze(statement, session);
+            }
+        }
     }
 
     public static ExecPlan planInsertStmt(Map<String, Database> dbs,
