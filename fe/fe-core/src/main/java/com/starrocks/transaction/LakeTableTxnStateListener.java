@@ -29,12 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
-<<<<<<< HEAD
 import com.starrocks.proto.TxnTypePB;
-import com.starrocks.replication.ReplicationTxnCommitAttachment;
-=======
-import com.starrocks.proto.TxnInfoPB;
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -216,7 +211,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTransactionType().toProto());
         List<ComputeNode> nodes = getAllAliveNodes();
         for (ComputeNode node : nodes) { // Send abortTxn() request to all nodes
             AbortTxnRequest request = new AbortTxnRequest();
@@ -231,7 +226,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnWithCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTransactionType().toProto());
         Map<Long, List<Long>> tabletGroup = new HashMap<>();
         for (TabletCommitInfo info : txnState.getTabletCommitInfos()) {
             tabletGroup.computeIfAbsent(info.getBackendId(), k -> Lists.newArrayList()).add(info.getTabletId());

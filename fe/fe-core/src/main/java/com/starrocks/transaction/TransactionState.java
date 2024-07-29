@@ -869,12 +869,7 @@ public class TransactionState implements Writable {
                     createTime,
                     this,
                     Config.enable_sync_publish,
-<<<<<<< HEAD
-                    this.getTxnType());
-=======
-                    this.getTransactionType(),
-                    isVersionOverwrite());
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
+                    this.getTransactionType());
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

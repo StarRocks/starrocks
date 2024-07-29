@@ -279,18 +279,6 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             isFirstPartition = false;
         }
 
-<<<<<<< HEAD
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
-                    .getTxnCommitAttachment();
-            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
-            }
-        }
-
-=======
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
 
         // add publish version tasks. set task to null as a placeholder.

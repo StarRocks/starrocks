@@ -90,8 +90,6 @@ public class DatabaseTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
-<<<<<<< HEAD
-=======
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
@@ -100,7 +98,6 @@ public class DatabaseTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
->>>>>>> 656a47cbcc ([Enhancement] Introduce dataVersion, versionEpoch and versionTxnType to partition (#46507))
             }
         };
     }
