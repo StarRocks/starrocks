@@ -67,6 +67,8 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -88,11 +90,14 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -123,7 +128,7 @@ public class SystemInfoService implements GsonPostProcessable {
         nodeSelector = new NodeSelector(this);
     }
 
-    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs, String location)
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -131,7 +136,9 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addComputeNode(pair.first, pair.second);
+            Map<String, String> loc = new HashMap<>();
+            loc.put(location.split(":")[0], location.split(":")[1]);
+            addComputeNode(pair.first, pair.second, loc);
         }
     }
 
@@ -163,8 +170,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) {
+    private void addComputeNode(String host, int heartbeatPort, Map<String, String> location) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        newComputeNode.setLocation(location);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
 
@@ -930,12 +938,92 @@ public class SystemInfoService implements GsonPostProcessable {
         return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
+    public Set<String> getLabelsLocation() {
+        String user = null;
+        try {
+            user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        } catch (Exception e) {
+            if (user == null) {
+                //heartbeat
+                return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
+            } else {
+                LOG.info("fail to get user info, msg: {}", e.getMessage());
+            }
+        }
+        Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
+        return locations;
+    }
+
     public ImmutableMap<Long, Backend> getIdToBackend() {
-        return ImmutableMap.copyOf(idToBackendRef);
+        if (RunMode.isSharedDataMode()) {
+            return ImmutableMap.copyOf(idToBackendRef);
+        }
+
+        Set<String> locations = getLabelsLocation();
+        ImmutableMap<Long, Backend> backends = getIdToBackend(locations);
+        return backends;
+    }
+
+    public ImmutableMap<Long, Backend> getIdToBackend(Set<String> locations) {
+        Map<Long, Backend> backends = new HashMap<>();
+        for (String location : locations) {
+            ImmutableMap<Long, Backend> labelToBackends = getIdToBackend(location);
+            backends.putAll(labelToBackends);
+        }
+        return ImmutableMap.copyOf(backends);
+    }
+
+    public ImmutableMap<Long, Backend> getIdToBackend(String location) {
+        if (location.equals(SessionVariable.GLOBAL_LABELS_LOCATION)) {
+            return ImmutableMap.copyOf(idToBackendRef);
+        }
+        Map<Long, Backend> backends = new HashMap<>();
+        for (Long id : idToBackendRef.keySet()) {
+            for (Map.Entry<String, String> entry :
+                    idToBackendRef.get(id).getLocation().entrySet()) {
+                String backendLocation = entry.getKey() + ":" + entry.getValue();
+                if (backendLocation.equals(location)) {
+                    backends.put(id, idToBackendRef.get(id));
+                }
+            }
+        }
+        return backends == null ? ImmutableMap.of() : ImmutableMap.copyOf(backends);
     }
 
     public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-        return ImmutableMap.copyOf(idToComputeNodeRef);
+        if (RunMode.isSharedDataMode()) {
+            return ImmutableMap.copyOf(idToComputeNodeRef);
+        }
+
+        Set<String> locations = getLabelsLocation();
+        ImmutableMap<Long, ComputeNode> computeNodes = getIdComputeNode(locations);
+        return computeNodes;
+    }
+
+    public ImmutableMap<Long, ComputeNode> getIdComputeNode(Set<String> locations) {
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+        for (String location : locations) {
+            ImmutableMap<Long, ComputeNode> labelToComputeNodes = getIdComputeNode(location);
+            computeNodes.putAll(labelToComputeNodes);
+        }
+        return ImmutableMap.copyOf(computeNodes);
+    }
+
+    public ImmutableMap<Long, ComputeNode> getIdComputeNode(String location) {
+        if (location.equals(SessionVariable.GLOBAL_LABELS_LOCATION)) {
+            return ImmutableMap.copyOf(idToComputeNodeRef);
+        }
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+        for (Long id : idToComputeNodeRef.keySet()) {
+            for (Map.Entry<String, String> entry :
+                    idToComputeNodeRef.get(id).getLocation().entrySet()) {
+                String computeNodeLocation = entry.getKey() + ":" + entry.getValue();
+                if (computeNodeLocation.equals(location)) {
+                    computeNodes.put(id, idToComputeNodeRef.get(id));
+                }
+            }
+        }
+        return computeNodes == null ? ImmutableMap.of() : ImmutableMap.copyOf(computeNodes);
     }
 
     public long getBackendReportVersion(long backendId) {

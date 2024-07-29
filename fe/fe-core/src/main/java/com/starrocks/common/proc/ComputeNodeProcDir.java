@@ -21,6 +21,7 @@ import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
@@ -51,7 +52,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
                 .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
-                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
+                .add("DataCacheMetrics").add("HasStoragePath").add("Location").add("StatusCode");
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
@@ -167,6 +168,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             }
 
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            computeNodeInfo.add(PropertyAnalyzer.convertLocationMapToString(computeNode.getLocation()));
             computeNodeInfo.add(computeNode.getStatus().name());
 
             if (RunMode.isSharedDataMode()) {

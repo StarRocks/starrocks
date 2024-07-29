@@ -15,19 +15,27 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public class UserProperty {
     @SerializedName(value = "m")
     private long maxConn = 1024;
+    @SerializedName("l")
+    private Set<String> labelsLocation = Sets.newHashSet(Arrays.asList(SessionVariable.DEFAULT_USER_LABELS_LOCATION));
 
     private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
+    private static final String PROP_LABELS_LOCATION = "labels.location";
 
     public long getMaxConn() {
         return maxConn;
@@ -37,9 +45,18 @@ public class UserProperty {
         this.maxConn = maxConn;
     }
 
+    public void setLabelsLocation(Set<String> labelsLocation) {
+        this.labelsLocation = labelsLocation;
+    }
+
+    public Set<String> getLabelsLocation() {
+        return labelsLocation;
+    }
+
     public void update(List<Pair<String, String>> properties) throws DdlException {
         // copy
         long newMaxConn = maxConn;
+        Set<String> newLabelsLocation = labelsLocation;
 
         // update
         for (Pair<String, String> entry : properties) {
@@ -69,6 +86,17 @@ public class UserProperty {
                                     " is not valid, the value must be less than qe_max_connection("
                                     + Config.qe_max_connection + ")");
                 }
+            } else if (key.equalsIgnoreCase(PROP_LABELS_LOCATION)) {
+                if (keyArr.length != 2) {
+                    throw new DdlException(PROP_LABELS_LOCATION + " format error");
+                }
+                //allowed format : "a:b" "a:b,c:d"
+                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)(?:,\\s*([a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*))*";
+                if (!Pattern.compile(regex).matcher(value).matches()) {
+                    throw new DdlException("invalid location format: " + value +
+                            ", should be like: 'key:val' or 'key1:val1,key2:val2'");
+                }
+                newLabelsLocation = Sets.newHashSet(Arrays.asList(value.split(",")));
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -76,5 +104,6 @@ public class UserProperty {
 
         // set
         maxConn = newMaxConn;
+        labelsLocation = newLabelsLocation;
     }
 }

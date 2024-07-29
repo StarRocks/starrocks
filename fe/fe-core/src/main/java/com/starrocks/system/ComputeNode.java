@@ -121,6 +121,9 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
 
+    @SerializedName("location")
+    private Map<String, String> location;
+
     // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
     @SerializedName("status")
     private Status status;
@@ -163,6 +166,7 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = Backend.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.location = new HashMap<>();
         this.status = Status.CONNECTING;
     }
 
@@ -182,6 +186,7 @@ public class ComputeNode implements IComputable, Writable {
 
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.location = location;
         this.status = Status.CONNECTING;
     }
 
@@ -282,6 +287,14 @@ public class ComputeNode implements IComputable, Writable {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public Map<String, String> getLocation() {
+        return location;
+    }
+
+    public void setLocation(Map<String, String> location) {
+        this.location = location;
     }
 
     // For TEST ONLY

@@ -47,9 +47,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -75,6 +77,7 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -291,7 +294,12 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddComputeNodeClause(AddComputeNodeClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(clause.getHostPortPairs());
+                String location = clause.getProperties().get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                if (StringUtils.isBlank(location)) {
+                    location = SessionVariable.DEFAULT_NODE_LABELS_LOCATION;
+                }
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(
+                        clause.getHostPortPairs(), location);
             });
             return null;
         }

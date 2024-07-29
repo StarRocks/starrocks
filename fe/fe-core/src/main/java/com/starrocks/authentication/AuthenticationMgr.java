@@ -191,6 +191,15 @@ public class AuthenticationMgr {
         }
     }
 
+    public Set<String> getLabelsLocation(String userName) {
+        UserProperty userProperty = userNameToProperty.get(userName);
+        if (userProperty == null) {
+            throw new SemanticException("Unknown user: " + userName);
+        } else {
+            return userNameToProperty.get(userName).getLabelsLocation();
+        }
+    }
+
     public String getDefaultPlugin() {
         return DEFAULT_PLUGIN;
     }

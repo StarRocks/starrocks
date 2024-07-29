@@ -21,16 +21,25 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class ComputeNodeClause extends AlterClause {
 
     protected List<String> hostPorts;
     private final List<Pair<String, Integer>> hostPortPairs;
+    protected Map<String, String> properties;
 
     public ComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(AlterOpType.ALTER_OTHER, pos);
         this.hostPorts = hostPorts;
         this.hostPortPairs = new LinkedList<>();
+    }
+
+    public ComputeNodeClause(List<String> hostPorts, NodePosition pos, Map<String, String> properties) {
+        super(AlterOpType.ALTER_OTHER, pos);
+        this.hostPorts = hostPorts;
+        this.hostPortPairs = new LinkedList<>();
+        this.properties = properties;
     }
 
     public List<Pair<String, Integer>> getHostPortPairs() {
@@ -39,6 +48,11 @@ public class ComputeNodeClause extends AlterClause {
 
     public List<String> getHostPorts() {
         return hostPorts;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

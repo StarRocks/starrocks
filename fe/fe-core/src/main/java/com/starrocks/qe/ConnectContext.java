@@ -217,6 +217,8 @@ public class ConnectContext {
 
     protected TWorkGroup resourceGroup;
 
+    private Set<String> labelsLocation = Sets.newHashSet();
+
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
 
@@ -554,6 +556,14 @@ public class ConnectContext {
 
     public void setDatabase(String db) {
         currentDb = db;
+    }
+
+    public Set<String> getLabelsLocation() {
+        return labelsLocation;
+    }
+
+    public void setLabelsLocation(Set<String> labelsLocation) {
+        this.labelsLocation = labelsLocation;
     }
 
     public void setExecutor(StmtExecutor executor) {
@@ -1073,6 +1083,7 @@ public class ConnectContext {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(labelsLocation.toString());
             // Command
             row.add(command.toString());
             // connection start Time

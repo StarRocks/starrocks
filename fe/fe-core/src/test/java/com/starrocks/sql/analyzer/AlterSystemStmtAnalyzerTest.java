@@ -192,4 +192,35 @@ public class AlterSystemStmtAnalyzerTest {
         Assert.assertEquals("{c=d}",
                 nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
     }
+
+    @Test
+    public void testAnalyzeAddComputeNodeProp() {
+        String[] testLocations = {"a", "a,b", "a:b", "A:b", "a_1", "a_1,b_1", "a_1:b_1", "A", "Ab", "a:b,c:d"};
+        Boolean[] analyzeSuccess = {false, false, true, false, false, false, true, false, false, false};
+        int i = 0;
+        for (String location : testLocations) {
+            //String stmtStr = "ALTER SYSTEM ADD COMPUTE NODE '127.0.0.1:9091' PROPERTIES ('" +
+            //        AlterSystemStmtAnalyzer.PROP_KEY_LOCATION.split(".")[0] + "' = '" + label + "')";
+            String stmtStr = "ALTER SYSTEM ADD COMPUTE NODE '127.0.0.1:9091' PROPERTIES ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + location + "')";
+            System.out.println(stmtStr);
+            try {
+                UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+                Assert.assertFalse(analyzeSuccess[i++]);
+                continue;
+            }
+
+            Assert.assertTrue(analyzeSuccess[i++]);
+        }
+        String stmtStr = "ALTER SYSTEM ADD COMPUTE NODE '127.0.0.1:9091' PROPERTIES ('invalid_prop_key' = 'a:b')";
+        System.out.println(stmtStr);
+        try {
+            UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid property: invalid_prop_key"));
+        }
+    }
 }

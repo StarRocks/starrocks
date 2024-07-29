@@ -104,6 +104,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The schedule policy of backend and compute nodes.
     // The optional values are "compute_nodes_only" and "all_nodes".
     public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
+    public static final String DEFAULT_NODE_LABELS_LOCATION = "rack:default";
+    public static final String DEFAULT_USER_LABELS_LOCATION = "rack:all";
+    public static final String GLOBAL_LABELS_LOCATION = "rack:all";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**

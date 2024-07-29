@@ -19,20 +19,28 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -209,6 +217,182 @@ public class DefaultWorkerProviderTest {
             for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
                         availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
+            }
+        }
+    }
+
+    @Test
+    public void testSelectNodeByLabel() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        UtFrameUtils.setUpForPersistTest();
+
+        Map<Long, ComputeNode> idToComputeNodeRef = new HashMap<>();
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+
+        Map<Long, ComputeNode> idToComputeNodeGroupA = new HashMap<>();
+        Map<Long, Backend> idToBackendGroupA = new HashMap<>();
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Set<String> getLabelsLocation() {
+                String user = null;
+                try {
+                    user = ConnectContext.get().getCurrentUserIdentity().getUser();
+                } catch (Exception e) {
+                    if (user == null) {
+                        //heartbeat
+                        return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
+                    } else {
+                        //LOG.info("fail to get user info, msg: {}", e.getMessage());
+                    }
+                }
+                Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
+                return locations;
+            }
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
+                Set<String> locations = getLabelsLocation();
+                ImmutableMap<Long, ComputeNode> computeNodes = getIdComputeNode(locations);
+                return computeNodes;
+            }
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdComputeNode(Set<String> locations) {
+                Map<Long, ComputeNode> computeNodes = new HashMap<>();
+                for (String location : locations) {
+                    ImmutableMap<Long, ComputeNode> labelToComputeNodes = getIdComputeNode(location);
+                    computeNodes.putAll(labelToComputeNodes);
+                }
+                return ImmutableMap.copyOf(computeNodes);
+            }
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdComputeNode(String location) {
+                if (location.equals(SessionVariable.GLOBAL_LABELS_LOCATION)) {
+                    return ImmutableMap.copyOf(idToComputeNodeRef);
+                }
+                Map<Long, ComputeNode> computeNodes = new HashMap<>();
+                for (Long id : idToComputeNodeRef.keySet()) {
+                    for (Map.Entry<String, String> entry :
+                            idToComputeNodeRef.get(id).getLocation().entrySet()) {
+                        String computeNodeLocation = entry.getKey() + ":" + entry.getValue();
+                        if (computeNodeLocation.equals(location)) {
+                            computeNodes.put(id, idToComputeNodeRef.get(id));
+                        }
+                    }
+                }
+                return computeNodes == null ? ImmutableMap.of() : ImmutableMap.copyOf(computeNodes);
+            }
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend() {
+                Set<String> locations = getLabelsLocation();
+                ImmutableMap<Long, Backend> backends = getIdToBackend(locations);
+                return backends;
+            }
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend(Set<String> locations) {
+                Map<Long, Backend> backends = new HashMap<>();
+                for (String location : locations) {
+                    ImmutableMap<Long, Backend> labelToBackends = getIdToBackend(location);
+                    backends.putAll(labelToBackends);
+                }
+                return ImmutableMap.copyOf(backends);
+            }
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend(String location) {
+                if (location.equals(SessionVariable.GLOBAL_LABELS_LOCATION)) {
+                    return ImmutableMap.copyOf(idToBackendRef);
+                }
+                Map<Long, Backend> backends = new HashMap<>();
+                for (Long id : idToBackendRef.keySet()) {
+                    for (Map.Entry<String, String> entry :
+                            idToBackendRef.get(id).getLocation().entrySet()) {
+                        String backendLocation = entry.getKey() + ":" + entry.getValue();
+                        if (backendLocation.equals(location)) {
+                            backends.put(id, idToBackendRef.get(id));
+                        }
+                    }
+                }
+                return backends == null ? ImmutableMap.of() : ImmutableMap.copyOf(backends);
+            }
+        };
+        //ComputeNode
+        for (long id = 10; id < 15; id++) {
+            String group = (id <= 12 ? "group_a" : "group_b");
+            id2ComputeNode.get(id).setLocation(new HashMap<String, String>() {{
+                    put("rack", group);
+                }});
+            idToComputeNodeRef.put(id, id2ComputeNode.get(id));
+            if (id <= 12) {
+                idToComputeNodeGroupA.put(id, id2ComputeNode.get(id));
+            }
+        }
+        //backend
+        for (long id = 0; id < 10; id++) {
+            String group = (id <= 4 ? "group_a" : "group_b");
+            ((Backend) id2Backend.get(id)).setLocation(new HashMap<String, String>() {{
+                    put("rack", group);
+                }});
+            idToBackendRef.put(id, (Backend) id2Backend.get(id));
+            if (id <= 4) {
+                idToBackendGroupA.put(id, (Backend) id2Backend.get(id));
+            }
+        }
+
+        String modifyUserPropSqlStr = "SET PROPERTY FOR 'root' '" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:group_a'";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyUserPropSqlStr, connectContext),
+                connectContext);
+
+        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+        DefaultWorkerProvider workerProvider;
+        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 3, 5, 8, 10);
+
+        // test ComputeNode only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            //System.out.println("test ComputeNode only the numUsedComputeNodes = " + numUsedComputeNodes);
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            //System.out.println("test ComputeNode only selectedWorkerId:" + selectedWorkerIdsList.toString());
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        idToComputeNodeGroupA.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            //System.out.println("test Backend only the numUsedComputeNodes = " + numUsedComputeNodes);
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            //System.out.println("test Backend only selectedWorkerId:" + selectedWorkerIdsList.toString());
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        idToBackendGroupA.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend and ComputeNode
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            //System.out.println("test Backend and ComputeNode the numUsedComputeNodes = " + numUsedComputeNodes);
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
+            //System.out.println("test Backend and ComputeNode selectedWorkerId:" + selectedWorkerIdsList.toString());
+            //test ComputeNode
+            for (int i = 0; i < idToComputeNodeGroupA.size() && i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        idToComputeNodeGroupA.containsKey(selectedWorkerIdsList.get(i)));
+            }
+            //test Backend
+            for (int i = idToBackendGroupA.size(); i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        idToBackendGroupA.containsKey(selectedWorkerIdsList.get(i)));
             }
         }
     }

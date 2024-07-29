@@ -346,6 +346,28 @@ public class AuthenticationManagerTest {
         masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
         Assert.assertEquals(555, masterManager.getMaxConn("test"));
 
+        String[] testLocations = {"a", "a,b", "a:b", "A:b", "a_1", "a_1,b_1", "a_1:b_1", "A", "Ab", "a:b,c:d"};
+        Boolean[] analyzeSuccess = {false, false, true, false, false, false, true, false, false, true};
+        int i = 0;
+        for (String location : testLocations) {
+            sql = "set property for 'test' 'labels.location' = '" + location + "'";
+            try {
+                setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+                String loc = "";
+                for (String l : masterManager.getLabelsLocation("test")) {
+                    loc = loc + l + ",";
+                }
+                Assert.assertEquals(location, loc.substring(0, loc.length() - 1));
+            } catch (Exception e) {
+                System.out.println(sql);
+                System.out.println(e.getMessage());
+                Assert.assertFalse(analyzeSuccess[i++]);
+                continue;
+            }
+            Assert.assertTrue(analyzeSuccess[i++]);
+        }
+
         // 4. save image after alter
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
         masterManager.saveV2(alterImage.getDataOutputStream());
