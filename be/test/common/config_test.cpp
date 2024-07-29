@@ -58,6 +58,7 @@ TEST_F(ConfigTest, test_init) {
     CONF_Strings(cfg_strings, "s1,s2,s3");
     CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
     CONF_Bool(cfg_bool_env, "false");
+    CONF_String_enum(cfg_string_enum, "true", "true,false");
     // Invalid config file name
     { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
     // Invalid bool value
@@ -88,6 +89,14 @@ TEST_F(ConfigTest, test_init) {
 
         EXPECT_FALSE(config::init(ss));
     }
+    // Invalid enum value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_string_enum = unknown
+           )DEL";
+        EXPECT_FALSE(config::init(ss));
+    }
 
     // Valid input
     {
@@ -111,6 +120,8 @@ TEST_F(ConfigTest, test_init) {
            cfg_strings = text1, hello world , StarRocks
            
            cfg_bool_env = ${ConfigTestEnv2}
+
+           cfg_string_enum = false
            )DEL";
 
         ASSERT_EQ(0, ::setenv("ConfigTestEnv1", "env1_value", 1));
@@ -137,6 +148,7 @@ TEST_F(ConfigTest, test_init) {
     EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
     EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
     EXPECT_EQ(true, cfg_bool_env);
+    EXPECT_EQ("false", cfg_string_enum);
 }
 
 TEST_F(ConfigTest, test_invalid_default_value) {

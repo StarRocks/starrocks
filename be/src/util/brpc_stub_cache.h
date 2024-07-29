@@ -64,6 +64,7 @@ public:
         // Explicitly set the max_retry
         // TODO(meegoo): The retry strategy can be customized in the future
         options.max_retry = 3;
+        options.connection_type = config::brpc_connection_type;
         std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
         if (channel->Init(endpoint, &options)) {
             return nullptr;
