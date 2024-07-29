@@ -1377,5 +1377,15 @@ CONF_mBool(enable_pk_strict_memcheck, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// Current supported modules:
+// 1. storage_page_cache
+// 2. connector_scan_executor
+// 3. non_pipeline_scan_thread_pool
+// 4. pipeline_prepare_thread_pool
+// 5. pipeline_sink_io_thread_pool
+// 6. query_rpc_thread_pool
+// use commas to separate:
+// * means release all above
+CONF_mString(try_release_resource_before_core_dump, "storage_page_cache")
 
 } // namespace starrocks::config
