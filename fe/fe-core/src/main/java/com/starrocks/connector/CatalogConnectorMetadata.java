@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -190,8 +191,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                                    long snapshotId, String serializedPredicate) {
-        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override

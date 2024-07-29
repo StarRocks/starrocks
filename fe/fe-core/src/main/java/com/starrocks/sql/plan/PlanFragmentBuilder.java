@@ -63,7 +63,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -1429,7 +1429,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
 
-            LogicalIcebergMetadataTable table = (LogicalIcebergMetadataTable) node.getTable();
+            MetadataTable table = (MetadataTable) node.getTable();
             context.getDescTbl().addReferencedTable(table);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(table);

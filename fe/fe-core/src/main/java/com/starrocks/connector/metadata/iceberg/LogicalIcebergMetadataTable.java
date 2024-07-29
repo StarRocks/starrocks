@@ -71,28 +71,21 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 MetadataTableType.LOGICAL_ICEBERG_METADATA);
     }
 
-    public List<Column> getPlaceHolderColumns() {
-        return PLACEHOLDER_COLUMNS;
-    }
-
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.LOGICAL_ICEBERG_METADATA_TABLE,
-                fullSchema.size() - PLACEHOLDER_COLUMNS.size(), 0, getName(), METADATA_DB_NAME);
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_REFS_TABLE,
+                fullSchema.size(), 0, getName(), METADATA_DB_NAME);
         THdfsTable hdfsTable = new THdfsTable();
-        List<Column> columns = fullSchema.stream()
-                .filter(c -> !PLACEHOLDER_COLUMNS.contains(c))
-                .collect(Collectors.toList());
 
-        hdfsTable.setColumns(columns.stream().map(Column::toThrift).collect(Collectors.toList()));
+        hdfsTable.setColumns(fullSchema.stream().map(Column::toThrift).collect(Collectors.toList()));
         hdfsTable.setPartition_columnsIsSet(false);
 
-        String columnNames = Joiner.on(',').join(columns.stream()
+        String columnNames = Joiner.on(',').join(fullSchema.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList()));
         hdfsTable.setHive_column_names(columnNames);
 
-        String columnTypes = Joiner.on(',').join(columns.stream()
+        String columnTypes = Joiner.on(',').join(fullSchema.stream()
                 .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
                 .collect(Collectors.toList()));
         hdfsTable.setHive_column_types(columnTypes);

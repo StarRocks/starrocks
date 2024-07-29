@@ -29,6 +29,15 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
     public LogicalIcebergMetadataScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      long limit,
+                                      ScalarOperator predicate) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
+
+
+    public LogicalIcebergMetadataScanOperator(Table table,
                                               Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                               Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                               long limit,

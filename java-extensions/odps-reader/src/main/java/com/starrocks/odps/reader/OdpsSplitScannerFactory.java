@@ -45,7 +45,7 @@ public class OdpsSplitScannerFactory implements ScannerFactory {
      * Copy from Hudi-reader, not test if this is essential
      */
     @Override
-    public Class getScannerClass() throws ClassNotFoundException {
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
         try {
             return classLoader.loadClass("com.starrocks.odps.reader.OdpsSplitScanner");
         } catch (ClassNotFoundException e) {

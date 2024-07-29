@@ -52,6 +52,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -1282,7 +1283,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        SerializedMetaSpec metaSpec = metadataMgr.getSerializedMetaSpec("catalog", "db", "tg", -1, null);
+        SerializedMetaSpec metaSpec = metadataMgr.getSerializedMetaSpec(
+                "catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA);
         Assert.assertTrue(metaSpec instanceof IcebergMetaSpec);
         IcebergMetaSpec icebergMetaSpec = metaSpec.cast();
         List<RemoteMetaSplit> splits = icebergMetaSpec.getSplits();
@@ -1321,7 +1323,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        SerializedMetaSpec metaSpec = metadataMgr.getSerializedMetaSpec("catalog", "db", "tg", -1, null);
+        SerializedMetaSpec metaSpec = metadataMgr.getSerializedMetaSpec(
+                "catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA);
         Assert.assertTrue(metaSpec instanceof IcebergMetaSpec);
         IcebergMetaSpec icebergMetaSpec = metaSpec.cast();
         Assert.assertFalse(icebergMetaSpec.loadColumnStats());

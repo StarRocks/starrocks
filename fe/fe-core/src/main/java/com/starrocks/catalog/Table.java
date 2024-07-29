@@ -302,6 +302,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG_VIEW;
     }
 
+    public boolean isMetadataTable() {
+        return type == TableType.METADATA;
+    }
+
     public boolean isAnalyzableExternalTable() {
         return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
     }

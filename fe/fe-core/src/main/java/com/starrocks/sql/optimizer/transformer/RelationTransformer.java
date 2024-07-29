@@ -608,7 +608,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.METADATA.equals(node.getTable().getType())) {
             MetadataTable metadataTable = (MetadataTable) node.getTable();
-            if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
+            MetadataTableType metadataTableType = metadataTable.getMetadataTableType();
+            if (metadataTableType == MetadataTableType.LOGICAL_ICEBERG_METADATA ||
+                    metadataTableType == MetadataTableType.REFS) {
                 scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
             } else {
