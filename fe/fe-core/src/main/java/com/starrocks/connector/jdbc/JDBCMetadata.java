@@ -107,11 +107,11 @@ public class JDBCMetadata implements ConnectorMetadata {
         return driverName;
     }
 
-    private String getJdbcUrl() {
+    String getJdbcUrl() {
         String jdbcUrl = properties.get(JDBCResource.URI);
         // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
-        if (jdbcUrl.contains("mysql")) {
-            jdbcUrl = jdbcUrl.replace("mysql", "mariadb");
+        if (jdbcUrl.startsWith("jdbc:mysql")) {
+            jdbcUrl = jdbcUrl.replaceFirst("jdbc:mysql", "jdbc:mariadb");
         }
         return jdbcUrl;
     }
