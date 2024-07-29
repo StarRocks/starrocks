@@ -46,7 +46,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(AsyncDeltaWriterImpl);
 
-    [[nodiscard]] Status open();
+    Status open();
 
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
@@ -66,7 +66,7 @@ public:
 
     [[nodiscard]] bool is_immutable() const { return _writer->is_immutable(); }
 
-    [[nodiscard]] Status check_immutable() { return _writer->check_immutable(); }
+    Status check_immutable() { return _writer->check_immutable(); }
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 

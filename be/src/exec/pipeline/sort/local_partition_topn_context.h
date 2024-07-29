@@ -51,13 +51,13 @@ public:
     [[nodiscard]] Status prepare(RuntimeState* state);
 
     // Add one chunk to partitioner
-    [[nodiscard]] Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
+    Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
 
     // Notify that there is no further input for partitiner
     void sink_complete();
 
     // Pull chunks form partitioner of each partition to correspondent sorter
-    [[nodiscard]] Status transfer_all_chunks_from_partitioner_to_sorters(RuntimeState* state);
+    Status transfer_all_chunks_from_partitioner_to_sorters(RuntimeState* state);
 
     // Return true if at least one of the sorters has remaining data
     bool has_output();
@@ -66,7 +66,7 @@ public:
     bool is_finished();
 
     // Pull one chunk from sorters or passthrough_buffer
-    [[nodiscard]] StatusOr<ChunkPtr> pull_one_chunk();
+    StatusOr<ChunkPtr> pull_one_chunk();
 
     bool is_passthrough() const { return _chunks_partitioner->is_passthrough(); }
 
@@ -75,7 +75,7 @@ public:
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
-    [[nodiscard]] StatusOr<ChunkPtr> pull_one_chunk_from_sorters();
+    StatusOr<ChunkPtr> pull_one_chunk_from_sorters();
 
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
@@ -113,7 +113,7 @@ public:
                                      const std::vector<OrderByType>& order_by_types,
                                      const std::vector<RuntimeFilterBuildDescriptor*>& rfs);
 
-    [[nodiscard]] Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state);
     LocalPartitionTopnContext* create(int32_t driver_sequence);
 
 private:

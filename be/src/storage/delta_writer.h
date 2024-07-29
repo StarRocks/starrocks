@@ -92,24 +92,24 @@ public:
     DISALLOW_COPY(DeltaWriter);
 
     // [NOT thread-safe]
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // [thread-safe]
-    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+    Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.
     // [NOT thread-safe]
-    [[nodiscard]] Status close();
+    Status close();
 
     void cancel(const Status& st);
 
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
-    [[nodiscard]] Status commit();
+    Status commit();
 
-    [[nodiscard]] Status flush_memtable_async(bool eos = false);
+    Status flush_memtable_async(bool eos = false);
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]

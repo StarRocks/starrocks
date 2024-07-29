@@ -55,7 +55,7 @@ public:
 
     // Call this to do some preparation for decoder.
     // eg: parse data page header
-    [[nodiscard]] virtual Status init() = 0;
+    virtual Status init() = 0;
 
     // Seek the decoder to the given positional index of the page.
     // For example, seek_to_position_in_page(0) seeks to the first
@@ -63,7 +63,7 @@ public:
     //
     // It is an error to call this with a value larger than Count().
     // Doing so has undefined results.
-    [[nodiscard]] virtual Status seek_to_position_in_page(uint32_t pos) = 0;
+    virtual Status seek_to_position_in_page(uint32_t pos) = 0;
 
     // Seek the decoder to the given value in the page, or the
     // lowest value which is greater than the given value.
@@ -79,15 +79,15 @@ public:
     //
     // This will only return valid results when the data page
     // consists of values in sorted order.
-    [[nodiscard]] virtual Status seek_at_or_after_value(const void* value, bool* exact_match) {
+    virtual Status seek_at_or_after_value(const void* value, bool* exact_match) {
         return Status::NotSupported("seek_at_or_after_value"); // FIXME
     }
 
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* column) {
+    virtual Status next_batch(size_t* n, Column* column) {
         return Status::NotSupported("vectorized not supported yet");
     }
 
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* column) {
+    virtual Status next_batch(const SparseRange<>& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
     }
 
@@ -104,11 +104,11 @@ public:
     // the codec algorithm then switched to plain encoding when the dictionary page is full.
     virtual EncodingTypePB encoding_type() const = 0;
 
-    [[nodiscard]] virtual Status next_dict_codes(size_t* n, Column* dst) {
+    virtual Status next_dict_codes(size_t* n, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
-    [[nodiscard]] virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 

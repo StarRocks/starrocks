@@ -141,7 +141,7 @@ class PlainPageDecoder : public PageDecoder {
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
 
         if (_data.size < PLAIN_PAGE_HEADER_SIZE) {
@@ -166,7 +166,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         CHECK(_parsed) << "Must call init()";
 
         if (PREDICT_FALSE(_num_elems == 0)) {
@@ -180,7 +180,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elems == 0) {
@@ -218,7 +218,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* count, Column* dst) override {
+    Status next_batch(size_t* count, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *count));
@@ -227,7 +227,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();

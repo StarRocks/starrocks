@@ -27,12 +27,12 @@ public:
 
     bool probe_chunk_empty() const { return _probe_chunk == nullptr; }
 
-    [[nodiscard]] Status push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk);
 
     // probe hash table
-    [[nodiscard]] StatusOr<ChunkPtr> probe_chunk(RuntimeState* state, JoinHashTable* hash_table);
+    StatusOr<ChunkPtr> probe_chunk(RuntimeState* state, JoinHashTable* hash_table);
 
-    [[nodiscard]] StatusOr<ChunkPtr> probe_remain(RuntimeState* state, JoinHashTable* hash_table, bool* has_remain);
+    StatusOr<ChunkPtr> probe_remain(RuntimeState* state, JoinHashTable* hash_table, bool* has_remain);
 
     void reset();
 

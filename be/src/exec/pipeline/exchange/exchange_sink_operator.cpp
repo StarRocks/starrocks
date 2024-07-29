@@ -73,8 +73,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    [[nodiscard]] Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                                            const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.

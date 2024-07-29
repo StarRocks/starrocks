@@ -152,16 +152,16 @@ public:
 
     // Use it as iterator
     // Return nullptr if no output
-    [[nodiscard]] StatusOr<ChunkUniquePtr> next();
+    StatusOr<ChunkUniquePtr> next();
 
-    [[nodiscard]] Status consume_all(const ChunkConsumer& output);
+    Status consume_all(const ChunkConsumer& output);
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
 
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
-    [[nodiscard]] StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
     // merge two runs
-    [[nodiscard]] StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
+    StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
 
     bool move_cursor();
 
@@ -184,12 +184,11 @@ public:
     MergeCursorsCascade() = default;
     ~MergeCursorsCascade() = default;
 
-    [[nodiscard]] Status init(const SortDescs& sort_desc,
-                              std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
+    Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
     bool is_data_ready();
     bool is_eos();
     ChunkUniquePtr try_get_next();
-    [[nodiscard]] Status consume_all(const ChunkConsumer& consumer);
+    Status consume_all(const ChunkConsumer& consumer);
 
 private:
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
@@ -200,16 +199,16 @@ class SimpleChunkSortCursor;
 
 // Merge implementations
 // Underlying algorithm is multi-level cascade-merge, which could be streaming and short-circuit
-[[nodiscard]] Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left,
-                                                 const SortedRun& right, Permutation* output);
-[[nodiscard]] Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                                         std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
-[[nodiscard]] Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
-                                                 std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                                 const ChunkConsumer& consumer);
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
+                                   Permutation* output);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                   const ChunkConsumer& consumer);
 
 // Merge in rowwise, which is slow and used only in benchmark
-[[nodiscard]] Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left,
-                                                         const Columns& right, Permutation* output, size_t limit);
+Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,
+                                           Permutation* output, size_t limit);
 
 } // namespace starrocks

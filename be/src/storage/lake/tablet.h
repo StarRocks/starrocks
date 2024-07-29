@@ -58,21 +58,21 @@ public:
 
     [[nodiscard]] std::string root_location() const;
 
-    [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
+    Status put_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
+    Status put_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    [[nodiscard]] Status delete_metadata(int64_t version);
+    Status delete_metadata(int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_slog(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
@@ -115,7 +115,7 @@ public:
 
     [[nodiscard]] std::string sst_location(std::string_view sst_name) const;
 
-    [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 

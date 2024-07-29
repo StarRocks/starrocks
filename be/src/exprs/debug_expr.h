@@ -14,7 +14,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DebugExpr(*this)); }
 
-    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 

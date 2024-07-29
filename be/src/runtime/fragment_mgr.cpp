@@ -94,14 +94,14 @@ public:
 
     ~FragmentExecState();
 
-    [[nodiscard]] Status prepare(const TExecPlanFragmentParams& params);
+    Status prepare(const TExecPlanFragmentParams& params);
 
     // just no use now
     void callback(const Status& status, RuntimeProfile* profile, bool done);
 
     std::string to_http_path(const std::string& file_name);
 
-    [[nodiscard]] Status execute();
+    Status execute();
 
     void cancel(const PPlanFragmentCancelReason& reason);
 
@@ -120,7 +120,7 @@ public:
     int backend_num() const { return _backend_num; }
 
     // Update status of this fragment execute
-    [[nodiscard]] Status update_status(const Status& status) {
+    Status update_status(const Status& status) {
         std::lock_guard<std::mutex> l(_status_lock);
         if (!status.ok() && _exec_status.ok()) {
             _exec_status = status;

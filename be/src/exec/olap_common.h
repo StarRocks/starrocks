@@ -73,9 +73,9 @@ public:
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
 
-    [[nodiscard]] Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
+    Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 
-    [[nodiscard]] Status add_range(SQLFilterOp op, T value);
+    Status add_range(SQLFilterOp op, T value);
 
     void set_precision(int precision);
 
@@ -156,9 +156,9 @@ public:
     OlapScanKeys() = default;
 
     template <class T>
-    [[nodiscard]] Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
+    Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
 
-    [[nodiscard]] Status get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range);
+    Status get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range);
 
     bool has_range_value() const { return _has_range_value; }
 

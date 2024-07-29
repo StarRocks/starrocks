@@ -31,44 +31,43 @@ public:
 
     ~ArrayColumnIterator() override = default;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    Status init(const ColumnIteratorOptions& opts) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override { return _array_size_iterator->get_current_ordinal(); }
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     // for support array<string>
     bool all_page_dict_encoded() const override;
 
-    [[nodiscard]] Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
     int dict_size() override { return _element_iterator->dict_size(); }
 
     ColumnReader* get_column_reader() override { return _reader; }
 
 private:
-    [[nodiscard]] Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls,
-                                                 size_t* element_rows);
-    [[nodiscard]] Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,
-                                                 SparseRange<>* element_range, size_t* element_rows);
+    Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls, size_t* element_rows);
+    Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,
+                                   SparseRange<>* element_range, size_t* element_rows);
 
 private:
     ColumnReader* _reader;
