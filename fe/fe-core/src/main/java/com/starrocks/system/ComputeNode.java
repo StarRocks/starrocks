@@ -28,6 +28,7 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -290,6 +291,9 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public Map<String, String> getLocation() {
+        if (location.isEmpty()) {
+            return SessionVariable.DEFAULT_NODE_LABELS_LOCATION;
+        }
         return location;
     }
 
