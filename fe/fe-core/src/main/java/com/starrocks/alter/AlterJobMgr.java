@@ -102,18 +102,13 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
-import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -134,8 +129,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class AlterJobMgr {
@@ -148,8 +141,7 @@ public class AlterJobMgr {
 
     public AlterJobMgr(SchemaChangeHandler schemaChangeHandler,
                        MaterializedViewHandler materializedViewHandler,
-                       SystemHandler systemHandler,
-                       CompactionHandler compactionHandler) {
+                       SystemHandler systemHandler) {
         this.schemaChangeHandler = schemaChangeHandler;
         this.materializedViewHandler = materializedViewHandler;
         this.clusterHandler = systemHandler;
@@ -550,13 +542,7 @@ public class AlterJobMgr {
             } else if (stmt.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);
                 isSynchronous = false;
-            } else if (stmt.contains(AlterOpType.RENAME)) {
-                processRename(db, olapTable, alterClauses);
-            } else if (stmt.contains(AlterOpType.ALTER_COMMENT)) {
-                processAlterComment(db, olapTable, alterClauses);
             } else if (stmt.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
-                needProcessOutsideDatabaseLock = true;
-            } else if (stmt.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
             } else {
                 throw new DdlException("Invalid alter operations: " + stmt.getAlterClauseList());
@@ -712,46 +698,6 @@ public class AlterJobMgr {
 
     public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
         return clusterHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
-    }
-
-    private void processAlterComment(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
-        for (AlterClause alterClause : alterClauses) {
-            if (alterClause instanceof AlterTableCommentClause) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .alterTableComment(db, table, (AlterTableCommentClause) alterClause);
-                break;
-            } else {
-                throw new DdlException("Unsupported alter table clause " + alterClause);
-            }
-        }
-    }
-
-    private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
-        for (AlterClause alterClause : alterClauses) {
-            if (alterClause instanceof TableRenameClause) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, (TableRenameClause) alterClause);
-                break;
-            } else if (alterClause instanceof RollupRenameClause) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, table, (RollupRenameClause) alterClause);
-                break;
-            } else if (alterClause instanceof PartitionRenameClause) {
-                PartitionRenameClause partitionRenameClause = (PartitionRenameClause) alterClause;
-                if (partitionRenameClause.getPartitionName()
-                        .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                    throw new DdlException("Rename of shadow partitions is not allowed");
-                }
-                GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, partitionRenameClause);
-                break;
-            } else if (alterClause instanceof ColumnRenameClause) {
-                Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                modifiedColumns.add(((ColumnRenameClause) alterClause).getColName());
-                schemaChangeHandler.checkModifiedColumWithMaterializedViews(table, modifiedColumns);
-                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
-                break;
-            } else {
-                Preconditions.checkState(false);
-            }
-        }
     }
 
     /**
