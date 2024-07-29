@@ -149,6 +149,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     init_block_cache();
     LOG(INFO) << "BE start step " << start_step++ << ": block cache init successfully";
 
+    // set up thrift client before providing any service to the external
+    // because these services may use thrift client, for example, stream
+    // load will send thrift rpc to FE after http server is started
+    ThriftRpcHelper::setup(exec_env);
+
     // Start thrift server
     auto thrift_server = BackendService::create<BackendService>(exec_env, config::be_port);
     if (auto status = thrift_server->start(); !status.ok()) {
@@ -202,7 +207,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    ThriftRpcHelper::setup(exec_env);
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
