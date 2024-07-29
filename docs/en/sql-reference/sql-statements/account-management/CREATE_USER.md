@@ -15,7 +15,7 @@ Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a 
 ### Syntax
 
 ```SQL
-CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
+CREATE USER [IF NOT EXISTS] <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
 ```
 
 ## Parameters
