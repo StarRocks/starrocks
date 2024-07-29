@@ -1611,6 +1611,7 @@ public class GlobalStateMgr {
                         SRMetaBlockReader reader = new SRMetaBlockReader(dis);
                         SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
 
+<<<<<<< HEAD
                         try {
                             SRMetaBlockLoader imageLoader = loadImages.get(srMetaBlockID);
                             if (imageLoader == null) {
@@ -1650,6 +1651,23 @@ public class GlobalStateMgr {
                 } catch (SRMetaBlockException e) {
                     LOG.error("load meta block failed ", e);
                     throw new IOException("load meta block failed ", e);
+=======
+                    imageLoader.apply(reader);
+                    metaMgrMustExists.remove(srMetaBlockID);
+                    LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
+                } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                    /*
+                     * The number of json expected to be read is more than the number of json actually stored in the image
+                     */
+                    metaMgrMustExists.remove(srMetaBlockID);
+                    LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                } catch (Throwable t) {
+                    LOG.warn("load meta block {} failed", srMetaBlockID, t);
+                    // throw the exception again, because the following steps will depend on this error.
+                    throw t;
+                } finally {
+                    reader.close();
+>>>>>>> 1778bcab2e ([Enhancement] Optimize Checkpoint log (#48357))
                 }
 
             } else {
