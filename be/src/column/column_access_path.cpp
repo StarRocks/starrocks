@@ -31,6 +31,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -193,22 +194,23 @@ StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TColu
 }
 
 StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TAccessPathType::type& type,
-                                                                     const std::string& path, uint32_t index) {
+                                                                     const std::string& path, uint32_t index,
+                                                                     const std::string& prefix) {
     auto p = std::make_unique<ColumnAccessPath>();
     p->_type = type;
     p->_path = path;
     p->_column_index = index;
-    p->_absolute_path = path;
+    if (prefix != "") {
+        p->_absolute_path = prefix + "." + path;
+    } else {
+        p->_absolute_path = path;
+    }
     p->_value_type = TypeDescriptor(LogicalType::TYPE_JSON);
     p->_children.clear();
     return std::move(p);
 }
 
-ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPath* root) {
-    if (path.empty()) {
-        return root;
-    }
-
+std::pair<std::string, std::string> _split_path(const std::string& path) {
     size_t pos = 0;
     if (path.starts_with("\"")) {
         pos = path.find('\"', 1);
@@ -224,9 +226,18 @@ ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPat
         next = path.substr(pos + 1);
     }
 
+    return {key, next};
+}
+
+ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPath* root) {
+    if (path.empty()) {
+        return root;
+    }
+
+    auto [key, next] = _split_path(path);
     auto child = root->get_child(key);
     if (child == nullptr) {
-        auto n = ColumnAccessPath::create(TAccessPathType::FIELD, key, 0);
+        auto n = ColumnAccessPath::create(TAccessPathType::FIELD, key, 0, root->absolute_path());
         DCHECK(n.ok());
         root->children().emplace_back(std::move(n.value()));
         child = root->children().back().get();

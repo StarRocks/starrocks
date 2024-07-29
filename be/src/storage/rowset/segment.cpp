@@ -39,11 +39,15 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include <memory>
+#include <string>
 
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "fs/key_cache.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -57,6 +61,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 #include "storage/utils.h"
+#include "types/logical_type.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -525,6 +530,27 @@ StatusOr<int64_t> Segment::get_data_size() const {
         return _segment_file_info.size.value();
     }
     return _fs->get_file_size(_segment_file_info.path);
+}
+
+Status Segment::get_all_flat_jsons(std::vector<std::unique_ptr<ColumnAccessPath>>* paths) const {
+    for (size_t i = 0; i < num_columns(); i++) {
+        auto col = _tablet_schema->column(i);
+        auto reader = column(i);
+        if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON && !reader->sub_readers()->empty()) {
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
+
+            int start = reader->is_nullable() ? 1 : 0;
+            int end = reader->sub_readers()->size();
+            end = reader->has_remain_json() ? end - 1 : end;
+
+            auto sub_readers = reader->sub_readers();
+            for (size_t k = start; k < end; k++) {
+                ColumnAccessPath::insert_json_path(res.get(), (*sub_readers)[k]->column_type(),
+                                                   (*sub_readers)[k]->name());
+            }
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/types.h"
+#include "storage/tablet_schema.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -46,11 +47,10 @@ public:
     Status init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
                 ObjectPool* pool);
 
-    // for test
     static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
-                                                              const std::string& path, uint32_t index);
+                                                              const std::string& path, uint32_t index,
+                                                              const std::string& prefix = "");
     static void insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path);
-    // end test
 
     const std::string& path() const { return _path; }
 
@@ -59,6 +59,10 @@ public:
     const std::vector<std::unique_ptr<ColumnAccessPath>>& children() const { return _children; }
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
+
+    void set_from_compaction(bool from_compaction) { _from_compaction = from_compaction; }
+
+    bool is_from_compaction() const { return _from_compaction; }
 
     bool is_key() const { return _type == TAccessPathType::type::KEY; }
 
@@ -104,6 +108,8 @@ private:
     uint32_t _column_index;
 
     bool _from_predicate;
+
+    bool _from_compaction = false;
 
     // the data type of the subfield
     TypeDescriptor _value_type;

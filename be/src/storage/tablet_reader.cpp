@@ -127,6 +127,25 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         _reader_params = &read_params;
         return Status::OK();
     }
+
+    if (read_params.is_compaction && read_params.column_access_paths != nullptr &&
+        !read_params.column_access_paths->empty()) {
+        // init compaction flat json paths
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->segments()) {
+                // only get one segment's paths
+                if (segment->get_all_flat_jsons(read_params.column_access_paths).ok()) {
+                    break;
+                } else {
+                    read_params.column_access_paths->clear();
+                }
+            }
+        }
+
+        for (auto& p : *read_params.column_access_paths) {
+            p->set_from_compaction(true);
+        }
+    }
     Status st = _init_collector(read_params);
     return st;
 }
