@@ -867,7 +867,7 @@ public class AnalyzeMgr implements Writable {
                     StatsConstants.buildInitStatsProp(), loadedRows);
             GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
         } else {
-            basicStatsMeta.increaseUpdateRows(loadedRows);
+            basicStatsMeta.increaseDeltaRows(loadedRows);
         }
     }
 
