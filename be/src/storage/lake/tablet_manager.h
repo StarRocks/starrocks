@@ -63,7 +63,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
-    [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
+    Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 

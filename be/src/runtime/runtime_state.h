@@ -166,7 +166,7 @@ public:
     RuntimeProfile* load_channel_profile() { return _load_channel_profile.get(); }
     std::shared_ptr<RuntimeProfile> load_channel_profile_ptr() { return _load_channel_profile; }
 
-    [[nodiscard]] Status query_status() {
+    Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
@@ -223,19 +223,17 @@ public:
     // This value and tracker are only used for error reporting.
     // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
-    [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                                std::string_view msg = {});
+    Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
+                                  std::string_view msg = {});
 
-    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
-        return set_mem_limit_exceeded(nullptr, 0, msg);
-    }
+    Status set_mem_limit_exceeded(std::string_view msg) { return set_mem_limit_exceeded(nullptr, 0, msg); }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
     // doesn't continue if the query terminates abnormally.
-    [[nodiscard]] Status check_query_state(const std::string& msg);
+    Status check_query_state(const std::string& msg);
 
-    [[nodiscard]] Status check_mem_limit(const std::string& msg);
+    Status check_mem_limit(const std::string& msg);
 
     std::vector<std::string>& output_files() { return _output_files; }
 
@@ -264,7 +262,7 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    [[nodiscard]] Status create_rejected_record_file();
+    Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
@@ -464,10 +462,10 @@ public:
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
-    [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
-    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -477,7 +475,7 @@ public:
 
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    [[nodiscard]] Status reset_epoch();
+    Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -533,10 +531,10 @@ private:
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    [[nodiscard]] Status create_error_log_file();
+    Status create_error_log_file();
 
-    [[nodiscard]] Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                                            phmap::flat_hash_map<uint32_t, int64_t>* version);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.

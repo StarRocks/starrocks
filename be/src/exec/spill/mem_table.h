@@ -60,9 +60,8 @@ public:
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table
-    [[nodiscard]] virtual Status append(ChunkPtr chunk) = 0;
-    [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                                  uint32_t size) = 0;
+    virtual Status append(ChunkPtr chunk) = 0;
+    virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
     // Theoretically, the implementation of done and finalize interfaces only have calculation logic, and there is no need to do them separately.
     // However, there are some limitations at this stage:
@@ -106,9 +105,8 @@ public:
     ~UnorderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
@@ -128,9 +126,8 @@ public:
     ~OrderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     Status done() override;
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;

@@ -90,11 +90,11 @@ public:
                                                    const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
-    [[nodiscard]] static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                                               size_t* footer_length_hint,
-                                                               const FooterPointerPB* partial_rowset_footer);
+    static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer);
 
-    [[nodiscard]] static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
+    static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
 
     Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
             TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager);
@@ -195,7 +195,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    [[nodiscard]] Status load_index(const LakeIOOptions& lake_io_opts = {});
+    Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
@@ -209,7 +209,7 @@ public:
     lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 
     // read short_key_index, for data check, just used in unit test now
-    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     // for cloud native tablet metadata cache.
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
