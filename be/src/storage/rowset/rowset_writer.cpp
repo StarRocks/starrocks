@@ -165,6 +165,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
         _rowset_meta_pb->set_num_update_files(_num_uptfile);
         _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
+        _rowset_meta_pb->set_num_rows_upt(_num_rows_upt);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
