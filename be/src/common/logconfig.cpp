@@ -29,6 +29,7 @@
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/page_cache.h"
@@ -159,7 +160,7 @@ static void dontdump_unused_pages() {
 }
 
 static void failure_handler_after_output_log() {
-    if (config::enable_core_file_size_optimization) {
+    if (config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         release_cache_mem();
         dontdump_unused_pages();
     }

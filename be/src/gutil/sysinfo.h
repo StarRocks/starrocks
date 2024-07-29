@@ -31,6 +31,7 @@
 #pragma once
 
 #include <cstdint>
+#include <sys/resource.h>
 
 namespace base {
 void SleepForNanoseconds(int64_t nanoseconds);
@@ -50,5 +51,15 @@ extern double CyclesPerSecond();
 // Ref: https://www.kernel.org/doc/Documentation/cputopology.txt
 // Exposed for testing.
 extern int ParseMaxCpuIndex(const char* str);
+
+int get_cur_core_file_limit() {
+    struct rlimit rlim;
+    int ret = getrlimit(RLIMIT_CORE, &rlim);
+    if (ret == 0) {
+        return rlim.rlim_cur;
+    } else {
+        return 0;
+    }
+}
 
 } // namespace base
