@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <boost/tokenizer.hpp>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -48,6 +49,7 @@
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_converter.h"
+#include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -396,9 +398,6 @@ public:
     JsonPath real_path;
 
     // support cast expr
-    ObjectPool pool;
-    Expr* ref;
-    Expr* cast_expr;
 };
 
 static NativeJsonState* get_native_json_state(FunctionContext* context) {
@@ -474,45 +473,6 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
         // ut test may be hit here, the json path is invaild
         return Status::JsonFormatError("flat json required prepare status");
     }
-    if (state->init_flat) {
-        JsonColumn* json_column;
-        if (columns[0]->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(columns[0].get());
-            json_column = down_cast<JsonColumn*>(nullable->data_column().get());
-        } else {
-            json_column = down_cast<JsonColumn*>(columns[0].get());
-        }
-
-        DCHECK_EQ(json_column->get_flat_field_type(state->flat_path), state->flat_column_type);
-        if (state->is_partial_match) {
-            DCHECK_EQ(state->flat_column_type, TYPE_JSON);
-        }
-        return json_column->get_flat_field(state->flat_path);
-    }
-
-    // flat json path must be constant
-    std::string path;
-    if (columns[1]->only_null()) {
-        // only null path, return null
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    } else if (LIKELY(columns[1]->is_constant())) {
-        path = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1].get()).to_string();
-    } else {
-        // just for compatible
-        ColumnViewer<TYPE_VARCHAR> viewer(columns[1]);
-        if (viewer.is_null(0) || (columns[1]->size() > 1 && viewer.is_null(1))) {
-            return Status::JsonFormatError("flat json doesn't support null json path");
-        }
-
-        path = viewer.value(0).to_string();
-        if (columns[1]->size() > 1 && path != viewer.value(1).to_string()) {
-            return Status::JsonFormatError("flat json doesn't support variables json path");
-        }
-    }
-
-    JsonPath required_path;
-    JsonPath* required_path_ptr = &required_path;
-    ASSIGN_OR_RETURN(required_path_ptr, get_prepared_or_parse(context, path, required_path_ptr));
 
     JsonColumn* json_column;
     if (columns[0]->is_nullable()) {
@@ -522,34 +482,70 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
         json_column = down_cast<JsonColumn*>(columns[0].get());
     }
 
-    JsonPath real_path;
-    for (const auto& flat_path : json_column->flat_column_paths()) {
-        ASSIGN_OR_RETURN(auto flat_json_path, JsonPath::parse(flat_path));
-        // flat path's depth must less than required_path
-        if (required_path_ptr->starts_with(&flat_json_path)) {
-            RETURN_IF_ERROR(required_path_ptr->relativize(&flat_json_path, &real_path));
+    if (!state->init_flat) {
+        // flat json path must be constant
+        std::string path;
+        if (columns[1]->only_null()) {
+            // only null path, return null
+            return ColumnHelper::create_const_null_column(columns[0]->size());
+        } else if (LIKELY(columns[1]->is_constant())) {
+            path = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1].get()).to_string();
+        } else {
+            // just for compatible
+            ColumnViewer<TYPE_VARCHAR> viewer(columns[1]);
+            if (viewer.is_null(0) || (columns[1]->size() > 1 && viewer.is_null(1))) {
+                return Status::JsonFormatError("flat json doesn't support null json path");
+            }
 
-            std::call_once(state->init_flat_once, [&] {
-                state->is_partial_match = !real_path.paths.empty();
-                state->flat_column_type = json_column->get_flat_field_type(flat_path);
-                state->flat_path = flat_path;
-                state->real_path.reset(real_path);
-                if (TargetType != TYPE_UNKNOWN && real_path.paths.empty() && state->flat_column_type != TargetType) {
-                    // full match, check target type is match flat type, need cast again
-                    state->ref = state->pool.add(new ColumnRef(TypeDescriptor(state->flat_column_type), 0));
-                    state->cast_expr =
-                            VectorizedCastExprFactory::from_type(TypeDescriptor(state->flat_column_type),
-                                                                 TypeDescriptor(TargetType), state->ref, &state->pool);
-                }
-                state->init_flat = true;
-            });
-
-            return json_column->get_flat_field(flat_path);
+            path = viewer.value(0).to_string();
+            if (columns[1]->size() > 1 && path != viewer.value(1).to_string()) {
+                return Status::JsonFormatError("flat json doesn't support variables json path");
+            }
         }
-    }
 
-    // not found, only should hit here in ut test
-    return Status::JsonFormatError(fmt::format("flat json not found json path: {}", path));
+        ASSIGN_OR_RETURN(auto flat_json_path, JsonPath::parse(path));
+        std::call_once(state->init_flat_once, [&] {
+            std::string flat_path = "";
+            size_t k = 0;
+            bool in_flat = true;
+            for (; k < flat_json_path.paths.size(); k++) {
+                auto& p = flat_json_path.paths[k];
+                if (p.key == "$" && p.array_selector->type == NONE) {
+                    state->real_path.paths.emplace_back(p);
+                    continue;
+                }
+                if (in_flat) {
+                    flat_path += "." + p.key;
+                    if (p.array_selector->type != NONE) {
+                        state->real_path.paths.emplace_back("", p.array_selector);
+                        in_flat = false;
+                    }
+                    continue;
+                }
+                state->real_path.paths.emplace_back(p);
+            }
+
+            state->init_flat = true;
+            state->flat_path = flat_path.substr(1);
+            if (in_flat) {
+                state->is_partial_match = false;
+                state->flat_column_type = TargetType;
+            } else {
+                state->is_partial_match = true;
+                state->flat_column_type = TYPE_JSON;
+            }
+        });
+    }
+    std::vector<std::string> dst_path{state->flat_path};
+    std::vector<LogicalType> dst_type{TargetType};
+    HyperJsonTransformer transform(dst_path, dst_type, false);
+    transform.init_read_task(json_column->flat_column_paths(), json_column->flat_column_types(),
+                             json_column->has_remain());
+
+    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields()));
+    auto res = transform.mutable_result();
+    DCHECK_EQ(1, res.size());
+    return res[0];
 }
 
 template <LogicalType ResultType>
@@ -582,12 +578,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
 
     } else {
         // full match
-        if (ResultType != state->flat_column_type) {
-            DCHECK(state->cast_expr != nullptr);
-            Chunk chunk;
-            chunk.append_column(flat_column, 0);
-            return state->cast_expr->evaluate_checked(nullptr, &chunk);
-        }
+        DCHECK_EQ(ResultType, state->flat_column_type);
         return std::move(flat_column->clone());
     }
 }

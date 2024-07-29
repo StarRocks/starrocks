@@ -321,6 +321,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
