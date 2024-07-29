@@ -158,4 +158,14 @@ public class SetVarTest extends PlanTestBase {
         }
         return hints;
     }
+
+    @Test
+    public void testQueryHint() throws Exception {
+        String hintSql1 = "select /*+ SET_USER_VARIABLE(@aHint= 1, @bHint = 2) */ @aHint, @bHint";
+        StatementBase stmt = SqlParser.parse(hintSql1, starRocksAssert.getCtx().getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+        executor.processQueryScopeHint();
+        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
+        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
+    }
 }
