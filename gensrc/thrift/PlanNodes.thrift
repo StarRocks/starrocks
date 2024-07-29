@@ -1109,6 +1109,8 @@ struct THdfsScanNode {
 
     // for jni scan factory selection scanner
     21: optional string metadata_table_type
+
+    22: optional DataCache.TDataCacheOptions datacache_options;
 }
 
 struct TProjectNode {

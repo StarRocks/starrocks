@@ -25,10 +25,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TDataCacheOptions;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -177,6 +179,7 @@ public class HdfsScanNode extends ScanNode {
         setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 
     public static void setScanOptimizeOptionToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode) {
@@ -191,6 +194,14 @@ public class HdfsScanNode extends ScanNode {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cc.toThrift(tCloudConfiguration);
             tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
+        }
+    }
+
+    public static void setDataCacheOptionsToThrift(THdfsScanNode tHdfsScanNode, DataCacheOptions options) {
+        if (options != null) {
+            TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
+            tDataCacheOptions.setEnable_populate_datacache(options.isEnablePopulate());
+            tHdfsScanNode.setDatacache_options(tDataCacheOptions);
         }
     }
 

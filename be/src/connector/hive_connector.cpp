@@ -99,7 +99,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
     }
-    if (state->query_options().__isset.enable_populate_datacache) {
+    if (hdfs_scan_node.__isset.datacache_options && hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
+        _enable_populate_datacache = hdfs_scan_node.datacache_options.enable_populate_datacache;
+    } else if (state->query_options().__isset.enable_populate_datacache) {
         _enable_populate_datacache = state->query_options().enable_populate_datacache;
     }
     if (state->query_options().__isset.enable_datacache_async_populate_mode) {
