@@ -708,9 +708,14 @@ public class AnalyzerUtils {
         return allTableAndViewRelations;
     }
 
-    public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
+    /**
+     * CopySafe:
+     * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
+     * 2. External tables with immutable memory-structure
+     */
+    public static boolean areTablesCopySafe(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
-        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        new CopyUnsafeTablesCollector(nonOlapTables).visit(statementBase);
         return nonOlapTables.isEmpty();
     }
 
@@ -803,8 +808,12 @@ public class AnalyzerUtils {
         }
     }
 
-    private static class NonOlapTableCollector extends TableCollector {
-        public NonOlapTableCollector(Map<TableName, Table> tables) {
+    private static class CopyUnsafeTablesCollector extends TableCollector {
+
+        private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
+                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
+
+        public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
             super(tables);
         }
 
@@ -814,10 +823,18 @@ public class AnalyzerUtils {
                 return null;
             }
 
+            Table table = node.getTable();
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
+            // TODO: not support LakeTable right now
+            if ((table.isOlapTableOrMaterializedView() && useNonLockOptimization)) {
+                // OlapTable can be copied via copyOnlyForQuery
+                return null;
+            } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
+                // Immutable table
+                return null;
+            } else {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -883,6 +900,9 @@ public class AnalyzerUtils {
 
         // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
+            if (!(originalTable instanceof OlapTable)) {
+                return null;
+            }
             OlapTable table = (OlapTable) originalTable;
             TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
             OlapTable existed = idMap.get(tableIndexId);

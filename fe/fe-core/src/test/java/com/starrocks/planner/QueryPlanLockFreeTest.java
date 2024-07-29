@@ -76,9 +76,11 @@ public class QueryPlanLockFreeTest {
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
         connectContext.getSessionVariable().setCboUseDBLock(false);
+
+        // follower node
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
-        plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
+        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
+                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
     }
 
 }
