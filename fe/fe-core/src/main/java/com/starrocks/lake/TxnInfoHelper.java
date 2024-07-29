@@ -24,7 +24,7 @@ public class TxnInfoHelper {
         infoPB.txnId = state.getTransactionId();
         infoPB.combinedTxnLog = false;
         infoPB.commitTime = state.getCommitTime() / 1000; // milliseconds to seconds
-        infoPB.txnType = state.getTxnTypePB();
+        infoPB.txnType = state.getTransactionType().toProto();
         // check whether needs to force publish
         if (state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
                 state.getTxnCommitAttachment() != null) {

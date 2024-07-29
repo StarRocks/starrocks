@@ -29,7 +29,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -256,7 +255,6 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         txnState.getErrorReplicas().addAll(errorReplicaIds);
         for (long partitionId : dirtyPartitionSet) {
             PartitionCommitInfo partitionCommitInfo;
-            long version = -1;
             if (isFirstPartition) {
 
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
@@ -267,27 +265,18 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     validDictCacheColumnVersions.add(dictVersion);
                 });
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        version,
+                        -1,
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        version,
+                        -1,
                         System.currentTimeMillis() /* use as partition visible time */);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
-        }
-
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
-                    .getTxnCommitAttachment();
-            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
-            }
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
@@ -344,7 +333,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
                 ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(),
-                        Lists.newArrayList(), txnState.getTxnType());
+                        Lists.newArrayList(), txnState.getTransactionType());
                 CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.

@@ -101,6 +101,10 @@ public class ReplicationMgrTest {
     public void setUp() throws Exception {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(100);
+        partition.setDataVersion(8);
+        partition.setNextDataVersion(9);
+        srcPartition.setDataVersion(98);
+        srcPartition.setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -157,6 +161,7 @@ public class ReplicationMgrTest {
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
         Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+        Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
 
         replicationMgr.replayReplicationJob(job);
     }
@@ -322,6 +327,7 @@ public class ReplicationMgrTest {
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
         partitionInfo.src_version = srcPartition.getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();

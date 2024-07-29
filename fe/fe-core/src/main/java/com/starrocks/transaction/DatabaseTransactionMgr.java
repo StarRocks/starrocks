@@ -1223,11 +1223,26 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
-                            .getTxnCommitAttachment()).getPartitionVersions();
-                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                    ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment();
+                    Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long versionDiff = newVersion - partition.getVisibleVersion();
+                    partitionCommitInfo.setVersion(newVersion);
+                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
+                    Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
+                    if (partitionVersionEpochs != null) {
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        partitionCommitInfo.setVersionEpoch(newVersionEpoch);
+                    }
                 } else {
                     partitionCommitInfo.setVersion(partition.getNextVersion());
+                    // update data version
+                    partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
+                            partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
+                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                    }
                 }
                 // versionTime has different meanings in shared data and shared nothing mode.
                 // In shared nothing mode, versionTime is the time when the transaction was

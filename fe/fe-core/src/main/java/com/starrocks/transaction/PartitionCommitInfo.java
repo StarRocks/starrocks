@@ -64,6 +64,12 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "versionTime")
     private long versionTime;
 
+    @SerializedName(value = "dataVersion")
+    private long dataVersion;
+
+    @SerializedName(value = "versionEpoch")
+    private long versionEpoch;
+
     // For low cardinality string column with global dict
     // TODO(KKS): move invalidDictCacheColumns and validDictCacheColumns to TableCommitInfo
     // Currently, for support FE rollback, we persist the invalidDictCacheColumns in PartitionCommitInfo by json,
@@ -133,6 +139,22 @@ public class PartitionCommitInfo implements Writable {
 
     public long getVersionTime() {
         return versionTime;
+    }
+
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
     }
 
     public List<ColumnId> getInvalidDictCacheColumns() {
