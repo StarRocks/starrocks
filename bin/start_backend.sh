@@ -18,6 +18,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+BIN_NAME=starrocks_be
 MACHINE_TYPE=$(uname -m)
 
 # ================== parse opts =======================
@@ -163,7 +164,7 @@ export_cachelib_lib_path
 
 # ====== handle meta_tool sub command before any modification change
 if [ ${RUN_META_TOOL} -eq 1 ] ; then
-    ${STARROCKS_HOME}/lib/starrocks_be meta_tool "$@"
+    ${STARROCKS_HOME}/lib/$BIN_NAME meta_tool "$@"
     exit $?
 fi
 
@@ -188,21 +189,25 @@ if [ ${RUN_CN} -eq 1 ]; then
 fi
 
 if [ -f $pidfile ]; then
-    if kill -0 $(cat $pidfile) > /dev/null 2>&1; then
-        echo "Backend running as process `cat $pidfile`. Stop it first."
+    # check if the binary name can be grepped from the process cmdline.
+    # still it has chances to be false positive, but the possibility is greatly reduced.
+    oldpid=$(cat $pidfile)
+    pscmd=$(ps -q $oldpid -o cmd=)
+    if echo "$pscmd" | grep -q -w "$BIN_NAME" &>/dev/null ; then
+        echo "Backend running as process $oldpid. Stop it first."
         exit 1
     else
         rm $pidfile
     fi
 fi
 
-chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
+chmod 755 ${STARROCKS_HOME}/lib/$BIN_NAME
 
 if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
     ulimit -n 65535
 fi
 
-START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
+START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/$BIN_NAME"
 LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
     START_BE_CMD="${START_BE_CMD} --cn"
