@@ -43,7 +43,12 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _chunk_metadata(column_chunk),
           _opts(opts),
           _def_level_decoder(&opts.stats->level_decode_ns),
-          _rep_level_decoder(&opts.stats->level_decode_ns) {}
+          _rep_level_decoder(&opts.stats->level_decode_ns) {
+    if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
+        _chunk_metadata->meta_data.statistics.null_count == 0) {
+        _no_null = true;
+    }
+}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -124,6 +129,11 @@ Status ColumnChunkReader::_parse_page_header() {
         _opts.stats->has_page_statistics |=
                 (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
                                                                 header.data_page_header.statistics.__isset.min));
+        _current_page_no_null =
+                (header.data_page_header.__isset.statistics && header.data_page_header.statistics.__isset.null_count &&
+                 header.data_page_header.statistics.null_count == 0)
+                        ? true
+                        : false;
     }
 
     _page_parse_state = PAGE_HEADER_PARSED;

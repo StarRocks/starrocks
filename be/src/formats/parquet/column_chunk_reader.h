@@ -84,7 +84,7 @@ public:
 
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        if (_no_null()) {
+        if (_no_null || _current_page_no_null) {
             return _cur_decoder->next_batch(n, content_type, dst);
         }
         size_t idx = 0;
@@ -145,11 +145,6 @@ private:
 
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
 
-    bool _no_null() {
-        return metadata().__isset.statistics && metadata().statistics.__isset.null_count &&
-               metadata().statistics.null_count == 0;
-    }
-
 private:
     enum PageParseState {
         INITIALIZED,
@@ -160,6 +155,8 @@ private:
 
     level_t _max_def_level = 0;
     level_t _max_rep_level = 0;
+    bool _no_null = false;
+    bool _current_page_no_null = false;
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
