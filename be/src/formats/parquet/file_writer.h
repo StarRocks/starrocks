@@ -33,6 +33,8 @@
 #include "column/nullable_column.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
+#include "gen_cpp/Types_types.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -69,6 +71,27 @@ private:
         WRITEN = 3,
     };
     HEADER_STATE _header_state = INITED;
+};
+
+class AsyncParquetOutputStream : public arrow::io::OutputStream {
+public:
+    AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
+
+    ~AsyncParquetOutputStream() override = default;
+
+    arrow::Status Write(const void* data, int64_t nbytes) override;
+
+    arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
+
+    arrow::Status Close() override;
+
+    arrow::Result<int64_t> Tell() const override;
+
+    bool closed() const override { return _is_closed; };
+
+private:
+    io::AsyncFlushOutputStream* _stream;
+    bool _is_closed = false;
 };
 
 struct ParquetBuilderOptions {
