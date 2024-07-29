@@ -1320,6 +1320,11 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
 
+// connector sink memory watermark
+CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
+CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
+CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
+
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 

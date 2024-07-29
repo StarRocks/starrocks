@@ -32,46 +32,14 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns,
                                    std::unique_ptr<LocationProvider> location_provider,
                                    std::unique_ptr<formats::FileWriterFactory> file_writer_factory,
                                    int64_t max_file_size, RuntimeState* state)
-        : _partition_column_names(std::move(partition_columns)),
-          _partition_column_evaluators(std::move(partition_column_evaluators)),
-          _location_provider(std::move(location_provider)),
-          _file_writer_factory(std::move(file_writer_factory)),
-          _max_file_size(max_file_size),
-          _state(state) {}
-
-Status IcebergChunkSink::init() {
-    RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
-    RETURN_IF_ERROR(_file_writer_factory->init());
-    return Status::OK();
+        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state, true) {
 }
 
-// requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
-StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
-    std::string partition = DEFAULT_PARTITION;
-    bool partitioned = !_partition_column_names.empty();
-    if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
-                                                                            _partition_column_evaluators, chunk.get()));
-    }
-
-    return HiveUtils::hive_style_partitioning_write_chunk(chunk, partitioned, partition, _max_file_size,
-                                                          _file_writer_factory.get(), _location_provider.get(),
-                                                          _partition_writers);
-}
-
-ConnectorChunkSink::Futures IcebergChunkSink::finish() {
-    Futures futures;
-    for (auto& [_, writer] : _partition_writers) {
-        auto f = writer->commit();
-        futures.commit_file_futures.push_back(std::move(f));
-    }
-    return futures;
-}
-
-std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChunkSink::callback_on_success() {
-    return [state = _state](const formats::FileWriter::CommitResult& result) {
-        DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_statistics.record_count);
+void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
+    _rollback_actions.push_back(std::move(result.rollback_action));
+    if (result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
         TIcebergColumnStats iceberg_column_stats;
         if (result.file_statistics.column_sizes.has_value()) {
@@ -104,8 +72,8 @@ std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChun
 
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_data_file);
-        state->add_sink_commit_info(commit_info);
-    };
+        _state->add_sink_commit_info(commit_info);
+    }
 }
 
 StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
