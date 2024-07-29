@@ -1259,8 +1259,12 @@ public class OlapTable extends Table {
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                int numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                info.setBucketNum(numBucket);
+                // prior to use user set mutable bucket num
+                long numBucket = getMutableBucketNum();
+                if (numBucket <= 0) {
+                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                }
+                info.setBucketNum((int) numBucket);
             } else {
                 throw new DdlException("Unknown distribution info type: " + info.getType());
             }
@@ -2466,6 +2470,13 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
+    public Long getMutableBucketNum() {
+        if (tableProperty != null) {
+            return tableProperty.getMutableBucketNum();
+        }
+        return (long) 0;
+    }
+
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2474,6 +2485,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setMutableBucketNum(long bucketNum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM,
+                        String.valueOf(bucketNum));
+        tableProperty.buildMutableBucketNum();
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -3126,6 +3147,12 @@ public class OlapTable extends Table {
         Long bucketSize = getAutomaticBucketSize();
         if (bucketSize > 0) {
             properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // mutable bucket num
+        Long mutableBucketNum = getMutableBucketNum();
+        if (mutableBucketNum > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
         }
 
         // locations
