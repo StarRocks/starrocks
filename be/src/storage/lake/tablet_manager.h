@@ -168,9 +168,7 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
-
-    void remove_in_writing_data_size(int64_t tablet_id);
+    int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
     void clean_in_writing_data_size();
 
