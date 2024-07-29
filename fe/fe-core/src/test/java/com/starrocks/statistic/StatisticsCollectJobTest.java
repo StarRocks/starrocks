@@ -357,7 +357,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1), Maps.newHashMap());
-        basicStatsMeta.increaseUpdateRows(10000000L);
+        basicStatsMeta.increaseDeltaRows(10000000L);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -380,7 +380,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         BasicStatsMeta basicStatsMeta2 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap());
+                LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap(),
+                basicStatsMeta.getUpdateRows());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -390,7 +391,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(0, jobs2.size());
+        Assert.assertEquals(1, jobs2.size());
     }
 
     @Test
