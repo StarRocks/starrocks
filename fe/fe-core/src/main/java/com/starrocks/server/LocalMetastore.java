@@ -45,7 +45,9 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HintNode;
@@ -870,7 +872,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
-        addPartitions(ctx, db, tableName, addPartitionClause.getResolvedPartitionDescList(), addPartitionClause);
+        addPartitions(ctx, db, tableName,
+                addPartitionClause.getResolvedPartitionDescList(),
+                addPartitionClause.isTempPartition(),
+                addPartitionClause.getDistributionDesc());
     }
 
     private OlapTable checkTable(Database db, String tableName) throws DdlException {
@@ -900,12 +905,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         }
     }
 
-    private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
+    private DistributionInfo getDistributionInfo(OlapTable olapTable, DistributionDesc distributionDesc)
             throws DdlException {
         DistributionInfo distributionInfo;
         List<Column> baseSchema = olapTable.getBaseSchema();
         DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
-        DistributionDesc distributionDesc = addPartitionClause.getDistributionDesc();
         if (distributionDesc != null) {
             distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
             // for now. we only support modify distribution's bucket num
@@ -1028,10 +1032,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     private void updatePartitionInfo(PartitionInfo partitionInfo, List<Pair<Partition, PartitionDesc>> partitionList,
-                                     Set<String> existPartitionNameSet, AddPartitionClause addPartitionClause,
+                                     Set<String> existPartitionNameSet, boolean isTempPartition,
                                      OlapTable olapTable)
             throws DdlException {
-        boolean isTempPartition = addPartitionClause.isTempPartition();
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             rangePartitionInfo.handleNewRangePartitionDescs(olapTable.getIdToColumn(),
@@ -1062,9 +1065,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     private void addRangePartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
-                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
+                                      boolean isTempPartition, PartitionInfo partitionInfo,
                                       List<Partition> partitionList, Set<String> existPartitionNameSet) {
-        boolean isTempPartition = addPartitionClause.isTempPartition();
         int partitionLen = partitionList.size();
         List<PartitionPersistInfoV2> partitionInfoV2List = Lists.newArrayListWithCapacity(partitionLen);
         if (partitionLen == 1) {
@@ -1112,7 +1114,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     @VisibleForTesting
     public void addListPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
-                                    AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
+                                    boolean isTempPartition, PartitionInfo partitionInfo,
                                     List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
         if (partitionList == null) {
@@ -1124,7 +1126,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         // TODO: add only 1 log for multi list partition
         int i = 0;
         for (Partition partition : partitionList) {
-            boolean isTempPartition = addPartitionClause.isTempPartition();
             if (existPartitionNameSet.contains(partition.getName())) {
                 LOG.info("add partition[{}] which already exists", partition.getName());
                 continue;
@@ -1146,15 +1147,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     private void addPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
-                                 AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
+                                 boolean isTempPartition, PartitionInfo partitionInfo,
                                  List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
         if (partitionInfo.isRangePartition()) {
-            addRangePartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
+            addRangePartitionLog(db, olapTable, partitionDescs, isTempPartition, partitionInfo, partitionList,
                     existPartitionNameSet);
         } else if (partitionType == PartitionType.LIST) {
-            addListPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
+            addListPartitionLog(db, olapTable, partitionDescs, isTempPartition, partitionInfo, partitionList,
                     existPartitionNameSet);
         } else {
             throw new DdlException("Only support adding partition log to range/list partitioned table");
@@ -1205,7 +1206,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
-                               AddPartitionClause addPartitionClause) throws DdlException {
+                               boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
         DistributionInfo distributionInfo;
         OlapTable olapTable;
         OlapTable copiedTable;
@@ -1223,7 +1224,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             checkPartitionType(partitionInfo);
 
             // get distributionInfo
-            distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
+            distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
             olapTable.inferDistribution(distributionInfo);
 
             // check colocation
@@ -1281,7 +1282,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 checkPartitionType(partitionInfo);
 
                 // update partition info
-                updatePartitionInfo(partitionInfo, newPartitions, existPartitionNameSet, addPartitionClause, olapTable);
+                updatePartitionInfo(partitionInfo, newPartitions, existPartitionNameSet, isTempPartition, olapTable);
 
                 try {
                     colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
@@ -1291,7 +1292,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 }
 
                 // add partition log
-                addPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
+                addPartitionLog(db, olapTable, partitionDescs, isTempPartition, partitionInfo, partitionList,
                         existPartitionNameSet);
             } finally {
                 cleanExistPartitionNameSet(existPartitionNameSet, partitionNameToTabletSet);
@@ -1623,12 +1624,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     }
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
-            int numSubPartition, long warehouseId) throws DdlException {
+                                 int numSubPartition, long warehouseId) throws DdlException {
         addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
     }
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
-            int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
+                                 int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
 
@@ -3018,7 +3019,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
      */
     @Override
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
-        stateMgr.getAlterJobMgr().processAlterTable(stmt, context);
+        /*
+         * Due to the implementation of the Table Level Lock transformation plan,
+         * we need to sort out the lock layering logic. Therefore, we plan to gradually
+         * migrate the alter table related logic scattered everywhere to AlterJobExecutor.
+         * This is a compatible logic, so that the functions that have not been migrated still use the original logic.
+         */
+        if (stmt.hasPartitionOp() || stmt.contains(AlterOpType.SWAP) || stmt.contains(AlterOpType.COMPACT)) {
+            AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
+            alterJobExecutor.process(stmt, context);
+        } else {
+            stateMgr.getAlterJobMgr().processAlterTable(stmt, context);
+        }
     }
 
     /**
@@ -3464,7 +3476,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
         return refreshMaterializedView(dbName, mvName, force, range, Constants.TaskRunPriority.HIGH.value(),
-               Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
+                Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 
     @Override

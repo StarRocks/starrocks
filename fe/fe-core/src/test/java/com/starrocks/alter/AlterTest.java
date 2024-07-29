@@ -340,7 +340,7 @@ public class AlterTest {
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             if (expectedException) {
                 Assert.fail();
             }
@@ -2430,7 +2430,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
     }
 
     @Test(expected = AnalysisException.class)

@@ -1098,7 +1098,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateDictionaryStatement(CreateDictionaryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getDictionaryMgr().createDictionary(stmt,
-                                                context.getCurrentCatalog(), context.getDatabase());
+                        context.getCurrentCatalog(), context.getDatabase());
             });
             return null;
         }

@@ -405,12 +405,12 @@ public class DynamicPartitionUtil {
         return analyzedProperties;
     }
 
-    public static void checkAlterAllowed(OlapTable olapTable) throws DdlException {
+    public static void checkAlterAllowed(OlapTable olapTable) {
         TableProperty tableProperty = olapTable.getTableProperty();
         if (tableProperty != null && tableProperty.getDynamicPartitionProperty() != null &&
                 tableProperty.getDynamicPartitionProperty().isExists() &&
                 tableProperty.getDynamicPartitionProperty().isEnabled()) {
-            throw new DdlException("Cannot add/drop partition on a Dynamic Partition Table, " +
+            throw new SemanticException("Cannot add/drop partition on a Dynamic Partition Table, " +
                     "Use command `ALTER TABLE tbl_name SET (\"dynamic_partition.enable\" = \"false\")` firstly.");
         }
     }

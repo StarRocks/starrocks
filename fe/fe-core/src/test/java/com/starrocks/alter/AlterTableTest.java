@@ -198,7 +198,8 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
                 "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
+        alterJobExecutor.process(alterTableStmt, ctx);
 
         p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
         p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());

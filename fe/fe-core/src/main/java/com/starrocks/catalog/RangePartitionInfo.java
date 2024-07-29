@@ -231,7 +231,6 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public Range<PartitionKey> handleNewSinglePartitionDesc(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
-        Preconditions.checkArgument(desc.isAnalyzed());
         Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(schema, desc, isTemp);
@@ -277,7 +276,6 @@ public class RangePartitionInfo extends PartitionInfo {
                 if (!existPartitionNameSet.contains(partition.getName())) {
                     long partitionId = partition.getId();
                     SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
-                    Preconditions.checkArgument(desc.isAnalyzed());
                     Range<PartitionKey> range;
                     try {
                         range = checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, isTemp);
