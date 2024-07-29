@@ -292,7 +292,10 @@ public class ComputeNode implements IComputable, Writable {
 
     public Map<String, String> getLocation() {
         if (location.isEmpty()) {
-            return SessionVariable.DEFAULT_NODE_LABELS_LOCATION;
+            Map<String, String> loc = new HashMap<>();
+            loc.put(SessionVariable.DEFAULT_NODE_LABELS_LOCATION.split(":")[0],
+                    SessionVariable.DEFAULT_NODE_LABELS_LOCATION.split(":")[1]);
+            return loc;
         }
         return location;
     }
