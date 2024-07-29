@@ -338,9 +338,7 @@ public class PaimonScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            if (dataCacheOptions != null) {
-                output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
-            }
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();

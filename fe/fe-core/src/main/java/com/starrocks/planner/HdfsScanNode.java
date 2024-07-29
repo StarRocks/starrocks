@@ -149,9 +149,7 @@ public class HdfsScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            if (dataCacheOptions != null) {
-                output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
-            }
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -184,6 +182,13 @@ public class HdfsScanNode extends ScanNode {
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+    }
+
+    public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
+        if (dataCacheOptions != null) {
+            output.append(prefix).append(String.format("dataCacheOptions={populate: %s}", dataCacheOptions.isEnablePopulate()));
+            output.append("\n");
+        }
     }
 
     public static void setScanOptimizeOptionToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode) {
