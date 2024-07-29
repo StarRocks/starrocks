@@ -170,6 +170,8 @@ public:
 
     const GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
+    Status download_segment(const SegmentPB& segment_pb, std::unique_ptr<SequentialFile> rfile);
+
 private:
     Status _flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 

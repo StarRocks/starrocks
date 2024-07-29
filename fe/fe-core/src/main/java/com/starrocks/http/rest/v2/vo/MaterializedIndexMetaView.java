@@ -33,6 +33,21 @@ public class MaterializedIndexMetaView {
     @SerializedName("columns")
     private List<ColumnView> columns;
 
+    @SerializedName(value = "schemaId")
+    private long schemaId;
+
+    @SerializedName(value = "sortKeyIdxes")
+    public List<Integer> sortKeyIdxes;
+
+    @SerializedName(value = "sortKeyUniqueIds")
+    public List<Integer> sortKeyUniqueIds;
+
+    @SerializedName(value = "schemaVersion")
+    private int schemaVersion = 0;
+
+    @SerializedName(value = "shortKeyColumnCount")
+    private short shortKeyColumnCount;
+
     public MaterializedIndexMetaView() {
     }
 
@@ -53,6 +68,15 @@ public class MaterializedIndexMetaView {
                         .collect(Collectors.toList()))
                 .ifPresent(imvo::setColumns);
 
+        imvo.setSchemaId(indexMeta.getSchemaId());
+        Optional.ofNullable(indexMeta.getSortKeyIdxes())
+                .ifPresent(imvo::setSortKeyIdxes);
+        Optional.ofNullable(indexMeta.getSortKeyUniqueIds())
+                .ifPresent(imvo::setSortKeyUniqueIds);
+        Optional.of(indexMeta.getSchemaVersion())
+                .ifPresent(imvo::setSchemaVersion);
+        Optional.of(indexMeta.getShortKeyColumnCount())
+                .ifPresent(imvo::setShortKeyColumnCount);
         return imvo;
     }
 
@@ -78,5 +102,45 @@ public class MaterializedIndexMetaView {
 
     public void setColumns(List<ColumnView> columns) {
         this.columns = columns;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
+    }
+
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
+    }
+
+    public List<Integer> getSortKeyIdxes() {
+        return sortKeyIdxes;
+    }
+
+    public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
+        this.sortKeyIdxes = sortKeyIdxes;
+    }
+
+    public List<Integer> getSortKeyUniqueIds() {
+        return sortKeyUniqueIds;
+    }
+
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public int getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(int schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
+
+    public short getShortKeyColumnCount() {
+        return shortKeyColumnCount;
+    }
+
+    public void setShortKeyColumnCount(short shortKeyColumnCount) {
+        this.shortKeyColumnCount = shortKeyColumnCount;
     }
 }

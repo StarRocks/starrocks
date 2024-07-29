@@ -82,6 +82,8 @@ private:
 
     Status _push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec);
 
+    virtual Status _load_segment(const TPushReq& request, vector<TTabletInfo>* tablet_info_vec);
+
     std::unique_ptr<MemTracker> _mem_tracker;
 
     bool _is_init = false;

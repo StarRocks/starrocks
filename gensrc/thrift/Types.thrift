@@ -172,7 +172,8 @@ enum TPushType {
     LOAD_DELETE,
     // for spark load push request
     LOAD_V2,
-    CANCEL_DELETE
+    CANCEL_DELETE,
+    LOAD_SEGMENT
 }
 
 enum TTaskType {

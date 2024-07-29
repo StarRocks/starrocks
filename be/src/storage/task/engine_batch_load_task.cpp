@@ -113,6 +113,12 @@ Status EngineBatchLoadTask::execute() {
             LOG(WARNING) << "delete data failed. status: " << delete_data_status << ", signature: " << _signature;
             status = STARROCKS_ERROR;
         }
+    } else if (_push_req.push_type == TPushType::LOAD_SEGMENT) {
+        Status load_segment_status = _load_segment(_push_req, _tablet_infos);
+        if (!load_segment_status.ok()) {
+            LOG(WARNING) << "load segment failed. status: " << load_segment_status << ", signature: " << _signature;
+            status = STARROCKS_ERROR;
+        }
     } else {
         status = STARROCKS_TASK_REQUEST_ERROR;
     }
@@ -298,6 +304,36 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
     }
 
     LOG(INFO) << "Finish to delete data. tablet:" << tablet->full_name();
+    return res;
+}
+
+Status EngineBatchLoadTask::_load_segment(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
+    LOG(INFO) << "begin to process load segment. request=" << ThriftDebugString(request);
+    StarRocksMetrics::instance()->delete_requests_total.increment(1);
+
+    if (tablet_info_vec == nullptr) {
+        LOG(WARNING) << "The input tablet_info_vec is a null pointer";
+        return Status::InternalError("The input tablet_info_vec is a null pointer");
+    }
+
+    // 1. Get all tablets with same tablet_id
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
+    if (tablet == nullptr) {
+        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+        return Status::NotFound(fmt::format("Not found tablet: ", request.tablet_id));
+    }
+
+    // 2. Process load segment  by push interface
+    DCHECK(request.__isset.transaction_id);
+    PushHandler push_handler;
+    Status res = push_handler.process_streaming_ingestion(tablet, request, PUSH_SEGMENT, tablet_info_vec);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to load segment. res: " << res << ", tablet: " << tablet->full_name();
+        StarRocksMetrics::instance()->delete_requests_failed.increment(1);
+        return res;
+    }
+
+    LOG(INFO) << "Finish to load segment. tablet:" << tablet->full_name();
     return res;
 }
 

@@ -53,6 +53,8 @@ private:
 
     Status _load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
                          const TabletSchemaCSPtr& tablet_schema);
+    Status _load_segment(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                         const TabletSchemaCSPtr& tablet_schema);
     Status _delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
                            const TabletSchemaCSPtr& tablet_schema);
 

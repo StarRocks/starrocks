@@ -15,6 +15,7 @@
 #include "storage/push_handler.h"
 
 #include "storage/compaction_manager.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -23,6 +24,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "util/defer_op.h"
+
 
 namespace starrocks {
 
@@ -130,6 +132,8 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
     Status st = Status::OK();
     if (push_type == PUSH_NORMAL_V2) {
         st = _load_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add), tablet_schema);
+    } else if (push_type == PUSH_SEGMENT) {
+        st = _load_segment(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add), tablet_schema);
     } else {
         DCHECK_EQ(push_type, PUSH_FOR_DELETE);
         st = _delete_convert(tablet_vars->at(0).tablet, &(tablet_vars->at(0).rowset_to_add), tablet_schema);
@@ -338,6 +342,71 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
         }
 
         reader->print_profile();
+    }
+
+    // 4. finish
+    RETURN_IF_ERROR(rowset_writer->flush());
+    auto rowset = rowset_writer->build();
+    if (!rowset.ok()) return rowset.status();
+    *cur_rowset = std::move(rowset).value();
+
+    _write_bytes += static_cast<int64_t>((*cur_rowset)->data_disk_size());
+    _write_rows += static_cast<int64_t>((*cur_rowset)->num_rows());
+    VLOG(10) << "convert delta file end. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name()
+             << ", processed_rows" << num_rows;
+    return st;
+}
+
+Status PushHandler::_load_segment(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                                  const TabletSchemaCSPtr& tablet_schema) {
+    Status st;
+    size_t num_rows = 0;
+    PUniqueId load_id;
+    load_id.set_hi(0);
+    load_id.set_lo(0);
+
+    VLOG(3) << "start to load segment file.";
+
+    // 1. init RowsetBuilder of cur_tablet for current push
+    VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
+            << ", block_row_size=" << tablet_schema->num_rows_per_row_block();
+    RowsetWriterContext context;
+    context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    context.tablet_uid = cur_tablet->tablet_uid();
+    context.tablet_id = cur_tablet->tablet_id();
+    context.partition_id = _request.partition_id;
+    context.tablet_schema_hash = cur_tablet->schema_hash();
+    context.rowset_path_prefix = cur_tablet->schema_hash_path();
+    context.tablet_schema = tablet_schema;
+    context.rowset_state = PREPARED;
+    context.txn_id = _request.transaction_id;
+    context.load_id = load_id;
+    context.segments_overlap = NONOVERLAPPING;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
+                     << ", txn_id: " << _request.transaction_id << ", res=" << st;
+        return Status::InternalError("Fail to init rowset writer");
+    }
+
+    // 2. Init remote fs and check the schema to avoid schema conflict
+    std::string path = _request.broker_scan_range.ranges[0].path;
+    LOG(INFO) << "tablet=" << cur_tablet->full_name() << ", file path=" << path
+              << ", file size=" << _request.broker_scan_range.ranges[0].file_size;
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(path, FSOptions(&_request.broker_scan_range.params)));
+
+    // 3. Download the remote file to load disk
+    for (auto & range: _request.broker_scan_range.ranges) {
+        std::string file = range.path;
+        ASSIGN_OR_RETURN(auto rfile, fs->new_sequential_file(file));
+        std::string pb_file = file + ".pb";
+        SegmentPB segment_pb;
+        ProtobufFile proto_file(pb_file);
+        RETURN_IF_ERROR(proto_file.load(&segment_pb));
+        RETURN_IF_ERROR(rowset_writer->download_segment(segment_pb, std::move(rfile)));
     }
 
     // 4. finish

@@ -141,6 +141,7 @@ enum MaterializeType {
 enum PushType {
     PUSH_FOR_DELETE = 2, // for delete
     PUSH_NORMAL_V2 = 4,  // for spark load
+    PUSH_SEGMENT = 6, // for bulk load
 };
 
 enum ReaderType {

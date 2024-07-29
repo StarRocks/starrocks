@@ -76,6 +76,12 @@ public class TableSchemaView {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    @SerializedName("bfFpp")
+    private double bfFpp;
+
+    @SerializedName("compressionType")
+    private String compressionType;
+
     public TableSchemaView() {
     }
 
@@ -129,7 +135,10 @@ public class TableSchemaView {
 
         Optional.ofNullable(table.getTableProperty())
                 .ifPresent(prop -> svo.setProperties(prop.getProperties()));
-
+        Optional.of(table.getBfFpp())
+                .ifPresent(svo::setBfFpp);
+        Optional.ofNullable(table.getCompressionType())
+                .ifPresent(type -> svo.setCompressionType(type.name()));
         return svo;
     }
 
@@ -259,5 +268,21 @@ public class TableSchemaView {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public double getBfFpp() {
+        return bfFpp;
+    }
+
+    public void setBfFpp(double bfFpp) {
+        this.bfFpp = bfFpp;
+    }
+
+    public String getCompressionType() {
+        return compressionType;
+    }
+
+    public void setCompressionType(String compressionType) {
+        this.compressionType = compressionType;
     }
 }
