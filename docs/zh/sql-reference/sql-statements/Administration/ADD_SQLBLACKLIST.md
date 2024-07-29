@@ -10,6 +10,12 @@ displayed_sidebar: "Chinese"
 
 有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/Blacklist.md)。
 
+:::tip
+
+- 该操作需要 admin 角色。
+- 当前 StarRocks 支持将 SELECT 语句加入 SQL 黑名单。
+:::
+
 ## 语法
 
 ```SQL
