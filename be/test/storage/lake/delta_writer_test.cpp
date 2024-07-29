@@ -178,12 +178,8 @@ TEST_F(LakeDeltaWriterTest, test_write) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-<<<<<<< HEAD
-                                               .set_index_id(_tablet_schema->id())
-                                               .set_immutable_tablet_size(1)
-=======
                                                .set_schema_id(_tablet_schema->id())
->>>>>>> 3c7f9db2ec ([Feature](3/n) Support fast schema evolution in shared data mode (#42737))
+                                               .set_immutable_tablet_size(1)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
