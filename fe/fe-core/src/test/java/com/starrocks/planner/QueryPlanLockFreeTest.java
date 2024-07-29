@@ -61,6 +61,22 @@ public class QueryPlanLockFreeTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `t1` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` int(11) NULL,\n" +
+                "  `v1` int SUM NULL,\n" +
+                "  `v2` bigint SUM NULL,\n" +
+                "  `v3` largeint SUM NULL,\n" +
+                "  `v4` double SUM NULL,\n" +
+                "  `v5` decimal(10, 3) SUM NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
@@ -85,9 +101,9 @@ public class QueryPlanLockFreeTest {
 
     @Test
     public void testCopiedTable() throws Exception {
-        String sql = "select t1.* from t0 t1 join t0 t2 on t1.k1 = t2.k2";
+        String sql = "select t1.* from t1 t1 join t1 t2 on t1.k1 = t2.k2";
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable("default_catalog", DB_NAME, "t0");
+                .getTable("default_catalog", DB_NAME, "t1");
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         OlapScanNode node1 = (OlapScanNode) plan.second.getScanNodes().get(0);
         OlapScanNode node2 = (OlapScanNode) plan.second.getScanNodes().get(1);
