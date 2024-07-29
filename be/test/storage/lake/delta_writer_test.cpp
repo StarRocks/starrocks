@@ -630,7 +630,7 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .set_immutable_tablet_size(1)
                                                .build());
     ASSERT_OK(delta_writer->open());

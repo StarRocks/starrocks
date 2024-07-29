@@ -357,7 +357,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -440,7 +440,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
