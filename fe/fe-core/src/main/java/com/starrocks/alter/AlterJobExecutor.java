@@ -168,9 +168,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         + "Do not allow to do ALTER ops");
             }
 
-            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
             visit(stmt.getAlterTableClause());
-            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
