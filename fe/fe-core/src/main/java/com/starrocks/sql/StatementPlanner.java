@@ -129,8 +129,8 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
-                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(queryStmt);
-                needWholePhaseLock = isLockFree(isOnlyOlapTableQueries, session) ? false : true;
+                boolean areTablesCopySafe = AnalyzerUtils.areTablesCopySafe(queryStmt);
+                needWholePhaseLock = isLockFree(areTablesCopySafe, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
@@ -173,20 +173,15 @@ public class StatementPlanner {
     private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
                                                 ConnectContext connectContext) {
         boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
-        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
-        return isOnlyOlapTableQueries && isSelect && isLeader &&
-                !connectContext.getSessionVariable().isCboUseDBLock();
+        boolean areTablesCopySafe = AnalyzerUtils.areTablesCopySafe(insertStmt);
+        return areTablesCopySafe && isSelect && !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
-    private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
+    private static boolean isLockFree(boolean areTablesCopySafe, ConnectContext session) {
         // condition can use conflict detection to replace db lock
-        // 1. all tables are olap tables
-        // 2. node is leader node
-        // 3. cbo_use_lock_db = false
-        return isOnlyOlapTable
-                && GlobalStateMgr.getCurrentState().isLeader()
-                && !session.getSessionVariable().isCboUseDBLock();
+        // 1. all tables are copy safe
+        // 2. cbo_use_lock_db = false
+        return areTablesCopySafe && !session.getSessionVariable().isCboUseDBLock();
     }
 
     /**
