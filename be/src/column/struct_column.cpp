@@ -376,6 +376,7 @@ void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is
         const auto& field = _fields[i];
         buf->push_string(_field_names[i]);
         buf->separator(':');
+        field->check_or_die();
         field->put_mysql_row_buffer(buf, idx);
         if (i < _fields.size() - 1) {
             // Add struct field separator, last field don't need ','.
@@ -473,14 +474,14 @@ bool StructColumn::capacity_limit_reached(std::string* msg) const {
 
 void StructColumn::check_or_die() const {
     // Struct must have at least one field.
-    DCHECK(_fields.size() > 0);
-    DCHECK(_field_names.size() > 0);
+    CHECK(_fields.size() > 0);
+    CHECK(_field_names.size() > 0);
 
     // fields and field_names must have the same size.
-    DCHECK(_fields.size() == _field_names.size());
+    CHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
-        DCHECK(column->is_nullable());
+        CHECK(column->is_nullable());
         column->check_or_die();
     }
 }

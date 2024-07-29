@@ -679,6 +679,8 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
     ChunkList chunks;
     faststring uncompressed_buffer;
     for (auto i = 0; i < request.chunks().size(); i++) {
+        auto& chunk_pb = request.chunks(i);
+        RETURN_IF_ERROR(_build_chunk_meta(chunk_pb));
         auto& pchunk = request.chunks().Get(i);
         int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
         int64_t chunk_bytes = pchunk.data().size();
@@ -700,7 +702,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
-    const bool use_pass_through = request.use_pass_through();
+    //const bool use_pass_through = request.use_pass_through();
+    const bool use_pass_through = false;
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {

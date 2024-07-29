@@ -460,6 +460,13 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
+        column->check_or_die();
+        LOG(INFO) << "struct column: " << column->get_name() << " field size: " << column->fields_column().size();
+        auto idx = 0;
+        for (const auto& name : column->field_names()) {
+            LOG(INFO) << "colum field[" << idx << "] name: " << name;
+            idx++;
+        }
         for (const auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
