@@ -35,7 +35,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -169,9 +168,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         + "Do not allow to do ALTER ops");
             }
 
-            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
             visit(stmt.getAlterTableClause());
-            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
