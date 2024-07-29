@@ -2414,8 +2414,7 @@ public class AlterTest {
         AlterJobMgr alter = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
