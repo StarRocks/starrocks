@@ -171,7 +171,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -2964,8 +2963,8 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView;
         if (RunMode.isSharedNothingMode()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
-                materializedView =
-                        MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
+                materializedView = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                        .createSinkTable(stmt, partitionInfo, mvId, db.getId());
                 materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
             } else {
                 materializedView =
@@ -3051,7 +3050,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.addPartition(partition);
             }
 
-            MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
 
             String storageVolumeId = "";
             if (materializedView.isCloudNativeMaterializedView()) {
@@ -3349,7 +3348,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MaterializedViewMgr.getInstance().startMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().startMaintainMV(materializedView);
             return;
         }
 
@@ -3410,7 +3409,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getName(), refreshType, executeOption);
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());

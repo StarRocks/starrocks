@@ -87,7 +87,11 @@ import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+<<<<<<< HEAD
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+=======
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -1065,12 +1069,12 @@ public class EditLog {
                 }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
-                    MaterializedViewMgr.getInstance().replay(job);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replay(job);
                     break;
                 }
                 case OperationType.OP_MV_EPOCH_UPDATE: {
                     MVEpoch epoch = (MVEpoch) journal.getData();
-                    MaterializedViewMgr.getInstance().replayEpoch(epoch);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replayEpoch(epoch);
                     break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {

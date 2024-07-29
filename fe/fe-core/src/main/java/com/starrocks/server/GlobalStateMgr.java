@@ -376,11 +376,20 @@ public class GlobalStateMgr {
 
     private final PortConnectivityChecker portConnectivityChecker;
 
+<<<<<<< HEAD
     private Load load;
     private LoadMgr loadMgr;
     private RoutineLoadMgr routineLoadMgr;
     private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
+=======
+    private final Load load;
+    private final LoadMgr loadMgr;
+    private final RoutineLoadMgr routineLoadMgr;
+    private final StreamLoadMgr streamLoadMgr;
+    private final ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
 
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
@@ -694,6 +703,7 @@ public class GlobalStateMgr {
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
+        this.materializedViewMgr = new MaterializedViewMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
@@ -1552,7 +1562,13 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+<<<<<<< HEAD
     public void loadImage(String imageDir) throws IOException, DdlException {
+=======
+    // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
+    public void loadImage(String imageDir) throws IOException {
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
         File curFile = storage.getCurrentImageFile();
@@ -1567,10 +1583,53 @@ public class GlobalStateMgr {
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
+<<<<<<< HEAD
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadVersion(dis, checksum);
+=======
+        Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
+                .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                .build();
+
+        Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
+        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())))) {
+            loadHeader(dis);
+            while (true) {
+                SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
 
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
@@ -1943,6 +2002,8 @@ public class GlobalStateMgr {
         }
     }
 
+    // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
@@ -1955,6 +2016,7 @@ public class GlobalStateMgr {
 
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
+<<<<<<< HEAD
             // ** NOTICE **: always add new code at the end
             if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
                 try {
@@ -1993,6 +2055,45 @@ public class GlobalStateMgr {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
                 }
+=======
+            try {
+                saveHeader(dos);
+                nodeMgr.save(dos);
+                localMetastore.save(dos);
+                alterJobMgr.save(dos);
+                recycleBin.save(dos);
+                VariableMgr.save(dos);
+                resourceMgr.saveResourcesV2(dos);
+                exportMgr.saveExportJobV2(dos);
+                backupHandler.saveBackupHandlerV2(dos);
+                globalTransactionMgr.saveTransactionStateV2(dos);
+                colocateTableIndex.saveColocateTableIndexV2(dos);
+                routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                loadMgr.saveLoadJobsV2JsonFormat(dos);
+                smallFileMgr.saveSmallFilesV2(dos);
+                pluginMgr.save(dos);
+                deleteMgr.save(dos);
+                analyzeMgr.save(dos);
+                resourceGroupMgr.save(dos);
+                authenticationMgr.saveV2(dos);
+                authorizationMgr.saveV2(dos);
+                taskManager.saveTasksV2(dos);
+                catalogMgr.save(dos);
+                insertOverwriteJobMgr.save(dos);
+                compactionMgr.save(dos);
+                streamLoadMgr.save(dos);
+                materializedViewMgr.save(dos);
+                globalFunctionMgr.save(dos);
+                storageVolumeMgr.save(dos);
+                dictionaryMgr.save(dos);
+                replicationMgr.save(dos);
+                keyMgr.save(dos);
+                pipeManager.getRepo().save(dos);
+            } catch (SRMetaBlockException e) {
+                LOG.error("Save meta block failed ", e);
+                throw new IOException("Save meta block failed ", e);
+            }
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
 
                 long saveImageEndTime = System.currentTimeMillis();
                 LOG.info("Finished save meta block {} in {} ms.",
@@ -3272,6 +3373,10 @@ public class GlobalStateMgr {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
+    }
+
+    public MaterializedViewMgr getMaterializedViewMgr() {
+        return this.materializedViewMgr;
     }
 
     public SmallFileMgr getSmallFileMgr() {
