@@ -568,7 +568,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
         auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
         schema.append(f);
-        values.emplace_back(Datum());
+        values.emplace_back();
         if (input.is_null(i)) {
             continue;
         }
