@@ -149,7 +149,6 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
-WITH_BRPC_KEEPALIVE=OFF
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
@@ -235,7 +234,6 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
-            --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             -h) HELP=1; shift ;;
@@ -371,7 +369,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
-                  -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE}          \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
