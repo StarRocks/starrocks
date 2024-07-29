@@ -72,7 +72,7 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
             public void close() {
                 Utils.closeCloseables(fileIter);
                 currentReadColumnarBatchIndex = -1;
-                currentColumnarBatchList.clear();
+                currentColumnarBatchList = Lists.newArrayList();
             }
 
             @Override

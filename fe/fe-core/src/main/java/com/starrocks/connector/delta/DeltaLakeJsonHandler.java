@@ -98,13 +98,13 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
             private String currentFile;
             // index of the current line being read from the current read json list, -1 means no line is read yet
             private int currentReadLine = -1;
-            private List<JsonNode> currentReadJsonList;
+            private List<JsonNode> currentReadJsonList = Lists.newArrayList();
 
             @Override
             public void close() {
                 Utils.closeCloseables(scanFileIter);
                 currentReadLine = -1;
-                currentReadJsonList.clear();
+                currentReadJsonList = Lists.newArrayList();
             }
 
             @Override
