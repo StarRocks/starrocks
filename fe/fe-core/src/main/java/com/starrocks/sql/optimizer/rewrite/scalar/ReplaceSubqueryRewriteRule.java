@@ -57,7 +57,7 @@ public class ReplaceSubqueryRewriteRule extends TopDownScalarOperatorRewriteRule
         // so columnRef operator's equals()' short-circuit can benefit complex ScalarOperator like one thousand or predicate
         // if use Map::containsKey, these complex ScalarOperator's hashCode can be super slow
         SubqueryOperator subqueryOperator = Utils.getValueIfExists(subqueryPlaceholders, scalarOperator);
-        if(subqueryOperator != null) {
+        if (subqueryOperator != null) {
             LogicalApplyOperator applyOperator = subqueryOperator.getApplyOperator();
             builder = new OptExprBuilder(applyOperator, Arrays.asList(builder, subqueryOperator.getRootBuilder()),
                     builder.getExpressionMapping());
