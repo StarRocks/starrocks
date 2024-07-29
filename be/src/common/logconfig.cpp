@@ -158,7 +158,7 @@ static void dontdump_unused_pages() {
     start_dump = true;
 }
 
-static void failure_writer(const char* data, int size) {
+static void failure_writer(const char* data, size_t size) {
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 
@@ -278,7 +278,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
-        google::InstallFailureFunction(failure_function);
+        google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
     }
 
     logging_initialized = true;

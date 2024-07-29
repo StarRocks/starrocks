@@ -250,6 +250,10 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $GLOG_SOURCE"
 
@@ -305,6 +309,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
+    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
 
@@ -314,6 +322,7 @@ if [ ! -f $PATCHED_MARK ]; then
     patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0.patch
     # replace uint64 with uint64_t to make compiler happy
     patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
+    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
     touch $PATCHED_MARK
 fi
 cd -

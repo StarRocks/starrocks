@@ -115,10 +115,10 @@ GFLAGS_SOURCE=gflags-2.2.2
 GFLAGS_MD5SUM="1a865b93bacfa963201af3f75b7bd64c"
 
 # glog
-GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.4.0.tar.gz"
-GLOG_NAME=glog-0.4.0.tar.gz
-GLOG_SOURCE=glog-0.4.0
-GLOG_MD5SUM="0daea8785e6df922d7887755c3d100d0"
+GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.7.1.tar.gz"
+GLOG_NAME=glog-0.7.1.tar.gz
+GLOG_SOURCE=glog-0.7.1
+GLOG_MD5SUM="128e2995cc33d794ff24f785a3060346"
 
 # gtest
 GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
@@ -193,10 +193,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=brpc-1.3.0.tar.gz
-BRPC_SOURCE=brpc-1.3.0
-BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
+BRPC_NAME=brpc-1.9.0.tar.gz
+BRPC_SOURCE=brpc-1.9.0
+BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
