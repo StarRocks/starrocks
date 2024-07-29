@@ -356,13 +356,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1), Maps.newHashMap());
-<<<<<<< HEAD
-        basicStatsMeta.increaseUpdateRows(10000000L);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-=======
         basicStatsMeta.increaseDeltaRows(10000000L);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
->>>>>>> d2508a8a56 ([BugFix] fix incorrect healthy value in basicStatsMeta (#48935))
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
@@ -384,14 +379,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         BasicStatsMeta basicStatsMeta2 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
-<<<<<<< HEAD
                 LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
-=======
-                LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap(),
-                basicStatsMeta.getUpdateRows());
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
->>>>>>> d2508a8a56 ([BugFix] fix incorrect healthy value in basicStatsMeta (#48935))
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
