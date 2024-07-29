@@ -10,18 +10,12 @@ Adds a regular expression to the SQL blacklist to forbid certain SQL patterns. W
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/Blacklist.md).
 
-<<<<<<< HEAD
-> **NOTE**
->
-> Only users with the ADMIN privilege can add SQL regular expressions to the SQL blacklist.
-=======
 :::tip
 
-- This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+- Only users with the ADMIN privilege can add SQL regular expressions to the SQL blacklist.
 - Currently, StarRocks supports adding SELECT statements to the SQL Blacklist.
 
 :::
->>>>>>> 5cf740c0c1 ([Doc] Update SQL Blacklist (#48996))
 
 ## Syntax
 
