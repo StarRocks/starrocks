@@ -26,7 +26,6 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -88,6 +87,87 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         throw new AlterJobException("Not support alter table operation : " + node.getClass().getName());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+        TableName tableName = statement.getTbl();
+        this.tableName = tableName;
+
+        Database db = MetaUtils.getDatabase(context, tableName);
+        Table table = MetaUtils.getTable(tableName);
+
+        if (table.getType() == Table.TableType.VIEW || table.getType() == Table.TableType.MATERIALIZED_VIEW) {
+            throw new SemanticException("The specified table [" + tableName + "] is not a table");
+        }
+
+        if (table instanceof OlapTable && ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+            OlapTable olapTable = (OlapTable) table;
+            throw new AlterJobException("", InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName()));
+        }
+
+        this.db = db;
+        this.table = table;
+
+        for (AlterClause alterClause : statement.getAlterClauseList()) {
+            visit(alterClause, context);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
+        TableName tableName = statement.getTableName();
+        Database db = MetaUtils.getDatabase(context, tableName);
+        Table table = MetaUtils.getTable(tableName);
+
+        if (table.getType() != Table.TableType.VIEW) {
+            throw new SemanticException("The specified table [" + tableName + "] is not a view");
+        }
+
+        this.db = db;
+        this.table = table;
+        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+        visit(alterViewClause, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
+        // check db
+        final TableName mvName = stmt.getMvName();
+        Database db = MetaUtils.getDatabase(context, mvName);
+
+        Locker locker = new Locker();
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
+        }
+
+        try {
+            Table table = MetaUtils.getTable(mvName);
+            if (!table.isMaterializedView()) {
+                throw new SemanticException("The specified table [" + mvName + "] is not a view");
+            }
+            this.db = db;
+            this.table = table;
+
+            MaterializedView materializedView = (MaterializedView) table;
+            // check materialized view state
+            if (materializedView.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new AlterJobException("Materialized view [" + materializedView.getName() + "]'s state is not NORMAL. "
+                        + "Do not allow to do ALTER ops");
+            }
+
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
+            visit(stmt.getAlterTableClause());
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
+            return null;
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+>>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
     //Alter table clause
 
     @Override
