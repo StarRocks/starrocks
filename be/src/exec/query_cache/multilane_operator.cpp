@@ -162,7 +162,7 @@ Status MultilaneOperator::set_cancelled(RuntimeState* state) {
             state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_cancelled(state); });
 }
 
-Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status MultilaneOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr);
     if (_lane_arbiter->in_passthrough_mode()) {
         if (chunk->is_empty()) {

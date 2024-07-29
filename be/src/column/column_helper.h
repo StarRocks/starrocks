@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "column/dictionary_column.h"
 #include "column/nullable_column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
@@ -122,6 +123,23 @@ public:
             return const_column->data_column();
         }
         return column;
+    }
+
+    static ColumnPtr unpack_dictionary_column(const ColumnPtr& column) {
+        DCHECK(column->is_dictionary());
+        if (column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+            auto data_column = unpack_dictionary_column(nullable_column->data_column());
+            return NullableColumn::create(data_column, nullable_column->null_column());
+        } else {
+            ColumnPtr dict_column = down_cast<DictionaryColumn*>(column.get())->data_column();
+            IndexColumnPtr index_column = down_cast<DictionaryColumn*>(column.get())->index_column();
+            ColumnPtr unpacked_column = dict_column->clone_empty();
+            for (size_t i = 0; i < index_column->size(); ++i) {
+                unpacked_column->append(*dict_column, index_column->get_data()[i], 1);
+            }
+            return unpacked_column;
+        }
     }
 
     static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {

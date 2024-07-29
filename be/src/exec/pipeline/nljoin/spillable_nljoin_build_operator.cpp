@@ -73,9 +73,9 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status SpillableNLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableNLJoinBuildOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (_strategy == spill::SpillStrategy::NO_SPILL) {
-        RETURN_IF_ERROR(NLJoinBuildOperator::push_chunk(state, chunk));
+        RETURN_IF_ERROR(NLJoinBuildOperator::do_push_chunk(state, chunk));
     } else {
         // TODO: process auto spill mode
         RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).add_chunk_to_spill_buffer(state, chunk));

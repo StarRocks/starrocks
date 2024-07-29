@@ -186,12 +186,12 @@ bool SpillableHashJoinBuildOperator::is_finished() const {
     return _is_finished || _join_builder->is_finished();
 }
 
-Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableHashJoinBuildOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DeferOp update_revocable_bytes{
             [this]() { set_revocable_mem_bytes(_join_builder->hash_join_builder()->hash_table().mem_usage()); }};
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
-        return HashJoinBuildOperator::push_chunk(state, chunk);
+        return HashJoinBuildOperator::do_push_chunk(state, chunk);
     }
 
     if (!chunk || chunk->is_empty()) {

@@ -25,7 +25,7 @@ StatusOr<ChunkPtr> IntersectProbeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
 
-Status IntersectProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status IntersectProbeSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _intersect_ctx->refine_chunk_from_ht(state, chunk, _dst_exprs, _dependency_index + 1);
 }
 

@@ -220,7 +220,7 @@ public:
     bool is_finished() const override { return !has_output(); }
     bool pending_finish() const override { return --_pending_finish_cnt >= 0; }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
@@ -230,7 +230,7 @@ private:
     mutable std::atomic<int32_t> _pending_finish_cnt;
 };
 
-Status TestSourceOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status TestSourceOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::InternalError("Shouldn't push chunk to source operator");
 }
@@ -282,7 +282,7 @@ public:
         return Status::OK();
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
@@ -290,7 +290,7 @@ private:
     ChunkPtr _chunk;
 };
 
-Status TestNormalOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status TestNormalOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _chunk = chunk;
     _counter->process_push(chunk);
     return Status::OK();
@@ -334,14 +334,14 @@ public:
         return Status::OK();
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
 };
 
-Status TestSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status TestSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::OK();
 }

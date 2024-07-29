@@ -97,7 +97,7 @@ struct UDFFunctionCallHelper {
 
 JavaFunctionCallExpr::JavaFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
 
     for (int i = 0; i < _children.size(); ++i) {

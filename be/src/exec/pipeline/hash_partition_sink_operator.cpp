@@ -26,7 +26,7 @@ StatusOr<ChunkPtr> HashPartitionSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't call pull_chunk from hash partition sink operator.");
 }
 
-Status HashPartitionSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status HashPartitionSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _hash_partition_ctx->push_one_chunk_to_partitioner(state, chunk);
 }
 

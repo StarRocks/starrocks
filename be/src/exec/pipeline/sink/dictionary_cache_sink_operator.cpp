@@ -54,7 +54,7 @@ StatusOr<ChunkPtr> DictionaryCacheSinkOperator::pull_chunk(RuntimeState* state) 
     return Status::InternalError("Shouldn't pull chunk from dictionary cache sink operator");
 }
 
-Status DictionaryCacheSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status DictionaryCacheSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _writer->append_chunk(chunk);
 }
 

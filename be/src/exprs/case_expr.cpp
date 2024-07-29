@@ -268,7 +268,7 @@ public:
         return out.str();
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         if (_has_case_expr) {
             return evaluate_case(context, chunk);
         } else {

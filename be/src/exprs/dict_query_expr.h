@@ -27,7 +27,7 @@ public:
     DictQueryExpr(const TExprNode& node);
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictQueryExpr(*this)); }
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;

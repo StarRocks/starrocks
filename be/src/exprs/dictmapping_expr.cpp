@@ -30,7 +30,7 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
     return state->mutable_dict_optimize_parser()->rewrite_expr(context, this, _output_id);
 }
 
-StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     if (ptr == nullptr || ptr->is_empty()) {
         return get_child(1)->evaluate_checked(context, ptr);
     }

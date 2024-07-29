@@ -49,7 +49,7 @@ StatusOr<ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AnalyticSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _analytor->process(state, chunk);
 }
 

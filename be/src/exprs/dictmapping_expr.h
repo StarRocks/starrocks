@@ -42,7 +42,7 @@ public:
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
     template <class Rewrite>
     Status rewrite(Rewrite&& rewriter) {

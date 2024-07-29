@@ -42,7 +42,7 @@ bool CollectStatsSourceOperator::is_finished() const {
     return _is_finished || _ctx->is_downstream_finished(_driver_sequence);
 }
 
-Status CollectStatsSourceOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status CollectStatsSourceOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::InternalError("Not support");
 }
 StatusOr<ChunkPtr> CollectStatsSourceOperator::pull_chunk(RuntimeState* state) {

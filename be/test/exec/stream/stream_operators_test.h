@@ -136,7 +136,7 @@ public:
         return Status::NotSupported("pull_chunk in StreamSinkOperator is not supported.");
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;

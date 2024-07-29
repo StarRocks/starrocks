@@ -55,7 +55,7 @@ public:
     const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
     void set_precondition_ready(RuntimeState* state) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:

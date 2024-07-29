@@ -244,6 +244,8 @@ public:
 
     bool has_const_column() const;
 
+    bool has_not_accumulatable_column() const;
+
     void materialized_nullable() {
         for (ColumnPtr& c : _columns) {
             c->materialized_nullable();
@@ -252,6 +254,9 @@ public:
 
     // Unpack and duplicate const columns in the chunk.
     void unpack_and_duplicate_const_columns();
+
+    // Unpack dictionary columns in the chunk
+    void unpack_dictionary_column_in_place();
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.

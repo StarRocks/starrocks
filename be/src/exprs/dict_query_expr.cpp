@@ -30,7 +30,7 @@ namespace starrocks {
 
 DictQueryExpr::DictQueryExpr(const TExprNode& node) : Expr(node), _dict_query_expr(node.dict_query_expr) {}
 
-StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
     bool null_if_not_found = !_dict_query_expr.strict_mode;

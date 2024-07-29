@@ -522,7 +522,7 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
     return Status::OK();
 }
 
-Status CacheOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status CacheOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr);
     if (_lane_arbiter->in_passthrough_mode()) {
         DCHECK(_passthrough_chunk == nullptr);

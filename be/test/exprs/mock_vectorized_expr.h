@@ -38,7 +38,7 @@ public:
     explicit MockExpr(const TExprNode& dummy, ColumnPtr result) : Expr(dummy), _column(std::move(result)) {}
     explicit MockExpr(TypeDescriptor type, ColumnPtr col) : Expr(std::move(type), false), _column(std::move(col)) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockExpr(*this)); }
 
@@ -52,7 +52,7 @@ class MockCostExpr : public Expr {
 public:
     explicit MockCostExpr(const TExprNode& t) : Expr(t) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext*, Chunk*) override {
         DCHECK(false);
         __builtin_unreachable();
     }
@@ -91,7 +91,7 @@ public:
     MockVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
             : MockCostExpr(t), size(size), value(value) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         start();
         ColumnPtr col;
         if constexpr (lt_is_decimal<Type>) {
@@ -120,7 +120,7 @@ public:
     MockMultiVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> num1, RunTimeCppType<Type> num2)
             : MockCostExpr(t), size(size), num1(num1), num2(num2) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         start();
         auto col = RunTimeColumnType<Type>::create();
         col->reserve(size);
@@ -151,7 +151,7 @@ public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value, bool only_null)
             : MockCostExpr(t), only_null(only_null), flag(0), size(size), value(value) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         start();
         if (only_null) {
             return ColumnHelper::create_const_null_column(size);
@@ -198,7 +198,7 @@ public:
         col = ColumnHelper::create_const_column<Type>(value, 1);
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         start();
         stop();
         return col;
@@ -213,7 +213,7 @@ class MockColumnExpr : public MockCostExpr {
 public:
     MockColumnExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), _column(column) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         start();
         auto col = _column->clone();
         stop();
@@ -230,7 +230,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 

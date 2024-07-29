@@ -145,7 +145,7 @@ public:
     // which will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
     virtual bool is_mutable() const { return false; }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }
 

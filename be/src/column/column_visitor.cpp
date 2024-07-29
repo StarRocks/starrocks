@@ -21,6 +21,7 @@ namespace starrocks {
 
 VISIT_IMPL(NullableColumn)
 VISIT_IMPL(ConstColumn)
+VISIT_IMPL(DictionaryColumn)
 VISIT_IMPL(ArrayColumn)
 VISIT_IMPL(MapColumn)
 VISIT_IMPL(StructColumn)

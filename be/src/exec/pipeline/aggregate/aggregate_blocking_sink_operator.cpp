@@ -88,7 +88,7 @@ StatusOr<ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state
     return Status::InternalError("Not support");
 }
 
-Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AggregateBlockingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     const auto chunk_size = chunk->num_rows();

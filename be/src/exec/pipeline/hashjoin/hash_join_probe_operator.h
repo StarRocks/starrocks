@@ -46,7 +46,7 @@ public:
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_prober.get());
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 

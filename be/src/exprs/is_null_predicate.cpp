@@ -37,7 +37,7 @@ class VectorizedIsNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNullPredicate);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {
@@ -72,7 +72,7 @@ class VectorizedIsNotNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNotNullPredicate);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {

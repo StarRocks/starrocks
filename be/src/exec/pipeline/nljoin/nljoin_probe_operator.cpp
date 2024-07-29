@@ -686,7 +686,7 @@ void NLJoinProbeOperator::_init_build_match() const {
     }
 }
 
-Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status NLJoinProbeOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _probe_chunk = chunk;
     _probe_row_start = 0;
     _probe_row_current = 0;

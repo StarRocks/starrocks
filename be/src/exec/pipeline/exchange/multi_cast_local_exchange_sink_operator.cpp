@@ -41,7 +41,7 @@ StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* 
     return Status::InternalError("Should not pull_chunk in MultiCastLocalExchangeSinkOperator");
 }
 
-Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status MultiCastLocalExchangeSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _exchanger->push_chunk(chunk, _driver_sequence);
 }
 

@@ -48,7 +48,7 @@ protected:
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
     // Evaluate the expression using the compiled function.
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
 private:
     // The original expression.

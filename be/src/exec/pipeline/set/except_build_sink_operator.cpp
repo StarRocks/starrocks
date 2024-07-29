@@ -20,7 +20,7 @@ StatusOr<ChunkPtr> ExceptBuildSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
 
-Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ExceptBuildSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _except_ctx->append_chunk_to_ht(state, chunk, _dst_exprs, _buffer_state.get());
 }
 

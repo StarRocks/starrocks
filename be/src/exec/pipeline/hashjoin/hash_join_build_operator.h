@@ -50,7 +50,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     std::string get_name() const override {

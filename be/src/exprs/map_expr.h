@@ -30,7 +30,7 @@ public:
     // a naive way to predicate whether there will be duplicated keys
     bool maybe_duplicated_keys() { return !_children[0]->is_slotref(); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapExpr(*this)); }
 };

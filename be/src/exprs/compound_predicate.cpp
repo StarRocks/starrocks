@@ -46,7 +46,7 @@ class VectorizedAndCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedAndCompoundPredicate);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         int l_falses = ColumnHelper::count_false_with_notnull(l);
 
@@ -123,7 +123,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(OrImpl, l_value, r_value) {
 class VectorizedOrCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedOrCompoundPredicate);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
         int l_trues = ColumnHelper::count_true_with_notnull(l);
@@ -190,7 +190,7 @@ DEFINE_UNARY_FN_WITH_IMPL(CompoundPredNot, l) {
 class VectorizedNotCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedNotCompoundPredicate);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);

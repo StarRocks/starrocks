@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> CastMapExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr orig_column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(orig_column) == orig_column->size()) {
         return ColumnHelper::create_const_null_column(orig_column->size());
@@ -65,7 +65,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
                     ColumnHelper::as_column<NullableColumn>(orig_column)->null_column()->clone_shared()));
 }
 
-StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> CastStructExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr orig_column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(orig_column) == orig_column->size()) {
         return ColumnHelper::create_const_null_column(orig_column->size());
@@ -98,7 +98,7 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
                     ColumnHelper::as_column<NullableColumn>(orig_column)->null_column()->clone_shared()));
 }
 
-StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr orig_column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(orig_column) == orig_column->size()) {
         return ColumnHelper::create_const_null_column(orig_column->size());

@@ -43,7 +43,7 @@ public:
 
     bool is_finished() const override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override;

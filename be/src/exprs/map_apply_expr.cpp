@@ -54,7 +54,7 @@ Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprCont
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked_impl(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
     MapColumn* input_map = nullptr;

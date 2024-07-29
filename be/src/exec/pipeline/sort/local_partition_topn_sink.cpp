@@ -33,7 +33,7 @@ StatusOr<ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(RuntimeState* stat
     return Status::InternalError("Shouldn't call pull_chunk from local partition topn sink operator.");
 }
 
-Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status LocalPartitionTopnSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _partition_topn_ctx->push_one_chunk_to_partitioner(state, chunk);
 }
 

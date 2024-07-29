@@ -67,7 +67,7 @@ StatusOr<ChunkPtr> GeneratorStreamSourceOperator::pull_chunk(starrocks::RuntimeS
     return StreamChunkConverter::make_stream_chunk(std::move(chunk), std::move(ops));
 }
 
-Status PrinterStreamSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status PrinterStreamSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     std::cout << "========= Sink Result: " << chunk->debug_columns() << std::endl;
     for (auto& col : chunk->columns()) {
         std::cout << col->debug_string() << std::endl;

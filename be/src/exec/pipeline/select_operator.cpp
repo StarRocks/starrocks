@@ -84,7 +84,7 @@ bool SelectOperator::need_input() const {
     return !_curr_chunk;
 }
 
-Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SelectOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get()));
     _curr_chunk = chunk;
     return Status::OK();

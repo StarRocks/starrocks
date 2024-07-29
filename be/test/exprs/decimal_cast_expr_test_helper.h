@@ -34,7 +34,7 @@ template <LogicalType Type>
 class VerbatimVectorizedExpr : public MockCostExpr {
 public:
     VerbatimVectorizedExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), column(column) {}
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override { return column; }
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override { return column; }
 
 private:
     ColumnPtr column;

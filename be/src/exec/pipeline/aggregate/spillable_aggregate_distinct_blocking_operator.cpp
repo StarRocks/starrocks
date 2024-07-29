@@ -87,11 +87,11 @@ Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* sta
     return Status::OK();
 }
 
-Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableAggregateDistinctBlockingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::push_chunk(state, chunk));
+    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::do_push_chunk(state, chunk));
     // direct return if is_finished. (hash set reach limit)
     if (_is_finished) return Status::OK();
     set_revocable_mem_bytes(_aggregator->hash_set_memory_usage());

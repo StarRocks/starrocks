@@ -116,8 +116,19 @@ public:
     // the chunk need to be shared
     virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) = 0;
 
+    virtual bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) {
+        return false;
+    }
+
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+        if (!use_optimization_impl_for_dictionary_column(state, chunk)) {
+            chunk->unpack_dictionary_column_in_place();
+        }
+        return do_push_chunk(state, chunk);
+    }
+
     // Push chunk to this operator
-    virtual Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
+    virtual Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
 
     // reset_state is used by MultilaneOperator in cache mechanism, because lanes in MultilaneOperator are
     // re-used by tablets, before the lane serves for the current tablet, it must invoke reset_state to re-prepare

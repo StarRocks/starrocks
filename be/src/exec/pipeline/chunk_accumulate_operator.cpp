@@ -24,7 +24,7 @@ Status ChunkAccumulateOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ChunkAccumulateOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _acc.push(chunk);
     return Status::OK();
 }

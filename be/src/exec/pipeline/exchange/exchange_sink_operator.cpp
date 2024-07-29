@@ -482,7 +482,7 @@ StatusOr<ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't call pull_chunk from exchange sink.");
 }
 
-Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ExchangeSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     uint16_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();

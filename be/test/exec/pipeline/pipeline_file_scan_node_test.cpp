@@ -351,7 +351,7 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -360,7 +360,7 @@ private:
     bool _is_finished = false;
 };
 
-Status TestFileScanSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status TestFileScanSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::OK();
 }

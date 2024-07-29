@@ -97,7 +97,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> LambdaFunction::evaluate_checked_impl(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
         chunk->append_column(sub_col, _common_sub_expr_ids[i]);
