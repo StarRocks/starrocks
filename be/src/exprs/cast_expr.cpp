@@ -1704,7 +1704,6 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
                                                                             const TypeDescriptor& to_type,
                                                                             bool allow_throw_exception) {
     if (to_type.is_string_type() && from_type.is_array_type()) {
-        LOG(INFO) << "Cast from array to varchar. ";
         TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
         TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
 

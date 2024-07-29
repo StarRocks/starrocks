@@ -139,11 +139,11 @@ Status CastStringToArray::open(RuntimeState* state, ExprContext* context, Functi
 
 // Cast array<ANY> to string
 StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Chunk* ptr) {
-    LOG(INFO) << "Converting array to string";
+    VLOG(1) << "Converting array to string";
 
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(column) == column->size()) {
-        LOG(WARNING) << "Returning null for converting array to string";
+        VLOG(1) << "Returning null for converting array to string";
         return ColumnHelper::create_const_null_column(column->size());
     }
     ColumnPtr cast_column = column->clone_shared();
@@ -160,7 +160,7 @@ StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Ch
         array_col = (ColumnHelper::as_column<ArrayColumn>(src_col));
         src_col = array_col->elements_column();
 
-        LOG(INFO) << "Returning string value. ";
+        VLOG(1) << "Returning string value. ";
         result->append(Slice(array_col->debug_string()));
     }
 
