@@ -441,9 +441,9 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
 
     auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
                                                                          std::filesystem::file_size(small_page_file));
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000,
-                                                    shared_buffer.get());
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                         std::filesystem::file_size(small_page_file), 100000, shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
