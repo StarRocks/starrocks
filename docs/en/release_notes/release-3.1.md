@@ -4,6 +4,33 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.14
+
+Release date: July 29, 2024
+
+### Improvements
+
+- Stream Load now supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Frequent INSERT and UPDATE operations on Primary Key tables may cause write and query delays in the database. [#47838](https://github.com/StarRocks/starrocks/pull/47838)
+- When a Primary Key table encounters data persistence failures, the persistent index may fail to capture the error, leading to data loss and reporting the error "Insert found duplicate key". [#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- Materialized views may report insufficient permissions when refreshed. [#47561](https://github.com/StarRocks/starrocks/pull/47561)
+- Materialized view reports the error "For input string" when refreshed. [#46131](https://github.com/StarRocks/starrocks/pull/46131)
+- During materialized view refresh, the lock is held excessively long, causing the Leader FE to be restarted by the deadlock detection script. [#48256](https://github.com/StarRocks/starrocks/pull/48256)
+- Queries against views with the IN clause in its definition may return inaccurate results. [#47484](https://github.com/StarRocks/starrocks/pull/47484)
+- Global Runtime Filter causes incorrect results. [#48496](https://github.com/StarRocks/starrocks/pull/48496)
+- MySQL protocol `COM_CHANGE_USER` does not support `conn_attr`. [#47796](https://github.com/StarRocks/starrocks/pull/47796)
+
+### Behavior Changes
+
+- When users create a non-partitioned table without specifying the bucket number, the minimum bucket number the system sets for the table is `16` (instead of `2` based on the formula `2*BE or CN count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+
+
 ## 3.1.13
 
 Release date: June 26, 2024

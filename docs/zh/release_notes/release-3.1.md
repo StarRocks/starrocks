@@ -4,6 +4,33 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.14
+
+发布日期：2024 年 7 月 29 日
+
+### 功能优化
+
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表频繁 INSERT UPDATE，可能会导致数据库写入和查询卡顿。 [#47838](https://github.com/StarRocks/starrocks/pull/47838)
+- 主键表写盘失败时，持久化索引可能会因为无法捕捉错误导致数据丢失，并报错 “Insert found duplicate key”。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 物化视图在刷新时，可能会报告权限不够。 [#47561](https://github.com/StarRocks/starrocks/pull/47561)
+- 物化视图刷新时报错 “For input string”。 [#46131](https://github.com/StarRocks/starrocks/pull/46131)
+- 物化视图刷新时持锁时间太长，导致死锁检测脚本重启了 Leader FE。[#48256](https://github.com/StarRocks/starrocks/pull/48256)
+- 视图带有 IN 的查询可能结果不准确。 [#47484](https://github.com/StarRocks/starrocks/pull/47484)
+- Global Runtime Filter 导致查询结果跳变。[#48496](https://github.com/StarRocks/starrocks/pull/48496)
+- MySQL 协议 `COM_CHANGE_USER` 不支持 `conn_attr`。[#47796](https://github.com/StarRocks/starrocks/pull/47796)
+
+### 行为变更
+
+- 非分区表为自动设置分桶数量时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+
+
 ## 3.1.13
 
 发布日期：2024 年 6 月 26 日
