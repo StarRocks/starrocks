@@ -356,21 +356,23 @@ static Status read_from_source_segment_and_update(Rowset* rowset, const Schema& 
             if (source_chunk_ptr->num_rows() >= INT32_MAX ||
                 (int64_t)source_chunk_ptr->num_rows() * upt_memory_usage_per_row_column * (int64_t)schema.num_fields() >
                         config::partial_update_memory_limit_per_worker) {
-                StreamChunkContainer container = {.chunk_ptr = source_chunk_ptr.get(),
-                                                  .start_rowid = start_rowid,
-                                                  .end_rowid = start_rowid + source_chunk_ptr->num_rows()};
+                StreamChunkContainer container = {
+                        .chunk_ptr = source_chunk_ptr.get(),
+                        .start_rowid = start_rowid,
+                        .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
                 RETURN_IF_ERROR(update_func(container));
-                start_rowid += source_chunk_ptr->num_rows();
+                start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
                 source_chunk_ptr->reset();
             }
         }
     }
     if (!source_chunk_ptr->is_empty()) {
-        StreamChunkContainer container = {.chunk_ptr = source_chunk_ptr.get(),
-                                          .start_rowid = start_rowid,
-                                          .end_rowid = start_rowid + source_chunk_ptr->num_rows()};
+        StreamChunkContainer container = {
+                .chunk_ptr = source_chunk_ptr.get(),
+                .start_rowid = start_rowid,
+                .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
         RETURN_IF_ERROR(update_func(container));
-        start_rowid += source_chunk_ptr->num_rows();
+        start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
         source_chunk_ptr->reset();
     }
     return Status::OK();
@@ -758,10 +760,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             RETURN_IF_ERROR(read_from_source_segment_and_update(
                     rowset, partial_schema, tablet, &stats, latest_applied_version.major_number(), rowsetid_segid,
                     seg_path, [&](StreamChunkContainer container) {
-                        LOG(INFO) << "RowsetColumnUpdateState read from source segment: [mem usage: "
-                                  << container.chunk_ptr->memory_usage()
-                                  << " row cnt: " << container.chunk_ptr->num_rows() << "] row range : ["
-                                  << container.start_rowid << ", " << container.end_rowid << ")";
+                        VLOG(2) << "RowsetColumnUpdateState read from source segment: [byte usage: "
+                                << container.chunk_ptr->bytes_usage() << " row cnt: " << container.chunk_ptr->num_rows()
+                                << "] row range : [" << container.start_rowid << ", " << container.end_rowid << ")";
                         const size_t source_chunk_size = container.chunk_ptr->memory_usage();
                         tracker->consume(source_chunk_size);
                         DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
