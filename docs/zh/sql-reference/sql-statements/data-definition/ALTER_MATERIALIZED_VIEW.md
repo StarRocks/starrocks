@@ -40,7 +40,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     { RENAME [db_name.]<new_mv_name> 
     | REFRESH <new_refresh_scheme_desc> 
     | ACTIVE | INACTIVE 
-    | SWAP WITH [db_name.]<mv2_name>
+    | SWAP WITH <mv2_name>
     | SET ( "<key>" = "<value>"[,...]) }
 ```
 
