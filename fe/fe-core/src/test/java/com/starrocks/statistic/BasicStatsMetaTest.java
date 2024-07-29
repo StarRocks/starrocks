@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
@@ -60,9 +61,9 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     result = 100L;
                 }
             };
-            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
-                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 100);
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 100);
             Assert.assertEquals(0.05, basicStatsMeta.getHealthy(), 0.01);
         }
 
@@ -78,9 +79,9 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     result = 10000L;
                 }
             };
-            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
-                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 10000);
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
@@ -103,14 +104,14 @@ public class BasicStatsMetaTest extends PlanTestBase {
             DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
             String deserializedString = Text.readString(dataInputStream);
             BasicStatsMeta deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMeta.class);
-            Assert.assertEquals(db.getId(), deserializedMeta.getDbId());
+            Assert.assertEquals(10001, deserializedMeta.getDbId());
 
         }
 
         {
-            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), Lists.newArrayList(),
                     StatsConstants.AnalyzeType.FULL,
-                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Maps.newHashMap(), 10000);
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
             String s = GSON.toJson(basicStatsMeta);
