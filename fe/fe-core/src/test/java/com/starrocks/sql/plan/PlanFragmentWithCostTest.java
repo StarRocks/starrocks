@@ -703,6 +703,45 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testPredicateJoinOnPropagationTwoJoin() throws Exception {
+        String sql =
+                "select * from (select * from t0 where v1 = 1) t_0 inner join t1 t_1 on t_0.v1 = t_1.v4";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1, 1: v1 IS NOT NULL\n" +
+                "     partitions=1/1"
+        );
+        assertContains(plan, "TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 = 1, 4: v4 IS NOT NULL\n" +
+                "     partitions=1/1"
+        );
+    }
+
+    @Test
+    public void testPredicateJoinOnPropagationThreeJoin() throws Exception {
+        String sql =
+                "select * from t0 inner join t1 on t0.v1 = t1.v4 inner join t2 on t1.v4 = t2.v7 where t0.v1 < 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 < 2\n" +
+                "     partitions=1/1"
+        );
+        assertContains(plan, "TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 < 2\n" +
+                "     partitions=1/1"
+        );
+        assertContains(plan, "TABLE: t2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 7: v7 < 2, 7: v7 IS NOT NULL\n" +
+                "     partitions=1/1"
+        );
+    }
+
+    @Test
     public void testSemiJoinPushDownPredicate() throws Exception {
         String sql =
                 "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";

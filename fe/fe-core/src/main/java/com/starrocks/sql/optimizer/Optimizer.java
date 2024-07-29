@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PredicateJoinOnPropagationRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -460,6 +461,9 @@ public class Optimizer {
 
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
+
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRE_PREDICATE_JOIN_ON_PROPAGATION);
+        ruleRewriteIterative(tree, rootTaskContext, new PredicateJoinOnPropagationRule());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

@@ -302,6 +302,24 @@ public class RuleSet {
                 new PruneCTEConsumeColumnsRule()
         ));
 
+        REWRITE_RULES.put(RuleSetType.PRE_PREDICATE_JOIN_ON_PROPAGATION, ImmutableList.of(
+                new CastToEmptyRule(),
+                new PruneTrueFilterRule(),
+                new PushDownPredicateCTEAnchor(),
+                new PushDownPredicateAggRule(),
+                new PushDownPredicateWindowRule(),
+                new PushDownPredicateJoinRule(),
+                new PushDownJoinOnClauseRule(),
+                new PushDownPredicateProjectRule(),
+                new PushDownPredicateUnionRule(),
+                new PushDownPredicateExceptRule(),
+                new PushDownPredicateIntersectRule(),
+                new PushDownPredicateTableFunctionRule(),
+                new PushDownPredicateRepeatRule(),
+                new MergeTwoFiltersRule(),
+                new PushDownPredicateCTEConsumeRule()
+        ));
+
         REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
                 new CastToEmptyRule(),
                 new PruneTrueFilterRule(),
