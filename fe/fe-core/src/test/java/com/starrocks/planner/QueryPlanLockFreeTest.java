@@ -83,4 +83,18 @@ public class QueryPlanLockFreeTest {
                 StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
     }
 
+    @Test
+    public void testCopiedTable() throws Exception {
+        String sql = "select t1.* from t0 t1 join t0 t2 on t1.k1 = t2.k2";
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable("default_catalog", DB_NAME, "t0");
+        Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        OlapScanNode node1 = (OlapScanNode) plan.second.getScanNodes().get(0);
+        OlapScanNode node2 = (OlapScanNode) plan.second.getScanNodes().get(1);
+        Assert.assertTrue("original table should different from copied table in plan", table != node1.getOlapTable());
+        Assert.assertTrue("original table should different from copied table in plan", table != node2.getOlapTable());
+
+        Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
+    }
+
 }
