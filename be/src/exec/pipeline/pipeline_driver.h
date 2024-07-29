@@ -225,8 +225,8 @@ public:
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
-    [[nodiscard]] Status prepare(RuntimeState* runtime_state);
-    [[nodiscard]] virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
+    Status prepare(RuntimeState* runtime_state);
+    virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -422,7 +422,7 @@ public:
     }
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
-    [[nodiscard]] Status check_short_circuit();
+    Status check_short_circuit();
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -474,10 +474,10 @@ protected:
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);

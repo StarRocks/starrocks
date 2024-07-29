@@ -62,7 +62,7 @@ public:
     // same Status as the first call.
     //
     // [thread-safe]
-    [[nodiscard]] Status open();
+    Status open();
 
     // REQUIRE:
     //  - |chunk| and |indexes| must be kept alive until |cb| been invoked
@@ -108,7 +108,7 @@ public:
 
     [[nodiscard]] bool is_immutable() const;
 
-    [[nodiscard]] Status check_immutable();
+    Status check_immutable();
 
     [[nodiscard]] int64_t last_write_ts() const;
 

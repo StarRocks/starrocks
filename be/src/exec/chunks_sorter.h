@@ -56,9 +56,9 @@ struct DataSegment {
     // the second is:
     //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
     //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
-    [[nodiscard]] Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                                          std::vector<std::vector<uint8_t>>& filter_array,
-                                          const SortDescs& sort_order_flags, uint32_t& least_num, uint32_t& middle_num);
+    Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
+                            std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_order_flags,
+                            uint32_t& least_num, uint32_t& middle_num);
 
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());
@@ -107,9 +107,9 @@ public:
                  const bool is_topn);
     virtual ~ChunksSorter();
 
-    [[nodiscard]] static StatusOr<ChunkPtr> materialize_chunk_before_sort(
-            Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
-            const std::vector<OrderByType>& order_by_types);
+    static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+                                                            const SortExecExprs& sort_exec_exprs,
+                                                            const std::vector<OrderByType>& order_by_types);
 
     virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
@@ -118,14 +118,14 @@ public:
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
     // Append a Chunk for sort.
-    [[nodiscard]] virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
+    virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    [[nodiscard]] virtual Status do_done(RuntimeState* state) = 0;
+    virtual Status do_done(RuntimeState* state) = 0;
 
-    [[nodiscard]] Status done(RuntimeState* state);
+    Status done(RuntimeState* state);
 
     // get_next only works after done().
-    [[nodiscard]] virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
+    virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     // RuntimeFilter generate by ChunkSorter only works in TopNSorter and HeapSorter
     virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
