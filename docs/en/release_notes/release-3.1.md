@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.1.14
 
-Release date: July 26, 2024
+Release date: July 29, 2024
 
 ### Improvements
 
