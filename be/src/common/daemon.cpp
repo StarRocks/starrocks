@@ -58,6 +58,7 @@
 #include "util/debug_util.h"
 #include "util/disk_info.h"
 #include "util/gc_helper.h"
+#include "util/json_flattener.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/misc.h"
@@ -306,6 +307,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     date::init_date_cache();
 
     TimezoneUtils::init_time_zones();
+    JsonFlatPath::init_vpack_types_info();
 
     std::thread gc_thread(gc_memory, this);
     Thread::set_thread_name(gc_thread, "gc_daemon");

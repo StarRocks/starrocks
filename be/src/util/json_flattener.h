@@ -64,6 +64,9 @@ public:
     // set new root, other path will set to exclude, the node must include the root path
     static void set_root(const std::string& new_root_path, JsonFlatPath* node);
 
+public:
+    static void init_vpack_types_info();
+
 private:
     static std::pair<std::string, std::string> _split_path(const std::string& path);
 };
@@ -103,8 +106,6 @@ private:
         // column path hit count, some json may be null or none, so hit use to record the actual value
         // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
         uint64_t hits = 0;
-        // how many rows need to be cast to a compatible type
-        uint16_t casts = 0;
 
         // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
         uint64_t max = 0;

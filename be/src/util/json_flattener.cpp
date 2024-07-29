@@ -92,6 +92,7 @@ void extract_string(const vpack::Slice* json, NullableColumn* result) {
             result->null_column()->append(0);
             vpack::Options options = vpack::Options::Defaults;
             options.singleLinePrettyPrint = true;
+            options.dumpAttributesInIndexOrder = false;
             std::string str = json->toJson(&options);
             down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str));
         }
@@ -117,9 +118,9 @@ void merge_number(vpack::Builder* builder, const std::string& name, const Column
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->add(name, vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
     } else {
-        builder->add(name, vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
     }
 }
 
@@ -127,50 +128,35 @@ void merge_string(vpack::Builder* builder, const std::string& name, const Column
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
-    builder->add(name, vpack::Value(col->get_slice(idx).to_string()));
+    builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_slice(idx).to_string()));
 }
 
 void merge_json(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx) {
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
-    builder->add(name, col->get_object(idx)->to_vslice());
+    builder->addUnchecked(name.data(), name.size(), col->get_object(idx)->to_vslice());
 }
 
 using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx);
-static const uint8_t JSON_BASE_TYPE_BITS = 0;     // least flat to JSON type
-static const uint8_t JSON_BIGINT_TYPE_BITS = 225; // 011000 10, bigint compatible type
+static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
+static const uint8_t JSON_BIGINT_TYPE_BITS = 3; // 00000011, 3, bigint compatible type
 
 // clang-format off
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
-static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS {
-        {vpack::ValueType::None, 255},      // 111111 11, 255
-        {vpack::ValueType::SmallInt, 241},  // 111100 01, 241
-        {vpack::ValueType::Int, 225},       // 111000 01, 225
-        {vpack::ValueType::UInt, 224},      // 111000 00, 224
-        {vpack::ValueType::Double, 192},    // 110000 00, 192
-        {vpack::ValueType::String, 8},      // 000010 00, 8
-};
+static std::vector<uint8_t> JSON_TYPE_BITS((int)vpack::ValueType::Tagged + 1, 0);
 
 // starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
-static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
-    {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_TINYINT},
-    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_BIGINT},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
-    {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        LogicalType::TYPE_LARGEINT},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Double),      LogicalType::TYPE_DOUBLE},
-    {JSON_TYPE_BITS.at(vpack::ValueType::String),      LogicalType::TYPE_VARCHAR},
-    {JSON_BASE_TYPE_BITS,                                LogicalType::TYPE_JSON},
-};
+static std::vector<LogicalType> JSON_BITS_TO_LOGICAL_TYPE(32, LogicalType::TYPE_JSON);
 
 static const std::unordered_map<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
-    {LogicalType::TYPE_TINYINT,         JSON_TYPE_BITS.at(vpack::ValueType::None)},
-    {LogicalType::TYPE_BIGINT,          JSON_TYPE_BITS.at(vpack::ValueType::Int)},
-    {LogicalType::TYPE_LARGEINT,        JSON_TYPE_BITS.at(vpack::ValueType::UInt)},
-    {LogicalType::TYPE_DOUBLE,          JSON_TYPE_BITS.at(vpack::ValueType::Double)},
-    {LogicalType::TYPE_VARCHAR,         JSON_TYPE_BITS.at(vpack::ValueType::String)},
+    {LogicalType::TYPE_TINYINT,         JSON_TYPE_BITS[(int)vpack::ValueType::None]},
+    {LogicalType::TYPE_BIGINT,          JSON_TYPE_BITS[(int)vpack::ValueType::Int]},
+    {LogicalType::TYPE_LARGEINT,        JSON_TYPE_BITS[(int)vpack::ValueType::UInt]},
+    {LogicalType::TYPE_DOUBLE,          JSON_TYPE_BITS[(int)vpack::ValueType::Double]},
+    {LogicalType::TYPE_VARCHAR,         JSON_TYPE_BITS[(int)vpack::ValueType::String]},
     {LogicalType::TYPE_JSON,            JSON_BASE_TYPE_BITS},
 };
 
@@ -195,14 +181,31 @@ static const std::unordered_map<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC 
 };
 // clang-format on
 
-uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
-    if (JSON_TYPE_BITS.contains(type1)) {
-        return JSON_TYPE_BITS.at(type1) & type2;
-    }
-    return JSON_BASE_TYPE_BITS;
+inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
+    DCHECK(JSON_TYPE_BITS.size() > (int)type1);
+    return JSON_TYPE_BITS[(int)type1] & type2;
 }
 
 } // namespace flat_json
+
+void JsonFlatPath::init_vpack_types_info() {
+    // clang-format off
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::None] = 31;       // 00011111, 31
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::SmallInt] = 15;   // 00001111, 15
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::Int] = 7;         // 00000111, 7
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::UInt] = 3;        // 00000011, 3
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::Double] = 1;      // 00000001, 1
+    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::String] = 16;     // 00010000, 8
+
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::None]] = LogicalType::TYPE_TINYINT;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::SmallInt]] = LogicalType::TYPE_BIGINT;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::Int]] = LogicalType::TYPE_BIGINT;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::UInt]] = LogicalType::TYPE_LARGEINT;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::Double]] = LogicalType::TYPE_DOUBLE;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::String]] = LogicalType::TYPE_VARCHAR;
+    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_BASE_TYPE_BITS] = LogicalType::TYPE_JSON;
+    // clang-format on
+}
 
 std::pair<std::string, std::string> JsonFlatPath::_split_path(const std::string& path) {
     size_t pos = 0;
@@ -401,7 +404,7 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
 }
 
 void JsonPathDeriver::_visit_json_paths(vpack::Slice value, JsonFlatPath* root, size_t mark_row) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
 
     for (; it.valid(); it.next()) {
         auto current = (*it);
@@ -416,18 +419,18 @@ void JsonPathDeriver::_visit_json_paths(vpack::Slice value, JsonFlatPath* root, 
         if (v.isObject()) {
             _visit_json_paths(v, child, mark_row);
         } else {
-            _derived_maps[child].hits++;
-            uint8_t base_type = _derived_maps[child].type;
+            auto desc = &_derived_maps[child];
+            desc->hits++;
+            uint8_t base_type = desc->type;
             vpack::ValueType json_type = v.type();
             uint8_t compatibility_type = flat_json::get_compatibility_type(json_type, base_type);
-            _derived_maps[child].type = compatibility_type;
-            _derived_maps[child].casts += (base_type != compatibility_type);
+            desc->type = compatibility_type;
 
-            _derived_maps[child].multi_times += (_derived_maps[child].last_row == mark_row);
-            _derived_maps[child].last_row = mark_row;
+            desc->multi_times += (desc->last_row == mark_row);
+            desc->last_row = mark_row;
 
             if (json_type == vpack::ValueType::UInt) {
-                _derived_maps[child].max = std::max(_derived_maps[child].max, v.getUIntUnchecked());
+                desc->max = std::max(desc->max, v.getUIntUnchecked());
             }
         }
     }
@@ -437,7 +440,7 @@ void JsonPathDeriver::_finalize() {
     // try downgrade json-uint to bigint
     int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
     for (auto& [name, desc] : _derived_maps) {
-        if (desc.type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && desc.max <= max) {
+        if (desc.type == flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::UInt] && desc.max <= max) {
             desc.type = flat_json::JSON_BIGINT_TYPE_BITS;
         }
     }
@@ -576,7 +579,7 @@ void JsonFlattener::flatten(const Column* json_column) {
 template <bool REMAIN>
 bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
                                   uint32_t* hit_count) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
     for (; it.valid(); it.next()) {
         auto current = (*it);
         // sub-object
@@ -586,7 +589,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
         auto child = root->children.find(k);
         if constexpr (REMAIN) {
             if (child == root->children.end()) {
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
                 continue;
             }
         } else {
@@ -610,7 +613,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             // not leaf node, should goto deep
         } else if (v.isObject()) {
             if constexpr (REMAIN) {
-                builder->add(k, vpack::Value(vpack::ValueType::Object));
+                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _flatten_json<REMAIN>(v, child->second.get(), builder, hit_count);
                 builder->close();
             } else {
@@ -620,7 +623,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             }
         } else {
             if constexpr (REMAIN) {
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
             }
         }
     }
@@ -801,7 +804,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
 #ifndef NDEBUG
     std::string json = remain->toJson();
 #endif
-    vpack::ObjectIterator it(*remain, false);
+    vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().copyString();
         auto v = it.value();
@@ -810,7 +813,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         if (iter == root->children.end()) {
             if constexpr (IN_TREE) {
                 // only remain contains
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
             }
             continue;
         }
@@ -824,7 +827,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 _merge_json_with_remain<true>(iter->second.get(), &v, builder, index);
             } else {
                 DCHECK(iter->second->op == JsonFlatPath::OP_INCLUDE);
-                builder->add(k, vpack::Value(vpack::ValueType::Object));
+                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _merge_json_with_remain<true>(iter->second.get(), &v, builder, index);
                 builder->close();
             }
@@ -832,7 +835,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         }
         // leaf node
         DCHECK(iter->second->op == JsonFlatPath::OP_INCLUDE);
-        builder->add(k, v);
+        builder->addUnchecked(k.data(), k.size(), v);
     }
     for (auto& [child_name, child] : root->children) {
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
@@ -878,7 +881,7 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
         } else if (child->op == JsonFlatPath::OP_ROOT) {
             _merge_json(child.get(), builder, index);
         } else {
-            builder->add(child_name, vpack::Value(vpack::ValueType::Object));
+            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
             _merge_json(child.get(), builder, index);
             builder->close();
         }
