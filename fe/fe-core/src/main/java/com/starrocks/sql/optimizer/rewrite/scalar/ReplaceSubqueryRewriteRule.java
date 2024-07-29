@@ -49,15 +49,35 @@ public class ReplaceSubqueryRewriteRule extends TopDownScalarOperatorRewriteRule
 
     @Override
     public ScalarOperator visit(ScalarOperator scalarOperator, ScalarOperatorRewriteContext context) {
-        if (subqueryPlaceholders == null) {
+        if (subqueryPlaceholders == null || subqueryPlaceholders.isEmpty()) {
             return scalarOperator;
         }
-        if (subqueryPlaceholders.containsKey(scalarOperator)) {
+
+        boolean findSubQuery = false;
+        // Usually subqueryPlaceholders's key set is small and only contain columnRef operator
+        // so columnRef operator's equals()' short-circuit can benefit complex ScalarOperator like one thousand or predicate
+        // if use Map::containsKey, these complex ScalarOperator's hashCode can be super slow
+        if (subqueryPlaceholders.size() < 4) {
+            for (ScalarOperator key : subqueryPlaceholders.keySet()) {
+                if (key.equals(scalarOperator)) {
+                    findSubQuery = true;
+                    break;
+                }
+            }
+        } else {
+            if(subqueryPlaceholders.containsKey(scalarOperator)) {
+                findSubQuery = true;
+            }
+        }
+
+        if(findSubQuery) {
             SubqueryOperator subqueryOperator = subqueryPlaceholders.get(scalarOperator);
             LogicalApplyOperator applyOperator = subqueryOperator.getApplyOperator();
             builder = new OptExprBuilder(applyOperator, Arrays.asList(builder, subqueryOperator.getRootBuilder()),
                     builder.getExpressionMapping());
         }
+
+
         return scalarOperator;
     }
 }
