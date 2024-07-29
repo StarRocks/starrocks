@@ -47,6 +47,7 @@ import java.util.zip.CheckedInputStream;
  */
 public class SRMetaBlockReader {
     private static final Logger LOG = LogManager.getLogger(SRMetaBlockReader.class);
+    private static final int MAX_JSON_PRINT_LENGTH = 1000;
     private final CheckedInputStream checkedInputStream;
     private SRMetaBlockHeader header;
     private int numJsonRead;
@@ -100,7 +101,9 @@ public class SRMetaBlockReader {
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
                     header.getSrMetaBlockID(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
-                LOG.warn("skip {}th json: {}", i, Text.readStringWithChecksum(checkedInputStream));
+                String text = Text.readStringWithChecksum(checkedInputStream);
+                LOG.warn("skip {}th json: {}", i,
+                        text.substring(0, Math.min(MAX_JSON_PRINT_LENGTH, text.length())));
             }
         }
 
