@@ -121,7 +121,46 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
+<<<<<<< HEAD
 static void failure_writer(const char* data, int size) {
+=======
+static void release_cache_mem() {
+    static bool start_dump = false;
+    if (!start_dump) {
+        auto* page_cache = StoragePageCache::instance();
+        if (page_cache != nullptr) {
+            LOG(INFO) << "Start to release memory of cache";
+            page_cache->set_capacity(0);
+            LOG(INFO) << "Release memory of cache success";
+        }
+    }
+    start_dump = true;
+}
+
+static void dontdump_unused_pages() {
+    static bool start_dump = false;
+    if (!start_dump) {
+        std::string purge_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".purge";
+        int ret = je_mallctl(purge_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        if (ret != 0) {
+            LOG(ERROR) << "je_mallctl execute purge failed: " << strerror(ret);
+        } else {
+            LOG(INFO) << "je_mallctl execute purge success";
+        }
+
+        std::string dontdump_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
+        ret = je_mallctl(dontdump_msg.c_str(), nullptr, nullptr, nullptr, 0);
+        if (ret != 0) {
+            LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+        } else {
+            LOG(INFO) << "je_mallctl execute dontdump success";
+        }
+    }
+    start_dump = true;
+}
+
+static void failure_writer(const char* data, size_t size) {
+>>>>>>> 47e85eeef9 ([Enhancement] Staros v3.3 rc3 and brpc glog update (#48949))
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
@@ -228,7 +267,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
-        google::InstallFailureFunction(failure_function);
+        google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
     }
 
     logging_initialized = true;
