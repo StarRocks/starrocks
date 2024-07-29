@@ -186,6 +186,9 @@ if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
 
+read_var_from_conf meta_dir $STARROCKS_HOME/conf/fe.conf
+mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
+
 # add libs to CLASSPATH
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
