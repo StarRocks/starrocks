@@ -151,12 +151,14 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_VARBINARY:
             _node_type = (TExprNodeType::BINARY_LITERAL);
             break;
-        case TYPE_UNKNOWN:
-        case TYPE_STRUCT:
-        case TYPE_MAP:
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
+            _node_type = TExprNodeType::DECIMAL_LITERAL;
+            break;
+        case TYPE_UNKNOWN:
+        case TYPE_STRUCT:
+        case TYPE_MAP:
         case TYPE_JSON:
             break;
 
