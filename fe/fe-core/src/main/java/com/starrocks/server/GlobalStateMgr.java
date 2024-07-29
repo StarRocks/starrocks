@@ -1509,6 +1509,10 @@ public class GlobalStateMgr {
                      */
                     metaMgrMustExists.remove(srMetaBlockID);
                     LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                } catch (Throwable t) {
+                    LOG.warn("load meta block {} failed", srMetaBlockID, t);
+                    // throw the exception again, because the following steps will depend on this error.
+                    throw t;
                 } finally {
                     reader.close();
                 }
