@@ -207,7 +207,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITIONS [IF EXISTS] START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> ) [FORCE]
 ```
 
-For parameters involved, refer to [Add a partition](#add-partitions).
+For parameters involved, refer to [ADD PARTITION(S)](#add-partitions).
 
 :::note
 
