@@ -41,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -99,6 +100,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     private final String predicateInfo;
     private final String serializedTable;
     private final String[] requiredFields;
+    private final String[] metadataColumnNames;
     private final String[] metadataColumnTypes;
     private ColumnType[] requiredTypes;
     private final int fetchSize;
@@ -115,6 +117,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     public IcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
+        this.metadataColumnNames = params.get("metadata_column_names").split(",");
         this.metadataColumnTypes = params.get("metadata_column_types").split(",");
         this.predicateInfo = params.get("serialized_predicate");
         this.serializedTable = params.get("serialized_table");
@@ -303,9 +306,15 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     }
 
     private void parseRequiredTypes() {
+        HashMap<String, String> columnNameToType = new HashMap<>();
+        for (int i = 0; i < metadataColumnNames.length; i++) {
+            columnNameToType.put(metadataColumnNames[i], metadataColumnTypes[i]);
+        }
+
         requiredTypes = new ColumnType[requiredFields.length];
         for (int i = 0; i < requiredFields.length; i++) {
-            requiredTypes[i] = new ColumnType(requiredFields[i], metadataColumnTypes[i]);
+            String type = columnNameToType.get(requiredFields[i]);
+            requiredTypes[i] = new ColumnType(requiredFields[i], type);
         }
     }
 }

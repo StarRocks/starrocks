@@ -636,10 +636,14 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
 // ---------------iceberg metadata jni scanner------------------
 std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 0f96157729 ([Enhancement] apapt column prune to metadata table (#49023))
     const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
     std::map<std::string, std::string> jni_scanner_params;
 
-    jni_scanner_params["required_fields"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_names"] = hdfs_table->get_hive_column_names();
     jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
     jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
 

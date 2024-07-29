@@ -33,6 +33,17 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
                                               Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                               long limit,
                                               ScalarOperator predicate) {
+<<<<<<< HEAD
+=======
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
+    public LogicalIcebergMetadataScanOperator(Table table,
+                                              Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                              Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                              long limit,
+                                              ScalarOperator predicate,
+                                              TableVersionRange versionRange) {
+>>>>>>> 0f96157729 ([Enhancement] apapt column prune to metadata table (#49023))
 
         super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
                 table,
