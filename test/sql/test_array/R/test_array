@@ -346,3 +346,40 @@ SELECT array_repeat(COLA, COLB) FROM repeat_test ORDER BY COLA;
 [1,1,1]
 None
 -- !result
+
+-- name: test_array_flatten
+select array_flatten([[1, 2], [1, 4]]);
+-- result:
+[1,2,1,4]
+-- !result
+select array_flatten([[[1],[2]],[[3],[4]]]);
+-- result:
+[[1],[2],[3],[4]]
+-- !result
+CREATE TABLE IF NOT EXISTS flatten_test (COLA INT, COLB ARRAY<ARRAY<INT>>) PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO flatten_test (COLA, COLB) VALUES (1, [[1, 2], [1, 4]]), (2, NULL), (3, [[5], [6, 7, 8], [9]]), (4, [[2, 3], [4, 5, 6], NULL]);
+-- result:
+-- !result
+SELECT array_flatten(COLB) FROM flatten_test ORDER BY COLA;
+-- result:
+[1,2,1,4]
+None
+[5,6,7,8,9]
+[2,3,4,5,6]
+-- !result
+SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_test ORDER BY COLA;
+-- result:
+[1,2]
+None
+[5,6]
+[2,3]
+-- !result
+SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_test ORDER BY COLA;
+-- result:
+[1,2,1,4]
+None
+[5,6,7,8]
+[2,3,4,5,6]
+-- !result

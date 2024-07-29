@@ -171,3 +171,12 @@ select array_repeat(1,-1);
 CREATE TABLE IF NOT EXISTS repeat_test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
 INSERT INTO repeat_test (COLA, COLB) VALUES (1, 3), (NULL, 3), (2, NULL);
 SELECT array_repeat(COLA, COLB) FROM repeat_test ORDER BY COLA;
+
+-- name: test_array_flatten
+select array_flatten([[1, 2], [1, 4]]);
+select array_flatten([[[1],[2]],[[3],[4]]]);
+CREATE TABLE IF NOT EXISTS flatten_test (COLA INT, COLB ARRAY<ARRAY<INT>>) PROPERTIES ("replication_num"="1");
+INSERT INTO flatten_test (COLA, COLB) VALUES (1, [[1, 2], [1, 4]]), (2, NULL), (3, [[5], [6, 7, 8], [9]]), (4, [[2, 3], [4, 5, 6], NULL]);
+SELECT array_flatten(COLB) FROM flatten_test ORDER BY COLA;
+SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_test ORDER BY COLA;
+SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_test ORDER BY COLA;

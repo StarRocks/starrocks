@@ -1723,4 +1723,49 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
         return dest_column;
     }
 }
+
+StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t chunk_size = columns[0]->size();
+    Column* src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]).get();
+
+    const NullableColumn* src_nullable_column = nullptr;
+    ArrayColumn* array_column = nullptr;
+    if (columns[0]->is_nullable()) {
+        src_nullable_column = down_cast<const NullableColumn*>(src_column);
+        array_column = down_cast<ArrayColumn*>(src_nullable_column->data_column().get());
+    } else {
+        array_column = down_cast<ArrayColumn*>(src_column);
+    }
+
+    auto [array_null, elements, offsets] = unpack_array_column(array_column->elements_column());
+    ColumnPtr result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(array_column->offsets().size());
+    result_offsets->append(0);
+
+    for (size_t i = 0; i < chunk_size; i++) {
+        Datum v = array_column->get(i);
+        if (!v.is_null()) {
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (!item.is_null()) {
+                    const auto& sub_items = item.get<DatumArray>();
+                    for (const auto& sub_item : sub_items) {
+                        result_elements->append_datum(sub_item);
+                    }
+                }
+            }
+        }
+        result_offsets->append(result_elements->size());
+    }
+
+    auto result = ArrayColumn::create(result_elements, result_offsets);
+    if (src_nullable_column != nullptr) {
+        return NullableColumn::create(result, src_nullable_column->null_column());
+    }
+    return result;
+}
 } // namespace starrocks
