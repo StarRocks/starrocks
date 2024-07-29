@@ -45,6 +45,33 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "\"replication_num\" = \"1\",\n"
                 + "\"in_memory\" = \"false\"\n"
                 + ");");
+
+        // date_trunc('month', c1)
+        starRocksAssert.withTable("CREATE TABLE t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202401 VALUES IN (('1', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202402 VALUES IN (('1', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202403 VALUES IN (('1', '2024-03-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202401 VALUES IN (('2', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
+
+        // year(c1)
+        starRocksAssert.withTable("CREATE TABLE t_gen_col_1 (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 tinyint NULL AS month(c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col_1 ADD PARTITION p1_01 VALUES IN (('1', '1'))");
     }
 
     @Test
@@ -172,5 +199,60 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    @Test
+    public void testGeneratedColumnPrune() throws Exception {
+        // c2
+        starRocksAssert.query("select count(*) from t_gen_col where c2 = 1 ")
+                .explainContains("partitions=3/7");
+
+        // c1
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-01-01' ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 < '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 <= '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 > '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01') ")
+                .explainContains("partitions=2/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01', '2024-01-01') ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2027-01-01') ")
+                .explainContains("partitions=0/7");
+
+        // c1 not supported
+        starRocksAssert.query("select count(*) from t_gen_col where c1 != '2024-02-01' ")
+                .explainContains("partitions=7/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = c2 ")
+                .explainContains("partitions=7/7");
+        starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
+                .explainContains("partitions=7/7");
+        starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
+                .explainContains("partitions=7/7");
+
+        // compound
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 <= '2024-03-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 = '2027-03-01' ")
+                .explainContains("partitions=0/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2024-03-01' ")
+                .explainContains("partitions=4/7");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2027-03-01' ")
+                .explainContains("partitions=2/7");
+
+        // c1 && c2
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' and c2 = 1 ")
+                .explainContains("partitions=1/7");
+
+        // non-monotonic function
+        starRocksAssert.query("select count(*) from t_gen_col_1 where c1 = '2024-01-01' ")
+                .explainContains("partitions=2/2");
     }
 }

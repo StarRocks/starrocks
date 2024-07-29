@@ -537,7 +537,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (generatedColumnExpr == null) {
             return null;
         }
-        return generatedColumnExpr.convertToColumnNameExpr(schema).clone();
+        Expr res = generatedColumnExpr.convertToColumnNameExpr(schema).clone();
+        res.setType(type);
+        return res;
     }
 
     public void setGeneratedColumnExpr(ColumnIdExpr expr) {
