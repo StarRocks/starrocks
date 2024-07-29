@@ -753,6 +753,8 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     schema_pb2.set_id(schema_id2);
 
     auto schema_id3 = tablet_metadata->schema().id();
+    auto& schema_pb3 = (*tablet_metadata->mutable_historical_schemas())[schema_id3];
+    schema_pb3.set_id(schema_id3);
 
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
