@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.alter.AlterOperations;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
@@ -38,14 +37,8 @@ public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectCont
         actions = new ArrayList<>();
     }
 
-    public void checkConflict() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-    }
-
     public void applyClauses() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         try {
             for (AlterClause c : alterClauses) {
                 visit(c, null);
@@ -56,7 +49,6 @@ public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectCont
     }
 
     public void execute() throws DdlException {
-        checkConflict();
         applyClauses();
     }
 

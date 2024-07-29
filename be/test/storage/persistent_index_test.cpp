@@ -33,6 +33,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
+#include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 
 namespace starrocks {
@@ -147,6 +148,64 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
+}
+
+TEST_P(PersistentIndexTest, test_dump_snapshot_fail) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_dump_snapshot_fail";
+    const std::string kIndexFile = "./PersistentIndexTest_test_dump_snapshot_fail/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = uint64_t;
+    PersistentIndexMetaPB index_meta;
+    const int N = 100;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    PersistentIndex index(kPersistentIndexDir);
+    ASSERT_OK(index.load(index_meta));
+    {
+        SyncPoint::GetInstance()->SetCallBack("BinaryOutputArchive::dump::1", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->SetCallBack("BinaryOutputArchive::dump::2", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("BinaryOutputArchive::dump::1");
+            SyncPoint::GetInstance()->ClearCallBack("BinaryOutputArchive::dump::2");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        index.test_force_dump();
+        ASSERT_OK(index.prepare(EditVersion(1, 0), N));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_FALSE(index.commit(&index_meta).ok());
+        ASSERT_OK(index.on_commited());
+        ASSERT_TRUE(index_meta.l0_meta().wals().empty());
+    }
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
@@ -609,6 +668,14 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    if (!config::enable_pindex_compression) {
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    }
+    std::string fp_name = "immutable_index_no_page_off";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
     write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
@@ -648,10 +715,11 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     config::l0_max_mem_usage = 100;
+    IOStat stat;
     for (auto t = 0; t < 100; ++t) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(t + 1, 0), N));
-        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &stat));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index.memory_usage() <= config::l0_max_mem_usage);
@@ -668,6 +736,8 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
 
     write_pindex_bf = true;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {

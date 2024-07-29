@@ -42,12 +42,12 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
             simdjson::ondemand::value* field_value_ptr = nullptr;
             if (err == simdjson::SUCCESS) {
                 field_value_ptr = &field_value;
-            } else if (err == simdjson::NO_SUCH_FIELD) {
-                // nullptr
-            } else {
+            } else if (err != simdjson::NO_SUCH_FIELD) {
+                // if returns error, the struct field columns may be inconsistent.
+                // so fill null if error.
                 auto err_msg = strings::Substitute("Failed to parse value, field=$0.$1, error=$2", name, field_name,
                                                    simdjson::error_message(err));
-                return Status::DataQualityError(err_msg);
+                LOG(WARNING) << err_msg;
             }
             RETURN_IF_ERROR(add_nullable_column(field_column.get(), field_type_desc, name, field_value_ptr, true));
         }

@@ -24,6 +24,7 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -56,6 +57,8 @@ import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
@@ -117,7 +120,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
-    private Set<String> bfColumns = null;
+    private Set<ColumnId> bfColumns = null;
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -154,7 +157,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
-    void setBloomFilterInfo(boolean hasBfChange, Set<String> bfColumns, double bfFpp) {
+    void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
@@ -319,6 +322,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -326,8 +330,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            numTablets =
-                    physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
+            if (enableTabletCreationOptimization) {
+                numTablets = physicalPartitionIndexMap.size();
+            } else {
+                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                        .mapToLong(List::size).sum();
+            }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
@@ -385,12 +393,18 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                                 .setCompressionType(table.getCompressionType())
+                                .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
+                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
+
+                        if (enableTabletCreationOptimization) {
+                            break;
+                        }
                     }
                 }
             }
@@ -640,12 +654,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     boolean publishVersion() {
         try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.forcePublish = false;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
-                            finishedTimeMs / 1000, warehouseId);
+                    Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
                 }
             }
             return true;
@@ -832,7 +851,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         for (Column column : table.getColumns()) {
             if (Type.VARCHAR.equals(column.getType())) {
-                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getName());
+                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
             }
         }
 

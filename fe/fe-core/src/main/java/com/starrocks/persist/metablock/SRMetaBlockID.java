@@ -30,7 +30,6 @@ public class SRMetaBlockID {
         return id;
     }
 
-
     public static final SRMetaBlockID INVALID = new SRMetaBlockID(0);
 
     public static final SRMetaBlockID NODE_MGR = new SRMetaBlockID(1);
@@ -93,6 +92,10 @@ public class SRMetaBlockID {
     public static final SRMetaBlockID DICTIONARY_MGR = new SRMetaBlockID(29);
 
     public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
+
+    public static final SRMetaBlockID KEY_MGR = new SRMetaBlockID(31);
+
+    public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
 
     @Override
     public String toString() {

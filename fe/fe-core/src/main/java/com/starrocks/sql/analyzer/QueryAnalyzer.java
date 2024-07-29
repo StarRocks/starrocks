@@ -35,10 +35,10 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -77,6 +77,7 @@ import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
@@ -97,6 +98,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -210,6 +212,8 @@ public class QueryAnalyzer {
                 throw unsupportedException("Table function must be used with lateral join");
             }
             selectRelation.setRelation(resolvedRelation);
+            //for avoid init column meta, try to prune unused columns
+            pruneScanColumns(selectRelation, resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
@@ -244,6 +248,32 @@ public class QueryAnalyzer {
 
             selectRelation.fillResolvedAST(analyzeState);
             return analyzeState.getOutputScope();
+        }
+
+        // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
+        private void pruneScanColumns(SelectRelation selectRelation, Relation fromRelation) {
+            if (!session.getSessionVariable().isEnableAnalyzePhasePruneColumns() ||
+                    !(fromRelation instanceof TableRelation) ||
+                    !Objects.isNull(selectRelation.getGroupByClause()) ||
+                    !Objects.isNull(selectRelation.getHavingClause()) ||
+                    !Objects.isNull(selectRelation.getWhereClause()) ||
+                    (!Objects.isNull(selectRelation.getOrderBy()) && !selectRelation.getOrderBy().isEmpty())) {
+                return;
+            }
+
+            List<String> scanColumns = new ArrayList<>();
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.isStar() || !(item.getExpr() instanceof SlotRef)) {
+                    return;
+                }
+
+                if (((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed() != null) {
+                    // avoid struct column pruned
+                    return;
+                }
+                scanColumns.add(((SlotRef) item.getExpr()).getColumnName().toLowerCase());
+            }
+            ((TableRelation) fromRelation).setPruneScanColumns(scanColumns);
         }
 
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
@@ -335,12 +365,12 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
-                } else if (table instanceof HiveView) {
-                    HiveView hiveView = (HiveView) table;
-                    QueryStatement queryStatement = hiveView.getQueryStatement();
-                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema(),
-                            Table.TableType.HIVE_VIEW);
-                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+                } else if (table instanceof ConnectorView) {
+                    ConnectorView connectorView = (ConnectorView) table;
+                    QueryStatement queryStatement = connectorView.getQueryStatement();
+                    View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
+                            connectorView.getType());
+                    view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
@@ -410,18 +440,50 @@ public class QueryAnalyzer {
                     fields.add(field);
                 }
             } else {
-                List<Column> fullSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
+                List<Column> fullSchema = table.getFullSchema();
+                Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+
+                List<String> pruneScanColumns = node.getPruneScanColumns();
+                boolean needPruneScanColumns = pruneScanColumns != null && !pruneScanColumns.isEmpty();
+                if (needPruneScanColumns) {
+                    Set<String> fullColumnNames = new HashSet<>(fullSchema.size());
+                    for (Column column : fullSchema) {
+                        if (column.isGeneratedColumn()) {
+                            needPruneScanColumns = false;
+                            break;
+                        }
+                        fullColumnNames.add(column.getName().toLowerCase());
+                    }
+                    needPruneScanColumns &= fullColumnNames.containsAll(pruneScanColumns);
+                }
+
+                Set<String> bucketColumns = table.getDistributionColumnNames();
+                List<String> partitionColumns = table.getPartitionColumnNames();
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
+                    if (needPruneScanColumns && !column.isKey() &&
+                            !bucketColumns.contains(column.getName()) &&
+                            !partitionColumns.contains(column.getName()) &&
+                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                        // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
+                        continue;
+                    }
                     boolean visible = baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
+                }
+
+                if (node.isBinlogQuery()) {
+                    for (Column column : getBinlogMetaColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
                 }
             }
 
@@ -451,8 +513,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.generatedColumnExpr() != null) {
-                    Expr materializedExpression = column.generatedColumnExpr();
+                Expr materializedExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
+                if (materializedExpression != null) {
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
@@ -464,8 +526,8 @@ public class QueryAnalyzer {
             return scope;
         }
 
-        private List<Column> appendBinlogMetaColumns(List<Column> schema) {
-            List<Column> columns = new ArrayList<>(schema);
+        private List<Column> getBinlogMetaColumns() {
+            List<Column> columns = new ArrayList<>();
             columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));

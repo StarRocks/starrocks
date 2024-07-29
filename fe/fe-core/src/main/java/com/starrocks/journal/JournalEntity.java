@@ -42,7 +42,6 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -65,7 +64,6 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AlterCatalogLog;
@@ -114,7 +112,6 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PipeOpEntry;
@@ -143,6 +140,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -235,12 +233,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_DB: {
-                data = new Database();
-                ((Database) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_DB_V2: {
                 data = CreateDbInfo.read(in);
                 isRead = true;
@@ -261,13 +253,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ALTER_DB_V2:
             case OperationType.OP_RENAME_DB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DatabaseInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_MATERIALIZED_VIEW:
-            case OperationType.OP_CREATE_TABLE: {
-                data = new CreateTableInfo();
-                ((CreateTableInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -311,17 +296,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
                 data = AddSubPartitionsInfoV2.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_PARTITION: {
-                data = new PartitionPersistInfo();
-                ((PartitionPersistInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_PARTITIONS: {
-                data = AddPartitionsInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -806,6 +780,11 @@ public class JournalEntity implements Writable {
                 data = DropTaskRunsLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_ARCHIVE_TASK_RUNS: {
+                data = ArchiveTaskRunsLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);

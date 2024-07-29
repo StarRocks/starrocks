@@ -16,7 +16,12 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -35,6 +40,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 
@@ -146,5 +152,38 @@ public class CompactionSchedulerTest {
 
         compactionScheduler.disableTables("");
         Assert.assertFalse(compactionScheduler.isTableDisabled(23456L));
+    }
+
+    @Test
+    public void testGetHistory() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                Database db = new Database();
+                Table table = new LakeTable();
+                PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
+                PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
+                PhysicalPartition partition1 = new Partition(123, "aaa", null, null);
+                PhysicalPartition partition2 = new Partition(124, "bbb", null, null);
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false);
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                }
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false);
+                r.put(partitionIdentifier1, job1);
+                r.put(partitionIdentifier2, job2);
+                return r;
+            }
+        };
+
+        List<CompactionRecord> list = compactionScheduler.getHistory();
+        Assert.assertEquals(2, list.size());
+        Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
     }
 }

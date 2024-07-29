@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -79,7 +80,7 @@ public class StorageMediumInferTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
     }
 
     @Test

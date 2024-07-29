@@ -254,8 +254,15 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
+    start_schedule_apply_thread();
+
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
+}
+
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
 void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
@@ -910,6 +917,42 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
         }
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
+                break;
+            }
+
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
+                _schedule_apply_tasks.pop();
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
+                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+            }
+        }
+    }
     return nullptr;
 }
 

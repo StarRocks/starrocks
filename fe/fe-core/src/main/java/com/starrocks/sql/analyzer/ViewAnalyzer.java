@@ -68,6 +68,10 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Table table = MetaUtils.getTable(stmt.getTableName());
+            if (table.isConnectorView()) {
+                throw new SemanticException("cannot alter connector view");
+            }
+
             if (!(table instanceof View)) {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
             }

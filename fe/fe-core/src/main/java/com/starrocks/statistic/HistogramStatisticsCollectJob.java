@@ -97,7 +97,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
-        context.put("columnName", StatisticUtils.quoting(columnName));
+        context.put("columnName", StatisticUtils.quoting(table, columnName));
         context.put("dbId", database.getId());
 
         context.put("dbName", database.getOriginName());
@@ -111,10 +111,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                          Type columnType) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
-        context.put("columnName", StatisticUtils.quoting(columnName));
+        context.put("columnName", quoteColumName);
         context.put("columnNameStr", columnName);
         context.put("dbId", database.getId());
         context.put("dbName", database.getOriginName());
@@ -137,10 +138,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         if (!mostCommonValues.isEmpty()) {
             if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (\"" +
+                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {
-                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (" +
+                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
                         Joiner.on(",").join(mostCommonValues.keySet()) + ")");
             }
         } else {

@@ -32,6 +32,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "testutil/deterministic_test_utils.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/faststring.h"
@@ -56,118 +57,12 @@ enum PICT_OP {
     MAX = 6,
 };
 
-class WeightedItem {
-public:
-    PICT_OP id;
-    double weight;
-
-    WeightedItem(PICT_OP id, double weight) : id(id), weight(weight) {}
-};
-
 struct TestParams {
     int64_t max_number = 0;
     int64_t max_n = 0;
     size_t run_second = 0;
     bool is_fixed_key_sz = false;
     bool print_debug_info = false;
-};
-
-// There are several random val we need to generate:
-// 1. op type
-// 2. Batch entry count
-// 3. Keys and Values
-template <typename T>
-class DeterRandomGenerator {
-public:
-    DeterRandomGenerator(const TestParams& params, int seed, int64_t s, int64_t e)
-            : _params(params), _rng(seed), _distribution(s, e) {}
-    ~DeterRandomGenerator() = default;
-
-    int64_t random() { return _distribution(_rng); }
-
-    int64_t random_n() { return (random() % _params.max_n) + 1; }
-
-    int64_t random_number(std::set<int64_t>& filter) {
-        int64_t r = 0;
-        do {
-            r = random() % _params.max_number;
-        } while (filter.count(r) > 0);
-        filter.insert(r);
-        return r;
-    }
-
-    int64_t random_number() { return random() % _params.max_number; }
-
-    // Template specialization for std::string
-    template <typename U = T>
-    typename std::enable_if<std::is_same<U, std::string>::value>::type assign_value(T& key, Slice& key_slice,
-                                                                                    std::set<int64_t>& filter) {
-        key = fmt::format("{:016x}", random_number(filter));
-        key_slice = key;
-    }
-
-    // Template specialization for integer
-    template <typename U = T>
-    typename std::enable_if<std::is_integral<U>::value>::type assign_value(T& key, Slice& key_slice,
-                                                                           std::set<int64_t>& filter) {
-        key = random_number(filter);
-        key_slice = Slice((uint8_t*)(&key), sizeof(T));
-    }
-
-    // vector<T> keys(N);
-    // vector<IndexValue> values(N);
-    void random_keys_values(int64_t N, vector<T>* keys, vector<Slice>* key_slices, vector<IndexValue>* values) {
-        keys->resize(N);
-        key_slices->resize(N);
-        if (values != nullptr) values->resize(N);
-        std::set<int64_t> filter;
-        for (int i = 0; i < N; i++) {
-            assign_value((*keys)[i], (*key_slices)[i], filter);
-            if (values != nullptr) (*values)[i] = random_number();
-        }
-    }
-
-private:
-    TestParams _params;
-    std::mt19937 _rng;
-    std::uniform_int_distribution<int64_t> _distribution;
-};
-
-template <typename T>
-class WeightedRandomOpSelector {
-public:
-    WeightedRandomOpSelector(DeterRandomGenerator<T>* ran_generator) : _ran_generator(ran_generator) {
-        _items.emplace_back(PICT_OP::UPSERT, 30);
-        _items.emplace_back(PICT_OP::ERASE, 15);
-        _items.emplace_back(PICT_OP::GET, 30);
-        _items.emplace_back(PICT_OP::MAJOR_COMPACT, 5);
-        _items.emplace_back(PICT_OP::REPLACE, 15);
-        _items.emplace_back(PICT_OP::RELOAD, 5);
-    }
-
-    PICT_OP select() {
-        double totalWeight = 0.0;
-
-        for (const auto& item : _items) {
-            totalWeight += item.weight;
-        }
-
-        double randomValue = ((double)(_ran_generator->random() % 100) / (double)100) * totalWeight;
-
-        double currentWeight = 0.0;
-        for (const auto& item : _items) {
-            currentWeight += item.weight;
-            if (randomValue <= currentWeight) {
-                return item.id;
-            }
-        }
-
-        return _items.back().id;
-    }
-
-private:
-    DeterRandomGenerator<T>* _ran_generator;
-    std::vector<WeightedItem> _items;
 };
 
 static const std::string kTestDirectory = "./test_persistent_index_consistency";
@@ -344,7 +239,7 @@ template <typename T>
 class PictOpBase {
 public:
     virtual ~PictOpBase() = 0;
-    virtual Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    virtual Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                        Checker* checker) = 0;
 };
 
@@ -354,7 +249,7 @@ PictOpBase<T>::~PictOpBase() = default;
 template <typename T>
 class PictOpUpsert : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         index->_cur_version++;
         IOStat stat;
@@ -379,7 +274,7 @@ public:
 template <typename T>
 class PictOpErase : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         index->_cur_version++;
         IOStat stat;
@@ -403,7 +298,7 @@ public:
 template <typename T>
 class PictOpGet : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         int64_t N = rand->random_n();
 
@@ -422,7 +317,7 @@ public:
 template <typename T>
 class PictOpMajorCompact : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         return index->_index->TEST_major_compaction(index->_index_meta);
     }
@@ -431,7 +326,7 @@ public:
 template <typename T>
 class PictOpReplace : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         index->_cur_version++;
         IOStat stat;
@@ -456,7 +351,7 @@ public:
 template <typename T>
 class PictOpReload : public PictOpBase<T> {
 public:
-    Status run(DeterRandomGenerator<T>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
+    Status run(DeterRandomGenerator<T, PICT_OP>* rand, PersistentIndexWrapper<T>* index, Replayer<T>* replayer,
                Checker* checker) override {
         return index->reload_index();
     }
@@ -475,12 +370,19 @@ public:
 
     void init(const TestParams& params, int seed) {
         _params = params;
-        _rand = std::make_unique<DeterRandomGenerator<T>>(params, seed, 0, INT64_MAX);
+        _rand = std::make_unique<DeterRandomGenerator<T, PICT_OP>>(params.max_number, params.max_n, seed, 0, INT64_MAX);
         _index_wrapper = std::make_unique<PersistentIndexWrapper<T>>();
         CHECK_OK(_index_wrapper->init());
         _replayer = std::make_unique<Replayer<T>>(params.print_debug_info);
         _checker = std::make_unique<Checker>(seed);
-        _op_selector = std::make_unique<WeightedRandomOpSelector<T>>(_rand.get());
+        std::vector<WeightedItem<PICT_OP>> items;
+        items.emplace_back(PICT_OP::UPSERT, 30);
+        items.emplace_back(PICT_OP::ERASE, 15);
+        items.emplace_back(PICT_OP::GET, 30);
+        items.emplace_back(PICT_OP::MAJOR_COMPACT, 5);
+        items.emplace_back(PICT_OP::REPLACE, 15);
+        items.emplace_back(PICT_OP::RELOAD, 5);
+        _op_selector = std::make_unique<WeightedRandomOpSelector<T, PICT_OP>>(_rand.get(), items);
     }
 
     void run() {
@@ -511,11 +413,11 @@ public:
 
 private:
     TestParams _params;
-    std::unique_ptr<DeterRandomGenerator<T>> _rand;
+    std::unique_ptr<DeterRandomGenerator<T, PICT_OP>> _rand;
     std::unique_ptr<PersistentIndexWrapper<T>> _index_wrapper;
     std::unique_ptr<Replayer<T>> _replayer;
     std::unique_ptr<Checker> _checker;
-    std::unique_ptr<WeightedRandomOpSelector<T>> _op_selector;
+    std::unique_ptr<WeightedRandomOpSelector<T, PICT_OP>> _op_selector;
     int64_t _old_l0_size = 0;
 };
 

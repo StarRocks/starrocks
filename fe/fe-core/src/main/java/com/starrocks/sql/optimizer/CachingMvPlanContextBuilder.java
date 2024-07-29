@@ -115,12 +115,15 @@ public class CachingMvPlanContextBuilder {
         return mvPlanContextCache.getIfPresent(mv);
     }
 
+    /**
+     * Build the plan for MV, return an empty list if no plan is available
+     */
     private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
         try {
             return MvPlanContextBuilder.getPlanContext(mv);
         } catch (Throwable e) {
             LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
-            return null;
+            return Lists.newArrayList();
         }
     }
 

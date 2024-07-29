@@ -21,6 +21,7 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -67,7 +68,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        DDLStmtExecutor.execute(stmt, connectContext);
     }
 
     private static void recoverDatabase(ConnectContext connectContext, String sql) throws Exception {

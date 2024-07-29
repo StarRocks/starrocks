@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -97,8 +98,13 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
-            resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
-            Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
+            String className = resultSetMetaData.getColumnClassName(i);
+            resultColumnClassNames.add(className);
+            if (className.equals("byte[]") || className.equals("[B")) {
+                resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
+                continue;
+            }
+            Class<?> clazz = classLoader.loadClass(className);
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
             } else if (null != mapEngineSpecificClassType(clazz)) {
@@ -124,6 +130,7 @@ public class JDBCScanner {
             put("com.clickhouse.data.value.UnsignedShort", Integer.class);
             put("com.clickhouse.data.value.UnsignedInteger", Long.class);
             put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+            put("oracle.jdbc.OracleBlob", Blob.class);
         }};
 
     private Class mapEngineSpecificClassType(Class<?> clazz) {
@@ -166,6 +173,10 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else if (resultObject instanceof byte[]) {
+                    dataColumn[resultNumRows] = resultObject;
+                } else if (resultObject instanceof Blob) {
+                    dataColumn[resultNumRows] = resultObject;
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;

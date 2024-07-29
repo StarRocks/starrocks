@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE Configuration
 
@@ -499,6 +499,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description:
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
+
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
 
 ##### drop_tablet_worker_count
 
@@ -3380,7 +3389,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--
@@ -3400,7 +3409,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
@@ -3924,6 +3933,69 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
 - Introduced in: -
 
+##### datacache_auto_adjust_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Automatic Scaling for Data Cache disk capacity. When it is enabled, the system dynamically adjusts the cache capacity based on the current disk usage rate.
+- Introduced in: v3.3.0
+
+##### datacache_disk_high_level
+
+- Default: 80
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache.
+- Introduced in: v3.3.0
+
+##### datacache_disk_safe_level
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible.
+- Introduced in: v3.3.0
+
+##### datacache_disk_low_level
+
+- Default: 60
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit.
+- Introduced in: v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval of Data Cache automatic capacity scaling. At regular intervals, the system checks the cache disk usage, and triggers Automatic Scaling when necessary.
+- Introduced in: v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- Default: 7200
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum wait time for Data Cache automatic expansion. Automatic scaling up is triggered only if the disk usage remains below `datacache_disk_low_level` for longer than this duration.
+- Introduced in: v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- Default: 107374182400
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum effective capacity for Data Cache Automatic Scaling. If the system tries to adjust the cache capacity to less than this value, the cache capacity will be directly set to `0` to prevent suboptimal performance caused by frequent cache fills and evictions due to insufficient cache capacity.
+- Introduced in: v3.3.0
+
 <!--
 ##### datacache_block_size
 
@@ -4343,39 +4415,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - Default: 104857600
@@ -4635,6 +4674,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The directory used to store User-defined Functions (UDFs).
 - Introduced in: -
 
+##### default_mv_resource_group_memory_limit
+
+- Default: 0.8
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_concurrency_limit
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
 <!--
 ##### pull_load_task_dir
 
@@ -4693,10 +4768,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: 60
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

@@ -61,8 +61,8 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(100, foreignKeyConstraints1.get(0).getParentTableInfo().getDbId());
         Assert.assertEquals(1000, foreignKeyConstraints1.get(0).getParentTableInfo().getTableId());
         Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
 
         String constraintDescs2 = "(column1, column2 )  REFERENCES default_catalog.100.1000(newColumn1, newColumn2)";
         List<ForeignKeyConstraint> foreignKeyConstraints2 = ForeignKeyConstraint.parse(constraintDescs2);
@@ -71,10 +71,10 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(100, foreignKeyConstraints2.get(0).getParentTableInfo().getDbId());
         Assert.assertEquals(1000, foreignKeyConstraints2.get(0).getParentTableInfo().getTableId());
         Assert.assertEquals(2, foreignKeyConstraints2.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
 
         String constraintDescs3 = "(column1)  REFERENCES  default_catalog.100.1000    (newColumn1);" +
                 " (column1, column2 )  REFERENCES default_catalog.101.1001(newColumn1, newColumn2);" +
@@ -85,28 +85,28 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(100, foreignKeyConstraints3.get(0).getParentTableInfo().getDbId());
         Assert.assertEquals(1000, foreignKeyConstraints3.get(0).getParentTableInfo().getTableId());
         Assert.assertEquals(1, foreignKeyConstraints3.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).second);
 
         Assert.assertEquals("default_catalog", foreignKeyConstraints3.get(1).getParentTableInfo().getCatalogName());
         Assert.assertEquals(101, foreignKeyConstraints3.get(1).getParentTableInfo().getDbId());
         Assert.assertEquals(1001, foreignKeyConstraints3.get(1).getParentTableInfo().getTableId());
         Assert.assertEquals(2, foreignKeyConstraints3.get(1).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).second);
 
         Assert.assertEquals("default_catalog", foreignKeyConstraints3.get(2).getParentTableInfo().getCatalogName());
         Assert.assertEquals(102, foreignKeyConstraints3.get(2).getParentTableInfo().getDbId());
         Assert.assertEquals(1002, foreignKeyConstraints3.get(2).getParentTableInfo().getTableId());
         Assert.assertEquals(3, foreignKeyConstraints3.get(2).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).second);
-        Assert.assertEquals("column3", foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).first);
-        Assert.assertEquals("newColumn3", foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column3"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).first);
+        Assert.assertEquals(ColumnId.create("newColumn3"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).second);
 
         String constraintDescs4 = "(_column1)  REFERENCES  default_catalog.100.1000    (_newColumn1)";
         List<ForeignKeyConstraint> foreignKeyConstraints4 = ForeignKeyConstraint.parse(constraintDescs4);
@@ -115,8 +115,8 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(100, foreignKeyConstraints4.get(0).getParentTableInfo().getDbId());
         Assert.assertEquals(1000, foreignKeyConstraints4.get(0).getParentTableInfo().getTableId());
         Assert.assertEquals(1, foreignKeyConstraints4.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("_column1", foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("_newColumn1", foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("_column1"), foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("_newColumn1"), foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).second);
 
         String constraintDescs5 = "(_column1)  REFERENCES";
         List<ForeignKeyConstraint> foreignKeyConstraints5 = ForeignKeyConstraint.parse(constraintDescs5);
@@ -132,8 +132,8 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints1.get(0).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName", foreignKeyConstraints1.get(0).getParentTableInfo().getTableName());
         Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
 
         String constraintDescs2 = "(column1, column2 )  REFERENCES catalog.db.tableName(newColumn1, newColumn2)";
         List<ForeignKeyConstraint> foreignKeyConstraints2 = ForeignKeyConstraint.parse(constraintDescs2);
@@ -142,10 +142,10 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints2.get(0).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName", foreignKeyConstraints2.get(0).getParentTableInfo().getTableName());
         Assert.assertEquals(2, foreignKeyConstraints2.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
 
         String constraintDescs3 = "(column1)  REFERENCES  catalog.db.tableName    (newColumn1);" +
                 " (column1, column2 )  REFERENCES catalog.db2.tableName2(newColumn1, newColumn2);" +
@@ -156,28 +156,28 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints3.get(0).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName", foreignKeyConstraints3.get(0).getParentTableInfo().getTableName());
         Assert.assertEquals(1, foreignKeyConstraints3.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(0).getColumnRefPairs().get(0).second);
 
         Assert.assertEquals("catalog", foreignKeyConstraints3.get(1).getParentTableInfo().getCatalogName());
         Assert.assertEquals("db2", foreignKeyConstraints3.get(1).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName2", foreignKeyConstraints3.get(1).getParentTableInfo().getTableName());
         Assert.assertEquals(2, foreignKeyConstraints3.get(1).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints3.get(1).getColumnRefPairs().get(1).second);
 
         Assert.assertEquals("catalog", foreignKeyConstraints3.get(2).getParentTableInfo().getCatalogName());
         Assert.assertEquals("db3", foreignKeyConstraints3.get(2).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName3", foreignKeyConstraints3.get(2).getParentTableInfo().getTableName());
         Assert.assertEquals(3, foreignKeyConstraints3.get(2).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).second);
-        Assert.assertEquals("column3", foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).first);
-        Assert.assertEquals("newColumn3", foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column3"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).first);
+        Assert.assertEquals(ColumnId.create("newColumn3"), foreignKeyConstraints3.get(2).getColumnRefPairs().get(2).second);
 
         String constraintDescs4 = "(_column1)  REFERENCES  catalog.db.tableName    (_newColumn1)";
         List<ForeignKeyConstraint> foreignKeyConstraints4 = ForeignKeyConstraint.parse(constraintDescs4);
@@ -186,8 +186,8 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints4.get(0).getParentTableInfo().getDbName());
         Assert.assertEquals("tableName", foreignKeyConstraints4.get(0).getParentTableInfo().getTableName());
         Assert.assertEquals(1, foreignKeyConstraints4.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("_column1", foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("_newColumn1", foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("_column1"), foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("_newColumn1"), foreignKeyConstraints4.get(0).getColumnRefPairs().get(0).second);
 
         String constraintDescs5 = "(_column1)  REFERENCES catalog.db.tableName()";
         List<ForeignKeyConstraint> foreignKeyConstraints5 = ForeignKeyConstraint.parse(constraintDescs5);
@@ -206,8 +206,8 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints1.get(0).getChildTableInfo().getDbName());
         Assert.assertEquals("table1", foreignKeyConstraints1.get(0).getChildTableInfo().getTableName());
         Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
 
         String constraintDescs2 = "catalog.db.table1(column1, column2)  REFERENCES  catalog.db.table2(newColumn1, newColumn2)";
         List<ForeignKeyConstraint> foreignKeyConstraints2 = ForeignKeyConstraint.parse(constraintDescs2);
@@ -219,10 +219,10 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("db", foreignKeyConstraints2.get(0).getChildTableInfo().getDbName());
         Assert.assertEquals("table1", foreignKeyConstraints2.get(0).getChildTableInfo().getTableName());
         Assert.assertEquals(2, foreignKeyConstraints2.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("column1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("newColumn1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("column2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("newColumn2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
+        Assert.assertEquals(ColumnId.create("column1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("newColumn1"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("column2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
+        Assert.assertEquals(ColumnId.create("newColumn2"), foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
 
         String constraintDescs3 = "catalog.db.table1(column1)  REFERENCES catalog.db.table2(newColumn1);" +
                 " catalog.db.table3(column1, column2 )  REFERENCES catalog.db.table4(newColumn1, newColumn2);" +
@@ -293,7 +293,7 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("customer", foreignKeyConstraints1.get(0).getParentTableInfo().getTableName());
 
         Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("lo_custkey", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("c_custkey", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals(ColumnId.create("lo_custkey"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals(ColumnId.create("c_custkey"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
     }
 }

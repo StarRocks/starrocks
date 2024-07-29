@@ -51,13 +51,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -87,6 +89,7 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -285,8 +288,8 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+            ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 
@@ -1224,6 +1227,29 @@ public class UtFrameUtils {
         }
     }
 
+    public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
+        new MockUp<MvRefreshArbiter>() {
+            /**
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
+             */
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                          boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            }
+        };
+
+        new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
+            @Mock
+            boolean isPrintPlanTableNames() {
+                return true;
+            }
+        };
+    }
+
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
         Config.dynamic_partition_check_interval_seconds = 10;
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -1250,6 +1276,9 @@ public class UtFrameUtils {
         // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
         // task run will only refresh 1 partition and will produce wrong result.
         Config.default_mv_partition_refresh_number = -1;
+
+        // Enable mv refresh insert strict in test
+        Config.enable_mv_refresh_insert_strict = true;
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;

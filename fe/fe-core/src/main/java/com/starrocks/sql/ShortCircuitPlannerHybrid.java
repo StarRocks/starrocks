@@ -48,7 +48,7 @@ public class ShortCircuitPlannerHybrid {
             }
 
             for (Column column : table.getFullSchema()) {
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName())) {
+                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getColumnId())) {
                     return false;
                 }
             }

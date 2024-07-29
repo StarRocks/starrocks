@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -274,25 +273,15 @@ public class CatalogUtils {
             Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allLiteralExprValues.addAll(v);
-                    }
-                });
-
+                Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
-                    for (LiteralExpr value : allLiteralExprValues) {
-                        if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value " + item.getStringValue());
-                        }
+                    if (existingValues.contains(item)) {
+                        throw new DdlException("Duplicate partition value " + item.getStringValue());
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+                int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
@@ -454,7 +443,8 @@ public class CatalogUtils {
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
         long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
-        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        // speculateTabletNum may be not accurate, so we need to take the max value of bucketNum and speculateTabletNum
+        bucketNum = (int) Math.max(bucketNum, speculateTabletNum);
         if (bucketNum == 0) {
             bucketNum = 1;
         }

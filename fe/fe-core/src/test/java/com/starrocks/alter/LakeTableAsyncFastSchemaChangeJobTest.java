@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -57,12 +58,14 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return (LakeTable) db.getTable(createTableStmt.getTableName());
+        LakeTable table = (LakeTable) db.getTable(createTableStmt.getTableName());
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+        return table;
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
     private LakeTableAsyncFastSchemaChangeJob getAlterJob(Table table) {
@@ -164,8 +167,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser("ALTER TABLE t3 ADD COLUMN c1 INT",
                 connectContext);
-        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) handler.analyzeAndCreateJob(stmt.getOps(), db,
-                table);
+        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob)
+                handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
         Assert.assertNotNull(job);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());

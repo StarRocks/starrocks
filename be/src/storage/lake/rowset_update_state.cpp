@@ -15,6 +15,7 @@
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -740,12 +741,17 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(params.tablet->del_location(path)));
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-    std::vector<uint8_t> read_buffer(file_size);
-    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+    RandomAccessFileOptions opts;
+    auto& meta = params.op_write.del_encryption_metas(del_id);
+    if (!meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
+    ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
-    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+    if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()) ==
+        nullptr) {
         return Status::InternalError("column deserialization failed");
     }
     col->raw_data();

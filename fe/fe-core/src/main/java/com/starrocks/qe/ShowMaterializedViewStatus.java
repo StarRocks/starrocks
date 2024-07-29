@@ -594,8 +594,25 @@ public class ShowMaterializedViewStatus {
         resultRow.addAll(Collections.nCopies(count, ""));
     }
 
-
     private String formatDuration(long duration) {
         return DebugUtil.DECIMAL_FORMAT_SCALE_3.format(duration / 1000D);
+    }
+
+    @Override
+    public String toString() {
+        return "ShowMaterializedViewStatus{" +
+                "id=" + id +
+                ", dbName='" + dbName + '\'' +
+                ", name='" + name + '\'' +
+                ", refreshType='" + refreshType + '\'' +
+                ", isActive=" + isActive +
+                ", text='" + text + '\'' +
+                ", rows=" + rows +
+                ", partitionType='" + partitionType + '\'' +
+                ", lastCheckTime=" + lastCheckTime +
+                ", inactiveReason='" + inactiveReason + '\'' +
+                ", queryRewriteStatus='" + queryRewriteStatus + '\'' +
+                ", lastJobTaskRunStatus=" + lastJobTaskRunStatus +
+                '}';
     }
 }

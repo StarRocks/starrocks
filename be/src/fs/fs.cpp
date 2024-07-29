@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "fs/encrypt_file.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
@@ -26,6 +27,27 @@
 #endif
 
 namespace starrocks {
+
+std::unique_ptr<SequentialFile> SequentialFile::from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                     const std::string& name, const FileEncryptionInfo& info) {
+    if (info.is_encrypted()) {
+        return std::make_unique<SequentialFile>(std::make_unique<EncryptSeekableInputStream>(std::move(stream), info),
+                                                name);
+    } else {
+        return std::make_unique<SequentialFile>(std::move(stream), name);
+    }
+}
+
+std::unique_ptr<RandomAccessFile> RandomAccessFile::from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                         const std::string& name, bool is_cache_hit,
+                                                         const FileEncryptionInfo& info) {
+    if (info.is_encrypted()) {
+        return std::make_unique<RandomAccessFile>(std::make_unique<EncryptSeekableInputStream>(std::move(stream), info),
+                                                  name, is_cache_hit);
+    } else {
+        return std::make_unique<RandomAccessFile>(std::move(stream), name, is_cache_hit);
+    }
+}
 
 static thread_local std::shared_ptr<FileSystem> tls_fs_posix;
 static thread_local std::shared_ptr<FileSystem> tls_fs_s3;

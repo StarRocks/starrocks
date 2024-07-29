@@ -409,7 +409,7 @@ public class ShowStmtAnalyzer {
                     if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
-                        Set<String> bfColumns = olapTable.getCopiedBfColumns();
+                        Set<String> bfColumns = olapTable.getBfColumnNames();
                         Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
 
                         // indices order
@@ -491,7 +491,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", procString));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
             }
         }
 
@@ -504,7 +504,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", path));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", path, e.getMessage()));
             }
             return null;
         }

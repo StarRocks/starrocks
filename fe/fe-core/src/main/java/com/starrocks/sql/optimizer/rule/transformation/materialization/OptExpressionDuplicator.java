@@ -77,18 +77,15 @@ public class OptExpressionDuplicator {
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private final ReplaceColumnRefRewriter rewriter;
-    private final Table partitionByTable;
-    private final Column partitionColumn;
     private final boolean partialPartitionRewrite;
     private final OptimizerContext optimizerContext;
+    private final Map<Table, Column> mvRefBaseTableColumns;
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        Pair<Table, Column> partitionInfo = materializationContext.getMv().getDirectTableAndPartitionColumn();
-        this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
-        this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
+        this.mvRefBaseTableColumns = materializationContext.getMv().getRefBaseTablePartitionColumns();
         this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
         this.optimizerContext = materializationContext.getOptimizerContext();
     }
@@ -97,8 +94,7 @@ public class OptExpressionDuplicator {
         this.columnRefFactory = columnRefFactory;
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        this.partitionByTable = null;
-        this.partitionColumn = null;
+        this.mvRefBaseTableColumns = null;
         this.partialPartitionRewrite = false;
         this.optimizerContext = optimizerContext;
     }
@@ -261,13 +257,15 @@ public class OptExpressionDuplicator {
 
             if (partialPartitionRewrite
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
-                    && partitionByTable != null) {
+                    && mvRefBaseTableColumns != null) {
                 // maybe partition column is not in the output columns, should add it
 
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
-                if (table.getId() == partitionByTable.getId()) {
-                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
+                if (mvRefBaseTableColumns.containsKey(table)) {
+                    Column partitionColumn = mvRefBaseTableColumns.get(table);
+                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
+                            newColumnMetaToColRefMap.containsKey(partitionColumn)) {
                         ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
                         columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
                     }

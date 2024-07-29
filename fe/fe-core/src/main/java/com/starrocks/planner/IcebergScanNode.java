@@ -34,10 +34,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -173,7 +173,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         if (snapshot.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getRemoteTableName()));
             return;
@@ -191,7 +191,7 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
+        IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) splits.get(0).getFiles().get(0);
         if (remoteFileDesc == null) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), predicate);

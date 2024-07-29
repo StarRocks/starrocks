@@ -939,6 +939,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (table.hasForbiddenGlobalDict()) {
                 continue;
             }
+            // skip low-cardinality optimize for temp partition
+            // our dict collection won't collect temp partition we could support it later
+            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
+                continue;
+            }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
@@ -955,9 +960,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                Column columnObj = table.getColumn(column.getName());
+                if (columnObj != null
+                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {

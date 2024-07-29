@@ -55,7 +55,9 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -87,6 +89,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
@@ -182,6 +185,9 @@ public class RestoreJob extends AbstractJob {
     @SerializedName(value = "snapshotInfos")
     protected com.google.common.collect.Table<Long, Long, SnapshotInfo> snapshotInfos = HashBasedTable.create();
 
+    @SerializedName(value = "colocatePersistInfos")
+    private List<ColocatePersistInfo> colocatePersistInfos = Lists.newArrayList();
+
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
 
     // store some remote table ids that is skipped to restore, eg: mv is active in local db
@@ -190,6 +196,8 @@ public class RestoreJob extends AbstractJob {
     private MvRestoreContext mvRestoreContext;
 
     private AgentBatchTask batchTask;
+
+    boolean enableColocateRestore = Config.enable_colocate_restore;
 
     public RestoreJob() {
         super(JobType.RESTORE);
@@ -545,6 +553,9 @@ public class RestoreJob extends AbstractJob {
                     OlapTable localOlapTbl = (OlapTable) localTbl;
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
+                    // disable colocate restore if the restored table has been existed
+                    remoteOlapTbl.setColocateGroup(null);
+
                     List<String> intersectPartNames = Lists.newArrayList();
                     Status st = localOlapTbl.getIntersectPartNamesWith(remoteOlapTbl, intersectPartNames);
                     if (!st.ok()) {
@@ -684,12 +695,25 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
 
+                    if (!enableColocateRestore) {
+                        remoteOlapTbl.setColocateGroup(null);
+                    }
+
                     // reset all ids in this table
                     Status st = resetTableForRestore(remoteOlapTbl, db);
                     // TODO: delete the shards for lake table if it fails.
                     if (!st.ok()) {
                         status = st;
                         return;
+                    }
+
+                    ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+                    if (enableColocateRestore && colocateTableIndex.isColocateTable(remoteOlapTbl.getId())) {
+                        ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(remoteOlapTbl.getId());
+                        List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                        ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo
+                                    .createForAddTable(groupId, remoteOlapTbl.getId(), backendsPerBucketSeq);
+                        colocatePersistInfos.add(colocatePersistInfo);
                     }
 
                     tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
@@ -895,7 +919,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     protected void createReplicas(OlapTable localTbl, Partition restorePart) {
-        Set<String> bfColumns = localTbl.getCopiedBfColumns();
+        Set<ColumnId> bfColumns = localTbl.getBfColumnIds();
         double bfFpp = localTbl.getBfFpp();
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
             for (MaterializedIndex restoredIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -936,6 +960,7 @@ public class RestoreJob extends AbstractJob {
                                 .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
                                 .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))
                                 .setCompressionType(localTbl.getCompressionType())
+                                .setCompressionLevel(localTbl.getCompressionLevel())
                                 .setInRestoreMode(true)
                                 .setTabletSchema(tabletSchema)
                                 .build();
@@ -995,7 +1020,7 @@ public class RestoreJob extends AbstractJob {
                 remoteIdx.clearTabletsForRestore();
                 // generate new table
                 status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
-                        visibleVersion, schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId());
+                        visibleVersion, schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), null);
                 if (!status.ok()) {
                     return null;
                 }
@@ -1137,6 +1162,9 @@ public class RestoreJob extends AbstractJob {
             state = RestoreJobState.DOWNLOAD;
 
             globalStateMgr.getEditLog().logRestoreJob(this);
+            for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+            }
             LOG.info("finished making snapshots. {}", this);
             return;
         }
@@ -1651,6 +1679,15 @@ public class RestoreJob extends AbstractJob {
             }
         }
 
+        for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
+            for (Table restoreTbl : restoredTbls) {
+                if (restoreTbl instanceof OlapTable && restoreTbl.getId() == colocatePersistInfo.getTableId()) {
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                                        .removeTable(restoreTbl.getId(), (OlapTable) restoreTbl, isReplay);
+                }
+            }
+        }
+
         if (!isReplay) {
             // backupMeta is useless
             backupMeta = null;
@@ -1755,64 +1792,6 @@ public class RestoreJob extends AbstractJob {
             for (Map.Entry<Long, SnapshotInfo> entry : map.entrySet()) {
                 out.writeLong(entry.getKey());
                 entry.getValue().write(out);
-            }
-        }
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        backupTimestamp = Text.readString(in);
-        jobInfo = BackupJobInfo.read(in);
-        allowLoad = in.readBoolean();
-
-        state = RestoreJobState.valueOf(Text.readString(in));
-
-        if (in.readBoolean()) {
-            backupMeta = BackupMeta.read(in);
-        }
-
-        fileMapping = RestoreFileMapping.read(in);
-
-        metaPreparedTime = in.readLong();
-        snapshotFinishedTime = in.readLong();
-        downloadFinishedTime = in.readLong();
-
-        restoreReplicationNum = in.readInt();
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String tblName = Text.readString(in);
-            Partition part = Partition.read(in);
-            restoredPartitions.add(Pair.create(tblName, part));
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            restoredTbls.add(Table.read(in));
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long tblId = in.readLong();
-            int innerSize = in.readInt();
-            for (int j = 0; j < innerSize; j++) {
-                long partId = in.readLong();
-                long version = in.readLong();
-                in.readLong(); // read a version_hash for compatibility
-                restoredVersionInfo.put(tblId, partId, version);
-            }
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long tabletId = in.readLong();
-            int innerSize = in.readInt();
-            for (int j = 0; j < innerSize; j++) {
-                long beId = in.readLong();
-                SnapshotInfo info = SnapshotInfo.read(in);
-                snapshotInfos.put(tabletId, beId, info);
             }
         }
     }

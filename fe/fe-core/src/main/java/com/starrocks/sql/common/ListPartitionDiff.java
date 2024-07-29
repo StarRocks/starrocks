@@ -15,35 +15,35 @@
 
 package com.starrocks.sql.common;
 
-import java.util.List;
 import java.util.Map;
 
+/**
+ * Diff result of list partitions.
+ */
+public final class ListPartitionDiff extends PartitionDiff {
 
-public class ListPartitionDiff {
+    Map<String, PListCell> adds;
 
-    Map<String, List<List<String>>> adds;
+    Map<String, PListCell> deletes;
 
-    Map<String, List<List<String>>> deletes;
-
-
-    public ListPartitionDiff(Map<String, List<List<String>>> adds, Map<String, List<List<String>>> deletes) {
+    public ListPartitionDiff(Map<String, PListCell> adds, Map<String, PListCell> deletes) {
         this.adds = adds;
         this.deletes = deletes;
     }
 
-    public Map<String, List<List<String>>> getAdds() {
+    public Map<String, PListCell> getAdds() {
         return adds;
     }
 
-    public void setAdds(Map<String, List<List<String>>> adds) {
+    public void setAdds(Map<String, PListCell> adds) {
         this.adds = adds;
     }
 
-    public Map<String, List<List<String>>> getDeletes() {
+    public Map<String, PListCell> getDeletes() {
         return deletes;
     }
 
-    public void setDeletes(Map<String, List<List<String>>> deletes) {
+    public void setDeletes(Map<String, PListCell> deletes) {
         this.deletes = deletes;
     }
 }

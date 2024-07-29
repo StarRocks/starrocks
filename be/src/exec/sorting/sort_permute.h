@@ -55,13 +55,17 @@ using Permutation = std::vector<PermutationItem>;
 using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
 
-template <class T, class Container>
-static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other,
-                                                             const Container& container) {
+template <class T, bool CheckBound = false>
+static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
     InlinePermutation<T> inlined(other.size());
     for (int i = 0; i < other.size(); i++) {
         int index = other[i].index_in_chunk;
         inlined[i].index_in_chunk = index;
+        if constexpr (CheckBound) {
+            if (index >= container.size()) {
+                continue;
+            }
+        }
         inlined[i].inline_value = container[index];
     }
     return inlined;
@@ -74,32 +78,12 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
     }
 }
 
-inline SmallPermutation create_small_permutation(std::pair<int, int> range) {
-    const auto [start, end] = range;
-    auto size = end - start;
-
-    SmallPermutation perm(size);
-    for (uint32_t i = 0; i < size; i++) {
-        perm[i].index_in_chunk = start + i;
-    }
-    return perm;
-}
-
 inline SmallPermutation create_small_permutation(uint32_t rows) {
     SmallPermutation perm(rows);
     for (uint32_t i = 0; i < rows; i++) {
         perm[i].index_in_chunk = i;
     }
     return perm;
-}
-
-inline void restore_small_permutation(const SmallPermutation& perm, Permutation& output, std::pair<int, int> range) {
-    const auto [start, end] = range;
-    const auto size = end - start;
-    output.resize(size);
-    for (int i = 0; i < size; ++i) {
-        output[i].index_in_chunk = perm[i].index_in_chunk;
-    }
 }
 
 inline void restore_small_permutation(const SmallPermutation& perm, Permutation& output) {

@@ -114,6 +114,7 @@ protected:
     const ColumnReaderOptions& _opts;
     bool _cur_page_loaded = false;
     uint64_t _read_cursor = _opts.first_row_index;
+    static constexpr size_t BATCH_PROCESS_SIZE = 8192;
 
 private:
     Status _next_selected_page(size_t records_to_read, ColumnContentType content_type, size_t* records_to_skip,

@@ -107,12 +107,6 @@ public class NativeAccessController implements AccessController {
     }
 
     @Override
-    public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                   Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
-        throw new AccessDeniedException("Column-level access control not implemented");
-    }
-
-    @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.VIEW,
@@ -333,6 +327,9 @@ public class NativeAccessController implements AccessController {
     }
 
     private static String getFullyQualifiedNameFromListAllowNull(List<String> objectTokens) {
+        if (objectTokens == null) {
+            return "";
+        }
         return objectTokens.stream()
                 .map(e -> e == null ? "null" : e)
                 .collect(Collectors.joining("."));

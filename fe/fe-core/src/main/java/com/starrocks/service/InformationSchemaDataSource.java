@@ -206,7 +206,7 @@ public class InformationSchemaDataSource {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
         int idx = 0;
-        for (Column column : partitionInfo.getPartitionColumns()) {
+        for (Column column : partitionInfo.getPartitionColumns(table.getIdToColumn())) {
             if (idx != 0) {
                 partitionKeySb.append(", ");
             }
@@ -230,7 +230,7 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type(distributionInfo.getType().name());
-        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey());
+        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -326,13 +326,13 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVisible_version_time(physicalPartition.getVisibleVersionTime() / 1000);
         // PARTITION_KEY
         partitionMetaInfo.setPartition_key(
-                Joiner.on(", ").join(PartitionsProcDir.findPartitionColNames(partitionInfo)));
+                Joiner.on(", ").join(partitionInfo.getPartitionColumns(table.getIdToColumn())));
         // PARTITION_VALUE
         partitionMetaInfo.setPartition_value(
                 PartitionsProcDir.findRangeOrListValues(partitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
-        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(distributionInfo));
+        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
         // BUCKETS
         partitionMetaInfo.setBuckets(distributionInfo.getBucketNum());
         // REPLICATION_NUM
@@ -374,6 +374,10 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
         }
+
+        partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
+        partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
+        partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
     }
 
     // tables
@@ -512,19 +516,19 @@ public class InformationSchemaDataSource {
             }
         }
 
-        com.google.common.collect.Table<Long, UUID, Long> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+        com.google.common.collect.Table<Long, Long, UUID> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
 
         List<TTableInfo> tableInfos = new ArrayList<>();
         for (Long databaseId : allTables.rowKeySet()) {
             Database db = metadataMgr.getDb(databaseId);
             if (db != null) {
-                Map<UUID, Long> tableMap = allTables.row(databaseId);
+                Map<Long, UUID> tableMap = allTables.row(databaseId);
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    for (Map.Entry<UUID, Long> entry : tableMap.entrySet()) {
-                        UUID sessionId = entry.getKey();
-                        Long tableId = entry.getValue();
+                    for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getValue();
+                        Long tableId = entry.getKey();
                         Table table = db.getTable(tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();

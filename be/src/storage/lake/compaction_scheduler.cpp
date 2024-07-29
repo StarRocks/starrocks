@@ -25,6 +25,7 @@
 #include "agent/master_info.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gutil/stl_util.h"
@@ -56,12 +57,38 @@ int64_t CompactionTaskCallback::timeout_ms() const {
     return _request->has_timeout_ms() ? _request->timeout_ms() : kDefaultTimeoutMs;
 }
 
+bool CompactionTaskCallback::allow_partial_success() const {
+    if (_request->has_allow_partial_success() && _request->allow_partial_success()) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+Status CompactionTaskCallback::has_error() const {
+    std::lock_guard l(_mtx);
+    if (_status.ok()) {
+        if (butil::gettimeofday_ms() >= _timeout_deadline_ms) {
+            return Status::Aborted(fmt::format("timeout exceeded after {}ms", timeout_ms()));
+        } else {
+            return Status::OK();
+        }
+    }
+    if (allow_partial_success()) {
+        if (_status.is_aborted()) { // manual cancel or background worker shutdown
+            return _status;
+        } else {
+            return Status::OK();
+        }
+    } else {
+        return _status;
+    }
+}
+
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
     std::unique_lock l(_mtx);
 
     if (!context->status.ok()) {
-        // Add failed tablet for upgrade compatibility: older version FE relies on the failed tablet to determine
-        // whether the job is successful.
         _response->add_failed_tablets(context->tablet_id);
     }
 
@@ -118,6 +145,14 @@ CompactionScheduler::~CompactionScheduler() {
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                                   CompactResponse* response, ::google::protobuf::Closure* done) {
+    // when FE request a compaction, CN may not have any key cached yet, so pass an encryption_meta to refresh cache
+    if (!request->encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request->encryption_meta());
+        if (!st.ok()) {
+            LOG(WARNING) << fmt::format("refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}",
+                                        st.detailed_message());
+        }
+    }
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
@@ -236,14 +271,12 @@ void CompactionScheduler::thread_task(int id) {
     }
 }
 
-bool compaction_should_cancel(CompactionTaskContext* context) {
-    if (context->callback->has_error() || context->callback->timeout_exceeded()) {
-        return true;
-    }
+Status compaction_should_cancel(CompactionTaskContext* context) {
+    RETURN_IF_ERROR(context->callback->has_error());
 
     int64_t check_interval_seconds = 60LL * config::lake_compaction_check_valid_interval_minutes;
     if (!context->is_checker || check_interval_seconds <= 0) {
-        return false;
+        return Status::OK();
     }
 
     int64_t now = time(nullptr);
@@ -266,8 +299,9 @@ bool compaction_should_cancel(CompactionTaskContext* context) {
                     // notify all tablets in this compaction request
                     LOG(WARNING) << "validate compaction transaction " << context->txn_id << " for tablet "
                                  << context->tablet_id << ", abort invalid compaction";
-                    context->callback->update_status(Status::Aborted("compaction validation failed"));
-                    return true; // should cancel compaction
+                    Status rs = Status::Aborted("compaction validation failed");
+                    context->callback->update_status(rs);
+                    return rs; // should cancel compaction
                 } else {
                     // everything is fine
                 }
@@ -283,7 +317,7 @@ bool compaction_should_cancel(CompactionTaskContext* context) {
         // update check time, if check rpc failed, wait next round
         context->last_check_time = now;
     }
-    return false;
+    return Status::OK();
 }
 
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
@@ -319,8 +353,9 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
 
-    // Task failure due to memory limitations allows for retries. more threads allow for more retries.
-    if (status.is_mem_limit_exceeded() &&
+    // Task failure due to memory limitations allows for retries, more threads allow for more retries.
+    // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
+    if (!context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
         context->runs.load(std::memory_order_relaxed) < _task_queues.task_queue_size() + 1) {
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
@@ -331,15 +366,6 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
                                 << " cost=" << cost << "s";
 
-        if (status.is_cancelled()) {
-            if (context->callback->has_error()) {
-                auto cause = context->callback->error();
-                status = Status::Cancelled(fmt::format("Cancelled due to another error: {}", cause.message()));
-            } else if (context->callback->timeout_exceeded()) {
-                auto timeout = context->callback->timeout_ms();
-                status = Status::Cancelled(fmt::format("Cancelled due to timeout exceeded: {}ms", timeout));
-            }
-        }
         LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
                                     << " txn_id=" << txn_id << " cost=" << cost << "s : " << status;
 

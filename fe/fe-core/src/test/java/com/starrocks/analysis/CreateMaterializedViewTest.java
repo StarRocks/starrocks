@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -392,10 +393,10 @@ public class CreateMaterializedViewTest {
             // test partition
             MaterializedView materializedView = getMaterializedViewChecked(sql);
             PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-            Assert.assertEquals(1, partitionInfo.getPartitionColumns().size());
+            Assert.assertEquals(1, partitionInfo.getPartitionColumnsSize());
             Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(materializedView.getIdToColumn()).get(0);
             Assert.assertTrue(partitionExpr instanceof FunctionCallExpr);
             FunctionCallExpr partitionFunctionCallExpr = (FunctionCallExpr) partitionExpr;
             Assert.assertEquals("date_trunc", partitionFunctionCallExpr.getFnName().getFunction());
@@ -434,8 +435,6 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(materializedView.isActive());
             // test sync
             testFullCreateSync(materializedView, baseTable);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
@@ -627,10 +626,10 @@ public class CreateMaterializedViewTest {
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
             PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-            Assert.assertEquals(1, partitionInfo.getPartitionColumns().size());
+            Assert.assertEquals(1, partitionInfo.getPartitionColumns(materializedView.getIdToColumn()).size());
             Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(materializedView.getIdToColumn()).get(0);
             Assert.assertTrue(partitionExpr instanceof SlotRef);
             SlotRef partitionSlotRef = (SlotRef) partitionExpr;
             Assert.assertEquals("s1", partitionSlotRef.getColumnName());
@@ -1295,7 +1294,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionByAllowedFunctionUseWeek() {
+    public void testPartitionByAllowedFunctionUseWeek1() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1308,8 +1307,44 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
-                    "Detail message: The function date_trunc used by the materialized view for partition " +
-                    "does not support week formatting.", e.getMessage());
+                    "Detail message: Materialized view partition function date_trunc check failed: " +
+                    "date_trunc('week', `k2`).", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testPartitionByAllowedFunctionUseWeek2() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('week',k1) ss, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testPartitionByAllowedFunctionUseWeek3() {
+        String sql = "create materialized view mv1 " +
+                "partition by date_trunc('week', k1) " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select k1, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
         }
     }
 
@@ -2677,7 +2712,7 @@ public class CreateMaterializedViewTest {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Expr> partitionExpr = expressionRangePartitionInfo.getPartitionExprs();
+        List<Expr> partitionExpr = expressionRangePartitionInfo.getPartitionExprs(table.getIdToColumn());
         Assert.assertEquals(1, partitionExpr.size());
         Assert.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
@@ -2734,8 +2769,8 @@ public class CreateMaterializedViewTest {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        Assert.assertEquals(1, expressionRangePartitionInfo.getPartitionColumns().size());
-        Column partColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
+        Assert.assertEquals(1, expressionRangePartitionInfo.getPartitionColumns(table.getIdToColumn()).size());
+        Column partColumn = expressionRangePartitionInfo.getPartitionColumns(table.getIdToColumn()).get(0);
         Assert.assertEquals("l_shipdate", partColumn.getName());
         Assert.assertTrue(partColumn.getType().isDate());
         starRocksAssert.dropMaterializedView("lineitem_supplier_hive_mv");
@@ -3675,10 +3710,8 @@ public class CreateMaterializedViewTest {
                 "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(
-                    e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
+            Assert.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -3715,6 +3748,37 @@ public class CreateMaterializedViewTest {
             Assert.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTables3() {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM;";
+        starRocksAssert.withTable(
+                createSQL,
+                () -> {
+                    String sql = "create materialized view list_partition_mv1 " +
+                            "partition by (province) " +
+                            "distributed by hash(dt, province) buckets 10 " +
+                            "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+                    try {
+                        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                    } catch (Exception e) {
+                        Assert.fail(e.getMessage());
+                    }
+                });
     }
 
     @Test

@@ -29,6 +29,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -204,5 +205,18 @@ public class MvUtilsTest {
             Assert.assertEquals(20, upperDate.getDay());
             Assert.assertEquals(0, upperDate.getHour());
         }
+    }
+
+    @Test
+    public void testResetOpAppliedRule() {
+        LogicalScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        Operator op = builder.build();
+        Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+        // set
+        Utils.setOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
+        Assert.assertTrue(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+        // reset
+        Utils.resetOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
+        Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
     }
 }

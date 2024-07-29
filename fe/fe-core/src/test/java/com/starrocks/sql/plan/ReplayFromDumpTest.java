@@ -16,8 +16,10 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.CTEProperty;
@@ -175,7 +177,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"));
     }
-
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -726,7 +727,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       TABLE: tbl_mock_024"));
     }
 
-
     @Test
     public void testTwoStageAgg() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
@@ -905,39 +905,24 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testDistinctConstantRewrite() throws Exception {
+    public void testTimeoutDeepJoinCostPrune() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/distinct_constant"),
+                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_count(1)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("9:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_count(NULL)"));
+        String ss = Tracers.printScopeTimer();
+        int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
+        int end = ss.indexOf("]", start);
+        long count = Long.parseLong(ss.substring(start, end));
+        Assert.assertTrue(ss, count < 10000);
     }
 
     @Test
-    public void testSplitOrderBy() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/split_order_by"),
-                        null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:MERGING-EXCHANGE"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:TOP-N"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:MERGING-EXCHANGE"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:TOP-N"));
-
-    }
-
-    @Test
-    public void testQueryCacheSetOperator() throws Exception {
-
-        String savedSv = connectContext.getSessionVariable().getJsonString();
-        try {
-            connectContext.getSessionVariable().setEnableQueryCache(true);
-            QueryDumpInfo dumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/query_cache_set_operator"));
-            ExecPlan execPlan = UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dumpInfo);
-            Assert.assertTrue(execPlan.getFragments().stream().anyMatch(frag -> frag.getCacheParam() != null));
-        } finally {
-            connectContext.getSessionVariable().replayFromJson(savedSv);
-        }
+    public void testQueryTimeout() {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
     }
 }

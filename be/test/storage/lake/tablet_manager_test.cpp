@@ -139,6 +139,51 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
+TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.__set_enable_tablet_creation_optimization(true);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_tablet_manager->tablet_initial_metadata_location(tablet_id)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+
+    ASSIGN_OR_ABORT(auto meta_iter, _tablet_manager->list_tablet_metadata(tablet_id));
+    EXPECT_TRUE(meta_iter.has_next());
+    ASSIGN_OR_ABORT(metadata, meta_iter.next());
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+}
+
 TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
     auto tablet_id = next_id();
     auto schema_id = next_id();
@@ -225,7 +270,7 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     metadata.set_version(2);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
-    ASSIGN_OR_ABORT(auto metaIter, _tablet_manager->list_tablet_metadata(23456, false));
+    ASSIGN_OR_ABORT(auto metaIter, _tablet_manager->list_tablet_metadata(12345));
 
     std::vector<std::string> objects;
     while (metaIter.has_next()) {
@@ -233,24 +278,8 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
         objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
     }
 
-    EXPECT_EQ(objects.size(), 3);
-    auto iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
-    EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
-    EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "0000000000005BA0_0000000000000002.meta");
-    EXPECT_TRUE(iter != objects.end());
-
-    ASSIGN_OR_ABORT(metaIter, _tablet_manager->list_tablet_metadata(12345, true));
-
-    objects.clear();
-    while (metaIter.has_next()) {
-        ASSIGN_OR_ABORT(auto tabletmeta_ptr, metaIter.next());
-        objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
-    }
-
     EXPECT_EQ(objects.size(), 2);
-    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
+    auto iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
     EXPECT_TRUE(iter != objects.end());
     iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
     EXPECT_TRUE(iter != objects.end());
@@ -693,14 +722,9 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
     _tablet_manager->add_in_writing_data_size(1, 100);
 
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
-    _tablet_manager->remove_in_writing_data_size(1);
-
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
-
     _tablet_manager->add_in_writing_data_size(1, 100);
     _tablet_manager->clean_in_writing_data_size();
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;

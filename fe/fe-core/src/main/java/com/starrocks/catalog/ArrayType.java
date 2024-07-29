@@ -178,6 +178,11 @@ public class ArrayType extends Type {
         }
         return String.format("array<%s>", itemType.toTypeString(depth + 1));
     }
+
+    @Override
+    public int getMaxUniqueId() {
+        return itemType.getMaxUniqueId();
+    }
 }
 
 

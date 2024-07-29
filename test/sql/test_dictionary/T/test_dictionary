@@ -539,3 +539,52 @@ SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_ge
 
 DROP DICTIONARY test_dictionary_common_expression;
 DROP TABLE t_dictionary_common_expression;
+
+-- name: test_dictionary_multiple_row
+CREATE TABLE `t_dictionary_multiple_row` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_dictionary_multiple_row_fact` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t_dictionary_multiple_row select generate_series, generate_series, generate_series, generate_series from Table(generate_series(1, 20001));
+
+[UC]DROP DICTIONARY test_dictionary_multiple_row_multi_value;
+CREATE DICTIONARY test_dictionary_multiple_row_multi_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_multi_value", "FINISHED")
+
+[UC]DROP DICTIONARY test_dictionary_multiple_row_single_value;
+CREATE DICTIONARY test_dictionary_multiple_row_single_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_single_value", "FINISHED")
+
+insert into t_dictionary_multiple_row_fact SELECT dictionary_get("test_dictionary_multiple_row_multi_value", id1)[1], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[2], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[3] FROM t_dictionary_multiple_row;
+insert into t_dictionary_multiple_row_fact SELECT dictionary_get("test_dictionary_multiple_row_single_value", id1)[1], 1, 1 FROM t_dictionary_multiple_row;
+
+DROP TABLE t_dictionary_multiple_row;
+DROP TABLE t_dictionary_multiple_row_fact;
+DROP DICTIONARY test_dictionary_multiple_row_multi_value;
+DROP DICTIONARY test_dictionary_multiple_row_single_value;

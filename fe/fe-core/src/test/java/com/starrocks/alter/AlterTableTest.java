@@ -94,7 +94,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test
@@ -122,7 +122,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_cool_down_ttl SET (\"storage_cooldown_ttl\" = \"3 day\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_cool_down_ttl");
         OlapTable olapTable = (OlapTable) table;
@@ -157,7 +157,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test
@@ -198,7 +198,8 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
                 "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
+        alterJobExecutor.process(alterTableStmt, ctx);
 
         p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
         p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
@@ -236,7 +237,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
         Set<Pair<Long, Long>> ttlPartitionInfo = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler().getTtlPartitionInfo();
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
@@ -244,7 +245,7 @@ public class AlterTableTest {
         Assert.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
         sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
         Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
@@ -271,7 +272,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_partition_storage_medium SET(\"default.storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("test_partition_storage_medium");
         Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));

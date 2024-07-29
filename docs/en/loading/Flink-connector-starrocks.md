@@ -576,7 +576,7 @@ There are several ways to implement a Flink DataStream job according to the type
 [Flink CDC 3.0](https://nightlies.apache.org/flink/flink-cdc-docs-stable) framework can be used
 to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
 
-Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks). The StarRocks Pipeline Connector supports:
+Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.1/docs/connectors/pipeline-connectors/starrocks/). The StarRocks Pipeline Connector supports:
 
 - Automatic creation of databases and tables
 - Schema change synchronization

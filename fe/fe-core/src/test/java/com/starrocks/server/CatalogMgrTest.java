@@ -88,9 +88,7 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog1 = new ExternalCatalog(10000, "catalog_3", "", config);
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog1);
-        });
+        catalogMgr.replayCreateCatalog(catalog1);
     }
 
     @Test
@@ -100,8 +98,27 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog = new ExternalCatalog(10000, "catalog_0", "", config);
+        catalogMgr.replayCreateCatalog(catalog);
+    }
+
+    @Test
+    public void testCreateExceptionMsg() {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        Map<String, String> config = new HashMap<>();
+
+        config.put("type", "jdbc");
+
+        try {
+            catalogMgr.createCatalog("jdbc", "a", "", config);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Missing"));
+        }
+
+        config.put("type", "test_unsupported");
+
         Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog);
+            catalogMgr.createCatalog("test_unsupported", "b", "", config);
         });
     }
 

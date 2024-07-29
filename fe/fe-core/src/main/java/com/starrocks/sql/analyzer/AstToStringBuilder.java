@@ -1165,6 +1165,8 @@ public class AstToStringBuilder {
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else if (node.getLabel() != null) {
+                return node.getLabel();
             } else {
                 return node.getColumnName();
             }
@@ -1501,12 +1503,12 @@ public class AstToStringBuilder {
             if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName(table.getIdToColumn()));
                 } else {
-                    sb.append("  ").append(column.toSql());
+                    sb.append("  ").append(column.toSql(table.getIdToColumn()));
                 }
             } else {
-                sb.append("  ").append(column.toSql());
+                sb.append("  ").append(column.toSql(table.getIdToColumn()));
             }
         }
         if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
@@ -1514,7 +1516,7 @@ public class AstToStringBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
-                    sb.append("  ").append(index.toSql());
+                    sb.append("  ").append(index.toSql(table));
                 }
             }
         }
@@ -1548,7 +1550,7 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
+            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -1606,7 +1608,7 @@ public class AstToStringBuilder {
                 sb.append("PARTITION BY RANGE(");
                 idx = 0;
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(table.getIdToColumn())) {
                     if (idx != 0) {
                         sb.append(", ");
                     }

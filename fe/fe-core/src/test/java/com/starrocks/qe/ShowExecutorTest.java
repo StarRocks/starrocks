@@ -46,6 +46,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -67,6 +68,7 @@ import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -76,6 +78,7 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -130,6 +133,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -161,6 +165,11 @@ public class ShowExecutorTest {
     @Mocked
     MetadataMgr metadataMgr;
 
+    @BeforeClass
+    public static void beforeClass() {
+        FeConstants.runningUnitTest = true;
+    }
+
     @Before
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
@@ -170,6 +179,10 @@ public class ShowExecutorTest {
         Column column2 = new Column("col2", Type.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column1.getColumnId(), column1);
+        idToColumn.put(column2.getColumnId(), column2);
+
         // mock index 1
         MaterializedIndex index1 = new MaterializedIndex();
 
@@ -188,6 +201,7 @@ public class ShowExecutorTest {
 
         // mock table
         OlapTable table = new OlapTable();
+        table.setId(10001);
         new Expectations(table) {
             {
                 table.getName();
@@ -201,6 +215,10 @@ public class ShowExecutorTest {
                 table.getBaseSchema();
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
 
                 table.getKeysType();
                 minTimes = 0;
@@ -226,9 +244,13 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = partition;
 
-                table.getCopiedBfColumns();
+                table.getBfColumnNames();
                 minTimes = 0;
                 result = null;
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 
@@ -259,6 +281,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = 1000L;
 
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
+
                 mv.getViewDefineSql();
                 minTimes = 0;
                 result = "select col1, col2 from table1";
@@ -279,8 +305,8 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(
                         Collections.singletonList(
-                                new SlotRef(
-                                        new TableName("test", "testMv"), column1.getName())),
+                                ColumnIdExpr.create(new SlotRef(
+                                        new TableName("test", "testMv"), column1.getName()))),
                         Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();
@@ -303,6 +329,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new TableProperty(
                         Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 

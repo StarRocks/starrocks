@@ -34,27 +34,19 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -98,6 +90,14 @@ public class DatabaseTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
     }
@@ -138,75 +138,6 @@ public class DatabaseTest {
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());
         Assert.assertEquals(0, db.getTables().size());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./database");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        // db1
-        Database db1 = new Database();
-        db1.write(dos);
-
-        // db2
-        Database db2 = new Database(2, "db2");
-        List<Column> columns = new ArrayList<Column>();
-        Column column2 = new Column("column2",
-                ScalarType.createType(PrimitiveType.TINYINT), false, AggregateType.MIN, "", "");
-        columns.add(column2);
-        columns.add(new Column("column3",
-                ScalarType.createType(PrimitiveType.SMALLINT), false, AggregateType.SUM, "", ""));
-        columns.add(new Column("column4",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column5",
-                ScalarType.createType(PrimitiveType.BIGINT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column6",
-                ScalarType.createType(PrimitiveType.FLOAT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column7",
-                ScalarType.createType(PrimitiveType.DOUBLE), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column8", ScalarType.createCharType(10), true, null, "", ""));
-        columns.add(new Column("column9", ScalarType.createVarchar(10), true, null, "", ""));
-        columns.add(new Column("column10", ScalarType.createType(PrimitiveType.DATE), true, null, "", ""));
-        columns.add(new Column("column11", ScalarType.createType(PrimitiveType.DATETIME), true, null, "", ""));
-
-        MaterializedIndex index = new MaterializedIndex(1, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "table", index, new RandomDistributionInfo(10));
-        OlapTable table = new OlapTable(1000, "table", columns, KeysType.AGG_KEYS,
-                new SinglePartitionInfo(), new RandomDistributionInfo(10));
-        short shortKeyColumnCount = 1;
-        table.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
-
-        List<Column> column = Lists.newArrayList();
-        column.add(column2);
-        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount,
-                TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
-        Deencapsulation.setField(table, "baseIndexId", 1);
-        table.addPartition(partition);
-        db2.registerTableUnlocked(table);
-        db2.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-
-        Database rDb1 = new Database();
-        rDb1.readFields(dis);
-        Assert.assertTrue(rDb1.equals(db1));
-
-        Database rDb2 = new Database();
-        rDb2.readFields(dis);
-        Assert.assertTrue(rDb2.equals(db2));
-
-        // 3. delete files
-        dis.close();
-        file.delete();
     }
 
     @Test

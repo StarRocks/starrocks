@@ -12,7 +12,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Storage method: Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of each involved row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred.
 
-   ![img](../assets/table_design/hybrid_table.png)
+   ![img](../_assets/table_design/hybrid_table.png)
 
 - Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
 
@@ -20,7 +20,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Storage method: Data is stored in a column-by-column fashion.
 
-  ![img](../assets/table_design/hybrid_table.png)
+  ![img](../_assets/table_design/hybrid_table.png)
 
 - Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
 
@@ -171,6 +171,7 @@ EXECUTE select_by_id_stmt USING @id2;
 
 ## Limits
 
+- Currently, StarRocks shared-data clusters do not support hybrid row-column storage.
 - Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.

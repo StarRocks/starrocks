@@ -14,9 +14,9 @@ PROPERTIES (
 );
 -- result:
 -- !result
-select TABLE_NAME, PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;
+select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;
 -- result:
-partitions_meta_test	p1
-partitions_meta_test	p2
-partitions_meta_test	p3
+partitions_meta_test	p1	1	TXN_NORMAL
+partitions_meta_test	p2	1	TXN_NORMAL
+partitions_meta_test	p3	1	TXN_NORMAL
 -- !result

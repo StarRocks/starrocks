@@ -50,6 +50,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -106,7 +107,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -297,7 +297,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
                         .setSchemaHash(rollupSchemaHash)
                         .setStorageType(TStorageType.COLUMN)
-                        .setBloomFilterColumnNames(tbl.getCopiedBfColumns())
+                        .setBloomFilterColumnNames(tbl.getBfColumnIds())
                         .setBloomFilterFpp(tbl.getBfFpp())
                         .setIndexes(tbl.getCopiedIndexes())
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
@@ -327,6 +327,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                 .setTabletType(tabletType)
                                 .setCompressionType(tbl.getCompressionType())
+                                .setCompressionLevel(tbl.getCompressionLevel())
                                 .setCreateSchemaFile(true)
                                 .setBaseTabletId(tabletIdMap.get(rollupTabletId))
                                 .setTabletSchema(tabletSchema)
@@ -604,9 +605,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     "found in the base table.");
                         }
                     }
+
+                    List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
+                    for (String name : usedBaseTableColNames) {
+                        usedColIds.add(tbl.getColumn(name).getColumnId());
+                    }
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
-                                    Lists.newLinkedList(usedBaseTableColNames));
+                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
@@ -1015,45 +1020,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long partitionId = in.readLong();
-            int size2 = in.readInt();
-            Map<Long, Long> tabletIdMap =
-                    physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
-            for (int j = 0; j < size2; j++) {
-                long rollupTabletId = in.readLong();
-                long baseTabletId = in.readLong();
-                tabletIdMap.put(rollupTabletId, baseTabletId);
-            }
-
-            physicalPartitionIdToRollupIndex.put(partitionId, MaterializedIndex.read(in));
-        }
-
-        baseIndexId = in.readLong();
-        rollupIndexId = in.readLong();
-        baseIndexName = Text.readString(in);
-        rollupIndexName = Text.readString(in);
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            Column column = Column.read(in);
-            rollupSchema.add(column);
-        }
-        baseSchemaHash = in.readInt();
-        rollupSchemaHash = in.readInt();
-
-        rollupKeysType = KeysType.valueOf(Text.readString(in));
-        rollupShortKeyColumnCount = in.readShort();
-
-        watershedTxnId = in.readLong();
-        Text.readString(in); // placeholder
     }
 
     @Override

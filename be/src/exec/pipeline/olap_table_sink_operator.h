@@ -69,7 +69,6 @@ private:
     mutable bool _is_open_done = false;
     int32_t _sender_id;
     bool _is_cancelled = false;
-    bool _is_audit_report_done = true;
 
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;

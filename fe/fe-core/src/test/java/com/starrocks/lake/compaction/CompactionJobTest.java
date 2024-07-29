@@ -18,17 +18,68 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 public class CompactionJobTest {
     @Test
+    public void testGetResult() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartitionImpl(0, "", 1, 2, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
+
+        Assert.assertTrue(job.getAllowPartialSuccess());
+        List<CompactionTask> list = new ArrayList<>();
+        list.add(new CompactionTask(100));
+        list.add(new CompactionTask(101));
+        job.setTasks(list);
+        new MockUp<CompactionTask>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.NOT_FINISHED;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.NOT_FINISHED, job.getResult());
+
+        new MockUp<CompactionTask>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.NONE_SUCCESS;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.NONE_SUCCESS, job.getResult());
+
+        new MockUp<CompactionTask>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.ALL_SUCCESS;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, job.getResult());
+
+        new MockUp<CompactionTask>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.PARTIAL_SUCCESS;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.PARTIAL_SUCCESS, job.getResult());
+    }
+
+    @Test
     public void testBuildTabletCommitInfo() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartitionImpl(0, 1, 2, null);
-        CompactionJob job = new CompactionJob(db, table, partition, 10010);
+        PhysicalPartition partition = new PhysicalPartitionImpl(0, "", 1, 2, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, false);
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
         });

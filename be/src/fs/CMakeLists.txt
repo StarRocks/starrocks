@@ -24,6 +24,8 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXEC_FILES
     fd_cache.cpp
     fs.cpp
+    encrypt_file.cpp
+    key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
     fs_memory.cpp

@@ -45,13 +45,17 @@ public class TableSnapshotInfo {
     }
 
     public long getId() {
-        return baseTableInfo.getTableId();
+        return baseTable.getId();
     }
 
     public String getName() {
         return baseTable.getName();
     }
 
+    /**
+     * NOTE: Base table is only copied from the real table if it's an OlapTable or MaterializedView,
+     * otherwise the real table is returned.
+     */
     public Table getBaseTable() {
         return baseTable;
     }
@@ -71,5 +75,23 @@ public class TableSnapshotInfo {
                 ", baseTable=" + baseTable.getName() +
                 ", refreshedPartitionInfos=" + refreshedPartitionInfos +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TableSnapshotInfo that = (TableSnapshotInfo) o;
+        return Objects.equals(baseTableInfo, that.baseTableInfo) &&
+                Objects.equals(baseTable, that.baseTable);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(baseTableInfo, baseTable);
     }
 }

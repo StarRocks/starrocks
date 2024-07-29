@@ -63,23 +63,16 @@ public class DeltaUtils {
             ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
                     "Delta table feature [column mapping] is not supported");
         }
-        // check timestampNtz type
-        if (protocol.getReaderFeatures().contains("timestampNtz")) {
-            LOG.error("Delta table feature timestampNtz is not supported");
-            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
-                    "Delta table feature [timestampNtz] is not supported");
-        }
     }
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                        Configuration configuration, long createTime) {
         DefaultEngine deltaEngine = DefaultEngine.create(configuration);
 
-        Table deltaTable = null;
-        SnapshotImpl snapshot = null;
+        SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
-            deltaTable = Table.forPath(deltaEngine, path);
+            Table deltaTable = Table.forPath(deltaEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
         } catch (TableNotFoundException e) {
             LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());

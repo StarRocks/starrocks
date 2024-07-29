@@ -9,8 +9,8 @@ distribution type: GATHER
 limit: 100
 cardinality: 100
 column statistics:
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
-* count-->[0.0, 2334116.931759134, 0.0, 8.0, 1000000.0] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
+* count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F10)
 
@@ -145,7 +145,7 @@ probe runtime filters:
 - filter_id = 3, probe_expr = (26: O_ORDERKEY)
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
-* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE
+* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] MCV: [[O:73204400][F:72941300][P:3854300]] ESTIMATE
 
 PLAN FRAGMENT 4(F02)
 
@@ -322,6 +322,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 [end]
-

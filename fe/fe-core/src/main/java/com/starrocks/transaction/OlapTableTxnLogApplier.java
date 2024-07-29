@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -64,9 +65,12 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + 1);
             }
         }
     }
@@ -80,7 +84,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
@@ -156,10 +160,17 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 } // end for tablets
             } // end for indices
+
             long versionTime = partitionCommitInfo.getVersionTime();
             partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+            partition.setDataVersion(partitionCommitInfo.getDataVersion());
+            if (partitionCommitInfo.getVersionEpoch() > 0) {
+                partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+            }
+            partition.setVersionTxnType(txnState.getTransactionType());
+
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -174,7 +185,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

@@ -113,43 +113,38 @@ under the License.
             </activation>
 
             <repositories>
+                <!-- keep the central repository the first one among all repositories -->
+                <repository>
+                    <id>central</id>
+                    <name>central maven repo https</name>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </repository>
+                <!-- for java-cup -->
+                <repository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
+                </repository>
                 <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64-->
                 <repository>
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
 
-                <repository>
-                    <id>central</id>
-                    <name>central maven repo https</name>
-                    <url>https://repo.maven.apache.org/maven2</url>
-                </repository>
-
-                <!-- for java-cup -->
-                <repository>
-                    <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
-                </repository>
-                <repository>
-                    <id>cloudera</id>
-                    <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-                </repository>
-                <!-- for bdb je -->
-                <repository>
-                    <id>oracleReleases</id>
-                    <url>https://download.oracle.com/maven</url>
-                </repository>
             </repositories>
 
             <pluginRepositories>
                 <pluginRepository>
-                    <id>spring-plugins</id>
-                    <url>https://repo.spring.io/plugins-release/</url>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2/</url>
                 </pluginRepository>
                 <!-- for cup-maven-plugin -->
                 <pluginRepository>
                     <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
+                    <url>https://repository.cloudera.com/repository/public/</url>
                 </pluginRepository>
             </pluginRepositories>
         </profile>
@@ -407,6 +402,12 @@ under the License.
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-slf4j-impl</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-layout-template-json</artifactId>
                 <version>${log4j.version}</version>
             </dependency>
 
@@ -794,6 +795,27 @@ under the License.
                 <groupId>com.clickhouse</groupId>
                 <artifactId>clickhouse-jdbc</artifactId>
                 <version>0.4.6</version>
+            </dependency>
+			
+			<!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+            <dependency>
+                <groupId>com.oracle.database.jdbc</groupId>
+                <artifactId>ojdbc10</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+            <dependency>
+                <groupId>com.oracle.database.nls</groupId>
+                <artifactId>orai18n</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 -->
+            <dependency>
+                <groupId>com.microsoft.sqlserver</groupId>
+                <artifactId>mssql-jdbc</artifactId>
+                <version>12.4.2.jre11</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->

@@ -34,11 +34,12 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
@@ -224,6 +225,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -455,11 +457,6 @@ public class StmtExecutor {
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
 
-        // Only add the last running stmt for multi statement,
-        // because the audit log will only show the last stmt.
-        if (context.getIsLastStmt()) {
-            addRunningQueryDetail(parsedStmt);
-        }
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -760,14 +757,15 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
-                clearQueryScopeHintContext(sessionVariableBackup);
+                clearQueryScopeHintContext();
             }
 
+            // restore session variable in connect context
+            context.setSessionVariable(sessionVariableBackup);
         }
     }
 
-    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
-        context.setSessionVariable(sessionVariableBackup);
+    private void clearQueryScopeHintContext() {
         Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, UserVariable> entry = iterator.next();
@@ -778,40 +776,63 @@ public class StmtExecutor {
     }
 
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    private void processQueryScopeHint() throws DdlException {
+    @VisibleForTesting
+    public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
-        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
         UUID queryId = context.getQueryId();
-        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
-            if (hint instanceof SetVarHint) {
-                if (clonedSessionVariable == null) {
-                    clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        clonedUserVars.putAll(context.getUserVariables());
+        boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
+                .stream().anyMatch(hint -> hint instanceof UserVariableHint);
+        if (hasUserVariableHint) {
+            context.modifyUserVariablesCopyInWrite(clonedUserVars);
+        }
+        boolean executeSuccess = true;
+        try {
+            for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+                if (hint instanceof SetVarHint) {
+                    if (clonedSessionVariable == null) {
+                        clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                    }
+                    for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(clonedSessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                    }
                 }
-                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                    VariableMgr.setSystemVariable(clonedSessionVariable,
-                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+
+                if (hint instanceof UserVariableHint) {
+                    UserVariableHint userVariableHint = (UserVariableHint) hint;
+                    for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
+                        if (context.userVariables.containsKey(entry.getKey())) {
+                            throw new SemanticException(PARSER_ERROR_MSG.invalidUserVariableHint(entry.getKey(),
+                                    "the user variable name in the hint must not match any existing variable names"));
+                        }
+                        SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
+                        SetStmtAnalyzer.calcuteUserVariable(entry.getValue());
+                        if (entry.getValue().getEvaluatedExpression() == null) {
+                            try {
+                                final UUID uuid = UUIDUtil.genUUID();
+                                context.setQueryId(uuid);
+                                context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+                                entry.getValue().deriveUserVariableExpressionResult(context);
+                            } finally {
+                                context.setQueryId(queryId);
+                                context.resetReturnRows();
+                                context.getState().reset();
+                            }
+                        }
+                        clonedUserVars.put(entry.getKey(), entry.getValue());
+                    }
                 }
             }
-
-            if (hint instanceof UserVariableHint) {
-                UserVariableHint userVariableHint = (UserVariableHint) hint;
-                for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
-                    if (context.userVariables.containsKey(entry.getKey())) {
-                        throw new SemanticException(PARSER_ERROR_MSG.invalidUserVariableHint(entry.getKey(),
-                                "the user variable name in the hint must not match any existing variable names"));
-                    }
-                    SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
-                    if (entry.getValue().getEvaluatedExpression() == null) {
-                        try {
-                            context.setQueryId(UUIDUtil.genUUID());
-                            entry.getValue().deriveUserVariableExpressionResult(context);
-                        } finally {
-                            context.setQueryId(queryId);
-                            context.resetReturnRows();
-                            context.getState().reset();
-                        }
-                    }
-                    userVariablesFromHint.put(entry.getKey(), entry.getValue());
+        } catch (Throwable t) {
+            executeSuccess = false;
+            throw t;
+        } finally {
+            if (hasUserVariableHint) {
+                context.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    context.modifyUserVariables(clonedUserVars);
                 }
             }
         }
@@ -819,7 +840,6 @@ public class StmtExecutor {
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
         }
-        context.userVariables.putAll(userVariablesFromHint);
     }
 
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
@@ -1256,7 +1276,8 @@ public class StmtExecutor {
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
-        if (coord.isShortCircuit()) {
+        // For short circuit query, 'ProfileElement#plan' is null
+        if (profileElement.plan == null) {
             throw new UserException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
@@ -2009,7 +2030,8 @@ public class StmtExecutor {
         long createTime = System.currentTimeMillis();
 
         long loadedRows = 0;
-        int filteredRows = 0;
+        // filteredRows is stored in int64_t in the backend, so use long here.
+        long filteredRows = 0;
         long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
@@ -2131,7 +2153,7 @@ public class StmtExecutor {
                 loadedRows = Long.parseLong(coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
             }
             if (coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL) != null) {
-                filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
+                filteredRows = Long.parseLong(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
             }
 
             if (coord.getLoadCounters().get(LoadJob.LOADED_BYTES) != null) {
@@ -2338,7 +2360,8 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
-                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true);
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtJobTransactionFinish(txnState, database,
+                        targetTable);
             }
         }
 
@@ -2373,7 +2396,8 @@ public class StmtExecutor {
             sb.append("}");
         }
 
-        context.getState().setOk(loadedRows, filteredRows, sb.toString());
+        // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
+        context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
     }
 
     public String getOriginStmtInString() {
@@ -2478,13 +2502,16 @@ public class StmtExecutor {
         }
     }
 
-    protected void addRunningQueryDetail(StatementBase parsedStmt) {
+    /**
+     * Record this sql into the query details, which would be collected by external query history system
+     */
+    public void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
         String sql;
         if (parsedStmt.needAuditEncryption()) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt);
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
@@ -2507,4 +2534,46 @@ public class StmtExecutor {
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
+
+    /*
+     * Record this finished sql into the query details, which would be collected by external query history system
+     */
+    public void addFinishedQueryDetail() {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        ConnectContext ctx = context;
+        QueryDetail queryDetail = ctx.getQueryDetail();
+        if (queryDetail == null || !queryDetail.getQueryId().equals(DebugUtil.printId(ctx.getQueryId()))) {
+            return;
+        }
+
+        long endTime = System.currentTimeMillis();
+        long elapseMs = endTime - ctx.getStartTime();
+
+        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            queryDetail.setState(QueryDetail.QueryMemState.FAILED);
+            queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        } else {
+            queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
+        }
+        queryDetail.setEndTime(endTime);
+        queryDetail.setLatency(elapseMs);
+        queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
+        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
+
+        QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
 }

@@ -18,18 +18,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
@@ -55,8 +50,6 @@ import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TBinaryProtocol;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -75,7 +68,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
-    private Optional<Snapshot> snapshot = Optional.empty();
+    private Optional<Snapshot> snapshot = null;
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -134,7 +127,7 @@ public class IcebergTable extends Table {
     }
 
     public Optional<Snapshot> getSnapshot() {
-        if (snapshot.isPresent()) {
+        if (snapshot != null) {
             return snapshot;
         } else {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
@@ -145,8 +138,9 @@ public class IcebergTable extends Table {
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
+            String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
             return String.join(".", catalogName, remoteDbName, remoteTableName,
-                    ((BaseTable) getNativeTable()).operations().current().uuid());
+                    uuid == null ? "" : uuid);
         } else {
             return Long.toString(id);
         }
@@ -282,7 +276,8 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        return Joiner.on(":").join(name, ((BaseTable) getNativeTable()).operations().current().uuid());
+        String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
     }
 
     public IcebergCatalogType getCatalogType() {
@@ -379,43 +374,6 @@ public class IcebergTable extends Table {
                 fullSchema.size(), 0, remoteTableName, remoteDbName);
         tTableDescriptor.setIcebergTable(tIcebergTable);
         return tTableDescriptor;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty(JSON_KEY_ICEBERG_DB, remoteDbName);
-        jsonObject.addProperty(JSON_KEY_ICEBERG_TABLE, remoteTableName);
-        if (!Strings.isNullOrEmpty(resourceName)) {
-            jsonObject.addProperty(JSON_KEY_RESOURCE_NAME, resourceName);
-        }
-        if (!icebergProperties.isEmpty()) {
-            JsonObject jIcebergProperties = new JsonObject();
-            for (Map.Entry<String, String> entry : icebergProperties.entrySet()) {
-                jIcebergProperties.addProperty(entry.getKey(), entry.getValue());
-            }
-            jsonObject.add(JSON_KEY_ICEBERG_PROPERTIES, jIcebergProperties);
-        }
-        Text.writeString(out, jsonObject.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        String json = Text.readString(in);
-        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-        remoteDbName = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_DB).getAsString();
-        remoteTableName = jsonObject.getAsJsonPrimitive(JSON_KEY_ICEBERG_TABLE).getAsString();
-        resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
-        if (jsonObject.has(JSON_KEY_ICEBERG_PROPERTIES)) {
-            JsonObject jIcebergProperties = jsonObject.getAsJsonObject(JSON_KEY_ICEBERG_PROPERTIES);
-            for (Map.Entry<String, JsonElement> entry : jIcebergProperties.entrySet()) {
-                icebergProperties.put(entry.getKey(), entry.getValue().getAsString());
-            }
-        }
     }
 
     @Override

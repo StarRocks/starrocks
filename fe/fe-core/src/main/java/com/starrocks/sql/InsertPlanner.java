@@ -29,6 +29,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
@@ -157,8 +158,10 @@ public class InsertPlanner {
         PARTIALLY_DEPEND_ON_TARGET_COLUMNS
     }
 
-    private static GenColumnDependency getDependencyType(Column column, Set<String> targetColumns) {
-        List<SlotRef> slots = column.getGeneratedColumnRef();
+    private static GenColumnDependency getDependencyType(Column column,
+                                                         Set<String> targetColumns,
+                                                         Map<ColumnId, Column> allColumns) {
+        List<SlotRef> slots = column.getGeneratedColumnRef(allColumns);
         if (slots.isEmpty()) {
             return GenColumnDependency.NO_DEPENDENCY;
         }
@@ -215,7 +218,7 @@ public class InsertPlanner {
                 // if so, add it to the output schema
                 // if is not related to target columns at all, skip it (TODO in future)
                 // else raise error
-                switch (getDependencyType(column, legalGeneratedColumnDependencies)) {
+                switch (getDependencyType(column, legalGeneratedColumnDependencies, targetTable.getIdToColumn())) {
                     case NO_DEPENDENCY:
                         // should not happen, just skip
                         continue;
@@ -290,12 +293,11 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
-        SessionVariable currentVariable = session.getSessionVariable();
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable().clone();
+        session.setSessionVariable(currentVariable);
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
-        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
         boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
                 currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
@@ -326,8 +328,8 @@ public class InsertPlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
@@ -414,6 +416,15 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
+            // enable spill for connector sink
+            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                session.getSessionVariable().setEnableSpill(true);
+                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
+                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
+            }
+
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
                     targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
@@ -450,12 +461,6 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
-        } finally {
-            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
-            if (forceDisablePipeline) {
-                session.getSessionVariable().setEnablePipelineEngine(true);
-            }
-            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
@@ -483,7 +488,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(plannerMetaLocker);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
@@ -645,7 +652,7 @@ public class InsertPlanner {
 
             if (targetColumn.isGeneratedColumn()) {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
-                Expr expr = targetColumn.generatedColumnExpr();
+                Expr expr = targetColumn.getGeneratedColumnExpr(insertStatement.getTargetTable().getIdToColumn());
                 ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()

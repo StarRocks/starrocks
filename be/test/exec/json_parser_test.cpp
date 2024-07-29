@@ -424,6 +424,35 @@ PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
     {"key4": 4})");
 }
 
+PARALLEL_TEST(JsonParserTest, test_big_illegal_document_stream) {
+    // ndjson with ' ', '/t', '\n'
+    std::string input = R"(   {"key1": 1} "key2": 012345678901234567890123456789012345678901234567890"} {"key3": 3})";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+
+    auto st = parser->parse(input.data(), size, padded_size);
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string(10).data(), R"("key2": 01)");
+}
+
 PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     // json array with ' ', '/t', '\n'
     std::string input = R"( [  {"key1": 1}, "key2": 2},    {"key3": 3},
@@ -455,6 +484,38 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_STREQ(parser->left_bytes_string(64).data(), R"("key2": 2},    {"key3": 3},
     {"key4": 4}])");
+}
+
+PARALLEL_TEST(JsonParserTest, test_big_illegal_json_array) {
+    // json array with ' ', '/t', '\n'
+    std::string input = R"( [  {"key1": 1}, "key2": "123456789012345678901234567890"},    {"key3": 3},
+    {"key4": 4}])";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
+
+    auto st = parser->parse(input.data(), size, padded_size);
+
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string(10).data(), R"("key2": "1)");
 }
 
 PARALLEL_TEST(JsonParserTest, test_big_value) {

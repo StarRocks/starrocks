@@ -98,6 +98,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean sys_log_to_console = false;
 
+    @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
+    public static String sys_log_format = "plaintext";
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -343,33 +345,28 @@ public class Config extends ConfigBase {
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
-    /**
-     * For Task framework do some background operation like cleanup Task/TaskRun.
-     * It will run every *task_check_interval_second* to do background job.
-     */
-    @ConfField
-    public static int task_check_interval_second = 1 * 3600; // 1 hour
+    /////////////////////////////////////////////////    Task   ///////////////////////////////////////////////////
+    @ConfField(mutable = true, comment = "Interval of task background jobs")
+    public static int task_check_interval_second = 60; // 1 minute
 
-    /**
-     * for task set expire time
-     */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "task ttl")
     public static int task_ttl_second = 24 * 3600;         // 1 day
 
-    /**
-     * for task run set expire time
-     */
-    @ConfField(mutable = true)
-    public static int task_runs_ttl_second = 24 * 3600;     // 1 day
+    @ConfField(mutable = true, comment = "task run ttl")
+    public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
-    /**
-     * max history task num kept
-     */
-    @ConfField(mutable = true)
+    @Deprecated
+    @ConfField(mutable = true, comment = "[DEPRECATED as enable_task_history_archive] max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
     public static int task_min_schedule_interval_s = 10;
+
+    @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
+    public static int table_keeper_interval_second = 30;
+
+    @ConfField(mutable = true, comment = "Whether enable the task history archive feature")
+    public static boolean enable_task_history_archive = true;
 
     /**
      * The max keep time of some kind of jobs.
@@ -861,6 +858,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
 
+    @ConfField(mutable = true)
+    public static boolean lake_enable_tablet_creation_optimization = false;
+
     /**
      * The thrift server max worker threads
      */
@@ -1193,6 +1193,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean materialized_view_refresh_ascending = true;
 
+    @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
+            "only refresh affected partitions of external table, instead of all of them ")
+    public static boolean enable_materialized_view_external_table_precise_refresh = true;
+
     /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */
@@ -1203,7 +1207,7 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_metrics_collect = true;
 
     @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
-               "build ast tree in materialized view initialization")
+            "build ast tree in materialized view initialization")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**
@@ -2333,6 +2337,20 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
+     * set this to enable Transparent Data Encryption(TDE)
+     * once set, should not be changed, or the data depending on this key cannot be read anymore
+     */
+    @ConfField(mutable = false)
+    public static String default_master_key = "";
+
+    /**
+     * Specifies KEK's rotation period. Default is 7 days.
+     * Do not set this value too small, because all keys rotated are stored in FE meta forever
+     */
+    @ConfField(mutable = true)
+    public static long key_rotation_days = 7;
+
+    /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
      * hybrid: run on both, not production ready, should only be used in test environment now.
@@ -2529,10 +2547,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static int lake_compaction_history_size = 12;
-
-    @ConfField(mutable = true)
-    public static int lake_compaction_fail_history_size = 12;
+    public static int lake_compaction_history_size = 20;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -2549,6 +2564,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int lake_compaction_default_timeout_second = 86400; // 1 day
+
+    @ConfField(mutable = true)
+    public static boolean lake_compaction_allow_partial_success = false;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -2744,7 +2762,7 @@ public class Config extends ConfigBase {
      * Enable the experimental temporary table feature
      */
     @ConfField(mutable = true)
-    public static boolean enable_experimental_temporary_table = false;
+    public static boolean enable_experimental_temporary_table = true;
 
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
@@ -2833,6 +2851,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
+    @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
+    public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
+
+    @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
+            "occupying too much meta memory")
+    public static int max_mv_task_run_meta_message_values_length = 16;
+
     /**
      * The refresh partition number when refreshing materialized view at once by default.
      */
@@ -2843,6 +2868,16 @@ public class Config extends ConfigBase {
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
     public static boolean default_mv_refresh_immediate = true;
+
+    @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
+    public static boolean enable_mv_query_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
+    public static boolean enable_mv_refresh_insert_strict = false;
+
+    @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
+            "default")
+    public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
 
     /**
      * Whether analyze the mv after refresh in async mode.
@@ -2996,4 +3031,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
 }

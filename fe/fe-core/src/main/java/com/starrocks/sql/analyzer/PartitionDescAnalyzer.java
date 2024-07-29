@@ -20,6 +20,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
@@ -43,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 
 public class PartitionDescAnalyzer {
     public static void analyze(PartitionDesc partitionDesc) {
@@ -92,7 +94,8 @@ public class PartitionDescAnalyzer {
                 ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
             }
 
-            analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo);
+            analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo,
+                    table.getIdToColumn());
         } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
             SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
             if (isAutomaticPartition && singleItemListPartitionDesc.getValues().size() > 1) {
@@ -117,10 +120,11 @@ public class PartitionDescAnalyzer {
     }
 
     public static void analyzeMultiRangePartitionDescWithExistsTable(MultiRangePartitionDesc multiRangePartitionDesc,
-                                                                     PartitionInfo partitionInfo) {
+                                                                     PartitionInfo partitionInfo,
+                                                                     Map<ColumnId, Column> idToColumn) {
 
 
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
             ErrorReport.report(ErrorCode.ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE);
         }
@@ -135,7 +139,7 @@ public class PartitionDescAnalyzer {
             long descStep = multiRangePartitionDesc.getStep();
 
             ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+            Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
 
@@ -161,12 +165,14 @@ public class PartitionDescAnalyzer {
             }
 
             checkManualAddPartitionDateAlignedWithExprRangePartition((ExpressionRangePartitionInfo) partitionInfo,
-                    multiRangePartitionDesc.getPartitionBegin(), multiRangePartitionDesc.getPartitionEnd(), 1, 1);
+                    idToColumn, multiRangePartitionDesc.getPartitionBegin(),
+                    multiRangePartitionDesc.getPartitionEnd(), 1, 1);
         }
     }
 
     public static void checkManualAddPartitionDateAlignedWithExprRangePartition(
             ExpressionRangePartitionInfo exprRangePartitionInfo,
+            Map<ColumnId, Column> idToColumn,
             String partitionBegin,
             String partitionEnd,
             int dayOfWeek,
@@ -174,7 +180,7 @@ public class PartitionDescAnalyzer {
         LocalDateTime partitionBeginDateTime = DateUtils.parseStrictDateTime(partitionBegin);
         LocalDateTime partitionEndDateTime = DateUtils.parseStrictDateTime(partitionEnd);
 
-        Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+        Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
         String functionName = functionCallExpr.getFnName().getFunction();
 
@@ -196,7 +202,7 @@ public class PartitionDescAnalyzer {
         checkManualAddPartitionDateAligned(partitionBeginDateTime, partitionEndDateTime,
                 partitionGranularity, partitionStep,
                 dayOfWeek, dayOfMonth,
-                exprRangePartitionInfo.getPartitionColumns().get(0).getType());
+                exprRangePartitionInfo.getPartitionColumns(idToColumn).get(0).getType());
     }
 
     public static void checkManualAddPartitionDateAligned(

@@ -67,8 +67,8 @@ public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
 
     private static final int FINAL_SINK_PSEUDO_PLAN_NODE_ID = -1;
-    private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
-    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\)$");
+    private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\).*$");
+    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\).*$");
 
     // ANSI Characters
     private static final String ANSI_RESET = "\u001B[0m";

@@ -38,13 +38,12 @@ class TabletManager;
 // - tablet_id Id of the tablet
 // - base_version Version of the base metadata
 // - new_version The new version to be published
-// - txn_ids Transactions to apply in sequence
-// - commit_time New commit timestamp
+// - txns Transactions to apply in sequence
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const int64_t> txn_ids, int64_t commit_time);
+                                            int64_t new_version, const std::vector<TxnInfoPB>& txns);
 
 // Publish a batch new versions of transaction logs.
 //

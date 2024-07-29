@@ -39,7 +39,7 @@ public class UnifiedConnectorTest {
         properties.put("kudu.schema-emulation.enabled", "true");
         properties.put("kudu.schema-emulation.prefix", "impala::");
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
-        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context);
+        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context, false);
         ConnectorMetadata metadata = catalogConnector.getMetadata();
         assertTrue(metadata instanceof CatalogConnectorMetadata);
         catalogConnector.shutdown();

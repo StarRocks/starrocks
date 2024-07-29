@@ -385,10 +385,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testInformationFunction() throws Exception {
         String sql = "select connection_id() from tall";
-        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+        assertPlanContains(sql, "<slot 12> : 0");
 
         sql = "select catalog() from tall";
-        assertPlanContains(sql, "<slot 12> : CATALOG()");
+        assertPlanContains(sql, "<slot 12> : 'default_catalog'");
 
         sql = "select database() from tall";
         assertPlanContains(sql, "<slot 12> : 'test'");
@@ -397,13 +397,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : 'test'");
 
         sql = "select user() from tall";
-        assertPlanContains(sql, "<slot 12> : USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@%'");
 
         sql = "select CURRENT_USER from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+        assertPlanContains(sql, "<slot 12> : '\\'root\\'@\\'%\\''");
 
         sql = "select CURRENT_ROLE from tall";
-        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
+        assertPlanContains(sql, "<slot 12> : 'root'");
     }
 
     @Test
@@ -436,9 +436,22 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testUtilityFunction() throws Exception {
         String sql = "select current_catalog";
-        assertPlanContains(sql, "<slot 2> : CATALOG()");
+        assertPlanContains(sql, "<slot 2> : 'default_catalog'");
 
         sql = "select current_schema";
         assertPlanContains(sql, "<slot 2> : 'test'");
+    }
+
+
+    @Test
+    public void testHllFunction() throws Exception {
+        String sql = "select empty_approx_set()";
+        assertPlanContains(sql, "<slot 2> : HLL_EMPTY()");
+
+        sql = "select approx_set(\"tc\") from tall";
+        assertPlanContains(sql, "<slot 12> : hll_hash(CAST(3: tc AS VARCHAR))");
+
+        sql = "select merge(approx_set(\"tc\")) from tall";
+        assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
     }
 }

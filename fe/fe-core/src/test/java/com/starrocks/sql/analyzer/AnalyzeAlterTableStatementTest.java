@@ -57,8 +57,8 @@ public class AnalyzeAlterTableStatementTest {
     @Test
     public void testTableRename() {
         AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 rename test1");
-        Assert.assertEquals(alterTableStmt.getOps().size(), 1);
-        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof TableRenameClause);
+        Assert.assertEquals(alterTableStmt.getAlterClauseList().size(), 1);
+        Assert.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof TableRenameClause);
         analyzeFail("alter table test rename");
     }
 
@@ -93,7 +93,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testCreateIndex() throws Exception {
-        String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
+        String sql = "CREATE INDEX index1 ON `test`.`t0` (`v1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";

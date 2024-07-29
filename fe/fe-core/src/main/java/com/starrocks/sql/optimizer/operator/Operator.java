@@ -161,6 +161,10 @@ public abstract class Operator {
         this.opRuleMask |= bit;
     }
 
+    public void resetOpRuleMask(int bit) {
+        this.opRuleMask &= (~ bit);
+    }
+
     public boolean isOpRuleMaskSet(int bit) {
         return (opRuleMask & bit) != 0;
     }
@@ -184,6 +188,10 @@ public abstract class Operator {
                     rowOutputInfo.getOriginalColOutputInfo(), rowOutputInfo.getEndogenousCols());
         }
         return rowOutputInfo;
+    }
+
+    public void clearRowOutputInfo() {
+        rowOutputInfo = null;
     }
 
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

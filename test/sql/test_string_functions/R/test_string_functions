@@ -512,3 +512,50 @@ select sum(result) from ( select ngram_search("normal_string", "normal_string", 
 -- result:
 4097.0
 -- !result
+-- name: test_ngram_search_with_low_cardinality
+CREATE TABLE __row_util_1 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
+-- result:
+-- !result
+CREATE TABLE left_table (
+    id int,
+    nation string,
+    exsit_hot_value int
+)
+ENGINE=olap
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) buckets 32
+PROPERTIES (
+    "replication_num" = "1" 
+);
+-- result:
+-- !result
+insert into left_table 
+select
+    cast(rand() * 100000000 as int),
+    CASE 
+        WHEN RAND() > 0.8 THEN 'china'
+        WHEN RAND() > 0.6 THEN 'usa'
+        WHEN RAND() > 0.4 THEN 'russian'
+        WHEN RAND() > 0.2 THEN 'canada'
+        ELSE 'japan'
+    END,
+   case when RAND() > 0.99 THEN k1
+       ELSE k1 % 5 
+   END
+from __row_util_1;
+-- result:
+-- !result
+select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
+-- result:
+1
+-- !result

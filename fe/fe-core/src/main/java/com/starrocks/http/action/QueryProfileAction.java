@@ -122,6 +122,20 @@ public class QueryProfileAction extends WebBaseAction {
                 "  document.body.removeChild(t)\n" +
                 "}\n" +
                 "</script>");
+        buffer.append("<script type=\"text/javascript\">\n" +
+                "function downloadProfile() {\n" +
+                "  content = $('#profile').html()\n" +
+                "  const file = new Blob([content], { type: \"text/plain\" });\n" +
+                "  const params = new URLSearchParams(window.location.search);\n" +
+                "  const query_id = params.get('query_id');\n" +
+                "  const a = document.createElement('a');\n" +
+                "  a.href = URL.createObjectURL(file);\n" +
+                "  a.download = query_id + \"profile.txt\";\n" +
+                "  a.click();\n" +
+                "\n" +
+                "  URL.revokeObjectURL(a.href);\n" +
+                "}" + "</script>");
         buffer.append("<input type=\"button\" onclick=\"copyProfile();\" value=\"Copy Profile\"></input>");
+        buffer.append("<input type=\"button\" onclick=\"downloadProfile();\" value=\"Download Profile\"></input>");
     }
 }

@@ -39,14 +39,12 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -70,8 +68,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
@@ -183,53 +179,18 @@ public class LakeMaterializedViewTest {
         FilePathInfo pathInfo = builder.build();
         mv.setStorageInfo(pathInfo, new DataCacheInfo(true, true));
 
-        // Test serialize and deserialize
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
-            mv.write(out);
-            out.flush();
-        }
-
-        Table newTable = null;
-        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
-            newTable = Table.read(in);
-        }
-        byteArrayOutputStream.close();
-
-        // Check lake mv and lake tablet
-        Assert.assertTrue(newTable.isCloudNativeMaterializedView());
-        Assert.assertTrue(newTable.isCloudNativeTableOrMaterializedView());
-        LakeMaterializedView newMv = (LakeMaterializedView) newTable;
-
+        // Test selectiveCopy
+        MaterializedView newMv = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
+        Assert.assertTrue(newMv.isCloudNativeMaterializedView());
         Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
         Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
-        Partition p1 = newMv.getPartition(partitionId);
-        MaterializedIndex newIndex = p1.getBaseIndex();
-        long expectedTabletId = 10L;
-        for (Tablet tablet : newIndex.getTablets()) {
-            Assert.assertTrue(tablet instanceof LakeTablet);
-            LakeTablet lakeTablet = (LakeTablet) tablet;
-            Assert.assertEquals(expectedTabletId, lakeTablet.getId());
-            Assert.assertEquals(expectedTabletId, lakeTablet.getShardId());
-            ++expectedTabletId;
-        }
-
-        // Test selectiveCopy
-        MaterializedView newMv2 = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
-        Assert.assertTrue(newMv2.isCloudNativeMaterializedView());
-        Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
-        cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
-        Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
-        Assert.assertTrue(cacheInfo.getAsyncWriteBack());
-
         // Test appendUniqueProperties
         StringBuilder sb = new StringBuilder();
-        Deencapsulation.invoke(newMv2, "appendUniqueProperties", sb);
+        Deencapsulation.invoke(newMv, "appendUniqueProperties", sb);
         String baseProperties = sb.toString();
         Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));

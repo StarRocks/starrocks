@@ -367,7 +367,7 @@ public class ScalarOperatorToIcebergExpr {
                     return null;
             }
 
-            return res.isPresent() ? res.get() : null;
+            return res.orElse(null);
         }
 
         @Override
@@ -445,14 +445,17 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
+        @Override
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
         }
 
+        @Override
         public String visitCastOperator(CastOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
         }
 
+        @Override
         public String visitSubfield(SubfieldOperator operator, Void context) {
             ScalarOperator child = operator.getChild(0);
             if (!(child instanceof ColumnRefOperator)) {

@@ -172,6 +172,10 @@ public:
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
                                          FilterPtr* filter = nullptr, bool apply_filter = true);
+    // evaluate no eq join runtime in filters
+    // The no-eq join runtime filter does not have a companion bloom filter.
+    // This function only executes these filters to avoid the overhead of executing an additional runtime in filter.
+    Status eval_no_eq_join_runtime_in_filters(Chunk* chunk);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);

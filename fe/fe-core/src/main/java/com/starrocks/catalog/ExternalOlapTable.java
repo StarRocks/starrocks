@@ -19,20 +19,19 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -54,9 +53,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
-import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -331,30 +328,6 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject obj = new JsonObject();
-        obj.addProperty(JSON_KEY_TABLE_ID, id);
-        obj.addProperty(JSON_KEY_TABLE_NAME, name);
-        obj.addProperty(JSON_KEY_DB_ID, dbId);
-        externalTableInfo.toJsonObj(obj);
-        Text.writeString(out, obj.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String jsonStr = Text.readString(in);
-        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
-        id = obj.getAsJsonPrimitive(JSON_KEY_TABLE_ID).getAsLong();
-        name = obj.getAsJsonPrimitive(JSON_KEY_TABLE_NAME).getAsString();
-        dbId = obj.getAsJsonPrimitive(JSON_KEY_DB_ID).getAsLong();
-        externalTableInfo = new ExternalTableInfo();
-        externalTableInfo.fromJsonObj(obj);
-    }
-
-    @Override
     public void copyOnlyForQuery(OlapTable olapTable) {
         super.copyOnlyForQuery(olapTable);
         ExternalOlapTable externalOlapTable = (ExternalOlapTable) olapTable;
@@ -405,7 +378,8 @@ public class ExternalOlapTable extends OlapTable {
         if (meta.isSetIndex_infos()) {
             List<Index> indexList = new ArrayList<>();
             for (TIndexInfo indexInfo : meta.getIndex_infos()) {
-                Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
+                Index index = new Index(indexInfo.getIndex_name(),
+                        MetaUtils.getColumnIdsByColumnNames(this, indexInfo.getColumns()),
                         IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment(),
                         Collections.emptyMap());
                 indexList.add(index);

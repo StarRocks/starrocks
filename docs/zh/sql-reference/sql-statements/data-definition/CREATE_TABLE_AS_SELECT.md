@@ -16,7 +16,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 - 同步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
 
   ```SQL
-  CREATE TABLE [IF NOT EXISTS] [database.]table_name
+  CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
   [column_name1 [, column_name2, ...]]
   [index_definition1 [, index_definition2, ...]]
   [key_desc]
@@ -48,6 +48,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
+| TEMPORARY         | 否       | 创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。目前，StarRocks 不支持通过 SUBMIT TASK 发起异步任务创建临时表。 |
 | column_name       | 否       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
 | index_definition  | 否       | 自 3.1.8 开始支持为新表创建 Bitmap 索引，语法是 `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']`。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)。|
 | key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br />**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|

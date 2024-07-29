@@ -28,6 +28,8 @@ public:
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
+        _tablet_metadata->set_enable_persistent_index(true);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -36,7 +38,7 @@ public:
         auto schema = _tablet_metadata->mutable_schema();
         schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
+        schema->set_keys_type(PRIMARY_KEYS);
         schema->set_num_rows_per_row_block(65535);
         auto c0 = schema->add_column();
         {
@@ -87,6 +89,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     }
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     // insert duplicate should return error
     // ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
@@ -127,7 +130,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
         num++;
     }
     vector<IndexValue> erase_old_values(erase_keys.size());
-    ASSERT_TRUE(index->erase(num, erase_key_slices.data(), erase_old_values.data()).ok());
+    ASSERT_TRUE(index->erase(num, erase_key_slices.data(), erase_old_values.data(), 1).ok());
 
     // test upsert
     vector<Key> upsert_keys(N, 0);
@@ -176,6 +179,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace
@@ -205,6 +209,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -298,6 +303,57 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
     // 5. <1000000, 10000, 10000, 10000, ...(11 items)>
     test_fn(10000, 11, true);
     config::lake_pk_index_sst_max_compaction_versions = old;
+}
+
+TEST_F(LakePersistentIndexTest, test_insert_delete) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    const int N = 10000;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values.emplace_back(i * 2);
+    }
+
+    // 1. insert
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
+    for (int i = 0; i < N; i++) {
+        values[i] = i * 3;
+    }
+    // 2. upsert
+    vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
+
+    // 3. insert delete
+    vector<bool> filter(N, false);
+    for (int i = 0; i < N; i++) {
+        if (i % 2 == 0) {
+            filter[i] = true;
+        }
+    }
+    ASSERT_OK(index->replay_erase(N, key_slices.data(), filter, 0, 0));
+    // 4. check result
+    std::vector<IndexValue> new_get_values(keys.size());
+    ASSERT_TRUE(index->get(N, key_slices.data(), new_get_values.data()).ok());
+    ASSERT_EQ(N, new_get_values.size());
+    for (int i = 0; i < new_get_values.size(); i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(IndexValue(i * 3), new_get_values[i]);
+        } else {
+            ASSERT_EQ(IndexValue(NullIndexValue), new_get_values[i]);
+        }
+    }
+    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 } // namespace starrocks::lake

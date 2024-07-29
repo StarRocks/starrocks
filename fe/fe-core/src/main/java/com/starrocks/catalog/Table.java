@@ -34,7 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -45,16 +44,14 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
@@ -117,8 +114,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         TABLE_FUNCTION,
         @SerializedName("PAIMON")
         PAIMON,
-        @SerializedName("HIVE_VIEW")
-        HIVE_VIEW,
         @SerializedName("ODPS")
         ODPS,
         @SerializedName("BLACKHOLE")
@@ -126,7 +121,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("KUDU")
         KUDU,
         @SerializedName("METADATA")
-        METADATA;
+        METADATA,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW,
+        @SerializedName("ICEBERG_VIEW")
+        ICEBERG_VIEW;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -166,16 +165,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
-    /*
-     *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
-     *  e.g. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
-     *      to query but visible to load process.
-     *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
-     *  subclasses.
-     *
-     *  NOTICE: the order of this fullSchema is meaningless to OlapTable
-     */
+
     /**
+     * For OlapTable:
      * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      * The properties of base columns in fullSchema are same as properties in baseIndex.
      * For example:
@@ -183,22 +175,28 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * Schema change (c3 to bigint)
      * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
-     * <p>
+     * NOTICE: The columns of baseIndex is placed before the SHADOW_NAME_PREFIX columns
+     *
+     * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
+     * subclasses.
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
+     *
+     * If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent
+     * read-write operations between these tasks with a relatively low probability.
+     * Therefore, we choose to use a CopyOnWriteArrayList.
      */
-    // If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent 
-    // read-write operations between these tasks with a relatively low probability. 
-    // Therefore, we choose to use a CopyOnWriteArrayList.
     @SerializedName(value = "fullSchema")
     protected List<Column> fullSchema = new CopyOnWriteArrayList<>();
-    // tree map for case-insensitive lookup.
+
     /**
-     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
+     * nameToColumn and idToColumn are both indexes of fullSchema.
+     * nameToColumn is the index of column name, idToColumn is the index of column id,
+     * column names can change, but the column ID of a specific column will never change.
+     * Use case-insensitive tree map, because the column name is case-insensitive in the system.
      */
     protected Map<String, Column> nameToColumn;
+    protected Map<ColumnId, Column> idToColumn;
 
-    // DO NOT persist this variable.
-    protected boolean isTypeRead = false;
     // table(view)'s comment
     @SerializedName(value = "comment")
     protected String comment = "";
@@ -218,7 +216,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
-        this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        updateSchemaIndex();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -230,22 +228,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         if (fullSchema != null) {
             this.fullSchema = Lists.newArrayList(fullSchema);
         }
-        this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        if (this.fullSchema != null) {
-            for (Column col : this.fullSchema) {
-                nameToColumn.put(col.getName(), col);
-            }
-        } else {
-            // Only view in with-clause have null base
-            Preconditions.checkArgument(type == TableType.VIEW || type == TableType.HIVE_VIEW,
-                    "Table has no columns");
-        }
+        updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-    }
-
-    public void setTypeRead(boolean isTypeRead) {
-        this.isTypeRead = isTypeRead;
     }
 
     public long getId() {
@@ -317,8 +302,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
     }
 
+    public boolean isIcebergView() {
+        return type == TableType.ICEBERG_VIEW;
+    }
+
     public boolean isView() {
-        return isOlapView() || isHiveView();
+        return isOlapView() || isConnectorView();
+    }
+
+    public boolean isConnectorView() {
+        return isHiveView() || isIcebergView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -422,16 +415,32 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return fullSchema;
     }
 
+    public Map<ColumnId, Column> getIdToColumn() {
+        return idToColumn;
+    }
+
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
-        this.nameToColumn.clear();
-        for (Column col : fullSchema) {
-            nameToColumn.put(col.getName(), col);
+        updateSchemaIndex();
+    }
+
+    protected void updateSchemaIndex() {
+        Map<String, Column> newNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Column> newIdToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : this.fullSchema) {
+            newNameToColumn.put(column.getName(), column);
+            newIdToColumn.put(column.getColumnId(), column);
         }
+        this.nameToColumn = newNameToColumn;
+        this.idToColumn = newIdToColumn;
     }
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public Column getColumn(ColumnId columnId) {
+        return nameToColumn.get(columnId.getId());
     }
 
     public boolean containColumn(String columnName) {
@@ -446,121 +455,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return createTime;
     }
 
-    public Map<String, Column> getNameToColumn() {
-        return nameToColumn;
-    }
-
     public String getTableLocation() {
         String msg = "The getTableLocation() method needs to be implemented.";
         throw new NotImplementedException(msg);
+    }
+
+    public Map<String, Column> getNameToColumn() {
+        return nameToColumn;
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return null;
     }
 
-    public static Table read(DataInput in) throws IOException {
-        Table table;
-        TableType type = TableType.deserialize(Text.readString(in));
-        if (type == TableType.OLAP) {
-            table = new OlapTable();
-        } else if (type == TableType.MYSQL) {
-            table = new MysqlTable();
-        } else if (type == TableType.VIEW) {
-            table = new View();
-        } else if (type == TableType.BROKER) {
-            table = new BrokerTable();
-        } else if (type == TableType.ELASTICSEARCH) {
-            table = new EsTable();
-        } else if (type == TableType.HIVE) {
-            table = new HiveTable();
-        } else if (type == TableType.FILE) {
-            table = new FileTable();
-        } else if (type == TableType.HUDI) {
-            table = new HudiTable();
-        } else if (type == TableType.OLAP_EXTERNAL) {
-            table = new ExternalOlapTable();
-        } else if (type == TableType.ICEBERG) {
-            table = new IcebergTable();
-        } else if (type == TableType.JDBC) {
-            table = new JDBCTable();
-        } else if (type == TableType.MATERIALIZED_VIEW) {
-            table = MaterializedView.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.CLOUD_NATIVE) {
-            table = LakeTable.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) {
-            table = LakeMaterializedView.read(in);
-            table.setTypeRead(true);
-            return table;
-        } else if (type == TableType.ODPS) {
-            table = new OdpsTable();
-        } else {
-            throw new IOException("Unknown table type: " + type.name());
-        }
-
-        table.setTypeRead(true);
-        table.readFields(in);
-        return table;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
-        // ATTN: must write type first
-        Text.writeString(out, TableType.serialize(type));
-
-        // write last check time
-        super.write(out);
-
-        out.writeLong(id);
-        Text.writeString(out, name);
-
-        // base schema
-        int columnCount = fullSchema.size();
-        out.writeInt(columnCount);
-        for (Column column : fullSchema) {
-            column.write(out);
-        }
-
-        Text.writeString(out, comment);
-
-        // write create time
-        out.writeLong(createTime);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isTypeRead) {
-            type = TableType.valueOf(Text.readString(in));
-            isTypeRead = true;
-        }
-
-        super.readFields(in);
-
-        this.id = in.readLong();
-        this.name = Text.readString(in);
-
-        // base schema
-        int columnCount = in.readInt();
-        for (int i = 0; i < columnCount; i++) {
-            Column column = Column.read(in);
-            this.fullSchema.add(column);
-            this.nameToColumn.put(column.getName(), column);
-        }
-
-        comment = Text.readString(in);
-
-        // read create time
-        this.createTime = in.readLong();
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
-        for (Column column : fullSchema) {
-            this.nameToColumn.put(column.getName(), column);
-        }
+        updateSchemaIndex();
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -857,6 +772,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
-                !type.equals(TableType.HIVE_VIEW);
+                !isConnectorView();
     }
 }

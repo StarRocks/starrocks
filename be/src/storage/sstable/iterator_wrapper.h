@@ -46,6 +46,10 @@ public:
         assert(iter_);
         return iter_->status();
     }
+    uint64_t max_rss_rowid() const {
+        assert(iter_);
+        return iter_->max_rss_rowid();
+    }
     void Next() {
         assert(iter_);
         iter_->Next();

@@ -1191,14 +1191,33 @@ class StarrocksSQLApiLib(object):
         """
         wait async materialized view job finish and return status
         """
-        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
-        print(show_sql)
+        # show materialized veiws result
+        def is_all_finished1():
+            sql = "SHOW MATERIALIZED VIEWS WHERE database_name='{}' AND NAME='{}'".format(current_db, mv_name)
+            print(sql)
+            result = self.execute_sql(sql, True)
+            if not result["status"]:
+                tools.assert_true(False, "show mv state error")
+            results = result["result"]
+            for res in results:
+                last_refresh_state = res[12]
+                if last_refresh_state != "SUCCESS" and last_refresh_state != "MERGED":
+                    return False
+            return True
 
-        def is_all_finished(results):
+        def is_all_finished2():
+            sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
+            print(sql)
+            result = self.execute_sql(sql, True)
+            if not result["status"]:
+                tools.assert_true(False, "show mv state error")
+            results = result["result"]
             for res in results:
                 if res[0] != "SUCCESS" and res[0] != "MERGED":
                     return False
             return True
+
+        # infomation_schema.task_runs result
         def get_success_count(results):
             cnt = 0
             for res in results:
@@ -1211,11 +1230,7 @@ class StarrocksSQLApiLib(object):
         count = 0
         if check_count is None:
             while count < MAX_LOOP_COUNT:
-                res = self.execute_sql(show_sql, True)
-                if not res["status"]:
-                    tools.assert_true(False, "show mv state error")
-
-                is_all_ok = is_all_finished(res["result"])
+                is_all_ok = is_all_finished1() and is_all_finished2()
                 if is_all_ok:
                     # sleep another 5s to avoid FE's async action.
                     time.sleep(2)
@@ -1223,7 +1238,9 @@ class StarrocksSQLApiLib(object):
                 time.sleep(2)
                 count += 1
         else:
+            show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
             while count < MAX_LOOP_COUNT:
+                print(show_sql)
                 res = self.execute_sql(show_sql, True)
                 if not res["status"]:
                     tools.assert_true(False, "show mv state error")
@@ -1298,8 +1315,51 @@ class StarrocksSQLApiLib(object):
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
+        plan = str(res["result"])
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def print_hit_materialized_view(self, query, *expects) -> bool:
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        plan = str(res["result"])
+        for expect in expects:
+            if plan.find(expect) > 0:
+                return True
+        return False
+
+    def assert_equal_result(self, *sqls):
+        if len(sqls) < 2:
+            return
+
+        res_list = []
+        # could be faster if making this loop parallel
+        for sql in sqls:
+            if sql.startswith(TRINO_FLAG):
+                sql = sql[len(TRINO_FLAG):]
+                res = self.trino_execute_sql(sql)
+            elif sql.startswith(SPARK_FLAG):
+                sql = sql[len(SPARK_FLAG):]
+                res = self.spark_execute_sql(sql)
+            elif sql.startswith(HIVE_FLAG):
+                sql = sql[len(HIVE_FLAG):]
+                res = self.hive_execute_sql(sql)
+            else:
+                res = self.execute_sql(sql)
+
+            tools.assert_true(res["status"])
+            res_list.append(res["result"])
+
+        # assert equal result
+        for i in range(1, len(res_list)):
+            tools.assert_equal(res_list[0], res_list[i])
 
     def check_no_hit_materialized_view(self, query, *expects):
         """
@@ -1391,6 +1451,15 @@ class StarrocksSQLApiLib(object):
                 return ""
             time.sleep(1)
 
+    def try_collect_dict_N_times(self, column_name, table_name, N):
+        """
+        try to collect dictionary for N times
+        """
+        for i in range(N):
+            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            time.sleep(1)
+
     def assert_has_global_dict(self, column_name, table_name):
         """
         assert table_name:column_name has global dict
@@ -1408,6 +1477,29 @@ class StarrocksSQLApiLib(object):
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         res = self.execute_sql(sql, True)
         tools.assert_true(str(res["result"]).find("Decode") <= 0, "assert dictionary error")
+
+    def assert_never_collect_dicts(self, column_name, table_name, db_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        sql = """
+admin execute on frontend '
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.catalog.ColumnId;
+
+var tid = GlobalStateMgr.getCurrentState().getMetadata().getDb(\"{db}\").getTable(\"{tb}\").getId();
+var dictMgr = CacheDictManager.getInstance();
+var columnId = new ColumnId("{col}");
+var cid = new ColumnIdentifier(tid, columnId)
+
+out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
+';      """.format(db=db_name, tb=table_name, col=column_name)
+        res = self.execute_sql(sql, True)
+        print("scirpt output:" + str(res))
+        tools.assert_true(str(res["result"][0][0]).strip() == "true", "column still could collect dictionary")
 
     def wait_submit_task_ready(self, task_name):
         """
@@ -1723,7 +1815,7 @@ class StarrocksSQLApiLib(object):
                 True,
             )
 
-            status = res["result"][0][6]
+            status = res["result"][0][7]
             if status != ("REFRESHING") and status != ("COMMITTING"):
                 break
             time.sleep(0.5)
@@ -1838,3 +1930,9 @@ class StarrocksSQLApiLib(object):
             timeout -= 10
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
+               
+    def assert_table_partitions_num(self, table_name, expect_num):
+        res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
+        tools.assert_true(res["status"], "show schema change task error")
+        ans = res["result"]
+        tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))

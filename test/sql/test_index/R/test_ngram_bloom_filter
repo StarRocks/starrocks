@@ -58,6 +58,8 @@ select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 drop database ngram_bloom_filter_db_1;
 -- result:
 -- !result
+
+
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -104,6 +106,8 @@ show index from ngram_index_default_3;
 -- result:
 ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "2")	
 -- !result
+
+
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -130,6 +134,8 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
+
+
 -- name: test_ngram_bloom_filter_case_insensitive
 CREATE TABLE ngram_index_case_in_sensitive(
     timestamp DATETIME NOT NULL,
@@ -201,6 +207,8 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
 -- !result
+
+
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;
 -- result:
@@ -226,6 +234,8 @@ insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"ch
 select * from ngram_index_char where username like '_hiaa%';
 -- result:
 -- !result
+
+
 -- name: test_bloom_filter
 create database ngram_bloom_filter_db_4;
 -- result:
@@ -293,4 +303,40 @@ select * from common_duplicate where c2 ="abc" order by c0;
 select * from common_duplicate where c1 = 2;
 -- result:
 2	2	abc
+-- !result
+
+-- name: test_bloom_filter_bug
+CREATE TABLE `t` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"bloom_filter_columns" = "c2",
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t values(1,1,1),(2,2,2),(3,3,1),(4,4,2),(5,4,3);
+-- result:
+-- !result
+select * from t where c2 in (1,2);
+-- result:
+1	1	1
+2	2	2
+3	3	1
+4	4	2
+-- !result
+select * from t where c2 in (1,2) and c2 is not null;
+-- result:
+1	1	1
+2	2	2
+3	3	1
+4	4	2
 -- !result

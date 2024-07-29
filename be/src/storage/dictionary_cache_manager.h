@@ -47,7 +47,8 @@ enum DictionaryCacheEncoderType {
 
 template <LogicalType logical_type>
 struct DictionaryCacheTypeTraits {
-    using CppType = typename CppTypeTraits<logical_type>::CppType;
+    using CppType = typename RunTimeTypeTraits<logical_type>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<logical_type>::ColumnType;
 };
 
 template <LogicalType logical_type>
@@ -89,6 +90,8 @@ public:
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
+
+    using ValueColumnType = typename DictionaryCacheTypeTraits<ValueLogicalType>::ColumnType;
 
     virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
         switch (_type) {
@@ -155,7 +158,13 @@ public:
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
+            RETURN_IF(size == 0, Status::OK());
             const auto* raw_data = reinterpret_cast<const KeyCppType*>(src->raw_data());
+            DCHECK(value_encode_flags.size() == size);
+            // avoid memory reallocation when looking up hash table
+            if constexpr (!std::is_same_v<ValueCppType, Slice>) {
+                dest->reserve(size);
+            }
 
             if (LIKELY(size >= 2 * PREFETCHN)) {
                 size_t beg_index = 0;
@@ -165,7 +174,14 @@ public:
                 // 1. prefetch N key
                 // 2. prefetch N value
                 // 3. actual lookup
+                // 4. If the ValueCppType is Slice, save the pointer and append to dest when the
+                //    lookup is finished
                 size_t prefetch_hashes[PREFETCHN];
+                std::vector<Slice> slices;
+                size_t slice_size = 0;
+                if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                    slices.resize(size);
+                }
                 for (size_t i = 0; i < loop; i++) {
                     beg_index = i * PREFETCHN;
 
@@ -190,22 +206,48 @@ public:
                         if (iter == _dictionary.end()) {
                             return Status::NotFound("key not found in dictionary cache");
                         }
-                        dest->append_datum(*_get_datum(iter->second));
+
+                        // Save the Slice instead of appending data here.
+                        // Because sometime the data in Slice is relative large
+                        // and it may pollutes the cpu cache which contain the
+                        // prefetched content using for the following look up.
                         if constexpr (std::is_same_v<ValueCppType, Slice>) {
-                            value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
+                            slices[beg_index + j].data = iter->second.data;
+                            slices[beg_index + j].size = iter->second.size;
+
+                            slice_size += slices[beg_index + j].size;
+                        } else {
+                            _append_value(dest, iter->second);
                         }
                     }
                 }
 
-                beg_index = loop * PREFETCHN;
-                for (size_t i = beg_index; i < size; i++) {
-                    auto iter = _dictionary.find(raw_data[i]);
-                    if (iter == _dictionary.end()) {
-                        return Status::NotFound("key not found in dictionary cache");
+                if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                    for (size_t i = loop * PREFETCHN; i < size; i++) {
+                        auto iter = _dictionary.find(raw_data[i]);
+                        if (iter == _dictionary.end()) {
+                            return Status::NotFound("key not found in dictionary cache");
+                        }
+                        slices[i].data = iter->second.data;
+                        slices[i].size = iter->second.size;
+
+                        slice_size += slices[i].size;
                     }
-                    dest->append_datum(*_get_datum(iter->second));
-                    if constexpr (std::is_same_v<ValueCppType, Slice>) {
-                        value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
+
+                    // avoid memory reallocation when looking up hash table
+                    down_cast<BinaryColumn*>(dest)->reserve(size, slice_size);
+                    for (size_t i = 0; i < size; i++) {
+                        value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(slices[i].data) - 1);
+                        _append_value(dest, slices[i]);
+                    }
+                } else {
+                    beg_index = loop * PREFETCHN;
+                    for (size_t i = beg_index; i < size; i++) {
+                        auto iter = _dictionary.find(raw_data[i]);
+                        if (iter == _dictionary.end()) {
+                            return Status::NotFound("key not found in dictionary cache");
+                        }
+                        _append_value(dest, iter->second);
                     }
                 }
             } else {
@@ -214,7 +256,7 @@ public:
                     if (iter == _dictionary.end()) {
                         return Status::NotFound("key not found in dictionary cache");
                     }
-                    dest->append_datum(*_get_datum(iter->second));
+                    _append_value(dest, iter->second);
                     if constexpr (std::is_same_v<ValueCppType, Slice>) {
                         value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
                     }
@@ -234,16 +276,8 @@ public:
     virtual std::mutex& lock() override { return _lock; }
 
 private:
-    inline std::shared_ptr<Datum> _get_datum(const ValueCppType& v) {
-        switch (_type) {
-        case DictionaryCacheEncoderType::PK_ENCODE: {
-            return std::make_shared<Datum>(v);
-        }
-        default:
-            break;
-        }
-        return nullptr;
-    }
+    // Avoid creating Datum
+    inline void _append_value(Column* dest, const ValueCppType& v) { down_cast<ValueColumnType*>(dest)->append(v); }
 
     template <class KeyCppType, class ValueCppType>
     inline size_t _get_element_memory_usage(const KeyCppType& k, const ValueCppType& v) {

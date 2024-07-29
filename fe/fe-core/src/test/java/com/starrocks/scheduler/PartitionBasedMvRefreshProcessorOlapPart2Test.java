@@ -16,10 +16,15 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.After;
@@ -33,6 +38,7 @@ import org.junit.runners.MethodSorters;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
@@ -54,14 +60,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-    }
-
     @Test
     public void testMVRefreshWithTheSameTables1() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 int",
@@ -141,7 +142,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
     @Test
     public void testMVRefreshWithTheSameTables22() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 int",
@@ -217,5 +218,71 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 9: k1 > 3\n" +
                 "     partitions=1/3");
+    }
+
+    @Test
+    public void testRefreshWithCachePartitionTraits() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl1 \n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("create materialized view test_mv1 \n" +
+                        "partition by (k1) \n" +
+                        "distributed by random \n" +
+                        "refresh deferred manual\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;",
+                () -> {
+                    executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 1, 10)");
+                    OlapTable table = (OlapTable) getTable("test", "tbl1");
+                    MaterializedView mv = getMv("test", "test_mv1");
+                    PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                    QueryMaterializationContext queryMVContext = connectContext.getQueryMVContext();
+                    Assert.assertTrue(queryMVContext == null);
+
+                    {
+                        RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                        QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
+                        String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
+                        Assert.assertTrue(queryCacheStats != null);
+                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
+                        Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                    }
+
+                    Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
+                    Assert.assertTrue(partitionsToRefresh1.isEmpty());
+
+                    executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
+                    Partition p2 = table.getPartition("p2");
+                    while (p2.getVisibleVersion()  != 3) {
+                        System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
+                        Thread.sleep(1000);
+                    }
+                    MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
+                    System.out.println(mvUpdateInfo);
+                    Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
+                    Assert.assertTrue(mvUpdateInfo.isValidRewrite());
+                    partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
+                    Assert.assertFalse(partitionsToRefresh1.isEmpty());
+
+                    {
+                        processor = refreshMV("test", mv);
+                        RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                        QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
+                        String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
+                        Assert.assertTrue(queryCacheStats != null);
+                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
+                        Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                    }
+                });
+        starRocksAssert.dropTable("tbl1");
     }
 }

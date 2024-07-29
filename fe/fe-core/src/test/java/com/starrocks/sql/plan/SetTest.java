@@ -664,6 +664,7 @@ public class SetTest extends PlanTestBase {
 
     @Test
     public void testEliminateAgg() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         String sql = "SELECT \n" +
                 "    id, \n" +
                 "    SUM(big_value) AS sum_big_value\n" +
@@ -749,5 +750,23 @@ public class SetTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
                 "     preAggregation: off. Reason: None aggregate function\n");
+        sql = "SELECT\n" +
+                "    id,\n" +
+                "    big_value,\n" +
+                "    COUNT(varchar_value) AS count_varchar_value\n" +
+                "FROM test_agg_group_multi_unique_key\n" +
+                "GROUP BY id, big_value\n" +
+                "HAVING COUNT(varchar_value) > 0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  PREDICATES: if(5: varchar_value IS NULL, 0, 1) > 0");
+        sql = "SELECT\n" +
+                "    id,\n" +
+                "    big_value,\n" +
+                "    COUNT(varchar_value) AS count_varchar_value\n" +
+                "FROM test_agg_group_multi_unique_key\n" +
+                "GROUP BY id, big_value\n" +
+                "HAVING SUM(varchar_value) > 0 and id + 2 > 5;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(5: varchar_value AS DOUBLE) > 0.0, 1: id > 3");
     }
 }

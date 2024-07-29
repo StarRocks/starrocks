@@ -45,10 +45,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
@@ -121,9 +121,9 @@ import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
+import com.starrocks.transaction.TransactionType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -792,6 +792,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
+        List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
@@ -915,7 +916,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                                     + " and it is lost. create an empty replica to recover it",
                                             tabletId, replica.getId(), backendId);
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
-                                    Set<String> bfColumns = olapTable.getCopiedBfColumns();
+                                    Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
                                     double bfFpp = olapTable.getBfFpp();
                                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                                             .setId(indexMeta.getSchemaId())
@@ -943,6 +944,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                                             .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
                                             .setCompressionType(olapTable.getCompressionType())
+                                            .setCompressionLevel(olapTable.getCompressionLevel())
                                             .setRecoverySource(RecoverySource.REPORT)
                                             .setTabletSchema(tabletSchema)
                                             .build();
@@ -980,6 +982,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
                         deleteTablets.add(tabletId);
+                        replicaPersistInfoList.add(ReplicaPersistInfo
+                                .createForDelete(dbId, tableId, partitionId, indexId, tabletId, backendId));
                         LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
                                         " report version: {}, current report version: {}",
                                 replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
@@ -1001,7 +1005,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (deleteTablets.size() > 0) {
             // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
             GlobalStateMgr.getCurrentState().getEditLog()
-                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets));
+                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets, replicaPersistInfoList));
         }
 
         if (Config.recover_with_empty_tablet && createReplicaBatchTask.getTaskNum() > 0) {
@@ -1270,7 +1274,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         new PublishVersionTask(backendId, txnId, dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
-                                Config.enable_sync_publish, TTxnType.TXN_NORMAL);
+                                Config.enable_sync_publish, TransactionType.TXN_NORMAL);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
@@ -1626,15 +1630,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                List<String> columns = Lists.newArrayList();
                 List<TColumn> columnsDesc = Lists.newArrayList();
                 List<Integer> columnSortKeyUids = Lists.newArrayList();
 
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
+                    tColumn.setColumn_name(column.getColumnId().getId());
+                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
                     columnsDesc.add(tColumn);
                 }
                 if (indexMeta.getSortKeyUniqueIds() != null) {
@@ -1735,7 +1737,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long transactionId : transactionsToClear.keySet()) {
             ClearTransactionTask clearTransactionTask = new ClearTransactionTask(backendId,
-                    transactionId, transactionsToClear.get(transactionId), TTxnType.TXN_NORMAL);
+                    transactionId, transactionsToClear.get(transactionId), TransactionType.TXN_NORMAL);
             batchTask.addTask(clearTransactionTask);
         }
 

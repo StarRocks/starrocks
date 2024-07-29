@@ -816,8 +816,13 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         TimestampValue tv;
-
-        bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
+        bool ret;
+        if constexpr (lt_is_decimalv2<FromType>) {
+            ret = value.value() > 0;
+        } else {
+            ret = value > 0;
+        }
+        ret = ret && tv.from_timestamp_literal_with_check(value);
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);

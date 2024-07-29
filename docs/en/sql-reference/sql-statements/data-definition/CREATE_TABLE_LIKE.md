@@ -12,7 +12,7 @@ v3.2 allows you to specify a different partitioning method, bucketing method, an
 
 :::tip
 This operation requires the CREATE TABLE privilege on the database in which you want to create a table, and the `SELECT` privilege on the source table based on which to create a table.
-:::tip
+:::
 
 ## Syntax
 
@@ -26,7 +26,7 @@ LIKE [database.]<source_table_name>
 - v3.2 supports specifying properties for the new table.
 
 ```sql
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
+CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
 [partition_desc]
 [distribution_desc]
 [PROPERTIES ("key" = "value",...)]
@@ -35,6 +35,7 @@ LIKE [database.]<source_table_name>
 
 ## Parameters
 
+- `TEMPORARY`: Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
 - `database`: the database.
 - `table_name`: the name of the table you want to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 - `source_table_name`: the name of the source table you want to copy.

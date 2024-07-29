@@ -117,11 +117,7 @@ PROPERTIES (
 )   as select tinyint_col, date_col , sum(float_col_1 * int_col_1) as sum_value from join_filter_mv group by tinyint_col, date_col;
 -- result:
 -- !result
-refresh materialized view date_mv;
-function: wait_async_materialized_view_finish("db_${uuid0}", "date_mv")
--- result:
-None
--- !result
+refresh materialized view date_mv with sync mode;
 create MATERIALIZED VIEW month_mv
 DISTRIBUTED BY RANDOM
 REFRESH MANUAL
@@ -130,11 +126,7 @@ PROPERTIES (
 )  as select tinyint_col, date_trunc('month', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('month', date_col);
 -- result:
 -- !result
-refresh materialized view month_mv;
-function: wait_async_materialized_view_finish("db_${uuid0}", "month_mv")
--- result:
-None
--- !result
+refresh materialized view month_mv with sync mode;
 create MATERIALIZED VIEW year_mv
 DISTRIBUTED BY RANDOM
 REFRESH MANUAL
@@ -143,10 +135,9 @@ PROPERTIES (
 )   as select  tinyint_col, date_trunc('year', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('year', date_col);
 -- result:
 -- !result
-refresh materialized view year_mv;
-function: wait_async_materialized_view_finish("db_${uuid0}", "year_mv")
+refresh materialized view year_mv with sync mode;
+set materialized_view_rewrite_mode="force";
 -- result:
-None
 -- !result
 select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */
 sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)

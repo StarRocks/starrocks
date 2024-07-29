@@ -147,7 +147,8 @@ public class KuduMetadataTest {
                 null, requiredNames, -1);
         Assert.assertEquals(1, remoteFileInfos.size());
         Assert.assertEquals(1, remoteFileInfos.get(0).getFiles().size());
-        Assert.assertEquals(1, remoteFileInfos.get(0).getFiles().get(0).getKuduScanTokens().size());
+        KuduRemoteFileDesc desc = (KuduRemoteFileDesc) remoteFileInfos.get(0).getFiles().get(0);
+        Assert.assertEquals(1, desc.getKuduScanTokens().size());
     }
 
     @Test

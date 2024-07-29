@@ -262,6 +262,9 @@ public:
 
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
 
+    Status(TStatusCode::type code, std::string_view msg) : Status(code, msg, {}) {}
+    Status(TStatusCode::type code, std::string_view msg, std::string_view ctx);
+
 private:
     static const char* copy_state(const char* state);
     static const char* copy_state_with_extra_ctx(const char* state, std::string_view ctx);
@@ -269,9 +272,6 @@ private:
     // Indicates whether this Status was the rhs of a move operation.
     static bool is_moved_from(const char* state);
     static const char* moved_from_state();
-
-    Status(TStatusCode::type code, std::string_view msg) : Status(code, msg, {}) {}
-    Status(TStatusCode::type code, std::string_view msg, std::string_view ctx);
 
 private:
     // OK status has a nullptr _state.  Otherwise, _state is a new[] array

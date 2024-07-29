@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -115,8 +117,7 @@ public class EliminateAggRule extends TransformationRule {
                 .map(ColumnRefOperator::getId)
                 .collect(Collectors.toSet());
 
-        Set<Integer> uniqueColumnRefIds =
-                uniqueKeys.keySet().stream().collect(Collectors.toSet());
+        Set<Integer> uniqueColumnRefIds = new HashSet<>(uniqueKeys.keySet());
         if (!groupColumnRefIds.equals(uniqueColumnRefIds)) {
             return false;
         }
@@ -136,10 +137,14 @@ public class EliminateAggRule extends TransformationRule {
             newProjectMap.put(aggColumnRef, newOperator);
         }
 
-        aggOp.getGroupingKeys()
-                .forEach(columnRefOperator -> newProjectMap.put(columnRefOperator, columnRefOperator));
-
+        aggOp.getGroupingKeys().forEach(ref -> newProjectMap.put(ref, ref));
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
+
+        if (aggOp.getPredicate() != null) {
+            return List.of(OptExpression.create(new LogicalFilterOperator(aggOp.getPredicate()),
+                    OptExpression.create(newProjectOp, input.getInputs())));
+        }
+
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0)));
     }
 

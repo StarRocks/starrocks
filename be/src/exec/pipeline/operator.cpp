@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
@@ -42,6 +43,10 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+    // some pipeline may have multiple limit operators with same plan_node_id, so add operator id to profile name
+    if (upper_name == "LIMIT") {
+        profile_name += " (operator id=" + std::to_string(id) + ")";
+    }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
@@ -190,6 +195,30 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         RETURN_IF_ERROR(
                 starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
         auto after = chunk->num_rows();
+        _conjuncts_output_counter->update(after);
+    }
+
+    return Status::OK();
+}
+
+Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
+    _init_conjuct_counters();
+    {
+        SCOPED_TIMER(_conjuncts_timer);
+        auto& in_filters = runtime_in_filters();
+        std::vector<ExprContext*> selected_vector;
+        for (ExprContext* in_filter : in_filters) {
+            if (in_filter->build_from_only_in_filter()) {
+                selected_vector.push_back(in_filter);
+            }
+        }
+        size_t before = chunk->num_rows();
+        _conjuncts_input_counter->update(before);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        size_t after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
     }
 

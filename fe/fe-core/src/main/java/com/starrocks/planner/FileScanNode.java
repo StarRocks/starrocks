@@ -451,11 +451,7 @@ public class FileScanNode extends LoadScanNode {
 
         if (hasBroker) {
             FsBroker broker = null;
-            try {
-                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
-            }
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
             brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
         } else {
             brokerScanRange.addToBroker_addresses(new TNetworkAddress("", 0));

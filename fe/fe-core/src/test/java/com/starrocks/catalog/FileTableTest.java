@@ -149,7 +149,7 @@ public class FileTableTest {
             @Override
             public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
                 List<RemoteFileDesc> fileDescList = new ArrayList<>();
-                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null, null);
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null);
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

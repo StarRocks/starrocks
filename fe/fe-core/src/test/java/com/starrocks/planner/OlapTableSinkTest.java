@@ -19,6 +19,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
@@ -37,6 +38,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -82,6 +84,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class OlapTableSinkTest {
     private static final Logger LOG = LogManager.getLogger(OlapTableSinkTest.class);
@@ -193,7 +196,7 @@ public class OlapTableSinkTest {
                 result = partInfo;
                 partInfo.getType();
                 result = PartitionType.RANGE;
-                partInfo.getPartitionColumns();
+                partInfo.getPartitionColumns((Map<ColumnId, Column>) any);
                 result = Lists.newArrayList(partKey);
                 dstTable.getPartitions();
                 result = Lists.newArrayList(p1, p2);
@@ -426,6 +429,9 @@ public class OlapTableSinkTest {
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
         Partition partition = new Partition(1, "p1", index, distInfo);
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
+
         new Expectations() {
             {
                 dstTable.getId();
@@ -436,6 +442,8 @@ public class OlapTableSinkTest {
                 result = partition;
                 dstTable.getPartitionInfo();
                 result = listPartitionInfo;
+                dstTable.getIdToColumn();
+                result = idToColumn;
             }
         };
 
@@ -456,10 +464,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, 2, 0, index);
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, 2, 0, index);
+        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 

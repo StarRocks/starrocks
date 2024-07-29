@@ -423,6 +423,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
+        SET_IGNORE_OVERCROWDED(closure->cntl, query);
 
         Status st;
         if (bthread_self()) {

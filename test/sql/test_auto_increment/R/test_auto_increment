@@ -19,11 +19,11 @@ E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 33. 
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
+E: (1064, 'Getting analyzing error. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
+E: (1064, 'Getting analyzing error. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
 -- !result
 DROP DATABASE test_create_table_abnormal;
 -- result:

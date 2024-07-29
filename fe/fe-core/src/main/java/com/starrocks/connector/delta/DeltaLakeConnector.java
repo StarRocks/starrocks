@@ -22,10 +22,12 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class DeltaLakeConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeConnector.class);
@@ -44,6 +46,7 @@ public class DeltaLakeConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
+        onCreate();
     }
 
     @Override
@@ -70,5 +73,13 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        metadataFactory.getCacheUpdateProcessor().ifPresent(DeltaLakeCacheUpdateProcessor::invalidateAll);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+    }
+
+    public void onCreate() {
+        Optional<DeltaLakeCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+        updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
     }
 }

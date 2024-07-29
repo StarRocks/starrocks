@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data using INSERT
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
@@ -191,6 +191,10 @@ WITH LABEL insert_load_wikipedia_3
 )
 SELECT event_time, channel FROM source_wiki_edit;
 ```
+
+:::note
+From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert.
+:::
 
 ### Insert data directly from files in an external source using FILES()
 

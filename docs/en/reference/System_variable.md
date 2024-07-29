@@ -513,6 +513,18 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: true
 * **Introduced in**: v2.5
 
+### enable_datacache_io_adaptor
+
+* **Description**: Whether to enable the Data Cache I/O Adaptor. Setting this to `true` enables the feature. When this feature is enabled, the system automatically routes some cache requests to remote storage when the disk I/O load is high, reducing disk pressure.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
+### enable_file_metacache
+
+* **Description**: Whether to enable metadata cache for files in remote storage (Footer Cache). Setting this to `true` enables the feature. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing. This feature uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
 ### enable_tablet_internal_parallel
 
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.

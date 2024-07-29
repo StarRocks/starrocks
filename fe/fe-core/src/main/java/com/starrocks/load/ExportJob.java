@@ -91,6 +91,8 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ExportStmt;
@@ -98,7 +100,6 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TInternalScanRange;
@@ -112,6 +113,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -777,9 +779,16 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 continue;
             }
 
-            AgentClient client = new AgentClient(host, port);
-            TAgentResult result = client.releaseSnapshot(snapshotPath.second);
-            if (result == null || result.getStatus().getStatus_code() != TStatusCode.OK) {
+            try {
+                TAgentResult result = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(host, port),
+                        client -> client.release_snapshot(snapshotPath.second)
+                );
+                if (result.getStatus().getStatus_code() != TStatusCode.OK) {
+                    continue;
+                }
+            } catch (TException e) {
                 continue;
             }
         }

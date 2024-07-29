@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -1574,9 +1575,9 @@ public class LowCardinalityTest extends PlanTestBase {
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
+                dictManager.hasGlobalDict(anyLong, ColumnId.create("S_ADDRESS"), anyLong);
                 result = true;
-                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
+                dictManager.getGlobalDict(anyLong, ColumnId.create("S_ADDRESS"));
                 result = Optional.empty();
             }
         };
@@ -1858,11 +1859,11 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select if(current_role = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:SORT\n" +
-                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  order by: <slot 11> 11: if ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictDecode(10: S_ADDRESS, [concat(<place-holder>, 'ccc')]), '***')");
+                "  |  <slot 11> : DictDefine(10: S_ADDRESS, [concat(<place-holder>, 'ccc')])");
     }
 
     @Test
@@ -1907,5 +1908,19 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(DictDecode(10: S_ADDRESS, [<place-holder> = '']), ''," +
                 " substr(md5(DictDecode(10: S_ADDRESS, [<place-holder>])), 1, 3))");
+    }
+
+    @Test
+    public void testTempPartition() throws Exception {
+        FeConstants.unitTestView = false;
+        try {
+            String sql = "ALTER TABLE lineitem_partition ADD TEMPORARY PARTITION px VALUES [('1998-01-01'), ('1999-01-01'));";
+            starRocksAssert.alterTable(sql);
+            sql = "select distinct L_COMMENT from lineitem_partition TEMPORARY PARTITION(px)";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "dict_col");
+        } finally {
+            FeConstants.unitTestView = true;
+        }
     }
 }

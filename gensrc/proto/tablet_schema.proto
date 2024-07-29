@@ -85,6 +85,7 @@ message TabletSchemaPB {
     optional int32 schema_version = 12;
     repeated uint32 sort_key_unique_ids = 13;
     repeated TabletIndexPB table_indices = 14;
+    optional int32 compression_level = 15 [default=-1];
     optional int64 id = 50;
 }
 

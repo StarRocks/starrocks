@@ -66,6 +66,26 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+message DelfileWithRowsetId {
+    optional string name = 1;
+    // origin rowset that generate this del file.
+    optional uint32 origin_rowset_id = 2;
+    // Because of historical reason, DELETE don't have its own segment id, we only use
+    // `rowset_id + segment_id` for UPSERT.
+    // So if there is a UPSERT and DELETE mix transaction, we use
+    // `op_offset` to identify the order of deletes, and rssid of DELETE will be
+    // just same as previous UPSERT. And if the Rowset don't have UPSERT, DELETE's rssid
+    // will be same as rowset_id.
+    //
+    // E.g. there are <UPSERT, UPSERT, UPSERT, DELETE, DELETE> in a transaction,
+    //      so the `op_offset` of this DELETE is 2.
+    //      And rssid of them will be rowset_id + [0, 1, 2, 2, 2].
+    //
+    //      there are <DELETE, DELETE> in a transaction, so the `op_offset` of this DELETE is 0.
+    //      And rssid of them will be rowset_id + [0, 0].
+    optional uint32 op_offset = 3;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -81,6 +101,9 @@ message RowsetMetadataPB {
     optional uint32 max_compact_input_rowset_id = 9;
     // The generated version of rowset.
     optional int64 version = 10;
+    // del_files are generated when pk table handle delete operation.
+    repeated DelfileWithRowsetId del_files = 11;
+    repeated bytes segment_encryption_metas = 12;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -134,6 +157,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        repeated bytes del_encryption_metas = 5;
     }
 
     message OpCompaction {
@@ -182,3 +206,12 @@ message TxnLogPB {
 }
 
 message TabletMetadataLockPB {}
+
+message TxnInfoPB {
+    optional int64 txn_id = 1;
+    optional int64 commit_time = 2;
+    // Does the transaction generated a combined txn log
+    optional bool combined_txn_log = 3;
+    optional TxnTypePB txn_type = 4;
+    optional bool force_publish = 5; // only used for compaction
+};

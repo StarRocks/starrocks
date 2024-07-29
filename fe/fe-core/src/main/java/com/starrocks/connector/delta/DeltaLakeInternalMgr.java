@@ -16,9 +16,11 @@ package com.starrocks.connector.delta;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -28,7 +30,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
@@ -46,7 +50,7 @@ public class DeltaLakeInternalMgr {
     public DeltaLakeInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
-        this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "false"));
+        this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
         this.hmsConf = new CachingHiveMetastoreConf(properties, "delta lake");
         this.hdfsEnvironment = hdfsEnvironment;
 
@@ -72,10 +76,22 @@ public class DeltaLakeInternalMgr {
     }
 
     public IMetastore createHMSBackedDeltaLakeMetastore() {
-        // TODO(stephen): Abstract the creator class to construct hive meta client
         HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
-        return new HMSBackedDeltaMetastore(catalogName, hiveMetastore, hdfsEnvironment.getConfiguration());
+        HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore(catalogName, hiveMetastore,
+                hdfsEnvironment.getConfiguration());
+        IMetastore deltaLakeMetastore;
+        if (!enableMetastoreCache) {
+            deltaLakeMetastore = hmsBackedDeltaMetastore;
+        } else {
+            refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
+                    new ThreadFactoryBuilder().setNameFormat("deltalake-metastore-refresh-%d").build());
+            Executor executor = new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum());
+            deltaLakeMetastore = CachingDeltaLakeMetastore.createCatalogLevelInstance(hmsBackedDeltaMetastore, executor,
+                    hmsConf.getCacheTtlSec(), hmsConf.getCacheRefreshIntervalSec(), hmsConf.getCacheMaxNum());
+        }
+
+        return deltaLakeMetastore;
     }
 
     public void shutdown() {

@@ -130,6 +130,10 @@ public:
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
     std::unique_ptr<ColumnConverter> converter;
+
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
 };
 
 } // namespace starrocks::parquet

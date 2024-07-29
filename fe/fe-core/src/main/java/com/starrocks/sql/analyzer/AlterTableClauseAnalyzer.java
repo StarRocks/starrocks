@@ -23,10 +23,7 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -35,6 +32,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -58,6 +56,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -70,10 +69,14 @@ import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -93,7 +96,9 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
@@ -123,10 +128,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Only assign meaningful indexId for OlapTable
         if (table.isOlapTableOrMaterializedView()) {
             long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
-            index = new Index(indexId, indexDef.getIndexName(), indexDef.getColumns(),
+            index = new Index(indexId, indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         } else {
-            index = new Index(indexDef.getIndexName(), indexDef.getColumns(),
+            index = new Index(indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
         clause.setIndex(index);
@@ -378,7 +385,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
-        List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
+        List<ColumnDef> columnDefs = olapTable.getColumns()
+                .stream().map(column -> column.toColumnDef(olapTable)).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
             List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
 
@@ -444,10 +452,9 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     && olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
                 HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
-                Set<String> orginalPartitionColumn = hashDistributionInfo.getDistributionColumns()
-                        .stream().map(Column::getName).collect(Collectors.toSet());
-                Set<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames()
-                        .stream().collect(Collectors.toSet());
+                List<String> orginalPartitionColumn = MetaUtils.getColumnNamesByColumnIds(
+                        table.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
+                List<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames();
                 if (!orginalPartitionColumn.equals(newPartitionColumn)) {
                     throw new SemanticException("not support change distribution column when specify partitions");
                 }
@@ -543,7 +550,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn());
+            clause.setColumn(columnDef.toColumn(table));
             return null;
         }
 
@@ -580,7 +587,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn());
+        clause.setColumn(columnDef.toColumn(table));
         return null;
     }
 
@@ -683,7 +690,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn()));
+        columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn(table)));
         return null;
     }
 
@@ -696,7 +703,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         for (Column column : table.getFullSchema()) {
             if (column.isGeneratedColumn()) {
-                List<SlotRef> slots = column.getGeneratedColumnRef();
+                List<SlotRef> slots = column.getGeneratedColumnRef(table.getIdToColumn());
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(clause.getColName())) {
                         throw new SemanticException("Column: " + clause.getColName() + " can not be dropped" +
@@ -705,6 +712,48 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                 }
             }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Add field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = clause.getFieldDesc();
+        try {
+            fieldDesc.analyze(baseColumn, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Drop field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
+        try {
+            fieldDesc.analyze(baseColumn, true);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
         }
         return null;
     }
@@ -782,7 +831,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn());
+            clause.setColumn(columnDef.toColumn(table));
             return null;
         }
 
@@ -803,7 +852,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn());
+        clause.setColumn(columnDef.toColumn(table));
         return null;
     }
 
@@ -888,6 +937,16 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
+
+        if (table instanceof OlapTable) {
+            List<String> partitionNames = clause.getPartitionNames();
+            for (String partitionName : partitionNames) {
+                if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    throw new SemanticException("Replace shadow partitions is not allowed");
+                }
+            }
+        }
+
         return null;
     }
 
@@ -1018,7 +1077,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                             olapTable.getTableProperty().getProperties(),
                             clause.isTempPartition(),
                             (MultiRangePartitionDesc) partitionDesc,
-                            partitionInfo.getPartitionColumns(),
+                            partitionInfo.getPartitionColumns(table.getIdToColumn()),
                             clause.getProperties());
             partitionDescList = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
@@ -1069,14 +1128,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (partitionDesc instanceof SingleRangePartitionDesc) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
-                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
+                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
-                    rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc,
+                    rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
             } else if (partitionDesc instanceof SingleItemListPartitionDesc
                     || partitionDesc instanceof MultiItemListPartitionDesc) {
-                List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns().stream()
+                List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns(olapTable.getIdToColumn()).stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc);
@@ -1124,6 +1183,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
         clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
+        if (table instanceof OlapTable) {
+            if (clause.getPartitionName() != null && clause.getPartitionName().startsWith(
+                    ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                throw new SemanticException("Deletion of shadow partitions is not allowed");
+            }
+        }
         return null;
     }
 }

@@ -87,7 +87,7 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
-FileReader::~FileReader() {}
+FileReader::~FileReader() = default;
 
 std::string FileReader::_build_metacache_key() {
     auto& filename = _file->filename();
@@ -123,17 +123,15 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_get_footer());
 
     // set existed SlotDescriptor in this parquet file
-    std::unordered_set<std::string> names;
+    std::unordered_set<std::string> existed_column_names;
     _meta_helper = _build_meta_helper();
-    _meta_helper->set_existed_column_names(&names);
-    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
+    _prepare_read_columns(existed_column_names);
+    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
         return Status::OK();
     }
-
-    _prepare_read_columns();
 
     RETURN_IF_ERROR(_build_split_tasks());
     if (_scanner_ctx->split_tasks.size() > 0) {
@@ -612,8 +610,9 @@ bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& colu
     return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
-void FileReader::_prepare_read_columns() {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols);
+void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
+                                       existed_column_names);
     _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
 }
 

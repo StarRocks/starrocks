@@ -32,6 +32,8 @@ set(EXEC_FILES
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
+        ./fs/encrypt_file_test.cpp
+        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
@@ -39,6 +41,7 @@ set(EXEC_FILES
         ./exec/es/es_scroll_parser_test.cpp
         ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
+        ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -144,6 +147,7 @@ set(EXEC_FILES
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
+        ./exprs/vectorized_literal_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -251,6 +255,7 @@ set(EXEC_FILES
         ./storage/lake/metacache_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
+        ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -448,6 +453,7 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./block_cache/datacache_utils_test.cpp
+        ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 

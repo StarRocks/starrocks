@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.List;
 
@@ -50,7 +49,7 @@ import java.util.List;
  *  from a join b on a.id = b.id group by a.dt, a.cal;
  *
  * Rewrite it by:
- * select a.dt, a.col, cardinility(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+ * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from
  *  (select id, dt, col, array_agg_unique(count_distinct_im_uv) from mv0 group by id,dt,col) as a join b on a.id = b.id
  * group by a.dt, a.cal;
@@ -77,9 +76,6 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             return false;
         }
         if (Utils.isOptHasAppliedRule(input, Operator.OP_PUSH_DOWN_BIT)) {
-            return false;
-        }
-        if (!MvUtils.isLogicalSPJG(input)) {
             return false;
         }
         return super.check(input, context);

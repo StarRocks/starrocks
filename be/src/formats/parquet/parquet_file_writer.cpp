@@ -246,7 +246,7 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
         break;
     }
     case TCompressionType::LZ4: {
-        converted_type = ::parquet::Compression::LZ4;
+        converted_type = ::parquet::Compression::LZ4_HADOOP;
         break;
     }
     default: {

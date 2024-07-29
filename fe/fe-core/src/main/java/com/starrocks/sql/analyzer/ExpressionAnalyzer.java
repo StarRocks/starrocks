@@ -121,6 +121,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -146,6 +147,10 @@ public class ExpressionAnalyzer {
 
     public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
         IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
+    public void analyzeWithVisitor(Expr expression, AnalyzeState analyzeState, Scope scope, Visitor visitor) {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -444,7 +449,7 @@ public class ExpressionAnalyzer {
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
-                node.setCol(resolvedField.getField().getName());
+                node.setColumnName(resolvedField.getField().getName());
                 node.setLabel(resolvedField.getField().getName());
 
                 if (resolvedField.getField().getTmpUsedStructFieldPos().size() > 0) {
@@ -1747,12 +1752,16 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
-            UserVariable userVariable = session.getUserVariable(node.getName());
+            UserVariable userVariable;
+            if (session.getUserVariablesCopyInWrite() == null) {
+                userVariable = session.getUserVariable(node.getName());
+            } else {
+                userVariable = session.getUserVariableCopyInWrite(node.getName());
+            }
+
             if (userVariable == null) {
                 node.setValue(NullLiteral.create(Type.STRING));
-                node.setType(Type.STRING);
             } else {
-                node.setType(userVariable.getEvaluatedExpression().getType());
                 node.setValue(userVariable.getEvaluatedExpression());
             }
             return null;
@@ -1982,8 +1991,8 @@ public class ExpressionAnalyzer {
                                             " but param give: " + Integer.toString(paramDictionaryKeysSize));
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
-            Table table = db.getTable(dictionary.getQueryableObject());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }
@@ -2059,6 +2068,23 @@ public class ExpressionAnalyzer {
         }
     }
 
+    static class ResolveSlotVisitor extends Visitor {
+
+        private java.util.function.Consumer<SlotRef> resolver;
+
+        public ResolveSlotVisitor(AnalyzeState state, ConnectContext session,
+                                  java.util.function.Consumer<SlotRef> slotResolver) {
+            super(state, session);
+            resolver = slotResolver;
+        }
+
+        @Override
+        public Void visitSlot(SlotRef node, Scope scope) {
+            resolver.accept(node);
+            return null;
+        }
+    }
+
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
@@ -2070,5 +2096,14 @@ public class ExpressionAnalyzer {
                 new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
+    public static void analyzeExpressionResolveSlot(Expr expression, ConnectContext session,
+                                                    Consumer<SlotRef> slotRefConsumer) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        AnalyzeState state = new AnalyzeState();
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(new AnalyzeState(), ConnectContext.get(), slotRefConsumer);
+        expressionAnalyzer.analyzeWithVisitor(expression, state, scope, visitor);
+    }
 }
 

@@ -576,3 +576,8 @@ struct TSnapshotInfo {
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
 }
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
+}

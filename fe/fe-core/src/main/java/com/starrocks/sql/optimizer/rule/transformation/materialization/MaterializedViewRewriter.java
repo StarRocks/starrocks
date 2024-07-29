@@ -41,10 +41,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.StringUtils;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -79,6 +80,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -462,12 +464,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
                 List<String> keyColumnNames =
-                        olapTable.getKeyColumns().stream().map(column -> column.getName()).collect(Collectors.toList());
+                        olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
                 return columnNames.containsAll(keyColumnNames);
             }
         }
         return table.hasUniqueConstraints() && table.getUniqueConstraints().stream().anyMatch(
-                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumns()));
+                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumnNames()));
     }
 
     private boolean isSupportedPredicate(
@@ -904,12 +906,13 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * @param mv: mv's definition
      * @return: ForeignKeyConstraint list associated with the child, empty list if no FK constraint.
      */
-    private List<ForeignKeyConstraint> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
+    private List<Pair<Table, ForeignKeyConstraint>> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
                                                                MaterializedView mv) {
-        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        List<Pair<Table, ForeignKeyConstraint>> foreignKeyConstraints = Lists.newArrayList();
         Table mvChildTable = mvTableScanDesc.getTable();
         if (mvChildTable.getForeignKeyConstraints() != null) {
-            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints());
+            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints().stream()
+                    .map(fkc -> Pair.create(mvChildTable, fkc)).collect(Collectors.toList()));
         }
 
         if (mv.getForeignKeyConstraints() != null) {
@@ -920,7 +923,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 }
                 Table table = MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo());
                 return table.equals(mvChildTable);
-            }).forEach(foreignKeyConstraints::add);
+            }).forEach(fkc -> foreignKeyConstraints.add(Pair.create(mv, fkc)));
         }
         return foreignKeyConstraints;
     }
@@ -961,15 +964,18 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            List<ForeignKeyConstraint> foreignKeyConstraints = getForeignKeyConstraint(mvTableScanDesc, materializedView);
+            List<Pair<Table, ForeignKeyConstraint>> foreignKeyConstraints =
+                    getForeignKeyConstraint(mvTableScanDesc, materializedView);
 
-            for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
+            for (Pair<Table, ForeignKeyConstraint> tableFKCPair : foreignKeyConstraints) {
+                Table table = tableFKCPair.first;
+                ForeignKeyConstraint foreignKeyConstraint = tableFKCPair.second;
                 Collection<TableScanDesc> mvParentTableScanDescs =
                         mvNameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
                 if (mvParentTableScanDescs == null || mvParentTableScanDescs.isEmpty()) {
                     continue;
                 }
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(table);
                 List<String> childKeys = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
@@ -1047,7 +1053,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
             if (foreignKeyConstraint.getChildTableInfo() != null &&
                     MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(materializedView);
                 Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toSet());
                 if (childKeySet.equals(mvChildKeySet)) {
@@ -1201,7 +1207,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (materializedView.hasUniqueConstraints()) {
             mvUniqueConstraints = materializedView.getUniqueConstraints().stream().filter(
-                           uniqueConstraint -> StringUtils.areTableNamesEqual(table, uniqueConstraint.getTableName()))
+                           uniqueConstraint -> SRStringUtils.areTableNamesEqual(table, uniqueConstraint.getTableName()))
                    .collect(Collectors.toList());
         }
 
@@ -1247,7 +1253,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(
+                    mv, hashDistributionInfo.getDistributionColumns());
             distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
         }
 
@@ -2053,8 +2060,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             return Lists.newArrayList();
         }
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
         Preconditions.checkState(partitionColumns.size() == 1);
         List<ScalarOperator> partitionRelatedPredicates = conjuncts.stream()
                 .filter(p -> isRelatedPredicate(p, partitionColumns.get(0).getName()))
@@ -2071,8 +2077,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             return queryCompensationPredicate;
         }
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
         Preconditions.checkState(partitionColumns.size() == 1);
         ScalarOperator queryPredicate = rewriteContext.getQueryPredicateSplit().toScalarOperator();
         Set<ScalarOperator> queryPredicates = Utils.extractConjunctSet(queryPredicate);

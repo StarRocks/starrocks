@@ -65,7 +65,8 @@ enum TResultSinkType {
     STATISTIC,
     VARIABLE,
     HTTP_PROTOCAL,
-    METADATA_ICEBERG
+    METADATA_ICEBERG,
+    CUSTOMIZED
 }
 
 enum TResultSinkFormatType {
@@ -228,6 +229,9 @@ struct TOlapTableSink {
     // enable colocated for sync mv 
     27: optional bool enable_colocate_mv_index 
     28: optional i64 automatic_bucket_size
+    29: optional bool write_txn_log
+    30: optional bool ignore_out_of_partition
+    31: optional binary encryption_meta;
 }
 
 struct TSchemaTableSink {

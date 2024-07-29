@@ -45,9 +45,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -251,7 +251,7 @@ public class ConnectProcessor {
 
         if (parsedStmt != null && parsedStmt.needAuditEncryption()) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
+            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
@@ -276,47 +276,6 @@ public class ConnectProcessor {
         } catch (NoSuchAlgorithmException e) {
             return "";
         }
-    }
-
-    private boolean containsComment(String sql) {
-        return (sql.contains("--")) || sql.contains("#");
-    }
-
-    protected void addFinishedQueryDetail() {
-        if (!Config.enable_collect_query_detail_info) {
-            return;
-        }
-        QueryDetail queryDetail = ctx.getQueryDetail();
-        if (queryDetail == null || !queryDetail.getQueryId().equals(DebugUtil.printId(ctx.getQueryId()))) {
-            return;
-        }
-
-        long endTime = System.currentTimeMillis();
-        long elapseMs = endTime - ctx.getStartTime();
-
-        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            queryDetail.setState(QueryDetail.QueryMemState.FAILED);
-            queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
-        } else {
-            queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
-        }
-        queryDetail.setEndTime(endTime);
-        queryDetail.setLatency(elapseMs);
-        queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
-        // add execution statistics into queryDetail
-        queryDetail.setReturnRows(ctx.getReturnRows());
-        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
-        PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
-        if (statistics != null) {
-            queryDetail.setScanBytes(statistics.scanBytes);
-            queryDetail.setScanRows(statistics.scanRows);
-            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
-            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
-            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
-        }
-        queryDetail.setCatalog(ctx.getCurrentCatalog());
-
-        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     // process COM_QUERY statement,
@@ -347,7 +306,7 @@ public class ConnectProcessor {
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
-            try {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
                 stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
@@ -387,6 +346,12 @@ public class ConnectProcessor {
                         return null;
                     }
                 }.visit(parsedStmt);
+
+                // Only add the last running stmt for multi statement,
+                // because the audit log will only show the last stmt.
+                if (ctx.getIsLastStmt()) {
+                    executor.addRunningQueryDetail(parsedStmt);
+                }
                 executor.execute();
 
                 // do not execute following stmt when current stmt failed, this is consistent with mysql server
@@ -423,12 +388,11 @@ public class ConnectProcessor {
         // We may need to find some way to resolve this.
         if (executor != null) {
             auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         } else {
             // executor can be null if we encounter analysis error.
             auditAfterExec(originStmt, null, null);
         }
-
-        addFinishedQueryDetail();
     }
 
     // Get the column definitions of a table
@@ -842,6 +806,7 @@ public class ConnectProcessor {
                     return null;
                 }
             }.visit(statement);
+            statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = new StmtExecutor(ctx, statement);
             executor.setProxy();

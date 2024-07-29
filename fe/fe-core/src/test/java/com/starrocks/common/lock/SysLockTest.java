@@ -15,8 +15,7 @@ package com.starrocks.common.lock;
 
 import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.concurrent.lock.DeadlockException;
-import com.starrocks.common.util.concurrent.lock.LockInterruptException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -42,7 +41,7 @@ public class SysLockTest {
     }
 
     @Test
-    public void testListLocks() throws TException, LockInterruptException, DeadlockException {
+    public void testListLocks() throws TException, LockException {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
 
         Locker locker = new Locker();

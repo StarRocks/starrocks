@@ -310,6 +310,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
         if (LIKELY(has_segment_size)) {
             segment_info.size = files_to_size.Get(index);
         }
+        auto segment_encryption_metas_size = metadata().segment_encryption_metas_size();
+        if (segment_encryption_metas_size > 0) {
+            if (index >= segment_encryption_metas_size) {
+                string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}", _tablet_id,
+                                         metadata().id(), index, segment_encryption_metas_size);
+                LOG(ERROR) << msg;
+                return Status::Corruption(msg);
+            }
+            segment_info.encryption_meta = metadata().segment_encryption_metas(index);
+        }
         index++;
 
         if (config::enable_load_segment_parallel) {

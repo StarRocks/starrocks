@@ -28,6 +28,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -81,7 +82,7 @@ public class LakeTableSchemaChangeJobTest {
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
     private LakeTableSchemaChangeJob getAlterJob(Table table) {
@@ -432,8 +433,8 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime, long warehouseId)
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId)
                     throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
@@ -497,8 +498,8 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime, long warehouseId) {
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId) {
                 // nothing to do
             }
         };

@@ -92,6 +92,7 @@ int init_test_env(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    engine->start_schedule_apply_thread();
     auto* global_env = GlobalEnv::GetInstance();
     config::disable_storage_page_cache = true;
     auto st = global_env->init();

@@ -35,10 +35,10 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 

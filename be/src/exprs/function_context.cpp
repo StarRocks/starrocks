@@ -24,6 +24,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/rowset/bloom_filter.h"
 #include "types/logical_type_infra.h"
+#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
@@ -128,6 +129,13 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     default:
         // TODO: signal error somehow
         return nullptr;
+    }
+}
+
+void FunctionContext::release_mems() {
+    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
+        auto env = JVMFunctionHelper::getInstance().getEnv();
+        _jvm_udaf_ctxs->states->clear(this, env);
     }
 }
 

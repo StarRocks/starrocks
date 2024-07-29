@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -26,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -99,12 +101,6 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
-        for (ColumnDef columnDef : columnDefList) {
-            if (columnDef.isAllowNull()) {
-                throw new AnalysisException("The list partition column does not support allow null currently, column:["
-                        + columnDef.getName() + "] should be set to not null.");
-            }
-        }
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
@@ -288,6 +284,7 @@ public class ListPartitionDesc extends PartitionDesc {
             throws DdlException {
         try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);
+            Map<ColumnId, Column> idToColumn = MetaUtils.buildIdToColumn(columns);
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
             for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -296,7 +293,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setValues(partitionId, desc.getValues());
-                listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
+                listPartitionInfo.setLiteralExprValues(idToColumn, partitionId, desc.getValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
                 listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
@@ -307,7 +304,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
-                listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
+                listPartitionInfo.setMultiLiteralExprValues(idToColumn, partitionId, desc.getMultiValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
                 listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
