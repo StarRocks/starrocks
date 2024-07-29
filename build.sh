@@ -149,10 +149,6 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
-<<<<<<< HEAD
-WITH_BRPC_KEEPALIVE=OFF
-=======
->>>>>>> 47e85eeef9 ([Enhancement] Staros v3.3 rc3 and brpc glog update (#48949))
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
@@ -238,10 +234,6 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
-<<<<<<< HEAD
-            --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
-=======
->>>>>>> 47e85eeef9 ([Enhancement] Staros v3.3 rc3 and brpc glog update (#48949))
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             -h) HELP=1; shift ;;
@@ -377,10 +369,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
-<<<<<<< HEAD
-                  -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE}          \
-=======
->>>>>>> 47e85eeef9 ([Enhancement] Staros v3.3 rc3 and brpc glog update (#48949))
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
