@@ -19,6 +19,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -77,6 +78,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -92,6 +95,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     public void process(StatementBase statement, ConnectContext context) {
         visit(statement, context);
+
+        if (table instanceof OlapTable) {
+            ((OlapTable) table).lastSchemaUpdateTime.set(System.nanoTime());
+        }
     }
 
     @Override
@@ -193,13 +200,27 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, clause));
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 
     @Override
     public Void visitAlterTableCommentClause(AlterTableCommentClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .alterTableComment(db, table, clause));
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 
@@ -288,7 +309,18 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            modifiedColumns.add(clause.getColName());
+            ErrorReport.wrapWithRuntimeException(() ->
+                    schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
+            GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 
@@ -312,7 +344,14 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRollupRenameClause(RollupRenameClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, (OlapTable) table, clause));
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 
@@ -393,7 +432,18 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitPartitionRenameClause(PartitionRenameClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            if (clause.getPartitionName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                throw new AlterJobException("Rename of shadow partitions is not allowed");
+            }
+
+            ErrorReport.wrapWithRuntimeException(() ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, clause));
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 
