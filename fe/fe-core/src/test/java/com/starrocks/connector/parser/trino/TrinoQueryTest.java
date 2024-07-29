@@ -1214,4 +1214,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select rand(10, 100);";
         assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
     }
+
+    @Test
+    public void testCastRowDataType() throws Exception {
+        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+    }
+
+    @Test
+    public void testCastArrayDataType() throws Exception {
+        String sql = "select cast(ARRAY[1] as array(int))";
+        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
 }

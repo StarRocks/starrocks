@@ -55,9 +55,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
@@ -156,6 +159,7 @@ import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
+import io.trino.sql.tree.RowDataType;
 import io.trino.sql.tree.SearchedCaseExpression;
 import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
@@ -170,6 +174,7 @@ import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
+import io.trino.sql.tree.TypeParameter;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.Unnest;
 import io.trino.sql.tree.Values;
@@ -1256,6 +1261,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else {
                 return ScalarType.createType(PrimitiveType.DATETIME);
             }
+        } else if (dataType instanceof RowDataType) {
+            RowDataType rowDataType = (RowDataType) dataType;
+            ArrayList<StructField> fields = new ArrayList<>(rowDataType.getFields().size());
+            for (int i = 0; i < rowDataType.getFields().size(); i++) {
+                final int finalIdx = i;
+                RowDataType.Field trinoField = rowDataType.getFields().get(i);
+                String name = trinoField.getName().map(Identifier::getCanonicalValue).orElseGet(() -> "col_" + finalIdx);
+                StructField field = new StructField(name, getType(trinoField.getType()));
+                fields.add(field);
+            }
+            return new StructType(fields);
         } else {
             throw trinoParserUnsupportedException(String.format("Trino parser on StarRocks does not support the " +
                     "type %s now", dataType));
@@ -1292,6 +1308,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             throw new ParsingException("Unknown type: %s", typeName);
         } else if (typeName.equals("real")) {
             return ScalarType.createType(PrimitiveType.FLOAT);
+        } else if (typeName.equals("array")) {
+            TypeParameter typeParam = (TypeParameter) dataType.getArguments().get(0);
+            return new ArrayType(getType(typeParam.getValue()));
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);
