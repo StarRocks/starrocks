@@ -52,14 +52,12 @@ Status GroupReader::init() {
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
     _process_columns_and_conjunct_ctxs();
+    _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
 
     return Status::OK();
 }
 
-Status GroupReader::prepare() {
-    RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    _init_read_chunk();
-    _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
+Status GroupReader::deal_with_pageindex() {
     if (config::parquet_page_index_enable) {
         SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
         _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
@@ -71,6 +69,13 @@ Status GroupReader::prepare() {
             page_index_reader->select_column_offset_index();
         }
     }
+
+    return Status::OK();
+}
+
+Status GroupReader::prepare() {
+    RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
+    _init_read_chunk();
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
@@ -412,6 +417,9 @@ Status GroupReader::_rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
+            if (*is_group_filtered) {
+                return Status::OK();
+            }
             RETURN_IF_ERROR(
                     _column_readers[slot_id]->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path, 0));
         }

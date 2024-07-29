@@ -717,6 +717,8 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
+    // we need deal with page index first, so that it can work on collect_io_range
+    RETURN_IF_ERROR(r->deal_with_pageindex());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and

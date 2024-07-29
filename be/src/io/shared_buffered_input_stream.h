@@ -91,6 +91,7 @@ public:
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
     int64_t estimated_mem_usage() const { return _estimated_mem_usage; }
+    int64_t current_range_ref_num() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
     const std::string& filename() const override { return _filename; }
