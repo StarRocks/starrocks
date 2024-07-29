@@ -1744,11 +1744,11 @@ public class GlobalStateMgr {
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
+                pipeManager.getRepo().save(dos);
                 securityPolicyManager.save(dos);
                 ((WarehouseManagerEPack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
                 keyMgr.save(dos);
-                pipeManager.getRepo().save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
