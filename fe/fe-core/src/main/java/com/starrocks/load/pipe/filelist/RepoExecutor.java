@@ -33,6 +33,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,6 +58,7 @@ public class RepoExecutor {
     }
 
     public void executeDML(String sql) {
+        ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
 
@@ -75,10 +77,14 @@ public class RepoExecutor {
             throw new SemanticException(String.format("execute sql failed: %s", e.getMessage()), e);
         } finally {
             ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
         }
     }
 
     public List<TResultBatch> executeDQL(String sql) {
+        ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
 
@@ -99,6 +105,9 @@ public class RepoExecutor {
             throw new SemanticException("execute sql failed: " + sql, e);
         } finally {
             ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
         }
     }
 
@@ -106,10 +115,12 @@ public class RepoExecutor {
         try {
             ConnectContext context = createConnectContext();
 
-            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            Analyzer.analyze(parsedStmt, context);
+            List<StatementBase> parsedStmts = SqlParser.parse(sql, context.getSessionVariable());
+            for (var parsedStmt : ListUtils.emptyIfNull(parsedStmts)) {
+                Analyzer.analyze(parsedStmt, context);
+                GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
+            }
             AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
-            GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
             throw new RuntimeException(e);

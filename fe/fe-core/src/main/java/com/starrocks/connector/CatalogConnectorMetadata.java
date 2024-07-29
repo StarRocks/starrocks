@@ -17,7 +17,6 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -29,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -89,6 +89,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return null;
     }
 
+    private ConnectorMetadata metadataOfTable(Table table) {
+        if (table instanceof MetadataTable) {
+            return tableMetadata;
+        }
+
+        return null;
+    }
+
     private ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
@@ -137,13 +145,15 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table) {
-        // TODO: refactor this in time travel patch
-        if (table instanceof IcebergTable) {
-            return normal.getTableVersionRange(table);
-        } else {
-            return TableVersionRange.empty();
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
         }
+
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -249,8 +259,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
-        normal.finishSink(dbName, table, commitInfos);
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
+        normal.finishSink(dbName, table, commitInfos, branch);
     }
 
     @Override
@@ -259,8 +269,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
-        normal.alterTable(stmt);
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+        normal.alterTable(context, stmt);
     }
 
     @Override

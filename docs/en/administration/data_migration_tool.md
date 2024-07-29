@@ -201,45 +201,7 @@ The description of the parameters is as follows:
 
 ### Obtain Cluster Token
 
-You can obtain the cluster token either through the HTTP port of the FE or from the metadata of the FE node.
-
-#### Obtain Cluster Token through the FE HTTP Port
-
-Run the following command:
-
-```Bash
-curl -v http://<fe_host>:<fe_http_port>/check
-```
-
-- `fe_host`: The IP address or FQDN (Fully Qualified Domain Name) of the cluster's FE.
-- `fe_http_port`: The HTTP port of the cluster's FE.
-
-Output:
-
-```Plain
-* About to connect() to xxx.xx.xxx.xx port 8030 (#0)
-*   Trying xxx.xx.xxx.xx...
-* Connected to xxx.xx.xxx.xx (xxx.xx.xxx.xx) port 8030 (#0)
-> GET /check HTTP/1.1
-> User-Agent: curl/7.29.0
-> Host: xxx.xx.xxx.xx:8030
-> Accept: */*
-> 
-< HTTP/1.1 200 OK
-< content-length: 0
-< cluster_id: yyyyyyyyyyy
-< content-type: text/html
-< token: wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
-< connection: keep-alive
-< 
-* Connection #0 to host xxx.xx.xxx.xx left intact
-```
-
-The `token` field represents the token of the current cluster.
-
-#### Obtain Cluster Token from FE Metadata
-
-Log in to the server where the FE node is located and run the following command:
+The Cluster Token is available in the FE metdata. Log in to the server where the FE node is located and run the following command:
 
 ```Bash
 cat fe/meta/image/VERSION | grep token
@@ -319,7 +281,7 @@ You can check the migration progress through the migration tool log **log/sync.I
 
 Example:
 
-![img](../assets/data_migration_tool-1.png)
+![img](../_assets/data_migration_tool-1.png)
 
 The important metrics are as follows:
 

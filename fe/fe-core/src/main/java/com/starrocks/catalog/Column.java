@@ -537,7 +537,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (generatedColumnExpr == null) {
             return null;
         }
-        return generatedColumnExpr.convertToColumnNameExpr(schema).clone();
+        Expr res = generatedColumnExpr.convertToColumnNameExpr(schema).clone();
+        res.setType(type);
+        return res;
     }
 
     public void setGeneratedColumnExpr(ColumnIdExpr expr) {
@@ -841,6 +843,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public int getUniqueId() {
         return this.uniqueId;
+    }
+
+    // return max unique id of all fields
+    public int getMaxUniqueId() {
+        return Math.max(this.uniqueId, type.getMaxUniqueId());
     }
 
     public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns) {

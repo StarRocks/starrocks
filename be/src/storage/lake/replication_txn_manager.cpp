@@ -77,7 +77,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
 
     std::vector<Version> missed_versions;
     for (auto v = request.visible_version + 1; v <= request.src_visible_version; ++v) {
-        missed_versions.emplace_back(Version(v, v));
+        missed_versions.emplace_back(v, v);
     }
     if (UNLIKELY(missed_versions.empty())) {
         LOG(WARNING) << "Remote snapshot tablet skipped, no missing version"

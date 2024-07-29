@@ -148,14 +148,25 @@ public:
     void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     MemPool* mem_pool() { return _mem_pool; }
-    size_t mem_usage() { return _mem_usage; }
-    void add_mem_usage(size_t size) { _mem_usage += size; }
+
+    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage = mem_usage_counter; }
+
+    int64_t mem_usage() const {
+        DCHECK(_mem_usage);
+        return *_mem_usage;
+    }
+    void add_mem_usage(int64_t delta) {
+        DCHECK(_mem_usage);
+        *_mem_usage += delta;
+    }
 
     RuntimeState* state() { return _state; }
     bool has_error() const;
     const char* error_msg() const;
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
+
+    void release_mems();
 
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
@@ -198,7 +209,7 @@ private:
     bool _is_udf = false;
 
     // this is used for count memory usage of aggregate state
-    size_t _mem_usage = 0;
+    int64_t* _mem_usage = nullptr;
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;

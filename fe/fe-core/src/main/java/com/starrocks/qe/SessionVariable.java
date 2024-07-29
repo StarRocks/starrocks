@@ -336,6 +336,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
+    public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
@@ -538,6 +539,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
 
     public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+
+    public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
+    public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
 
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
@@ -1270,6 +1274,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
+
+    // only used for test case
+    @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT, flag = VariableMgr.INVISIBLE)
+    private boolean alwaysCollectDict = false;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
@@ -2178,6 +2186,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //
     @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
     private boolean enableWaitDependentEvent = false;
+
+    @VarAttr(name = ENABLE_PHASED_SCHEDULER)
+    private boolean enablePhasedScheduler = false;
+
+    @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
+    private int phasedSchedulerMaxConcurrency = 2;
+
+    public int getPhasedSchedulerMaxConcurrency() {
+        return phasedSchedulerMaxConcurrency;
+    }
+    public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
+        this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
+    }
+
+    public boolean enablePhasedScheduler() {
+        return enablePhasedScheduler;
+    }
+    public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
+        this.enablePhasedScheduler = enablePhasedScheduler;
+    }
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -3159,6 +3187,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
     }
 
+    public boolean isAlwaysCollectDict() {
+        return alwaysCollectDict;
+    }
+
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
     }
@@ -4011,7 +4043,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
-        tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+        if (enablePhasedScheduler) {
+            tResult.setQuery_delivery_timeout(tResult.getQuery_timeout());
+        } else {
+            tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+        }
         tResult.setEnable_profile(enableProfile);
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);

@@ -38,9 +38,11 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.PointerType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
@@ -103,6 +105,7 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -137,6 +140,7 @@ import static com.starrocks.catalog.Type.DATE;
 import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
+import static com.starrocks.catalog.Type.VARCHAR;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -621,7 +625,7 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo));
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assert.assertEquals(1, fileScanTasks.size());
@@ -652,7 +656,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo));
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
         mockedNativeTableA.refresh();
         TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
@@ -726,7 +730,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "commit failed",
-                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo)));
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null));
         Assert.assertFalse(fakeFile.exists());
     }
 
@@ -1149,7 +1153,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(addColumnClause);
         clauses.add(addColumnsClause);
         AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
-        metadata.alterTable(stmt);
+        metadata.alterTable(new ConnectContext(), stmt);
         clauses.clear();
 
         // must be default null
@@ -1157,7 +1161,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
-        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(), stmtC4));
         clauses.clear();
 
         // drop/rename/modify column
@@ -1170,13 +1174,13 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(dropColumnClause);
         clauses.add(columnRenameClause);
         clauses.add(modifyColumnClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
 
         // rename table
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
 
         // modify table properties/comment
         clauses.clear();
@@ -1189,14 +1193,15 @@ public class IcebergMetadataTest extends TableTestBase {
         AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
         clauses.add(modifyTablePropertiesClause);
         clauses.add(alterTableCommentClause);
-        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
 
         // modify empty properties
         clauses.clear();
         Map<String, String> emptyProperties = new HashMap<>();
         ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
         clauses.add(emptyPropertiesClause);
-        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        Assert.assertThrows(DdlException.class,
+                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses)));
 
         // modify unsupported properties
         clauses.clear();
@@ -1205,7 +1210,8 @@ public class IcebergMetadataTest extends TableTestBase {
         invalidProperties.put(COMPRESSION_CODEC, "zzz");
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
-        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        Assert.assertThrows(DdlException.class,
+                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses)));
     }
 
     @Test
@@ -1479,5 +1485,59 @@ public class IcebergMetadataTest extends TableTestBase {
         versionRange = TableVersionRange.withEnd(Optional.of(1L));
         Assert.assertFalse(versionRange.isEmpty());
         Assert.assertNotNull(versionRange.toString());
+    }
+
+    @Test
+    public void testGetSnapshotIdFromVersion() {
+        ConstantOperator constantOperator = new ConstantOperator("2023-01-01", VARCHAR);
+        ConnectorTableVersion tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion));
+
+        constantOperator = new ConstantOperator(LocalDateTime.now(), DATE);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion1 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion1));
+
+        constantOperator = new ConstantOperator("2000-01-01 00:00:00", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion2 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion2));
+
+        constantOperator = new ConstantOperator("not_exist", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion3 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Cannot find snapshot with reference name",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion3));
+
+        constantOperator = new ConstantOperator(123, INT);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion4 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported type for table version",
+                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
+    }
+
+    public void testNullTableUUID() {
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Assert.assertEquals(2, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(4, icebergTable.getUUID().split("\\.").length);
+
+        new MockUp<TableMetadata>() {
+            @Mock
+            public String uuid() {
+                return null;
+            }
+        };
+        Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
+        Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
     }
 }

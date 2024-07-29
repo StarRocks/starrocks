@@ -493,6 +493,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
+        _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
     }
 
     // save TFunction object
@@ -552,7 +553,15 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     } else if (!_is_only_group_by_columns) {
         _release_agg_memory();
     }
+
+    for (int i = 0; i < _agg_functions.size(); i++) {
+        if (_agg_fn_ctxs[i]) {
+            _agg_fn_ctxs[i]->release_mems();
+        }
+    }
+
     _mem_pool->free_all();
+    _agg_state_mem_usage = 0;
 
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
@@ -564,6 +573,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     } else {
         TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
+
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
     // is used to access these entries, so we must reset the _state_allocator along with the hash_map/hash_set.
     _state_allocator.reset();
@@ -619,6 +629,12 @@ void Aggregator::close(RuntimeState* state) {
             }
 
             _mem_pool->free_all();
+        }
+
+        for (int i = 0; i < _agg_functions.size(); i++) {
+            if (_agg_fn_ctxs[i]) {
+                _agg_fn_ctxs[i]->release_mems();
+            }
         }
 
         if (_is_only_group_by_columns) {
@@ -910,7 +926,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
-            if (use_intermediate_as_input) {
+            if (_is_merge_funcs[i] || use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {

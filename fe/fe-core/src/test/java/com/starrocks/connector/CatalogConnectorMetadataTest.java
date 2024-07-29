@@ -189,7 +189,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.alterView(null);
                 connectorMetadata.truncateTable(null, null);
                 connectorMetadata.alterTableComment(null, null, null);
-                connectorMetadata.finishSink("test_db", "test_tbl", null);
+                connectorMetadata.finishSink("test_db", "test_tbl", null, null);
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
@@ -226,7 +226,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.alterView(null);
         catalogConnectorMetadata.truncateTable(null, null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
-        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
+        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null, null);
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);

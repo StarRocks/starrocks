@@ -124,8 +124,9 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    // TODO: add connector table version params in the next patch
-    default TableVersionRange getTableVersionRange(Table table) {
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                   Optional<ConnectorTableVersion> startVersion,
+                                                   Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();
     }
 
@@ -278,14 +279,14 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support dropping temporary tables");
     }
 
-    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(AlterTableStmt stmt) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 

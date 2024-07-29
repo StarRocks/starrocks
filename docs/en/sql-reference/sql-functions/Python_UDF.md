@@ -38,6 +38,7 @@ CREATE FUNCTION python_echo(INT) RETURNS
 INT
 type = 'Python'
 symbol = 'echo'
+file = 'inline'
 AS
 $$
 def echo(x):

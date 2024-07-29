@@ -166,7 +166,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                hiveMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+                hiveMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
                 times = 1;
             }
             {
@@ -188,7 +188,7 @@ public class UnifiedMetadataTest {
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(hiveTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", hiveTable, ImmutableList.of(), false);
-        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hive");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
@@ -243,7 +243,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                icebergMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+                icebergMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
                 times = 1;
             }
             {
@@ -275,7 +275,7 @@ public class UnifiedMetadataTest {
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(icebergTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", icebergTable, ImmutableList.of(), false);
-        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("iceberg");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
         Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1, TableVersionRange.empty()).isEmpty());
@@ -324,7 +324,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                hudiMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+                hudiMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
                 times = 1;
             }
             {
@@ -346,7 +346,7 @@ public class UnifiedMetadataTest {
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(hudiTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", hudiTable, ImmutableList.of(), false);
-        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hudi");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
@@ -397,7 +397,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                deltaLakeMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+                deltaLakeMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
                 times = 1;
             }
             {
@@ -419,7 +419,7 @@ public class UnifiedMetadataTest {
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(deltaLakeTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", deltaLakeTable, ImmutableList.of(), false);
-        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("deltalake");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
     }

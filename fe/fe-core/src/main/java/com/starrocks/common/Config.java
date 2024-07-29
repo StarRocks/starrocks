@@ -98,6 +98,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean sys_log_to_console = false;
 
+    @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
+    public static String sys_log_format = "plaintext";
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -2786,7 +2788,7 @@ public class Config extends ConfigBase {
      * Enable the experimental temporary table feature
      */
     @ConfField(mutable = true)
-    public static boolean enable_experimental_temporary_table = false;
+    public static boolean enable_experimental_temporary_table = true;
 
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
@@ -3058,4 +3060,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
 }

@@ -518,8 +518,20 @@ CONF_mInt64(write_buffer_size, "104857600");
 CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Double(query_pool_spill_mem_limit_threshold, "1.0");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
-CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
+// It's is a soft limit, when this limit is hit,
+// memtable in delta writer will be flush to reduce memory cost.
+// Load memory beyond this limit is allowed.
+CONF_Int32(load_process_max_memory_limit_percent, "30"); // 30%
+// It's hard limit ratio, when this limit is hit, new loading task will be rejected.
+// we can caculate and got the hard limit percent.
+// E.g.
+//  load_process_max_memory_limit_percent is 30%,
+//  load_process_max_memory_hard_limit_ratio is 2.
+//  then hard limit percent is 30% * 2 = 60%.
+//  And when hard limit percent is larger than process limit percent,
+//  use process limit percent as hard limit percent.
+CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
@@ -839,6 +851,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
@@ -855,6 +868,11 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 // When the ORC file file size is smaller than orc_loading_buffer_size,
 // we'll read the whole file at once instead of reading a footer first.
 CONF_Int32(orc_loading_buffer_size, "8388608");
+
+// orc writer
+// This is a workaround from SR side for a out-of-bound bug of hive orc reader.
+// Refer to https://issues.apache.org/jira/browse/ORC-125 for more detailed information.
+CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
@@ -1050,6 +1068,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
+CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1105,9 +1124,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
 CONF_Bool(datacache_tiered_cache_enable, "true");
-// DataCache engines, alternatives: cachelib, starcache.
+// DataCache engines, alternatives: starcache.
+// `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manully configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+// If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
@@ -1354,5 +1374,8 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
+CONF_mBool(skip_lake_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
 
 } // namespace starrocks::config

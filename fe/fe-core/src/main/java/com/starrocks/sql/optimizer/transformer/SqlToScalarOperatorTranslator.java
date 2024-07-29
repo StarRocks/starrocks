@@ -199,6 +199,12 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
+    public static ScalarOperator translateWithSlotRef(Expr expr,
+                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
+        return visitor.visit(expr, new Context());
+    }
+
     private static final class Context {
 
         public final boolean hasSubquery;
@@ -661,7 +667,7 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .toArray(ScalarOperator[]::new);
 
-            return new MatchExprOperator(children); 
+            return new MatchExprOperator(children);
         }
 
         @Override
@@ -743,21 +749,13 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitInformationFunction(InformationFunction node,
-                                                       Context context) {
-            if (node.getFuncType().equalsIgnoreCase("CONNECTION_ID")) {
-                return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                        ConstantOperator.createBigint(node.getIntValue())));
-            }
-
-            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
-                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+        public ScalarOperator visitInformationFunction(InformationFunction node, Context context) {
+            String funcType = node.getFuncType();
+            if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+                return ConstantOperator.createBigint(node.getIntValue());
+            } else {
                 return ConstantOperator.createVarchar(node.getStrValue());
             }
-
-            return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                    ConstantOperator.createVarchar(node.getStrValue()),
-                    ConstantOperator.createBigint(node.getIntValue())));
         }
 
         @Override
@@ -874,6 +872,32 @@ public final class SqlToScalarOperatorTranslator {
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
                     node.getDictionaryTxnId(), node.getKeySize());
             return op;
+        }
+    }
+
+    /**
+     * Resolve the SlotRef
+     */
+    static class ResolveSlotVisitor extends Visitor {
+
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
+
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.resolver = resolver;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                ColumnRefOperator ref = resolver.apply(node);
+                if (ref != null) {
+                    return ref;
+                }
+            }
+            throw unsupportedException("unknown slot: " + node.toSql());
         }
     }
 

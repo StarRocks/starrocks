@@ -193,7 +193,8 @@ public enum ScalarOperatorEvaluator {
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
             // check return result type, decimal will change return type
-            if (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
+            if (!operator.isNull() &&
+                    operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
                 operator.setType(fn.getReturnType());
@@ -208,6 +209,21 @@ public enum ScalarOperatorEvaluator {
         return root;
     }
 
+    public boolean isMonotonicFunction(CallOperator call) {
+        FunctionSignature signature;
+        if (call.getFunction() != null) {
+            Function fn = call.getFunction();
+            List<Type> argTypes = Arrays.asList(fn.getArgs());
+            signature = new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
+        } else {
+            List<Type> argTypes = call.getArguments().stream().map(ScalarOperator::getType).collect(Collectors.toList());
+            signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
+        }
+
+        FunctionInvoker invoker = functions.get(signature);
+
+        return invoker != null && invoker.isMonotonic;
+    }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
         if (!invoker.isMonotonic) {

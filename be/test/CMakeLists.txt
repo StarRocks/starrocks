@@ -1,5 +1,6 @@
 set(EXEC_FILES
         ./agent/agent_task_test.cpp
+        ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -52,6 +53,7 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -359,6 +361,7 @@ set(EXEC_FILES
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
+        ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
@@ -387,6 +390,7 @@ set(EXEC_FILES
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
         ./util/bitmap_test.cpp
+        ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
@@ -458,10 +462,11 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./block_cache/datacache_utils_test.cpp
+        ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 
-if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
+if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)

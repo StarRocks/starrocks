@@ -424,6 +424,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
+    config::skip_lake_pk_preload = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -450,6 +451,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _update_mgr->mem_tracker()->set_limit(old_limit);
+    config::skip_lake_pk_preload = false;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {

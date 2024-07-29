@@ -1104,7 +1104,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1120,7 +1120,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitTimeout() throws UserException, TException {
+    public void testLoadTxnCommitTimeout() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1134,7 +1134,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitFailed() throws UserException, TException {
+    public void testLoadTxnCommitFailed() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1148,7 +1148,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testStreamLoadPutTimeout() throws UserException, TException {
+    public void testStreamLoadPutTimeout() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1226,7 +1226,7 @@ public class FrontendServiceImplTest {
         partitionList.add(p19910425);
 
         currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
-                addPartitionClause, partitionInfo, partitionList, Sets.newSet("p19900425"));
+                addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
 
     }
 

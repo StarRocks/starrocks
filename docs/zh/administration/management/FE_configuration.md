@@ -3,11 +3,11 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE 配置项
 
@@ -158,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String[]
 - 单位：-
 - 是否动态：否
-- 描述：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 描述：打印审计日志的模块。默认打印 `slow_query` 和 `query` 模块的日志。自 v3.0 起 支持 `connection` 模块，即连接日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
 - 引入版本：-
 
 ##### qe_slow_log_ms
@@ -1093,7 +1093,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### lock_manager_enabled
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -1102,7 +1102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lock_manager_enable_using_fine_granularity_lock
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -1203,16 +1203,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许创建物化视图。
 - 引入版本：-
 
-<!--
 ##### enable_materialized_view_spill
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否为物化视图的刷新任务开启中间结果落盘功能。
+- 引入版本：v3.1.1
 
 ##### enable_backup_materialized_view
 
@@ -3063,11 +3061,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_autovacuum_grace_period_minutes
 
-- 默认值：5
+- 默认值：30
 - 类型：Long
 - 单位：Minutes
 - 是否动态：是
-- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。自 v3.3.0，v3.2.5 及 v3.1.10 起，默认值由 `5` 变更为 `30`。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold

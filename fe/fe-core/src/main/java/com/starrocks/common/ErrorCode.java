@@ -63,6 +63,9 @@ public enum ErrorCode {
     ERR_FIELD_SPECIFIED_TWICE(1110, new byte[] {'4', '2', '0', '0', '0'}, "Column '%s' specified twice"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
+    ERR_TOO_MANY_COLUMNS(1117, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of columns in a table must be less than or equal to %d," +
+                    " Please decrease the number of columns or increase frontend config 'max_column_number_per_table'."),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
             "Host %s is not allowed to connect to this MySQL server"),
     ERR_NONEXISTING_GRANT(1141, new byte[] {'4', '2', '0', '0', '0'},
@@ -298,6 +301,12 @@ public enum ErrorCode {
     ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
             "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
                     "or increase frontend config max_bucket_number_per_partition."),
+    ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE(5511, new byte[] {'4', '2', '0', '0', '0'},
+            "Column renaming is only supported for olap table"),
+    ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB(5512, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column in internal database: %s"),
+    ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column of table in %s state"),
 
     /**
      * 5600 - 5699: DML operation failure

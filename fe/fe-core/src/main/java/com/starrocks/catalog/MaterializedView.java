@@ -456,8 +456,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
     @Deprecated
     private List<Expr> partitionRefTableExprs;
-    @Deprecated
-    private transient Optional<Pair<Table, Column>> refBaseTableColumnOpt = Optional.empty();
 
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
@@ -477,11 +475,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private Map<ExpressionSerializedObject, ExpressionSerializedObject> serializedPartitionExprMaps;
     private Map<Expr, SlotRef> partitionExprMaps;
     // ref base table to partition expression
-    private transient Optional<Map<Table, Expr>> refBaseTablePartitionExprsOpt = Optional.empty();
+    private transient volatile Optional<Map<Table, Expr>> refBaseTablePartitionExprsOpt = Optional.empty();
     // ref bae table to partition column slot ref
-    private transient Optional<Map<Table, SlotRef>> refBaseTablePartitionSlotsOpt = Optional.empty();
+    private transient volatile Optional<Map<Table, SlotRef>> refBaseTablePartitionSlotsOpt = Optional.empty();
     // ref bae table to partition column
-    private transient Optional<Map<Table, Column>> refBaseTablePartitionColumnsOpt = Optional.empty();
+    private transient volatile Optional<Map<Table, Column>> refBaseTablePartitionColumnsOpt = Optional.empty();
+    // cache table to base table info's mapping to refresh table
+    private transient volatile Map<Table, BaseTableInfo> tableToBaseTableInfoCache = Maps.newConcurrentMap();
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -581,13 +581,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
-
         // reset cached variables
-        refBaseTableColumnOpt = Optional.empty();
+        resetMetadataCache();
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
+    }
+
+    /**
+     * Reset cached metadata when mv's meta has changed.
+     */
+    public void resetMetadataCache() {
         refBaseTablePartitionExprsOpt = Optional.empty();
         refBaseTablePartitionSlotsOpt = Optional.empty();
         refBaseTablePartitionColumnsOpt = Optional.empty();
+        tableToBaseTableInfoCache.clear();
     }
 
     public String getInactiveReason() {
@@ -678,21 +684,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
         this.queryOutputIndices = queryOutputIndices;
-    }
-
-    /**
-     * @param materializedView : materialized view to check
-     * @return : return the column slot ref which materialized view's partition column comes from.
-     * <p>
-     * NOTE: Only support one column for Materialized View's partition column for now.
-     */
-    public static SlotRef getRefBaseTablePartitionSlotRef(MaterializedView materializedView) {
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr partitionExpr = materializedView.getPartitionExpr();
-        partitionExpr.collect(SlotRef.class, slotRefs);
-        // if partitionExpr is FunctionCallExpr, get first SlotRef
-        Preconditions.checkState(slotRefs.size() == 1);
-        return slotRefs.get(0);
     }
 
     /**
@@ -893,10 +884,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (this.partitionExprMaps != null) {
             mv.partitionExprMaps = ImmutableMap.copyOf(this.partitionExprMaps);
         }
-        mv.refBaseTableColumnOpt = this.refBaseTableColumnOpt;
         mv.refBaseTablePartitionExprsOpt = this.refBaseTablePartitionExprsOpt;
         mv.refBaseTablePartitionSlotsOpt = this.refBaseTablePartitionSlotsOpt;
         mv.refBaseTablePartitionColumnsOpt = this.refBaseTablePartitionColumnsOpt;
+        mv.tableToBaseTableInfoCache = this.tableToBaseTableInfoCache;
     }
 
     @Override
@@ -1448,13 +1439,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.info("Base table {} contains no partition expr, skip", table.getName());
                     continue;
                 }
+                tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionExprMap.put(table, mvPartitionExpr.get().getExpr());
             }
             LOG.info("The refBaseTablePartitionExprMap of mv {} is {}", getName(), refBaseTablePartitionExprMap);
-            refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
+            synchronized (this) {
+                if (refBaseTablePartitionExprsOpt.isEmpty()) {
+                    refBaseTablePartitionExprsOpt = Optional.of(refBaseTablePartitionExprMap);
+                    return refBaseTablePartitionExprMap;
+                }
+            }
         }
         Preconditions.checkState(refBaseTablePartitionExprsOpt.isPresent());
-        return refBaseTablePartitionExprsOpt.get();
+        return refBaseTablePartitionExprsOpt.map(this::refreshBaseTable).get();
     }
 
     /**
@@ -1472,13 +1469,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.info("Base table {} contains no partition expr, skip", table.getName());
                     continue;
                 }
+                tableToBaseTableInfoCache.put(table, tableInfo);
                 refBaseTablePartitionSlotMap.put(table, mvPartitionExpr.get().getSlotRef());
             }
             LOG.info("The refBaseTablePartitionSlotMap of mv {} is {}", getName(), refBaseTablePartitionSlotMap);
-            refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
+            synchronized (this) {
+                if (refBaseTablePartitionSlotsOpt.isEmpty()) {
+                    refBaseTablePartitionSlotsOpt = Optional.of(refBaseTablePartitionSlotMap);
+                    return refBaseTablePartitionSlotMap;
+                }
+            }
         }
         Preconditions.checkState(refBaseTablePartitionSlotsOpt.isPresent());
-        return refBaseTablePartitionSlotsOpt.get();
+        return refBaseTablePartitionSlotsOpt.map(this::refreshBaseTable).get();
     }
 
     /**
@@ -1560,51 +1563,35 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Materialized View's partition column can only refer one base table's partition column, get the referred
-     * base table and its partition column.
-     * @return : The materialized view's referred base table and its partition column.
-     * TODO: Support multi-column partitions later.
-     * TODO: Use getRefBaseTablePartitionColumns instead since SR v3.3 has supported multi-tables partition change tracking.
-     */
-    @Deprecated
-    public Pair<Table, Column> getRefBaseTablePartitionColumn() {
-        if (partitionRefTableExprs == null || !(partitionInfo.isRangePartition() || partitionInfo.isListPartition())) {
-            return null;
-        }
-        if (refBaseTableColumnOpt.isEmpty()) {
-            Expr partitionExpr = getPartitionRefTableExprs().get(0);
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            partitionExpr.collect(SlotRef.class, slotRefs);
-            Preconditions.checkState(slotRefs.size() == 1);
-            SlotRef partitionSlotRef = slotRefs.get(0);
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Table table = MvUtils.getTableChecked(baseTableInfo);
-                if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
-                    refBaseTableColumnOpt = Optional.of(Pair.create(table, table.getColumn(partitionSlotRef.getColumnName())));
-                    break;
-                }
-            }
-            if (refBaseTableColumnOpt.isEmpty()) {
-                String baseTableNames = baseTableInfos.stream()
-                        .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getName()).collect(Collectors.joining(","));
-                throw new RuntimeException(
-                        String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
-            }
-        }
-        Preconditions.checkState(refBaseTableColumnOpt.isPresent());
-        return refBaseTableColumnOpt.get();
-    }
-
-    /**
      * Get the related partition table and column of the materialized view since one mv can contain multi ref base tables.
      * @return The related partition table and its partition column referred by the materialized view.
      */
     public Map<Table, Column> getRefBaseTablePartitionColumns() {
         if (refBaseTablePartitionColumnsOpt.isEmpty()) {
-            refBaseTablePartitionColumnsOpt = Optional.of(getBaseTablePartitionColumnMapImpl());
+            Map<Table, Column> result = getBaseTablePartitionColumnMapImpl();
+            synchronized (this) {
+                if (refBaseTablePartitionColumnsOpt.isEmpty()) {
+                    refBaseTablePartitionColumnsOpt = Optional.of(result);
+                    return result;
+                }
+            }
         }
         Preconditions.checkState(refBaseTablePartitionColumnsOpt.isPresent());
-        return refBaseTablePartitionColumnsOpt.get();
+        return refBaseTablePartitionColumnsOpt.map(this::refreshBaseTable).get();
+    }
+
+    /**
+     * Since the table is cached in the Optional, needs to refresh it again for each query.
+     * TODO: optimize cases which not care table's refresh-ness.
+     */
+    private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
+        Map<Table, K> result = Maps.newHashMap();
+        for (Map.Entry<Table, K> e : cached.entrySet()) {
+            Preconditions.checkState(tableToBaseTableInfoCache.containsKey(e.getKey()));
+            Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(e.getKey()));
+            result.put(refreshedTable, e.getValue());
+        }
+        return result;
     }
 
     private Map<Table, Column> getBaseTablePartitionColumnMapImpl() {
@@ -1634,6 +1621,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         table.getName(), baseTablePartitionSlotMap);
                 continue;
             }
+            tableToBaseTableInfoCache.put(table, baseTableInfo);
             result.put(table, partitionColumnOpt.get());
         }
         if (result.isEmpty()) {

@@ -201,45 +201,7 @@ replication_job_batch_size=10
 
 ### 获取集群 Token
 
-您可以通过 FE 的 HTTP 端口获取，或通过 FE 节点的元数据获取集群 Token。
-
-#### 通过 FE 的 HTTP 端口获取集群 Token
-
-运行以下命令：
-
-```Bash
-curl -v http://<fe_host>:<fe_http_port>/check
-```
-
-- `fe_host`：集群 FE 的 IP 地址或 FQDN。
-- `fe_http_port`：集群 FE 的 HTTP 端口。
-
-返回如下：
-
-```Plain
-* About to connect() to xxx.xx.xxx.xx port 8030 (#0)
-*   Trying xxx.xx.xxx.xx...
-* Connected to xxx.xx.xxx.xx (xxx.xx.xxx.xx) port 8030 (#0)
-> GET /check HTTP/1.1
-> User-Agent: curl/7.29.0
-> Host: xxx.xx.xxx.xx:8030
-> Accept: */*
-> 
-< HTTP/1.1 200 OK
-< content-length: 0
-< cluster_id: yyyyyyyyyyy
-< content-type: text/html
-< token: wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
-< connection: keep-alive
-< 
-* Connection #0 to host xxx.xx.xxx.xx left intact
-```
-
-其中 `token` 字段即为当前集群的 Token。
-
-#### 通过 FE 节点的元数据获取集群 Token
-
-登录  FE 节点所在的服务器，运行以下命令：
+通过 FE 节点的元数据获取集群 Token。登录  FE 节点所在的服务器，运行以下命令：
 
 ```Bash
 cat fe/meta/image/VERSION | grep token
@@ -319,7 +281,7 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 
 示例：
 
-![img](../assets/data_migration_tool-1.png)
+![img](../_assets/data_migration_tool-1.png)
 
 主要指标如下：
 

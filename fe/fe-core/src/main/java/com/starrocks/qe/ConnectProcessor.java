@@ -45,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.LogUtil;
@@ -308,7 +309,7 @@ public class ConnectProcessor {
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
-            try {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
                 stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
@@ -808,6 +809,7 @@ public class ConnectProcessor {
                     return null;
                 }
             }.visit(statement);
+            statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = new StmtExecutor(ctx, statement);
             executor.setProxy();

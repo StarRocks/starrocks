@@ -97,7 +97,7 @@ public class QueryRuntimeProfile {
     private boolean profileAlreadyReported = false;
 
     private RuntimeProfile queryProfile;
-    private final List<RuntimeProfile> fragmentProfiles;
+    private List<RuntimeProfile> fragmentProfiles;
 
     // The load channel profile is only present if loading to OlapTables.
     // The hierarchy is LoadChannel -> Channel(BE) -> Index
@@ -140,25 +140,27 @@ public class QueryRuntimeProfile {
 
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
-                               int numFragments,
                                boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.jobSpec = jobSpec;
         this.isShortCircuit = isShortCircuit;
 
         this.queryProfile = new RuntimeProfile("Execution");
-        this.fragmentProfiles = new ArrayList<>(numFragments);
-        for (int i = 0; i < numFragments; i++) {
-            RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
-            fragmentProfiles.add(profile);
-            queryProfile.addChild(profile);
-        }
 
         if (jobSpec.hasOlapTableSink()) {
             loadChannelProfile = Optional.of(new RuntimeProfile(LOAD_CHANNEL_PROFILE_NAME));
             queryProfile.addChild(loadChannelProfile.get());
         } else {
             loadChannelProfile = Optional.empty();
+        }
+    }
+
+    public void initFragmentProfiles(int numFragments) {
+        this.fragmentProfiles = new ArrayList<>(numFragments);
+        for (int i = 0; i < numFragments; i++) {
+            RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
+            fragmentProfiles.add(profile);
+            queryProfile.addChild(profile);
         }
     }
 
@@ -219,12 +221,18 @@ public class QueryRuntimeProfile {
     }
 
     public void attachExecutionProfiles(Collection<FragmentInstanceExecState> executions) {
+        Map<Integer, List<RuntimeProfile>> profiles = Maps.newHashMap();
         for (FragmentInstanceExecState execState : executions) {
             if (!execState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
-            fragmentProfiles.get(execState.getFragmentIndex()).addChild(execState.getProfile());
+            if (execState.getProfile() == null) {
+                continue;
+            }
+            profiles.computeIfAbsent(execState.getFragmentIndex(), k -> Lists.newArrayList());
+            profiles.get(execState.getFragmentIndex()).add(execState.getProfile());
         }
+        profiles.forEach((k, v) -> fragmentProfiles.get(k).addChildren(v));
     }
 
     public void finishInstance(TUniqueId instanceId) {
@@ -393,10 +401,11 @@ public class QueryRuntimeProfile {
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
-        long maxQueryCumulativeCpuTime = 0;
+        long sumQueryCumulativeCpuTime = 0;
+        long sumQuerySpillBytes = 0;
+        long sumQueryPeakMemoryBytes = 0;
         long maxQueryPeakMemoryUsage = 0;
         long maxQueryExecutionWallTime = 0;
-        long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
@@ -427,13 +436,14 @@ public class QueryRuntimeProfile {
                 // Get query level peak memory usage, cpu cost, wall time
                 Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
                 if (toBeRemove != null) {
-                    maxQueryCumulativeCpuTime = Math.max(maxQueryCumulativeCpuTime, toBeRemove.getValue());
+                    sumQueryCumulativeCpuTime += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QueryCumulativeCpuTime");
 
                 toBeRemove = instanceProfile.getCounter("QueryPeakMemoryUsage");
                 if (toBeRemove != null) {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
+                    sumQueryPeakMemoryBytes += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
 
@@ -445,7 +455,7 @@ public class QueryRuntimeProfile {
 
                 toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
                 if (toBeRemove != null) {
-                    maxQuerySpillBytes = Math.max(maxQuerySpillBytes, toBeRemove.getValue());
+                    sumQuerySpillBytes += toBeRemove.getValue();
                 }
                 instanceProfile.removeCounter("QuerySpillBytes");
             }
@@ -569,13 +579,15 @@ public class QueryRuntimeProfile {
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
-        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
+        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
+        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsagePerNode", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter sumQueryPeakMemoryUsage = newQueryProfile.addCounter("QuerySumMemoryUsage", TUnit.BYTES, null);
+        sumQueryPeakMemoryUsage.setValue(sumQueryPeakMemoryBytes);
         Counter queryExecutionWallTime = newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
         queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
-        querySpillBytes.setValue(maxQuerySpillBytes);
+        querySpillBytes.setValue(sumQuerySpillBytes);
 
         if (execPlan != null) {
             newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
@@ -584,7 +596,7 @@ public class QueryRuntimeProfile {
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
         processTimer.setValue(System.nanoTime() - start);
 
-        Optional<RuntimeProfile> mergedLoadChannelProfile =  mergeLoadChannelProfile();
+        Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile();
         mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
 
         return newQueryProfile;
@@ -609,10 +621,10 @@ public class QueryRuntimeProfile {
         counter.setValue(channelProfiles.size());
 
         String hosts = channelProfiles.stream()
-                               .map(p -> getChannelHost(p.getName()))
-                               .filter(Optional::isPresent)
-                               .map(Optional::get)
-                               .collect(Collectors.joining(","));
+                .map(p -> getChannelHost(p.getName()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.joining(","));
         mergedProfile.addInfoString("BackendAddresses", hosts);
 
         RuntimeProfile mergedChannelProfile =

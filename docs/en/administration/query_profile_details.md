@@ -14,7 +14,7 @@ The structure of a Query Profile is closely related to the design of StarRocks' 
 - **PipelineDriver**: A Pipeline can have multiple instances, each instance is called a PipelineDriver, to fully utilize multiple computing cores.
 - **Operator**: A PipelineDriver consists of multiple Operator instances.
 
-![profile-3](../assets/Profile/profile-3.png)
+![profile-3](../_assets/Profile/profile-3.png)
 
 ### Query Profile Merging Strategy
 
@@ -96,9 +96,13 @@ Description: Cumulative allocated memory across all compute nodes.
 
 Description: Cumulative deallocated memory across all compute nodes.
 
-##### QueryPeakMemoryUsage
+##### QueryPeakMemoryUsagePerNode
 
 Description: Maximum peak memory across all compute nodes.
+
+##### QuerySumMemoryUsage
+
+Description: Summary of peak memory across all compute nodes.
 
 ##### QueryExecutionWallTime
 
@@ -175,7 +179,7 @@ The relationship between core metrics is illustrated in the following diagram:
 - PendingTime = InputEmptyTime + OutputFullTime + PreconditionBlockTime + PendingFinishTime
 - InputEmptyTime = FirstInputEmptyTime + FollowupInputEmptyTime
 
-![profile_pipeline_time_relationship](../assets/Profile/profile_pipeline_time_relationship.jpeg)
+![profile_pipeline_time_relationship](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
 ##### DegreeOfParallelism
 
@@ -313,13 +317,13 @@ Description: Time spent on Join Runtime Filter.
 
 The Scan Operator utilizes an additional thread pool for executing IO tasks. Therefore, the relationship between time metrics for this node is illustrated below:
 
-![profile_scan_time_relationship](../assets/Profile/profile_scan_time_relationship.jpeg)
+![profile_scan_time_relationship](../_assets/Profile/profile_scan_time_relationship.jpeg)
 
 #### OLAP Scan Operator
 
 To facilitate a better understanding of the various metrics within the Scan Operator, the following diagram demonstrates the associations between these metrics and storage structures.
 
-![profile_scan_relationship](../assets/Profile/profile_scan_relationship.jpeg)
+![profile_scan_relationship](../_assets/Profile/profile_scan_relationship.jpeg)
 
 ##### Table
 

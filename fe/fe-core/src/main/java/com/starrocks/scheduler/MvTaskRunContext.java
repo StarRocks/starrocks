@@ -16,7 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
-import com.starrocks.catalog.Column;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -44,13 +44,6 @@ public class MvTaskRunContext extends TaskRunContext {
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
     private Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap;
-
-    // The Table which materialized view' partition column comes from is called `RefBaseTable`:
-    // - Materialized View's to-refresh partitions is synced from its `refBaseTable`.
-    private Table refBaseTable;
-    // The `RefBaseTable`'s partition column which materialized view's partition column derives from
-    // is called `refBaseTablePartitionColumn`.
-    private Column refBaseTablePartitionColumn;
 
     private String nextPartitionStart = null;
     private String nextPartitionEnd = null;
@@ -154,21 +147,22 @@ public class MvTaskRunContext extends TaskRunContext {
         this.partitionTTLNumber = partitionTTLNumber;
     }
 
-    public Table getRefBaseTable() {
-        return refBaseTable;
-    }
-
-    public void setRefBaseTable(Table refBaseTable) {
-        Preconditions.checkNotNull(refBaseTable);
-        this.refBaseTable = refBaseTable;
-    }
-
-    public Column getRefBaseTablePartitionColumn() {
-        return refBaseTablePartitionColumn;
-    }
-
-    public void setRefBaseTablePartitionColumn(Column refBaseTablePartitionColumn) {
-        Preconditions.checkNotNull(refBaseTablePartitionColumn);
-        this.refBaseTablePartitionColumn = refBaseTablePartitionColumn;
+    /**
+     * For external table, the partition name is normalized which should convert it into original partition name.
+     * <p>
+     * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
+     * of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * partition columns problem.
+     * eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public Set<String> getExternalTableRealPartitionName(Table table, String mvPartitionName) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            Preconditions.checkState(externalRefBaseTableMVPartitionMap.containsKey(table));
+            return externalRefBaseTableMVPartitionMap.get(table).get(mvPartitionName);
+        } else {
+            return Sets.newHashSet(mvPartitionName);
+        }
     }
 }

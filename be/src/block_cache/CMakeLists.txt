@@ -28,11 +28,8 @@ set(CACHE_FILES
   cache_options.cpp
   datacache_utils.cpp
   disk_space_monitor.cpp
+  block_cache_hit_rate_counter.hpp
 )
-
-if (${WITH_CACHELIB} STREQUAL "ON")
-    list(APPEND CACHE_FILES cachelib_wrapper.cpp)
-endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     list(APPEND CACHE_FILES starcache_wrapper.cpp)
@@ -41,12 +38,3 @@ endif()
 add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
-
-if (${WITH_CACHELIB} STREQUAL "ON")
-    set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
-    link_directories(${CACHELIB_DIR}/deps/lib64)
-
-    include_directories(AFTER ${CACHELIB_DIR}/include)
-    include_directories(AFTER ${CACHELIB_DIR}/deps/include)
-endif()
-

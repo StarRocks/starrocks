@@ -119,12 +119,12 @@ public class IcebergTable extends Table {
         return remoteTableName;
     }
 
-
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
+            String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
             return String.join(".", catalogName, remoteDbName, remoteTableName,
-                    ((BaseTable) getNativeTable()).operations().current().uuid());
+                    uuid == null ? "" : uuid);
         } else {
             return Long.toString(id);
         }
@@ -256,7 +256,8 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        return Joiner.on(":").join(name, ((BaseTable) getNativeTable()).operations().current().uuid());
+        String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
     }
 
     public IcebergCatalogType getCatalogType() {
@@ -369,6 +370,11 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
+    public boolean isTemporal() {
         return true;
     }
 

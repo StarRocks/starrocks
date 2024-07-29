@@ -23,6 +23,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.iceberg.SnapshotRef;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -136,7 +138,8 @@ public class InsertAnalyzer {
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
-                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                    // case-insensitive match. refer to AstBuilder#getColumnNames
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName.toLowerCase())) {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
@@ -354,6 +357,21 @@ public class InsertAnalyzer {
         if ((table.isHiveTable() || table.isIcebergTable()) && CatalogMgr.isInternalCatalog(catalogName)) {
             throw unsupportedException(String.format("Doesn't support %s table sink in the internal catalog. " +
                     "You need to use %s catalog.", table.getType(), table.getType()));
+        }
+
+        if (insertStmt.getTargetBranch() != null) {
+            if (!table.isIcebergTable()) {
+                throw unsupportedException("Only support insert iceberg table with branch");
+            }
+            String targetBranch = insertStmt.getTargetBranch();
+            SnapshotRef snapshotRef = ((IcebergTable) table).getNativeTable().refs().get(targetBranch);
+            if (snapshotRef == null) {
+                throw unsupportedException("Cannot find snapshot with reference name: " + targetBranch);
+            }
+
+            if (!snapshotRef.isBranch()) {
+                throw unsupportedException(String.format("%s is a tag, not a branch", targetBranch));
+            }
         }
 
         return table;

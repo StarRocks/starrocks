@@ -98,7 +98,7 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
 
         conjuncts = Lists.newArrayList();
-        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null, null);
     }
 
     @Test

@@ -1208,6 +1208,7 @@ public class DatabaseTransactionMgr {
         transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1255,12 +1256,26 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
-                            .getTxnCommitAttachment()).getPartitionVersions();
-                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                    ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment();
+                    Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long versionDiff = newVersion - partition.getVisibleVersion();
+                    partitionCommitInfo.setVersion(newVersion);
+                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
+                    Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
+                    if (partitionVersionEpochs != null) {
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        partitionCommitInfo.setVersionEpoch(newVersionEpoch);
+                    }
                 } else if (transactionState.isVersionOverwrite()) {
                     partitionCommitInfo.setVersion(((InsertTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment()).getPartitionVersion());
+                    // reset data version to visible version
+                    partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
+                    if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
+                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                    }
                 } else {
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
                     if (doubleWritePartitions != null && !doubleWritePartitions.isEmpty()) {
@@ -1276,6 +1291,12 @@ public class DatabaseTransactionMgr {
                         }
                     } else {
                         partitionCommitInfo.setVersion(partition.getNextVersion());
+                    }
+                    // update data version
+                    partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
+                            partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) { 
+                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                     }
                     LOG.debug("set partition {} version to {} in transaction {}",
                             partitionId, partitionCommitInfo.getVersion(), transactionState);
@@ -1875,6 +1896,7 @@ public class DatabaseTransactionMgr {
 
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1941,6 +1963,7 @@ public class DatabaseTransactionMgr {
         // do after transaction finish in batch
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
             GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         }
 
         LOG.info("finish transaction {} batch successfully", stateBatch);

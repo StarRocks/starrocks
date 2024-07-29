@@ -912,7 +912,9 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 
 void TabletUpdates::do_apply() {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(config::enable_pk_strict_memcheck);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
+            config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {
@@ -1008,6 +1010,7 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
 
 Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info,
                                                           const RowsetSharedPtr& rowset) {
+    CHECK_MEM_LIMIT("TabletUpdates::_apply_column_partial_update_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
@@ -1218,6 +1221,7 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
 }
 
 Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
+    CHECK_MEM_LIMIT("TabletUpdates::_apply_normal_rowset_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
@@ -2159,6 +2163,7 @@ Status TabletUpdates::_light_apply_compaction_commit(const EditVersion& version,
 }
 
 Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    CHECK_MEM_LIMIT("TabletUpdates::_apply_compaction_commit");
     const uint32_t rowset_id = version_info.compaction->output;
     Rowset* output_rowset = get_rowset(rowset_id).get();
     Status apply_st;
@@ -2362,6 +2367,12 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {
@@ -4998,7 +5009,7 @@ void TabletUpdates::_clear_rowset_del_vec_cache(const Rowset& rowset) {
         std::vector<TabletSegmentId> tsids;
         tsids.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i});
+            tsids.emplace_back(_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i);
         }
         return tsids;
     }());
@@ -5009,7 +5020,7 @@ void TabletUpdates::_clear_rowset_delta_column_group_cache(const Rowset& rowset)
         std::vector<TabletSegmentId> tsids;
         tsids.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i});
+            tsids.emplace_back(_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i);
         }
         return tsids;
     }());

@@ -86,7 +86,7 @@ public class AlterTest {
         String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
                 "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
 
@@ -132,7 +132,7 @@ public class AlterTest {
                 "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
 
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
 
@@ -251,7 +251,7 @@ public class AlterTest {
         String sql = "ALTER TABLE t1 COMPACT p1";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();

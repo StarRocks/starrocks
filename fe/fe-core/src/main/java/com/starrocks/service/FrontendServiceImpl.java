@@ -278,6 +278,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TReportLakeCompactionRequest;
 import com.starrocks.thrift.TReportLakeCompactionResponse;
 import com.starrocks.thrift.TReportRequest;
@@ -1393,7 +1395,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
+    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException, LockTimeoutException {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1717,7 +1719,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
-    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException, LockTimeoutException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -2679,6 +2681,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         result.setTrackingLoads(trackingLoadInfoList);
+        LOG.debug("get tracking load jobs size: {}", trackingLoadInfoList.size());
         return result;
     }
 
@@ -2935,5 +2938,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
             throws TException {
         return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
+    }
+
+    @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
+        return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
     }
 }

@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -121,9 +122,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table) {
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableVersionRange(table);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -251,9 +254,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
-        metadata.finishSink(dbName, table, commitInfos);
+        metadata.finishSink(dbName, table, commitInfos, branch);
     }
 
     @Override

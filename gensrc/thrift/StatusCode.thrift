@@ -110,5 +110,7 @@ enum TStatusCode {
     JIT_COMPILE_ERROR = 57,
 
     CAPACITY_LIMIT_EXCEED = 58,
+
+    SHUTDOWN = 59, // the service is shutting down
 }
 

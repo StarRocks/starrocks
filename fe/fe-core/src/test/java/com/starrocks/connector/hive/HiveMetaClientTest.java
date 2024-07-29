@@ -103,7 +103,7 @@ public class HiveMetaClientTest {
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unable to instantiate"));
+            Assert.assertTrue(e.getMessage().contains("Invalid port 90303"));
         }
     }
 

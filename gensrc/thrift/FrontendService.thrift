@@ -734,6 +734,16 @@ struct TReportExecStatusParams {
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
+struct TReportFragmentFinishParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    4: optional i32 backend_num
+}
+
+struct TReportFragmentFinishResponse {
+    1: optional Status.TStatus status
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -1449,6 +1459,9 @@ struct TPartitionMetaInfo {
     23: optional double p50_cs
     24: optional double max_cs
     25: optional string storage_path
+    26: optional i64 data_version
+    27: optional i64 version_epoch
+    28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
 }
 
 struct TGetTablesInfoRequest {
@@ -1741,6 +1754,7 @@ struct TPartitionReplicationInfo {
     1: optional i64 partition_id
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
+    4: optional i64 src_version_epoch
 }
 
 struct TTableReplicationRequest {
@@ -1900,5 +1914,7 @@ service FrontendService {
 
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 }
 

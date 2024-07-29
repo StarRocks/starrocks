@@ -284,7 +284,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             // TODO(fixme): for self join, forbid pushing down filter, but there are some cases to optimize.
-            PlanTestBase.assertContains(plan, "partitions=5/5");
+            PlanTestBase.assertContains(plan, "partitions=1/5");
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail(e.getMessage());
@@ -2531,6 +2531,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             "MVRefreshDoWholeRefresh",
                             "MVRefreshComputeCandidatePartitions",
                             "MVRefreshSyncAndCheckPartitions",
+                            "MVRefreshCheckMVToRefreshPartitions",
                             "MVRefreshExternalTable",
                             "MVRefreshSyncPartitions",
                             "MVRefreshCheckBaseTableChange",

@@ -35,7 +35,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
@@ -65,6 +67,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
@@ -77,6 +80,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -91,6 +95,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
@@ -119,6 +124,9 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -146,6 +154,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 
 public class IcebergMetadata implements ConnectorMetadata {
@@ -285,7 +294,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
@@ -346,6 +355,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
+
             tables.put(identifier, table);
             return table;
         } catch (StarRocksConnectorException e) {
@@ -355,6 +365,71 @@ public class IcebergMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
     }
+
+    public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
+        switch (version.getPointerType()) {
+            case TEMPORAL :
+                return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
+            case VERSION:
+                return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
+            case UNKNOWN:
+            default:
+                throw new StarRocksConnectorException("Unknown version type %s", version.getPointerType());
+        }
+    }
+
+    private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConstantOperator version) {
+        long snapshotId;
+        if (version.getType() == com.starrocks.catalog.Type.BIGINT) {
+            snapshotId = version.getBigint();
+        } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
+            String refName = version.getVarchar();
+            SnapshotRef ref = table.refs().get(refName);
+            if (ref == null) {
+                throw new StarRocksConnectorException("Cannot find snapshot with reference name: " + refName);
+            }
+            snapshotId = ref.snapshotId();
+        } else {
+            throw new StarRocksConnectorException("Unsupported type for table version: " + version);
+        }
+
+        if (table.snapshot(snapshotId) == null) {
+            throw new StarRocksConnectorException("Iceberg snapshot ID does not exists: " + snapshotId);
+        }
+        return snapshotId;
+    }
+
+    private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
+        try {
+            if (version.getType() != com.starrocks.catalog.Type.DATETIME &&
+                    version.getType() != com.starrocks.catalog.Type.DATE &&
+                    version.getType() != com.starrocks.catalog.Type.VARCHAR) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.catalog.Type.DATETIME);
+            if (timestampVersion.isEmpty()) {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+            LocalDateTime time = timestampVersion.get().getDatetime();
+            long epochMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+            return getSnapshotIdAsOfTime(table, epochMillis);
+        } catch (Exception e) {
+            LOG.error("Invalid temporal version {}", version, e);
+            throw new StarRocksConnectorException("Invalid temporal version [%s]", version, e);
+        }
+    }
+
+    public static long getSnapshotIdAsOfTime(org.apache.iceberg.Table table, long epochMillis) {
+        return table.history().stream()
+                .filter(logEntry -> logEntry.timestampMillis() <= epochMillis)
+                .max(comparing(HistoryEntry::timestampMillis))
+                .orElseThrow(() -> new StarRocksConnectorException("No version history table %s at or before %s",
+                        table.name(), Instant.ofEpochMilli(epochMillis)))
+                .snapshotId();
+    }
+
 
     public Table getView(String dbName, String viewName) {
         try {
@@ -367,11 +442,22 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table) {
-        IcebergTable icebergTable = (IcebergTable) table;
-        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                .map(Snapshot::snapshotId);
-        return TableVersionRange.withEnd(snapshotId);
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isPresent()) {
+            throw new StarRocksConnectorException("Read table with start version is not supported");
+        }
+
+        if (endVersion.isEmpty()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                    .map(Snapshot::snapshotId);
+            return TableVersionRange.withEnd(snapshotId);
+        } else {
+            Long snapshotId = getSnapshotIdFromVersion(((IcebergTable) table).getNativeTable(), endVersion.get());
+            return TableVersionRange.withEnd(Optional.of(snapshotId));
+        }
     }
 
     @Override
@@ -973,7 +1059,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
         boolean isOverwrite = false;
         if (!commitInfos.isEmpty()) {
             TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
@@ -989,6 +1075,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
         Transaction transaction = nativeTbl.newTransaction();
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+
+        if (branch != null) {
+            batchWrite.toBranch(branch);
+        }
 
         PartitionSpec partitionSpec = nativeTbl.spec();
         for (TIcebergDataFile dataFile : dataFiles) {
@@ -1152,10 +1242,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         void addFile(DataFile file);
 
         void commit();
+
+        void toBranch(String targetBranch);
     }
 
     static class Append implements BatchWrite {
-        private final AppendFiles append;
+        private AppendFiles append;
 
         public Append(Transaction txn) {
             append = txn.newAppend();
@@ -1170,10 +1262,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         public void commit() {
             append.commit();
         }
+
+        @Override
+        public void toBranch(String targetBranch) {
+            append = append.toBranch(targetBranch);
+        }
     }
 
     static class DynamicOverwrite implements BatchWrite {
-        private final ReplacePartitions replace;
+        private ReplacePartitions replace;
 
         public DynamicOverwrite(Transaction txn) {
             replace = txn.newReplacePartitions();
@@ -1187,6 +1284,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void commit() {
             replace.commit();
+        }
+
+        @Override
+        public void toBranch(String targetBranch) {
+            replace = replace.toBranch(targetBranch);
         }
     }
 

@@ -16,6 +16,7 @@ package com.starrocks.common.lock;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.After;
 import org.junit.Before;
@@ -23,6 +24,7 @@ import org.junit.Test;
 
 import java.util.concurrent.Future;
 
+import static com.starrocks.common.lock.LockTestUtils.assertLockFail;
 import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
 import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
@@ -225,7 +227,7 @@ public class TestLockUpAndDownUpgrade {
         TestLocker testLocker2 = new TestLocker();
         assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
-        assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        assertLockFail(testLocker1.lock(rid, LockType.READ), NotSupportLockException.class);
     }
 
     /**
@@ -246,7 +248,7 @@ public class TestLockUpAndDownUpgrade {
         TestLocker testLocker2 = new TestLocker();
         assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
-        assertLockWait(testLocker1.lock(rid, LockType.WRITE));
+        assertLockFail(testLocker1.lock(rid, LockType.WRITE), NotSupportLockException.class);
     }
 
     /**
@@ -289,7 +291,7 @@ public class TestLockUpAndDownUpgrade {
         TestLocker testLocker2 = new TestLocker();
         assertLockSuccess(testLocker2.lock(rid, LockType.READ));
 
-        assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        assertLockFail(testLocker1.lock(rid, LockType.READ), NotSupportLockException.class);
     }
 
     /**
@@ -310,7 +312,7 @@ public class TestLockUpAndDownUpgrade {
         TestLocker testLocker2 = new TestLocker();
         assertLockSuccess(testLocker2.lock(rid, LockType.READ));
 
-        assertLockWait(testLocker1.lock(rid, LockType.WRITE));
+        assertLockFail(testLocker1.lock(rid, LockType.WRITE), NotSupportLockException.class);
     }
 
     /**
@@ -353,7 +355,7 @@ public class TestLockUpAndDownUpgrade {
         Future<LockResult> lockerFuture2 = testLocker2.lock(rid, LockType.INTENTION_SHARED);
         assertLockSuccess(lockerFuture2);
 
-        assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        assertLockFail(testLocker1.lock(rid, LockType.READ), NotSupportLockException.class);
     }
 
 
@@ -376,7 +378,7 @@ public class TestLockUpAndDownUpgrade {
         Future<LockResult> lockerFuture2 = testLocker2.lock(rid, LockType.INTENTION_SHARED);
         assertLockSuccess(lockerFuture2);
 
-        assertLockWait(testLocker1.lock(rid, LockType.WRITE));
+        assertLockFail(testLocker1.lock(rid, LockType.WRITE), NotSupportLockException.class);
     }
 
     /**
@@ -398,7 +400,7 @@ public class TestLockUpAndDownUpgrade {
         Future<LockResult> lockerFuture2 = testLocker2.lock(rid, LockType.INTENTION_EXCLUSIVE);
         assertLockSuccess(lockerFuture2);
 
-        assertLockWait(testLocker1.lock(rid, LockType.READ));
+        assertLockFail(testLocker1.lock(rid, LockType.READ), NotSupportLockException.class);
     }
 
     /**
@@ -420,6 +422,6 @@ public class TestLockUpAndDownUpgrade {
         Future<LockResult> lockerFuture2 = testLocker2.lock(rid, LockType.INTENTION_EXCLUSIVE);
         assertLockSuccess(lockerFuture2);
 
-        assertLockWait(testLocker1.lock(rid, LockType.WRITE));
+        assertLockFail(testLocker1.lock(rid, LockType.WRITE), NotSupportLockException.class);
     }
 }

@@ -610,6 +610,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             fields.add(field);
         }
+        if (fields.isEmpty()) {
+            throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
+                                   "], can not drop any more.");
+        }
         oriFieldType.updateFields(fields);
 
         // update the modifyColumn int index schema.
@@ -1452,6 +1456,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
+        Map<Integer, Column> columnUniqueIdToColumn = Maps.newHashMap();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1573,6 +1578,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
                 dataBuilder.withNewIndexShortKeyCount(alterIndexId,
                         newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+            }
+
+            // 6. check the uniqueness of column unique id
+            if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                for (Column alterColumn : alterSchema) {
+                    Column existedColumn = columnUniqueIdToColumn.putIfAbsent(alterColumn.getUniqueId(), alterColumn);
+                    if (existedColumn != null && !existedColumn.getName().equals(alterColumn.getName())) {
+                        LOG.warn(
+                                "Table {} column {} has same unique id {} with column {}, table max column unique id: {}",
+                                olapTable.getName(), alterColumn.getName(), alterColumn.getUniqueId(),
+                                existedColumn.getName(), olapTable.getMaxColUniqueId());
+                        throw new DdlException("Column " + alterColumn.getName() + " has same unique id "
+                                + alterColumn.getUniqueId() + " with column " + existedColumn.getName());
+                    }
+                }
             }
         } // end for indices
 

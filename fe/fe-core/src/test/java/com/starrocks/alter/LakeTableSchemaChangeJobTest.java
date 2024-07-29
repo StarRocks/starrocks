@@ -82,7 +82,7 @@ public class LakeTableSchemaChangeJobTest {
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
     private LakeTableSchemaChangeJob getAlterJob(Table table) {

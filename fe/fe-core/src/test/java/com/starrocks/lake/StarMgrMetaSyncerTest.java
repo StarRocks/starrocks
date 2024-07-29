@@ -52,6 +52,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
@@ -137,6 +138,10 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
 

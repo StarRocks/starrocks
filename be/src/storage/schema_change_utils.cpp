@@ -135,7 +135,7 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
-        _convert_type_set.emplace(std::make_pair(from_type, to_type));
+        _convert_type_set.emplace(from_type, to_type);
     }
 
 private:
@@ -734,6 +734,10 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 return Status::OK();
             } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
                        base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
                 *sc_directly = true;
                 return Status::OK();
             }

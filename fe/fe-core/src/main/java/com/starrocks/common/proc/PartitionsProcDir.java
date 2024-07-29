@@ -122,7 +122,10 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
-                    .add("MaxCS"); // Maximum compaction score
+                    .add("MaxCS") // Maximum compaction score
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -142,7 +145,10 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
                     .add("IsInMemory")
-                    .add("RowCount");
+                    .add("RowCount")
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
             this.titleNames = builder.build();
         }
     }
@@ -360,6 +366,10 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
         partitionInfo.add(physicalPartition.storageRowCount());
 
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
+
         return partitionInfo;
     }
 
@@ -377,8 +387,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
-        partitionInfo.add(Joiner.on(", ")
-                .join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn()))); // PartitionKey
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
@@ -389,6 +399,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
+
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
+
         return partitionInfo;
     }
 

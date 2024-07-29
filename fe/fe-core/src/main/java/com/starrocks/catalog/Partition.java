@@ -42,10 +42,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +58,7 @@ import java.util.stream.Collectors;
 /**
  * Internal representation of partition-related metadata.
  */
-public class Partition extends MetaObject implements PhysicalPartition, Writable {
+public class Partition extends MetaObject implements PhysicalPartition, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -79,6 +82,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private PartitionState state;
     @SerializedName(value = "idToSubPartition")
     private Map<Long, PhysicalPartitionImpl> idToSubPartition = Maps.newHashMap();
+    private Map<String, PhysicalPartitionImpl> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
@@ -117,13 +121,31 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private volatile long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
     private volatile long visibleVersionTime;
+    @SerializedName(value = "nextVersion")
+    private volatile long nextVersion;
+
+    /*
+     * in shared-nothing mode, data version is always equals to visible version
+     * in shared-data mode, compactions increase visible version but not data version
+     */
+    @SerializedName(value = "dataVersion")
+    private volatile long dataVersion;
+    @SerializedName(value = "nextDataVersion")
+    private volatile long nextDataVersion;
+
+    /*
+     * if the visible version and version epoch are unchanged, the data is unchanged
+     */
+    @SerializedName(value = "versionEpoch")
+    private volatile long versionEpoch;
+    @SerializedName(value = "versionTxnType")
+    private volatile TransactionType versionTxnType;
+
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
     private volatile long visibleTxnId = -1;
-    @SerializedName(value = "nextVersion")
-    private volatile long nextVersion;
 
     private volatile long lastVacuumTime = 0;
 
@@ -144,7 +166,11 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
         // PARTITION_INIT_VERSION == 1, so the first load version is 2 !!!
-        this.nextVersion = PARTITION_INIT_VERSION + 1;
+        this.nextVersion = this.visibleVersion + 1;
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        this.versionEpoch = this.nextVersionEpoch();
+        this.versionTxnType = TransactionType.TXN_NORMAL;
 
         this.distributionInfo = distributionInfo;
     }
@@ -167,9 +193,14 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         partition.visibleVersion = this.visibleVersion;
         partition.visibleVersionTime = this.visibleVersionTime;
         partition.nextVersion = this.nextVersion;
+        partition.dataVersion = this.dataVersion;
+        partition.nextDataVersion = this.nextDataVersion;
+        partition.versionEpoch = this.versionEpoch;
+        partition.versionTxnType = this.versionTxnType;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
+        partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
     }
 
@@ -201,11 +232,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     public void addSubPartition(PhysicalPartition subPartition) {
         if (subPartition instanceof PhysicalPartitionImpl) {
             idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
+            nameToSubPartition.put(subPartition.getName(), (PhysicalPartitionImpl) subPartition);
         }
     }
 
     public void removeSubPartition(long id) {
-        idToSubPartition.remove(id);
+        PhysicalPartitionImpl subPartition = idToSubPartition.remove(id);
+        if (subPartition != null) {
+            nameToSubPartition.remove(subPartition.getName());
+        }
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {
@@ -216,6 +251,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public PhysicalPartition getSubPartition(long id) {
         return this.id == id ? this : idToSubPartition.get(id);
+    }
+
+    public PhysicalPartition getSubPartition(String name) {
+        return this.name.equals(name) ? this : nameToSubPartition.get(name);
     }
 
     public long getParentId() {
@@ -340,6 +379,46 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getCommittedVersion() {
         return this.nextVersion - 1;
+    }
+
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getNextDataVersion() {
+        return nextDataVersion;
+    }
+
+    public void setNextDataVersion(long nextDataVersion) {
+        this.nextDataVersion = nextDataVersion;
+    }
+
+    public long getCommittedDataVersion() {
+        return this.nextDataVersion - 1;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    public long nextVersionEpoch() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
+    public TransactionType getVersionTxnType() {
+        return versionTxnType;
+    }
+
+    public void setVersionTxnType(TransactionType versionTxnType) {
+        this.versionTxnType = versionTxnType;
     }
 
     public MaterializedIndex getIndex(long indexId) {
@@ -516,9 +595,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
             }
         }
 
-        buffer.append("committedVersion: ").append(visibleVersion).append("; ");
-        buffer.append("committedVersionHash: ").append(0).append("; ");
+        buffer.append("visibleVersion: ").append(visibleVersion).append("; ");
+        buffer.append("committedVersion: ").append(getCommittedVersion()).append("; ");
         buffer.append("nextVersion: ").append(nextVersion).append("; ");
+
+        buffer.append("dataVersion: ").append(dataVersion).append("; ");
+        buffer.append("committedDataVersion: ").append(getCommittedDataVersion()).append("; ");
+
+        buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
+        buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
 
         buffer.append("distribution_info.type: ").append(distributionInfo.getType().name()).append("; ");
         buffer.append("distribution_info: ").append(distributionInfo.toString());
@@ -540,5 +625,32 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    public String generatePhysicalPartitionName(long physicalParitionId) {
+        return this.name + '_' + physicalParitionId;
+    }
+        
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (dataVersion == 0) {
+            dataVersion = visibleVersion;
+        }
+        if (nextDataVersion == 0) {
+            nextDataVersion = nextVersion;
+        }
+        if (versionEpoch == 0) {
+            versionEpoch = nextVersionEpoch();
+        }
+        if (versionTxnType == null) {
+            versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        for (PhysicalPartitionImpl subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
     }
 }

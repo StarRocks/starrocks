@@ -404,7 +404,8 @@ public class InsertPlanner {
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
-                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable(),
+                        insertStmt.getTargetBranch());
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
@@ -488,7 +489,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(plannerMetaLocker);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
