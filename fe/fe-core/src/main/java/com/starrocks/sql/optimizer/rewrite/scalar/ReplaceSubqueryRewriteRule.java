@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
@@ -53,30 +53,15 @@ public class ReplaceSubqueryRewriteRule extends TopDownScalarOperatorRewriteRule
             return scalarOperator;
         }
 
-        boolean findSubQuery = false;
         // Usually subqueryPlaceholders's key set is small and only contain columnRef operator
         // so columnRef operator's equals()' short-circuit can benefit complex ScalarOperator like one thousand or predicate
         // if use Map::containsKey, these complex ScalarOperator's hashCode can be super slow
-        if (subqueryPlaceholders.size() < 4) {
-            for (ScalarOperator key : subqueryPlaceholders.keySet()) {
-                if (key.equals(scalarOperator)) {
-                    findSubQuery = true;
-                    break;
-                }
-            }
-        } else {
-            if(subqueryPlaceholders.containsKey(scalarOperator)) {
-                findSubQuery = true;
-            }
-        }
-
-        if(findSubQuery) {
-            SubqueryOperator subqueryOperator = subqueryPlaceholders.get(scalarOperator);
+        SubqueryOperator subqueryOperator = Utils.getValueIfExists(subqueryPlaceholders, scalarOperator);
+        if(subqueryOperator != null) {
             LogicalApplyOperator applyOperator = subqueryOperator.getApplyOperator();
             builder = new OptExprBuilder(applyOperator, Arrays.asList(builder, subqueryOperator.getRootBuilder()),
                     builder.getExpressionMapping());
         }
-
 
         return scalarOperator;
     }
