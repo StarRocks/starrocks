@@ -42,7 +42,7 @@ on:
         type: string
         default: 'true'
       ALL_LINUX:
-        description: 'Centos7 && Release only?'
+        description: 'Ubuntu && Release only?'
         type: string
         default: 'true'
       RETAIN_ENV:
