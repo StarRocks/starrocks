@@ -42,7 +42,7 @@ on:
         type: string
         default: 'true'
       ALL_LINUX:
-        description: "False: Ubuntu && Release only"
+        description: "ALL_LINUX? (⬜: Ubuntu && Release only)"
         type: string
         default: 'true'
       RETAIN_ENV:
