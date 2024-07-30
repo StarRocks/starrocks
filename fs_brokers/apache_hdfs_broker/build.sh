@@ -41,6 +41,8 @@ rm -rf ${BROKER_OUTPUT}
 install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
            ${BROKER_OUTPUT}/lib/
 
+cp -r ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${BROKER_OUTPUT}/lib/
+
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
 cp -r -p ${BROKER_HOME}/conf/*.conf ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/conf/*.xml ${BROKER_OUTPUT}/conf/
