@@ -545,6 +545,13 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
 
     } while (chunk->num_rows() == 0);
     _update_realtime_counter(chunk);
+
+    if (chunk->num_rows() > 0) {
+        for (auto& col : chunk->columns()) {
+            col->check_field_rows();
+        }
+    }
+
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {
         return Status::EndOfFile("limit reach");
