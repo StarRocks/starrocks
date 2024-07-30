@@ -154,7 +154,7 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+InputStreamPtr SpillInputStream::as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller) {
     return std::make_shared<RawChunkInputStream>(chunks, spiller);
 }
 
@@ -319,7 +319,7 @@ public:
 
     ~OrderedInputStream() override = default;
 
-    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
+    Status init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
@@ -341,7 +341,7 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
+Status OrderedInputStream::init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
                                 Spiller* spiller) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     DCHECK(!_input_streams.empty());

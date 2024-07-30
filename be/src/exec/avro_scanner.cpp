@@ -73,11 +73,7 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _closed(false) {}
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-<<<<<<< HEAD
-                         ScannerCounter* counter, const std::string schema_text)
-=======
                          ScannerCounter* counter, std::string schema_text)
->>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _schema_text(std::move(schema_text)),
@@ -575,7 +571,7 @@ Status AvroScanner::_get_array_element(const avro_value_t* cur_value, size_t idx
     return Status::OK();
 }
 
-bool construct_path_from_str(std::string path_str, std::vector<AvroPath>& paths) {
+bool construct_path_from_str(const std::string& path_str, std::vector<AvroPath>& paths) {
     return false;
 }
 

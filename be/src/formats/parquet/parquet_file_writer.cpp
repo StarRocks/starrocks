@@ -451,15 +451,9 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
                                                    PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
-<<<<<<< HEAD
-          _field_ids(field_ids),
-          _options(options),
-          _column_names(column_names),
-=======
           _field_ids(std::move(field_ids)),
           _options(std::move(options)),
           _column_names(std::move(column_names)),
->>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
           _runtime_state(runtime_state) {}

@@ -14,6 +14,8 @@
 
 #include "exec/tablet_sink_colocate_sender.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
@@ -27,7 +29,7 @@ TabletSinkColocateSender::TabletSinkColocateSender(
         OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
         std::unordered_map<int64_t, NodeChannel*> node_channels, std::vector<ExprContext*> output_expr_ctxs,
         bool enable_replicated_storage, TWriteQuorumType::type write_quorum_type, int num_repicas)
-        : TabletSinkSender(load_id, txn_id, std::move(index_id_to_tablet_be_map), vectorized_partition,
+        : TabletSinkSender(std::move(load_id), txn_id, std::move(index_id_to_tablet_be_map), vectorized_partition,
                            std::move(channels), std::move(node_channels), std::move(output_expr_ctxs),
                            enable_replicated_storage, write_quorum_type, num_repicas) {}
 

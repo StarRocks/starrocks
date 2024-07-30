@@ -14,16 +14,9 @@
 
 #include "formats/parquet/chunk_writer.h"
 
-<<<<<<< HEAD
 #include <parquet/arrow/writer.h>
-=======
-#include <parquet/file_writer.h>
-#include <parquet/schema.h>
 
-#include <algorithm>
-#include <numeric>
 #include <utility>
->>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 
 #include "column/array_column.h"
 #include "column/chunk.h"
