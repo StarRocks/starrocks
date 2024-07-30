@@ -320,6 +320,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     return _state;
                 }
 
+                for (auto& col : maybe_chunk.value()->columns()) {
+                    col->check_field_rows();
+                }
                 if (return_status.ok()) {
                     if (maybe_chunk.value() &&
                         (maybe_chunk.value()->num_rows() > 0 ||
