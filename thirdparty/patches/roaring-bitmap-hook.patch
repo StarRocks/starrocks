@@ -1,4 +1,7 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 383aafb5c3 (fix hook)
 --- a/src/memory.c	2024-07-23 16:23:14.008781609 +0800
 +++ b/src/memory.c	2024-07-30 15:00:40.701832586 +0800
 @@ -44,26 +44,26 @@ void roaring_init_memory_hook(roaring_me
@@ -33,6 +36,7 @@
 -void roaring_aligned_free(void* p) {
 +__attribute__((weak)) void roaring_aligned_free(void* p) {
      global_memory_hook.aligned_free(p);
+<<<<<<< HEAD
 =======
 --- a/include/roaring/memory.h	2024-07-23 16:24:18.610777683 +0800
 +++ b/include/roaring/memory.h	2024-07-23 16:17:15.761688729 +0800
@@ -55,4 +59,6 @@
  
  #ifdef __cplusplus
 >>>>>>> 44a262685b (change roaring alloc interfaces to weak symbol)
+=======
+>>>>>>> 383aafb5c3 (fix hook)
  }
