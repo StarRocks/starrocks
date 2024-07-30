@@ -27,6 +27,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -134,7 +135,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         _source_column_modules.emplace_back(JsonColumn::create());
     }
 
-    if (!opts.has_preaggregation) {
+    if (!opts.has_preaggregation && config::enable_direct_read_json) {
         _is_direct = true;
         // update stats
         for (int i = 0; i < _source_paths.size(); i++) {
@@ -337,7 +338,7 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
         opts.stats->dynamic_json_hits[p] += 1;
     }
 
-    if (!opts.has_preaggregation) {
+    if (!opts.has_preaggregation && config::enable_direct_read_json) {
         _is_direct = true;
         return Status::OK();
     }

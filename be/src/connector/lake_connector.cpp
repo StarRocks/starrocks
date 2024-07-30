@@ -14,6 +14,9 @@
 
 #include "connector/lake_connector.h"
 
+#include <vector>
+
+#include "column/column_access_path.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
@@ -56,6 +59,20 @@ Status LakeDataSource::open(RuntimeState* state) {
     }
 
     init_counter(state);
+
+    // init column access paths
+    if (thrift_lake_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < thrift_lake_scan_node.column_access_paths.size(); ++i) {
+            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], state, state->obj_pool());
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: "
+                             << thrift_lake_scan_node.column_access_paths[i].type << "index: " << i
+                             << ", error: " << st.status();
+            }
+        }
+    }
 
     // eval const conjuncts
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
@@ -320,6 +337,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         }
     }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
+    RETURN_IF_ERROR(init_column_access_paths(&child_schema));
+    // will modify schema field, need to copy schema
+    RETURN_IF_ERROR(prune_schema_by_access_paths(&child_schema));
 
     // need to split
     bool need_split = _provider->could_split() && _split_context == nullptr;
@@ -358,6 +378,98 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
+    return Status::OK();
+}
+
+Status LakeDataSource::init_column_access_paths(Schema* schema) {
+    // column access paths
+    int64_t leaf_size = 0;
+    std::vector<ColumnAccessPathPtr> new_one;
+    for (const auto& path : _column_access_paths) {
+        auto& root = path->path();
+        int32_t index = _tablet_schema->field_index(root);
+        auto field = schema->get_field_by_name(root);
+        if (index >= 0 && field != nullptr) {
+            auto res = path->convert_by_index(field.get(), index);
+            // read whole data, doesn't effect query
+            if (LIKELY(res.ok())) {
+                new_one.emplace_back(std::move(res.value()));
+                leaf_size += path->leaf_size();
+            } else {
+                LOG(WARNING) << "failed to convert column access path: " << res.status();
+            }
+        } else {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+        }
+    }
+    _column_access_paths = std::move(new_one);
+    _params.column_access_paths = &_column_access_paths;
+
+    // update counter
+    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
+    return Status::OK();
+}
+
+Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        DCHECK_EQ(path->children().size(), 1);
+        DCHECK_EQ(field->sub_fields().size(), 1);
+        RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[0], path->children()[0].get()));
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        DCHECK_EQ(path->children().size(), 1);
+        auto child_path = path->children()[0].get();
+        if (child_path->is_index() || child_path->is_all()) {
+            DCHECK_EQ(field->sub_fields().size(), 2);
+            RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[1], child_path));
+        } else {
+            return Status::OK();
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        std::unordered_map<std::string_view, ColumnAccessPath*> path_index;
+        for (auto& child_path : path->children()) {
+            path_index[child_path->path()] = child_path.get();
+        }
+
+        std::vector<Field> new_fields;
+        for (auto& child_fields : field->sub_fields()) {
+            auto iter = path_index.find(child_fields.name());
+            if (iter != path_index.end()) {
+                auto child_path = iter->second;
+                RETURN_IF_ERROR(prune_field_by_access_paths(&child_fields, child_path));
+                new_fields.emplace_back(child_fields);
+            }
+        }
+
+        field->set_sub_fields(std::move(new_fields));
+    }
+    return Status::OK();
+}
+
+Status LakeDataSource::prune_schema_by_access_paths(Schema* schema) {
+    if (_column_access_paths.empty()) {
+        return Status::OK();
+    }
+
+    // schema
+    for (auto& path : _column_access_paths) {
+        if (path->is_from_predicate()) {
+            continue;
+        }
+        auto& root = path->path();
+        auto field = schema->get_field_by_name(root);
+        if (field == nullptr) {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+            continue;
+        }
+        // field maybe modified, so we need to deep copy
+        auto new_field = std::make_shared<Field>(*field);
+        schema->set_field_by_name(new_field, root);
+        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+    }
+
     return Status::OK();
 }
 
