@@ -46,6 +46,7 @@
 #include "storage/persistent_index.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
