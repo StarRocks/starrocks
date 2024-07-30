@@ -14,9 +14,8 @@
 
 #include "formats/parquet/page_index_reader.h"
 
-#include <stddef.h>
-
 #include <algorithm>
+#include <cstddef>
 #include <utility>
 
 #include "column/chunk.h"

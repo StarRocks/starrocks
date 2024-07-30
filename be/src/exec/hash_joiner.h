@@ -171,8 +171,8 @@ public:
         }
     }
 
-    [[nodiscard]] Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
-    [[nodiscard]] Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     bool need_input() const;
@@ -199,16 +199,16 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    [[nodiscard]] Status append_chunk_to_ht(const ChunkPtr& chunk);
+    Status append_chunk_to_ht(const ChunkPtr& chunk);
 
-    [[nodiscard]] Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
+    Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
-    [[nodiscard]] Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
+    Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
 
-    [[nodiscard]] Status build_ht(RuntimeState* state);
+    Status build_ht(RuntimeState* state);
     // probe phase
-    [[nodiscard]] Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
+    Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
     pipeline::RuntimeBloomFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
@@ -220,7 +220,7 @@ public:
 
     HashJoinBuilder* hash_join_builder() { return _hash_join_builder; }
 
-    [[nodiscard]] Status create_runtime_filters(RuntimeState* state);
+    Status create_runtime_filters(RuntimeState* state);
 
     void reference_hash_table(HashJoiner* src_join_builder);
 
@@ -231,7 +231,7 @@ public:
     bool has_referenced_hash_table() const { return _has_referenced_hash_table; }
 
     Columns string_key_columns() { return _string_key_columns; }
-    [[nodiscard]] Status reset_probe(RuntimeState* state);
+    Status reset_probe(RuntimeState* state);
 
     float avg_keys_per_bucket() const;
 
@@ -259,13 +259,13 @@ public:
     void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
     spill::SpillStrategy spill_strategy() { return _spill_strategy; }
 
-    [[nodiscard]] Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(probe_metrics().probe_conjunct_evaluate_timer);
         RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _probe_expr_ctxs));
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(build_metrics().build_conjunct_evaluate_timer);
         RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _build_expr_ctxs));
         return Status::OK();
@@ -302,7 +302,7 @@ public:
         }
     }
 
-    [[nodiscard]] Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
+    Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
@@ -319,8 +319,7 @@ private:
 
     void _init_hash_table_param(HashTableParam* param);
 
-    [[nodiscard]] Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk,
-                                              const vector<ExprContext*>& expr_ctxs) {
+    Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);
         for (auto& expr_ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto column_ptr, expr_ctx->evaluate(chunk.get()));
@@ -372,23 +371,22 @@ private:
         }
     }
 
-    [[nodiscard]] StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
+    StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
-    [[nodiscard]] Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
-                                                         bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Filter& filter);
 
-    [[nodiscard]] Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column,
-                                                                 size_t column_count, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
-    [[nodiscard]] Status _process_where_conjunct(ChunkPtr* chunk);
+    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
+                                                   JoinHashTable& hash_table);
+    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_where_conjunct(ChunkPtr* chunk);
 
-    [[nodiscard]] Status _create_runtime_in_filters(RuntimeState* state);
+    Status _create_runtime_in_filters(RuntimeState* state);
 
-    [[nodiscard]] Status _create_runtime_bloom_filters(RuntimeState* state, int64_t limit);
+    Status _create_runtime_bloom_filters(RuntimeState* state, int64_t limit);
 
 private:
     const THashJoinNode& _hash_join_node;

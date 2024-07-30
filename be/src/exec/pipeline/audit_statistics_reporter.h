@@ -29,7 +29,7 @@ public:
     static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                           const TNetworkAddress& fe_addr);
 
-    [[nodiscard]] Status submit(std::function<void()>&& report_task);
+    Status submit(std::function<void()>&& report_task);
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

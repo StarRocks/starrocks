@@ -63,7 +63,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
-    [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
+    Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
@@ -168,9 +168,7 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
-
-    void remove_in_writing_data_size(int64_t tablet_id);
+    int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
     void clean_in_writing_data_size();
 

@@ -41,6 +41,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -109,13 +110,10 @@ public class StatementPlanner {
         // 1. For all queries, we need db lock when analyze phase
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
         try (var guard = session.bindScope()) {
-            try (Timer ignored = Tracers.watchScope("Lock")) {
-                lock(plannerMetaLocker);
-            }
-            try (Timer ignored = Tracers.watchScope("Analyzer")) {
-                Analyzer.analyze(stmt, session);
-            }
+            // Analyze
+            analyzeStatement(stmt, session, plannerMetaLocker);
 
+            // Authorization check
             Authorizer.check(stmt, session);
             if (stmt instanceof QueryStatement) {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
@@ -125,8 +123,8 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
-                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(queryStmt);
-                needWholePhaseLock = isLockFree(isOnlyOlapTableQueries, session) ? false : true;
+                boolean areTablesCopySafe = AnalyzerUtils.areTablesCopySafe(queryStmt);
+                needWholePhaseLock = isLockFree(areTablesCopySafe, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
@@ -158,6 +156,39 @@ public class StatementPlanner {
         return null;
     }
 
+    /**
+     * Analyze the statement.
+     * 1. Optimization for INSERT-SELECT: if the SELECT doesn't need the lock, we can defer the lock acquisition
+     * after analyzing the SELECT. That can help the case which SELECT is a time-consuming external table access.
+     */
+    private static void analyzeStatement(StatementBase statement, ConnectContext session, PlannerMetaLocker locker) {
+        boolean deferredLock = false;
+        Runnable takeLock = () -> {
+            try (Timer lockerTime = Tracers.watchScope("Lock")) {
+                lock(locker);
+            }
+        };
+        try (Timer ignored = Tracers.watchScope("Analyzer")) {
+            if (statement instanceof InsertStmt) {
+                InsertStmt insertStmt = (InsertStmt) statement;
+                Map<Long, Database> dbs = Maps.newHashMap();
+                Map<Long, Set<Long>> tables = Maps.newHashMap();
+                PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
+
+                if (tables.isEmpty()) {
+                    deferredLock = true;
+                }
+            }
+
+            if (deferredLock) {
+                InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+            } else {
+                takeLock.run();
+                Analyzer.analyze(statement, session);
+            }
+        }
+    }
+
     public static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
                                           InsertStmt insertStmt,
                                           ConnectContext connectContext) {
@@ -169,20 +200,15 @@ public class StatementPlanner {
     private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
                                                 ConnectContext connectContext) {
         boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
-        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
-        return isOnlyOlapTableQueries && isSelect && isLeader &&
-                !connectContext.getSessionVariable().isCboUseDBLock();
+        boolean areTablesCopySafe = AnalyzerUtils.areTablesCopySafe(insertStmt);
+        return areTablesCopySafe && isSelect && !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
-    private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
+    private static boolean isLockFree(boolean areTablesCopySafe, ConnectContext session) {
         // condition can use conflict detection to replace db lock
-        // 1. all tables are olap table
-        // 2. node is master node
-        // 3. cbo_use_lock_db = false
-        return isOnlyOlapTable
-                && GlobalStateMgr.getCurrentState().isLeader()
-                && !session.getSessionVariable().isCboUseDBLock();
+        // 1. all tables are copy safe
+        // 2. cbo_use_lock_db = false
+        return areTablesCopySafe && !session.getSessionVariable().isCboUseDBLock();
     }
 
     /**

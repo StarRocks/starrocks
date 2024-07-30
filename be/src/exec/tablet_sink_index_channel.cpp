@@ -760,7 +760,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
                 version = tablet.valid_dict_collected_version(i);
             }
             const auto& col_name = tablet.valid_dict_cache_columns(i);
-            _valid_dict_cache_info.valid_dict_cache_column_set.emplace(std::make_pair(col_name, version));
+            _valid_dict_cache_info.valid_dict_cache_column_set.emplace(col_name, version);
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));

@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstring>
 #include <filesystem>

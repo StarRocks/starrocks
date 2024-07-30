@@ -177,6 +177,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             String mvPartitionName = addEntry.getKey();
             mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
         }
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
         return mvUpdateInfo;
     }
 }
