@@ -17,12 +17,12 @@ on:
         description: 'COMMIT ID'
         required: true
         type: string
-      TAR_PATH:
-        description: 'TAR PATH(Release)'
+      CENTOS_TAR_PATH:
+        description: 'TAR PATH(Release & Centos)'
         required: false
         type: string
-      ASAN_TAR_PATH:
-        description: 'TAR PATH(ASAN)'
+      CENTOS_ASAN_TAR_PATH:
+        description: 'TAR PATH(ASAN & Centos)'
         required: false
         type: string
       UBUNTU_TAR_PATH:
@@ -77,8 +77,8 @@ jobs:
     outputs:
       BRANCH: ${{ steps.param.outputs.BRANCH }}
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ steps.param.outputs.TAR_PATH }}
-      ASAN_TAR_PATH: ${{ steps.param.outputs.ASAN_TAR_PATH }}
+      CENTOS_TAR_PATH: ${{ steps.param.outputs.CENTOS_TAR_PATH }}
+      CENTOS_ASAN_TAR_PATH: ${{ steps.param.outputs.CENTOS_ASAN_TAR_PATH }}
       UBUNTU_TAR_PATH: ${{ steps.param.outputs.UBUNTU_TAR_PATH }}
       UBUNTU_ASAN_TAR_PATH: ${{ steps.param.outputs.UBUNTU_ASAN_TAR_PATH }}
       BE_UT_LINUX: ${{ steps.param.outputs.BE_UT_LINUX }}
@@ -89,7 +89,7 @@ jobs:
       - name: CRON PARAM
         id: param
         run: |
-          BE_UT_LINUX=centos7
+          BE_UT_LINUX=ubuntu
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [[ "${{ github.event.schedule }}" == "0 11 * * 1,3,5" ]]; then
               branch=branch-3.3
@@ -107,7 +107,7 @@ jobs:
             else
               branch=main
             fi
-            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=ubuntu
+            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=centos7
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
             echo "::notice::${branch}(${BE_UT_LINUX} ${base_sha})"
             [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
@@ -118,8 +118,8 @@ jobs:
           else
             echo "BRANCH=${{ inputs.BRANCH }}" >> $GITHUB_OUTPUT
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
-            echo "TAR_PATH=${{ inputs.TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "ASAN_TAR_PATH=${{ inputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_TAR_PATH=${{ inputs.CENTOS_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_TAR_PATH=${{ inputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_TAR_PATH=${{ inputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_ASAN_TAR_PATH=${{ inputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "RETAIN_ENV=${{ inputs.RETAIN_ENV }}" >> $GITHUB_OUTPUT
@@ -334,8 +334,8 @@ jobs:
     env:
       ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
-      RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
-      ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
+      CENTOS_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
+      CENTOS_ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
       UBUNTU_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_TAR_PATH }}
       UBUNTU_ASAN_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_TAR_PATH }}
       IS_SELF_BUILD: ${{ steps.set_output.outputs.IS_SELF_BUILD }}
@@ -391,8 +391,10 @@ jobs:
         if: always()
         run: |
           if [[ "${{steps.analyse_artifact.outcome}}" == "skipped" ]]; then
-            echo "CENTOS_RELEASE_TAR_PATH=${{ needs.info.outputs.TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_TAR_PATH=${{ needs.info.outputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_TAR_PATH=${{ needs.info.outputs.CENTOS_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_TAR_PATH=${{ needs.info.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_TAR_PATH=${{ needs.info.outputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_TAR_PATH=${{ needs.info.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=false" >> $GITHUB_OUTPUT
           else
             echo "CENTOS_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
@@ -409,11 +411,11 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.RELEASE_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.RELEASE_TAR_PATH }}
+      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -426,11 +428,11 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.ASAN_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.ASAN_TAR_PATH }}
+      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
