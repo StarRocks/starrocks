@@ -98,7 +98,7 @@ public class Replica implements Writable {
     //   1. tablet has 2 replica A has version[7,8,9,10], B: [7,8,9,10]
     //   2. a newly cloned replica C full clone from replica A, then has version [10]
     //   3. current partition visible version is still 9
-    //   4. A query read this tablet at version 9, and picks replica C, but replica C doesn't have version 10,
+    //   4. A query read this tablet at version 9, and picks replica C, but replica C only have version 10,
     //      causing `version not found` error
     @SerializedName(value = "minReadableVersion")
     private volatile long minReadableVersion = 0;
