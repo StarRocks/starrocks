@@ -338,6 +338,7 @@ Status MemLimitedChunkQueue::_flush() {
     {
         std::unique_lock l(_mutex);
 
+        std::vector<size_t> flush_idx;
         // 1. find block to flush
         while (_next_flush_block) {
             // don't flush the last block
@@ -348,17 +349,15 @@ Status MemLimitedChunkQueue::_flush() {
                 // already flushed, should skip it
                 _next_flush_block = _next_flush_block->next;
             } else {
-                // check if need flush
-                chunks.clear();
-                std::for_each(_next_flush_block->cells.begin(), _next_flush_block->cells.end(),
-                              [&chunks, this](Cell& cell) {
-                                  if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
-                                      return;
-                                  }
-                                  cell.flushed = true;
-                                  chunks.emplace_back(cell.chunk);
-                              });
-                if (!chunks.empty()) {
+                flush_idx.clear();
+                for (size_t i = 0; i < _next_flush_block->cells.size(); i++) {
+                    auto& cell = _next_flush_block->cells[i];
+                    if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
+                        continue;
+                    }
+                    flush_idx.push_back(i);
+                }
+                if (!flush_idx.empty()) {
                     break;
                 }
                 _next_flush_block = _next_flush_block->next;
@@ -380,9 +379,16 @@ Status MemLimitedChunkQueue::_flush() {
         if (block->has_pending_reader()) {
             size_t unconsumed_bytes = _total_accumulated_bytes - _fastest_accumulated_bytes;
             if (unconsumed_bytes > 0) {
+                VLOG_ROW << fmt::format("block [{}] has pending reader, should skip flush it", (void*)block);
                 return Status::OK();
             }
             VLOG_ROW << fmt::format("force flush block [{}] to avoid blocking producer", (void*)block);
+        }
+
+        for (const auto idx : flush_idx) {
+            auto& cell = block->cells[idx];
+            cell.flushed = true;
+            chunks.emplace_back(cell.chunk);
         }
     }
 
@@ -449,8 +455,8 @@ Status MemLimitedChunkQueue::_flush() {
         _flushed_accumulated_rows = block->cells.back().accumulated_rows;
         _flushed_accumulated_bytes = block->cells.back().accumulated_bytes;
         _next_flush_block = block->next;
-        VLOG_ROW << fmt::format("flush block [{}], rows[{}], bytes[{}]", (void*)block, _flushed_accumulated_rows,
-                                _flushed_accumulated_bytes);
+        VLOG_ROW << fmt::format("flush block [{}], rows[{}], bytes[{}], flushed bytes[{}]", (void*)block,
+                                _flushed_accumulated_rows, _flushed_accumulated_bytes, content_length);
         TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::after_flush_block", block);
     }
     return Status::OK();
@@ -499,6 +505,8 @@ Status MemLimitedChunkQueue::_load(Block* block) {
         block_len = block->block->size();
         flush_chunks = block->flush_chunks;
     }
+    VLOG_ROW << fmt::format("load block begin, block[{}], flushed_bytes[{}], flushed_chunks[{}]", (void*)block,
+                            block_len, flush_chunks);
     buffer.resize(block_len);
     RETURN_IF_ERROR(block_reader->read_fully(buffer.data(), block_len));
 
