@@ -32,6 +32,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
 #include "testutil/sync_point.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
 
@@ -186,11 +187,16 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
+DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet, {
+        builder->apply_opwrite(op_write, {}, {});
+        return Status::OK();
+    });
     auto& index = index_entry->value();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
@@ -697,7 +703,10 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                                        int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
+
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
@@ -728,10 +737,16 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                  const TabletMetadata& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
+        builder->apply_opcompaction(op_compaction, *std::max_element(op_compaction.input_rowsets().begin(),
+                                                                     op_compaction.input_rowsets().end()));
+        return Status::OK();
+    });
     if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
         // conflict happens
         return Status::OK();
@@ -742,7 +757,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));

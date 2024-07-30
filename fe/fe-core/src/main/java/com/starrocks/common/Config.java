@@ -3140,4 +3140,7 @@ public class Config extends ConfigBase {
     // backuped table is colocated
     @ConfField(mutable = true)
     public static boolean enable_colocate_restore = false;
+    
+    @ConfField
+    public static boolean enable_alter_struct_column = true;
 }
