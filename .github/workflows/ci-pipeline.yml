@@ -623,7 +623,7 @@ jobs:
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
           if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
-            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/StarRocks-
+            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/ubuntu/StarRocks-
             package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
             echo "package=${package}" >> $GITHUB_ENV
           fi
