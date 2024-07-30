@@ -84,7 +84,7 @@ public:
 
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        if (_no_null || _current_page_no_null) {
+        if (_current_row_group_no_null || _current_page_no_null) {
             return _cur_decoder->next_batch(n, content_type, dst);
         }
         size_t idx = 0;
@@ -155,7 +155,7 @@ private:
 
     level_t _max_def_level = 0;
     level_t _max_rep_level = 0;
-    bool _no_null = false;
+    bool _current_row_group_no_null = false;
     bool _current_page_no_null = false;
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;

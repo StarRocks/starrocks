@@ -46,7 +46,7 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _rep_level_decoder(&opts.stats->level_decode_ns) {
     if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
         _chunk_metadata->meta_data.statistics.null_count == 0) {
-        _no_null = true;
+        _current_row_group_no_null = true;
     }
 }
 
