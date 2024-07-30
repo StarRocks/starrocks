@@ -55,6 +55,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
@@ -89,6 +90,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
@@ -184,6 +186,9 @@ public class RestoreJob extends AbstractJob {
     @SerializedName(value = "snapshotInfos")
     protected com.google.common.collect.Table<Long, Long, SnapshotInfo> snapshotInfos = HashBasedTable.create();
 
+    @SerializedName(value = "colocatePersistInfos")
+    private List<ColocatePersistInfo> colocatePersistInfos = Lists.newArrayList();
+
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
 
     // store some remote table ids that is skipped to restore, eg: mv is active in local db
@@ -192,6 +197,8 @@ public class RestoreJob extends AbstractJob {
     private MvRestoreContext mvRestoreContext;
 
     private AgentBatchTask batchTask;
+
+    boolean enableColocateRestore = Config.enable_colocate_restore;
 
     public RestoreJob() {
         super(JobType.RESTORE);
@@ -548,6 +555,9 @@ public class RestoreJob extends AbstractJob {
                     OlapTable localOlapTbl = (OlapTable) localTbl;
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
+                    // disable colocate restore if the restored table has been existed
+                    remoteOlapTbl.setColocateGroup(null);
+
                     List<String> intersectPartNames = Lists.newArrayList();
                     Status st = localOlapTbl.getIntersectPartNamesWith(remoteOlapTbl, intersectPartNames);
                     if (!st.ok()) {
@@ -687,12 +697,25 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
 
+                    if (!enableColocateRestore) {
+                        remoteOlapTbl.setColocateGroup(null);
+                    }
+
                     // reset all ids in this table
                     Status st = resetTableForRestore(remoteOlapTbl, db);
                     // TODO: delete the shards for lake table if it fails.
                     if (!st.ok()) {
                         status = st;
                         return;
+                    }
+
+                    ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+                    if (enableColocateRestore && colocateTableIndex.isColocateTable(remoteOlapTbl.getId())) {
+                        ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(remoteOlapTbl.getId());
+                        List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                        ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo
+                                    .createForAddTable(groupId, remoteOlapTbl.getId(), backendsPerBucketSeq);
+                        colocatePersistInfos.add(colocatePersistInfo);
                     }
 
                     tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
@@ -999,7 +1022,7 @@ public class RestoreJob extends AbstractJob {
                 remoteIdx.clearTabletsForRestore();
                 // generate new table
                 status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
-                        visibleVersion, schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId());
+                        visibleVersion, schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), null);
                 if (!status.ok()) {
                     return null;
                 }
@@ -1141,6 +1164,9 @@ public class RestoreJob extends AbstractJob {
             state = RestoreJobState.DOWNLOAD;
 
             globalStateMgr.getEditLog().logRestoreJob(this);
+            for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+            }
             LOG.info("finished making snapshots. {}", this);
             return;
         }
@@ -1653,6 +1679,15 @@ public class RestoreJob extends AbstractJob {
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.WRITE);
+            }
+        }
+
+        for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
+            for (Table restoreTbl : restoredTbls) {
+                if (restoreTbl instanceof OlapTable && restoreTbl.getId() == colocatePersistInfo.getTableId()) {
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                                        .removeTable(restoreTbl.getId(), (OlapTable) restoreTbl, isReplay);
+                }
             }
         }
 
