@@ -639,6 +639,7 @@ public class TaskManager implements MemoryTrackable {
         Predicate<TaskRunStatus> taskRunFilter = (task) ->
                 Objects.nonNull(task)
                         && task.getSource() == Constants.TaskSource.MV
+                        && task.getState() != Constants.TaskRunState.MERGED
                         && (dbName == null || task.getDbName().equals(dbName))
                         && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
         Consumer<TaskRunStatus> addResult = task -> {
