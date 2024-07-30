@@ -93,9 +93,6 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
     private void analyzeComputeNodeProperties(Map<String, String> properties) {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String propKey = entry.getKey();
-            //if (!PROPS_SUPPORTED.contains(propKey)) {
-            //    throw new SemanticException("unsupported property: " + propKey);
-            //}
             if (propKey.equals(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                 String propVal = entry.getValue();
                 if (propVal.isEmpty()) {
