@@ -234,7 +234,7 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 
 > **CAUTION**
 >
-> From v3.3.0 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
 >
 > - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
 > - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
