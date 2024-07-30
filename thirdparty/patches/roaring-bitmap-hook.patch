@@ -1,21 +1,35 @@
---- a/include/roaring/memory.h	2024-07-23 16:24:18.610777683 +0800
-+++ b/include/roaring/memory.h	2024-07-23 16:17:15.761688729 +0800
-@@ -25,12 +25,12 @@
+--- a/src/memory.c	2024-07-23 16:23:14.008781609 +0800
++++ b/src/memory.c	2024-07-30 15:00:40.701832586 +0800
+@@ -44,26 +44,26 @@ void roaring_init_memory_hook(roaring_me
+     global_memory_hook = memory_hook;
+ }
  
- void roaring_init_memory_hook(roaring_memory_t memory_hook);
+-void* roaring_malloc(size_t n) {
++__attribute__((weak)) void* roaring_malloc(size_t n) {
+     return global_memory_hook.malloc(n);
+ }
  
--void* roaring_malloc(size_t);
--void* roaring_realloc(void*, size_t);
--void* roaring_calloc(size_t, size_t);
--void roaring_free(void*);
--void* roaring_aligned_malloc(size_t, size_t);
--void roaring_aligned_free(void*);
-+void* roaring_malloc(size_t) __attribute__((weak));
-+void* roaring_realloc(void*, size_t) __attribute__((weak));
-+void* roaring_calloc(size_t, size_t) __attribute__((weak));
-+void roaring_free(void*) __attribute__((weak));
-+void* roaring_aligned_malloc(size_t, size_t) __attribute__((weak));
-+void roaring_aligned_free(void*) __attribute__((weak));
+-void* roaring_realloc(void* p, size_t new_sz) {
++__attribute__((weak)) void* roaring_realloc(void* p, size_t new_sz) {
+     return global_memory_hook.realloc(p, new_sz);
+ }
  
- #ifdef __cplusplus
+-void* roaring_calloc(size_t n_elements, size_t element_size) {
++__attribute__((weak)) void* roaring_calloc(size_t n_elements, size_t element_size) {
+     return global_memory_hook.calloc(n_elements, element_size);
+ }
+ 
+-void roaring_free(void* p) {
++__attribute__((weak)) void roaring_free(void* p) {
+     global_memory_hook.free(p);
+ }
+ 
+-void* roaring_aligned_malloc(size_t alignment, size_t size) {
++__attribute__((weak)) void* roaring_aligned_malloc(size_t alignment, size_t size) {
+     return global_memory_hook.aligned_malloc(alignment, size);
+ }
+ 
+-void roaring_aligned_free(void* p) {
++__attribute__((weak)) void roaring_aligned_free(void* p) {
+     global_memory_hook.aligned_free(p);
  }
