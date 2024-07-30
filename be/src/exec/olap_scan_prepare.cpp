@@ -797,6 +797,8 @@ Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
     constexpr bool Negative = Type == CompoundNodeType::OR;
     olap_filters.clear();
 
+    // False alert from clang-tidy-14
+    // NOLINTNEXTLINE(performance-for-range-copy)
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
         std::visit([&](auto&& range) { range.template to_olap_filter<Negative>(filters); }, iter.second);

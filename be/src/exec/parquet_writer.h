@@ -48,7 +48,7 @@ struct TableInfo {
 
 class RollingAsyncParquetWriter {
 public:
-    RollingAsyncParquetWriter(TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+    RollingAsyncParquetWriter(TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs,
                               RuntimeProfile* parent_profile,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
                               RuntimeState* state, int32_t driver_id);

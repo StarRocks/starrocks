@@ -15,7 +15,7 @@ namespace starrocks::failpoint {
 
 class FailPoint {
 public:
-    FailPoint(const std::string& name);
+    FailPoint(std::string name);
     ~FailPoint() = default;
 
     virtual bool shouldFail();

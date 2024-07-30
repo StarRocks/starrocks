@@ -134,6 +134,7 @@ private:
     uint64_t _threads_started_metric{0};
     uint64_t _threads_running_metric{0};
 
+public:
     ThreadMgr(const ThreadMgr&) = delete;
     const ThreadMgr& operator=(const ThreadMgr&) = delete;
 };

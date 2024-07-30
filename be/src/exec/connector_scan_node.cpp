@@ -666,7 +666,7 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // it means data source provider does not support reading by scan ranges.
         // So here we insert a single placeholder, to force data source provider
         // to create at least one data source
-        _scan_ranges.emplace_back(TScanRangeParams());
+        _scan_ranges.emplace_back();
     }
     return Status::OK();
 }

@@ -16,10 +16,10 @@
 
 #include <cctz/time_zone.h>
 #include <glog/logging.h>
-#include <stdint.h>
-#include <string.h>
 
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <utility>

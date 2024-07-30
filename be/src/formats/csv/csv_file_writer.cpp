@@ -14,6 +14,8 @@
 
 #include "csv_file_writer.h"
 
+#include <utility>
+
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
@@ -21,19 +23,18 @@
 namespace starrocks::formats {
 
 CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
-                             const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
+                             std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             TCompressionType::type compression_type,
-                             const std::shared_ptr<CSVWriterOptions>& writer_options,
-                             const std::function<void()> rollback_action)
+                             TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
+                             std::function<void()> rollback_action)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
-          _column_names(column_names),
-          _types(types),
+          _column_names(std::move(column_names)),
+          _types(std::move(types)),
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
-          _writer_options(writer_options),
-          _rollback_action(rollback_action) {}
+          _writer_options(std::move(writer_options)),
+          _rollback_action(std::move(rollback_action)) {}
 
 CSVFileWriter::~CSVFileWriter() = default;
 
@@ -111,14 +112,14 @@ FileWriter::CommitResult CSVFileWriter::commit() {
 }
 
 CSVFileWriterFactory::CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
-                                           const std::map<std::string, std::string>& options,
-                                           const std::vector<std::string>& column_names,
+                                           std::map<std::string, std::string> options,
+                                           std::vector<std::string> column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
-          _options(options),
-          _column_names(column_names),
+          _options(std::move(options)),
+          _column_names(std::move(column_names)),
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
           _runtime_state(runtime_state) {}

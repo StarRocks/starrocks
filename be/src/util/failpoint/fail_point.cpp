@@ -2,6 +2,7 @@
 #include "util/failpoint/fail_point.h"
 
 #include <filesystem>
+#include <utility>
 
 #include "fmt/format.h"
 #include "simdjson.h"
@@ -17,7 +18,7 @@ int check_fail_point(const char* name, int* failnum, void** failinfo, unsigned i
     return fp->shouldFail();
 }
 
-FailPoint::FailPoint(const std::string& name) : _name(name) {
+FailPoint::FailPoint(std::string name) : _name(std::move(name)) {
     _trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
 }
 
@@ -178,6 +179,7 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
     return false;
 }
 
+// NOLINTNEXTLINE(modernize-use-equals-default)
 FailPointRegistry::FailPointRegistry() {
 #ifdef FIU_ENABLE
     fiu_init(0);

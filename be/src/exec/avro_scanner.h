@@ -46,7 +46,7 @@ public:
 
     // A new constructor is introduced for the single test.
     AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                ScannerCounter* counter, const std::string& schema_text);
+                ScannerCounter* counter, std::string schema_text);
     ~AvroScanner() override;
 
     // Open this scanner, will initialize information needed

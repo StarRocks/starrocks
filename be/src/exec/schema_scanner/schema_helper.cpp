@@ -15,6 +15,7 @@
 #include "exec/schema_scanner/schema_helper.h"
 
 #include <sstream>
+#include <utility>
 
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
@@ -29,7 +30,7 @@ Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
                                std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
     DCHECK(state.param);
     SCOPED_TIMER((state.param)->_rpc_timer);
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, callback, state.timeout_ms);
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, std::move(callback), state.timeout_ms);
 }
 
 Status SchemaHelper::get_db_names(const SchemaScannerState& state, const TGetDbsParams& request,

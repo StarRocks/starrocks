@@ -44,7 +44,7 @@ public:
                       int timeout_ms);
 
     template <typename T>
-    static Status rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
+    static Status rpc_impl(const std::function<void(ClientConnection<T>&)>& callback, ClientConnection<T>& client,
                            const TNetworkAddress& address) noexcept;
 
 private:

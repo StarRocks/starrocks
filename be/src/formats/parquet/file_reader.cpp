@@ -15,10 +15,10 @@
 #include "formats/parquet/file_reader.h"
 
 #include <glog/logging.h>
-#include <string.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <iterator>
 #include <map>
 #include <sstream>
@@ -456,7 +456,7 @@ bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const tparque
 bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_group) {
     // runtime_in_filter, the sql-original in_filter and is_null/not_null filter will be in
     // _scanner_ctx->conjunct_ctxs_by_slot
-    for (auto kv : _scanner_ctx->conjunct_ctxs_by_slot) {
+    for (const auto& kv : _scanner_ctx->conjunct_ctxs_by_slot) {
         StatisticsHelper::StatSupportedFilter filter_type;
         for (auto ctx : kv.second) {
             if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
