@@ -409,7 +409,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.RELEASE_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.RELEASE_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -443,7 +443,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
