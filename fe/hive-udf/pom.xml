@@ -17,6 +17,7 @@
         <dependency>
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -25,6 +26,7 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
