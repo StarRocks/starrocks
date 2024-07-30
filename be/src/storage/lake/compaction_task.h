@@ -38,7 +38,7 @@ public:
     using CancelFunc = std::function<Status()>;
 
     explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                            CompactionTaskContext* context);
+                            CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema);
     virtual ~CompactionTask() = default;
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
@@ -54,6 +54,7 @@ protected:
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
 };
 
 } // namespace starrocks::lake
