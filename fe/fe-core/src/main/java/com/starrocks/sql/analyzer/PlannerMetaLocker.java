@@ -120,7 +120,17 @@ public class PlannerMetaLocker {
         }
     }
 
-    private Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
+    /**
+     * Collect tables that need to be protected by the PlannerMetaLock
+     */
+    public static void collectTablesNeedLock(StatementBase statement,
+                                             ConnectContext session,
+                                             Map<Long, Database> dbs,
+                                             Map<Long, Set<Long>> tables) {
+        new TableCollector(session, dbs, tables).visit(statement);
+    }
+
+    private static Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         String catalogName = tableName.getCatalog();
@@ -164,7 +174,7 @@ public class PlannerMetaLocker {
         return new Pair<>(db, table);
     }
 
-    private class TableCollector extends AstTraverser<Void, Void> {
+    private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
         private final Map<Long, Database> dbs;
