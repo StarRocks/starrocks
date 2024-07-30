@@ -94,10 +94,11 @@ public class PruneComplexTypeUtil {
         public void addAccessPaths(ColumnRefOperator columnRefOperator,
                                    ComplexTypeAccessPaths curAccessPaths,
                                    ComplexTypeAccessGroup visitedAccessGroup) {
-            int size = visitedAccessGroup.size();
-            // We should we below loop to avoid ConcurrentModificationException
-            for (int i = 0; i < size; i++) {
-                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, visitedAccessGroup.get(i)));
+            // We should copy it first to avoid ConcurrentModificationException
+            ImmutableList<ComplexTypeAccessPaths> accessGroup = ImmutableList.<ComplexTypeAccessPaths>builder().addAll(
+                    visitedAccessGroup.getAccessGroup()).build();
+            for (ComplexTypeAccessPaths complexTypeAccessPaths : accessGroup) {
+                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, complexTypeAccessPaths));
             }
         }
 

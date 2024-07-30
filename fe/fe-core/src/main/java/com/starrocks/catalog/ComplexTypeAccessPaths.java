@@ -14,12 +14,16 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+
+import java.util.Objects;
 
 public class ComplexTypeAccessPaths {
     private final ImmutableList<ComplexTypeAccessPath> accessPaths;
 
     public ComplexTypeAccessPaths(ImmutableList<ComplexTypeAccessPath> accessPaths) {
+        Preconditions.checkNotNull(accessPaths, "accessPaths can't be null");
         this.accessPaths = accessPaths;
     }
 
@@ -37,5 +41,23 @@ public class ComplexTypeAccessPaths {
 
     public ImmutableList<ComplexTypeAccessPath> getAccessPaths() {
         return accessPaths;
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof ComplexTypeAccessPaths)) {
+            return false;
+        }
+
+        ComplexTypeAccessPaths that = (ComplexTypeAccessPaths) o;
+        return Objects.equals(accessPaths, that.accessPaths);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(accessPaths);
     }
 }
