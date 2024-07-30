@@ -26,7 +26,7 @@ LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* 
 
 Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    return _partition_topn_ctx->prepare(state);
+    return _partition_topn_ctx->prepare(state, _unique_metrics.get());
 }
 
 StatusOr<ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(RuntimeState* state) {
@@ -50,6 +50,11 @@ Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
     return _partition_topn_ctx->transfer_all_chunks_from_partitioner_to_sorters(state);
+}
+
+// try to passthrough when memory usage is high.
+void LocalPartitionTopnSinkOperator::set_execute_mode(int performance_level) {
+    _partition_topn_ctx->set_passthrough();
 }
 
 OperatorPtr LocalPartitionTopnSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

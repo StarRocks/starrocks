@@ -14,8 +14,10 @@
 
 #include "exec/partition/chunks_partitioner.h"
 
+#include <memory>
 #include <utility>
 
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "types/logical_type.h"
@@ -31,25 +33,27 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
     _partition_columns.resize(partition_exprs.size());
 }
 
-Status ChunksPartitioner::prepare(RuntimeState* state) {
+Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
     _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
+
+    _statistics.chunk_buffer_peak_memory = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakMem", TUnit::BYTES);
+    _statistics.chunk_buffer_peak_size = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakSize", TUnit::BYTES);
+
+    _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<ChunksPartitionStatistics>>(
+            &_statistics, 1, config::local_exchange_buffer_mem_limit_per_driver,
+            state->chunk_size() * config::streaming_agg_chunk_buffer_size);
     return Status::OK();
 }
 
 ChunkPtr ChunksPartitioner::consume_from_passthrough_buffer() {
+    if (_limited_buffer->is_empty()) {
+        return nullptr;
+    }
     ChunkPtr chunk = nullptr;
-    if (_passthrough_buffer.empty()) {
-        return chunk;
-    }
-    {
-        std::lock_guard<std::mutex> l(_buffer_lock);
-        chunk = _passthrough_buffer.front();
-        _passthrough_buffer.pop();
-    }
-    return chunk;
+    return _limited_buffer->pull();
 }
 
 bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,
