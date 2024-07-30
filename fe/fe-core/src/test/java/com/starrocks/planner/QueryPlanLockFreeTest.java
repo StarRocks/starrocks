@@ -25,7 +25,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -100,12 +100,6 @@ public class QueryPlanLockFreeTest {
                 StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
     }
 
-<<<<<<< HEAD
-    @AfterClass
-    public static void afterClass() {
-        connectContext.getSessionVariable().setCboUseDBLock(false);
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
-=======
     @Test
     public void testCopiedTable() throws Exception {
         String sql = "select t1.* from t1 t1 join t1 t2 on t1.k1 = t2.k2";
@@ -118,7 +112,11 @@ public class QueryPlanLockFreeTest {
         Assert.assertTrue("original table should different from copied table in plan", table != node2.getOlapTable());
 
         Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
->>>>>>> f20b88930b ([BugFix] fix original table not replaced by copied table (#49068))
+    }
+    @After
+    public void after() {
+        connectContext.getSessionVariable().setCboUseDBLock(false);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
 
 }
