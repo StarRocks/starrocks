@@ -104,7 +104,7 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
             public void close() {
                 Utils.closeCloseables(scanFileIter);
                 currentReadLine = -1;
-                currentReadJsonList = Lists.newArrayList();
+                currentReadJsonList = null;
             }
 
             @Override
