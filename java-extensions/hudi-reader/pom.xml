@@ -19,8 +19,8 @@
         <hive-apache.version>3.1.2-22</hive-apache.version>
         <parquet-hadoop.version>1.12.3</parquet-hadoop.version>
         <hadoop.version>3.4.0</hadoop.version>
-        <hudi.version>0.14.1</hudi.version>
-        <airlift.version>0.25</airlift.version>
+        <hudi.version>0.15.0</hudi.version>
+        <airlift.version>0.27</airlift.version>
         <avro.version>1.11.3</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
@@ -47,6 +47,13 @@
                     <artifactId>hbase-server</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-io</artifactId>
+            <version>${hudi.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
@@ -82,7 +89,6 @@
             <artifactId>avro</artifactId>
             <version>${avro.version}</version>
         </dependency>
-
 
         <!-- https://mvnrepository.com/artifact/io.airlift/aircompressor -->
         <dependency>
