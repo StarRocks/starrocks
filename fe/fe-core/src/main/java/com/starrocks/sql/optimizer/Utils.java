@@ -149,7 +149,7 @@ public class Utils {
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return new LinkedList<>();
         }
 
@@ -160,7 +160,11 @@ public class Utils {
         }
 
         for (ScalarOperator child : root.getChildren()) {
-            list.addAll(extractColumnRef(child));
+            if (list.isEmpty()) {
+                list = (LinkedList<ColumnRefOperator>) extractColumnRef(child);
+            } else {
+                list.addAll(extractColumnRef(child));
+            }
         }
 
         return list;
@@ -171,7 +175,7 @@ public class Utils {
     }
 
     private static int countColumnRef(ScalarOperator root, int count) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return 0;
         }
 
