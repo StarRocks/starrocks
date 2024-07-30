@@ -18,12 +18,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
@@ -56,6 +58,11 @@ public class ExecPlan {
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
 
     private volatile ProfilingExecPlan profilingPlan;
+<<<<<<< HEAD
+=======
+    private LogicalPlan logicalPlan;
+    private ColumnRefFactory columnRefFactory;
+>>>>>>> df5a254875 ([Enhancement] Show plan cost in explain verbose/costs (#49106))
 
     @VisibleForTesting
     public ExecPlan() {
@@ -143,6 +150,17 @@ public class ExecPlan {
         return outputColumns;
     }
 
+<<<<<<< HEAD
+=======
+    public void setExecGroups(List<ExecGroup> execGroups) {
+        this.execGroups = execGroups;
+    }
+
+    public List<ExecGroup> getExecGroups() {
+        return this.execGroups;
+    }
+
+>>>>>>> df5a254875 ([Enhancement] Show plan cost in explain verbose/costs (#49106))
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
         optExpressions.put(id, optExpression);
     }
@@ -174,6 +192,17 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
+
+        if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (FeConstants.showFragmentCost) {
+                final String prefix = "  ";
+                AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+                str.append("PLAN COST").append("\n")
+                        .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
+                        .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
+            }
+        }
+
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
