@@ -34,8 +34,7 @@
 
 #include "runtime/exec_env.h"
 
-#include <ctype.h>
-
+#include <cctype>
 #include <memory>
 #include <thread>
 
