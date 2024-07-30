@@ -789,8 +789,8 @@ bool parse_resource_str(const string& str, string* value) {
         if (tmp_str.empty()) {
             return false;
         } else {
-            value->resize(tmp_str.size());
-            std::transform(tmp_str.begin(), tmp_str.end(), value->begin(), [](char c) { return std::tolower(c); });
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
             return true;
         }
     } else {
