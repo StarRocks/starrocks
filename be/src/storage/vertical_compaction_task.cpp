@@ -132,7 +132,6 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
     reader_params.column_access_paths = &_column_access_paths;
-    reader_params.is_compaction = true;
 
     StatusOr<int32_t> ret = _calculate_chunk_size_for_column_group(column_group);
     if (!ret.ok()) {

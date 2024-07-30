@@ -128,8 +128,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::OK();
     }
 
-    if (read_params.is_compaction && read_params.column_access_paths != nullptr &&
-        !read_params.column_access_paths->empty()) {
+    if (is_compaction(read_params.reader_type) && _tablet_schema->keys_type() == DUP_KEYS &&
+        read_params.column_access_paths != nullptr && !read_params.column_access_paths->empty()) {
         // init compaction flat json paths
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->segments()) {

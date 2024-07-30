@@ -93,7 +93,6 @@ struct TabletReaderParams {
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
-    bool is_compaction = false;
 
 public:
     std::string to_string() const;
