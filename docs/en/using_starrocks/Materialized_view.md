@@ -173,7 +173,7 @@ GROUP BY order_id;
 > - While creating an asynchronous materialized view, you must specify either the data distribution strategy or the refresh strategy of the materialized view, or both.
 > - You can set different partitioning and bucketing strategies for an asynchronous materialized view from those of its base tables, but you must include the partition keys and bucket keys of the materialized views in the query statement used to create the materialized view.
 > - Asynchronous materialized views support a dynamic partitioning strategy in a longer span. For example, if the base table is partitioned at an interval of one day, you can set the materialized view to be partitioned at an interval of one month.
-> - From v3.3.0 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+> - From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
 >   - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
 >   - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
 >   - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
