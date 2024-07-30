@@ -28,7 +28,8 @@ public class IcebergMetaSplit implements RemoteMetaSplit {
     public static final String PLACEHOLDER_FILE_PATH = "placeholder_file_path";
     public static final List<MetadataTableType> ONLY_NEED_SINGLE_SPLIT = List.of(
             MetadataTableType.REFS,
-            MetadataTableType.HISTORY);
+            MetadataTableType.HISTORY,
+            MetadataTableType.METADATA_LOG_ENTRIES);
 
 
     private final String manifestFile;

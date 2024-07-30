@@ -67,7 +67,7 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
 
     protected abstract void doOpen();
 
-    protected abstract void initReader();
+    protected abstract void initReader() throws IOException;
 
     private void parseRequiredTypes() {
         HashMap<String, String> columnNameToType = new HashMap<>();
