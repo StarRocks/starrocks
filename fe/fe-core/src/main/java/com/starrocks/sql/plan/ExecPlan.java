@@ -195,7 +195,7 @@ public class ExecPlan {
             if (FeConstants.showFragmentCost) {
                 final String prefix = "  ";
                 AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
-                str.append("Plan Cost").append("\n")
+                str.append("PLAN COST").append("\n")
                         .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
                         .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
             }

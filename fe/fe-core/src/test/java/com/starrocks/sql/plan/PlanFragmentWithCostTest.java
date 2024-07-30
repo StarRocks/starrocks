@@ -2322,11 +2322,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partition exprs: [4: t1a, VARCHAR, true]\n" +
                     "     cardinality: 9000");
             System.out.println(plan);
-            assertContains(plan, "Plan Cost\n" +
+            assertContains(plan, "PLAN COST\n" +
                     "  CPU: 1881002.0\n" +
                     "  Memory: 288001.0");
 
-            assertContains(getCostExplain(sql), "Plan Cost\n" +
+            assertContains(getCostExplain(sql), "PLAN COST\n" +
                     "  CPU: 1881002.0\n" +
                     "  Memory: 288001.0");
 
