@@ -538,6 +538,9 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+// Metadata cache limit for shared-nothing mode. Not working for PK table now.
+// Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
+CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
 // if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
 // the failed apply task will retry after `retry_apply_interval_second`

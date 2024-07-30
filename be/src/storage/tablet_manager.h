@@ -61,6 +61,7 @@ namespace starrocks {
 class Tablet;
 class DataDir;
 struct TabletBasicInfo;
+class MetadataCache;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -198,6 +199,8 @@ public:
 
     Status generate_pk_dump();
 
+    MetadataCache* metadata_cache() const { return _metadata_cache.get(); }
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -297,6 +300,9 @@ private:
     // context for compaction checker
     size_t _cur_shard = 0;
     std::unordered_set<int64_t> _shard_visited_tablet_ids;
+
+    // LRU cache for metadata
+    std::unique_ptr<MetadataCache> _metadata_cache;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {
