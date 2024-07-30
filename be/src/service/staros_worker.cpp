@@ -62,6 +62,7 @@ DECLARE_int32(fslib_s3client_max_instance_per_item);
 DECLARE_int32(fslib_s3client_nonread_max_retries);
 DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
 DECLARE_int32(fslib_s3client_connect_timeout_ms);
+DECLARE_bool(fslib_s3client_use_list_objects_v1);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
