@@ -670,6 +670,22 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
     }
 
     @Test
+    public void testJoinWithAggPushDown_NoGroupBy() {
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_SUPPKEY, sum(LO_REVENUE) as revenue_sum\n" +
+                "from lineorder l group by LO_ORDERDATE,LO_SUPPKEY";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            {
+                String query = "select sum(LO_REVENUE) as revenue_sum\n" +
+                        "   from lineorder l join supplier s on l.lo_suppkey = s.s_suppkey";
+                // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
+                // TODO: support this if group by keys are equals to join keys
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
     public void testJoinWithAggPushDown_BitmapUnion1() {
         String aggArg = "LO_REVENUE";
         String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +

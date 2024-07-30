@@ -244,12 +244,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 return visit(optExpression, context);
             }
 
-            // no-group-by don't push down
-            if (aggOp.getGroupingKeys().isEmpty()) {
-                logMVRewrite(mvRewriteContext, "No group by can't push down");
-                return visit(optExpression, context);
-            }
-
             context = new AggregatePushDownContext();
             context.setAggregator(aggOp);
             return context;
@@ -322,7 +316,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
     // 3. return input AggRewriteInfo as return value if you want to rewrite upper nodes.
     private class PostVisitor extends OptExpressionVisitor<AggRewriteInfo, AggRewriteInfo> {
         private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
-            return context.isEmpty() || context.groupBys.isEmpty() || optExpression.getOp().hasLimit();
+            return context.isEmpty() || optExpression.getOp().hasLimit();
         }
 
         // Default visit method do nothing but just pass the AggRewriteInfo to its parent
