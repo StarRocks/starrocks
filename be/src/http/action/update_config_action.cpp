@@ -297,6 +297,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
             }
         });
+        _config_callback.emplace("s3_use_list_objects_v1", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_use_list_objects_v1", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_use_list_objects_v1";
+            }
+        });
 #endif // USE_STAROS
     });
 
