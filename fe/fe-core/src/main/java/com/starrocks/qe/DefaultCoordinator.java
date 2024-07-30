@@ -915,12 +915,12 @@ public class DefaultCoordinator extends Coordinator {
 
         queryProfile.updateProfile(execState, params);
 
+        if (!execState.updateExecStatus(params)) {
+            return;
+        }
+
         lock();
         try {
-            if (!execState.updateExecStatus(params)) {
-                return;
-            }
-
             queryProfile.updateLoadChannelProfile(params);
         } finally {
             unlock();
