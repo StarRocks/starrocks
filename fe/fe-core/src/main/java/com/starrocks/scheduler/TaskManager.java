@@ -641,16 +641,17 @@ public class TaskManager implements MemoryTrackable {
                         && task.getSource() == Constants.TaskSource.MV
                         && (dbName == null || task.getDbName().equals(dbName))
                         && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
-        // Keep the first one of duplicated task runs
-        Predicate<TaskRunStatus> duplicateFilter = task -> isSameTaskRunJob(task, mvNameRunStatusMap);
-        Consumer<TaskRunStatus> addResult = task ->
+        Consumer<TaskRunStatus> addResult = task -> {
+            // Keep only the first one of duplicated task runs
+            if (isSameTaskRunJob(task, mvNameRunStatusMap)) {
                 mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
+            }
+        };
 
         // running
         taskRunScheduler.getCopiedRunningTaskRuns().stream()
                 .map(TaskRun::getStatus)
                 .filter(taskRunFilter)
-                .filter(duplicateFilter)
                 .forEach(addResult);
 
         // pending task runs
@@ -664,7 +665,6 @@ public class TaskManager implements MemoryTrackable {
         taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
                 .stream()
                 .filter(taskRunFilter)
-                .filter(duplicateFilter)
                 .forEach(addResult);
 
         return mvNameRunStatusMap;
