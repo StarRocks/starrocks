@@ -14,64 +14,39 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.SnapshotRef;
-import org.apache.iceberg.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
-
-public class IcebergRefsTableScanner extends ConnectorScanner {
+public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
     private static final Logger LOG = LogManager.getLogger(IcebergRefsTableScanner.class);
-
-    private final String serializedTable;
-    private final String[] requiredFields;
-    private final String[] metadataColumnNames;
-    private final String[] metadataColumnTypes;
-    private ColumnType[] requiredTypes;
-    private final int fetchSize;
-    private final ClassLoader classLoader;
-    private Table table;
     private Iterator<Map.Entry<String, SnapshotRef>> reader;
 
     public IcebergRefsTableScanner(int fetchSize, Map<String, String> params) {
-        this.fetchSize = fetchSize;
-        this.requiredFields = params.get("required_fields").split(",");
-        this.metadataColumnNames = params.get("metadata_column_names").split(",");
-        this.metadataColumnTypes = params.get("metadata_column_types").split(",");
-        this.serializedTable = params.get("serialized_table");
-        this.classLoader = this.getClass().getClassLoader();
+        super(fetchSize, params);
     }
 
     @Override
-    public void open() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            this.table = deserializeFromBase64(serializedTable);
-            parseRequiredTypes();
-            initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
-            initReader();
-        } catch (Exception e) {
-            close();
-            String msg = "Failed to open the iceberg refs table reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
-        }
+    public void doOpen() {
+
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         if (reader != null) {
             reader = null;
         }
+    }
+
+    @Override
+    protected void initReader() {
+        reader = table.refs().entrySet().iterator();
     }
 
     @Override
@@ -103,10 +78,6 @@ public class IcebergRefsTableScanner extends ConnectorScanner {
         }
     }
 
-    private void initReader() {
-        reader = table.refs().entrySet().iterator();
-    }
-
     private Object get(String columnName, String refName, SnapshotRef ref) {
         switch (columnName) {
             case "name":
@@ -123,19 +94,6 @@ public class IcebergRefsTableScanner extends ConnectorScanner {
                 return ref.maxSnapshotAgeMs();
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
-        }
-    }
-
-    private void parseRequiredTypes() {
-        HashMap<String, String> columnNameToType = new HashMap<>();
-        for (int i = 0; i < metadataColumnNames.length; i++) {
-            columnNameToType.put(metadataColumnNames[i], metadataColumnTypes[i]);
-        }
-
-        requiredTypes = new ColumnType[requiredFields.length];
-        for (int i = 0; i < requiredFields.length; i++) {
-            String type = columnNameToType.get(requiredFields[i]);
-            requiredTypes[i] = new ColumnType(requiredFields[i], type);
         }
     }
 }
