@@ -93,7 +93,7 @@ TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
     const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
     const int32_t lru_cache_limit = process_limit * config::metadata_cache_memory_limit_percent / 100;
     _metadata_cache = std::make_unique<MetadataCache>(lru_cache_limit);
-    REGISTER_GAUGE_STARROCKS_METRIC(metadata_lru_cache_bytes_total,
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
                                     [this]() { return _metadata_cache->get_memory_usage(); });
 #endif
 }
