@@ -73,10 +73,14 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _closed(false) {}
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
+<<<<<<< HEAD
                          ScannerCounter* counter, const std::string schema_text)
+=======
+                         ScannerCounter* counter, std::string schema_text)
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _schema_text(schema_text),
+          _schema_text(std::move(schema_text)),
           _closed(false) {}
 
 AvroScanner::~AvroScanner() {
@@ -144,7 +148,7 @@ Status AvroScanner::open() {
         }
 
         serdes_conf_t* sconf =
-                serdes_conf_new(NULL, 0, "schema.registry.url", confluent_schema_registry_url.c_str(), NULL);
+                serdes_conf_new(nullptr, 0, "schema.registry.url", confluent_schema_registry_url.c_str(), NULL);
         _serdes = serdes_new(sconf, _err_buf, sizeof(_err_buf));
         if (!_serdes) {
             LOG(ERROR) << "failed to create serdes handle: " << _err_buf;
@@ -308,7 +312,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
                         auto err_msg = "Cannot get value by index: " + std::string(avro_strerror());
                         return Status::InternalError(err_msg);
                     }
-                    _data_idx_to_fieldname.push_back(std::string(field_name));
+                    _data_idx_to_fieldname.emplace_back(field_name);
                 }
 
                 _init_data_idx_to_slot_once = true;
@@ -336,7 +340,7 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
     size_t element_count = _data_idx_to_fieldname.size();
     avro_value_t element_value;
     for (size_t i = 0; i < element_count; i++) {
-        if (UNLIKELY(avro_value_get_by_index(&avro_value, i, &element_value, NULL) != 0)) {
+        if (UNLIKELY(avro_value_get_by_index(&avro_value, i, &element_value, nullptr) != 0)) {
             auto err_msg = "Cannot get value by index: " + std::string(avro_strerror());
             return Status::InternalError(err_msg);
         }

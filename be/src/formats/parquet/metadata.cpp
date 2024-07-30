@@ -14,6 +14,12 @@
 
 #include "formats/parquet/metadata.h"
 
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+
+#include <cstdlib>
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 #include <sstream>
 
 #include "formats/parquet/schema.h"

@@ -14,7 +14,16 @@
 
 #include "formats/parquet/chunk_writer.h"
 
+<<<<<<< HEAD
 #include <parquet/arrow/writer.h>
+=======
+#include <parquet/file_writer.h>
+#include <parquet/schema.h>
+
+#include <algorithm>
+#include <numeric>
+#include <utility>
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -29,14 +38,14 @@
 
 namespace starrocks::parquet {
 
-ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                         const std::shared_ptr<::parquet::schema::GroupNode>& schema,
-                         const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func, std::string timezone,
+ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, std::vector<TypeDescriptor> type_descs,
+                         std::shared_ptr<::parquet::schema::GroupNode> schema,
+                         std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> eval_func, std::string timezone,
                          bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
         : _rg_writer(rg_writer),
-          _type_descs(type_descs),
-          _schema(schema),
-          _eval_func(eval_func),
+          _type_descs(std::move(type_descs)),
+          _schema(std::move(schema)),
+          _eval_func(std::move(eval_func)),
           _timezone(std::move(timezone)),
           _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
           _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {

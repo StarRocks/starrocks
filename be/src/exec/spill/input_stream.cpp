@@ -459,7 +459,7 @@ StatusOr<InputStreamPtr> BlockGroupSet::as_unordered_stream(const SerdePtr& serd
     }
     std::vector<BlockPtr> blocks;
     // collect block for each group
-    for (auto group : _groups) {
+    for (const auto& group : _groups) {
         blocks.insert(blocks.end(), group->blocks().begin(), group->blocks().end());
     }
     auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde, read_options);

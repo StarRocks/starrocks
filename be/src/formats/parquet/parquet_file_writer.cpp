@@ -212,18 +212,19 @@ FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileM
     return file_statistics;
 }
 
-ParquetFileWriter::ParquetFileWriter(
-        const std::string& location, std::shared_ptr<arrow::io::OutputStream> output_stream,
-        const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
-        std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators, TCompressionType::type compression_type,
-        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()>& rollback_action)
-        : _location(location),
+ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow::io::OutputStream> output_stream,
+                                     std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
+                                     std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                     TCompressionType::type compression_type,
+                                     std::shared_ptr<ParquetWriterOptions> writer_options,
+                                     const std::function<void()>& rollback_action)
+        : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
-          _column_names(column_names),
-          _type_descs(type_descs),
+          _column_names(std::move(column_names)),
+          _type_descs(std::move(type_descs)),
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
-          _writer_options(writer_options),
+          _writer_options(std::move(writer_options)),
           _rollback_action(std::move(rollback_action)) {}
 
 StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_type(TCompressionType::type type) {
@@ -443,16 +444,22 @@ ParquetFileWriter::~ParquetFileWriter() = default;
 
 ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs,
                                                    TCompressionType::type compression_type,
-                                                   const std::map<std::string, std::string>& options,
-                                                   const std::vector<std::string>& column_names,
+                                                   std::map<std::string, std::string> options,
+                                                   std::vector<std::string> column_names,
                                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                                    std::optional<std::vector<formats::FileColumnId>> field_ids,
                                                    PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
+<<<<<<< HEAD
           _field_ids(field_ids),
           _options(options),
           _column_names(column_names),
+=======
+          _field_ids(std::move(field_ids)),
+          _options(std::move(options)),
+          _column_names(std::move(column_names)),
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
           _runtime_state(runtime_state) {}

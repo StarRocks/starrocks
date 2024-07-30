@@ -14,6 +14,15 @@
 
 #include "formats/parquet/page_index_reader.h"
 
+<<<<<<< HEAD
+=======
+#include <algorithm>
+#include <cstddef>
+#include <utility>
+
+#include "column/chunk.h"
+#include "column/column.h"
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

@@ -14,6 +14,26 @@
 
 #include "formats/parquet/file_reader.h"
 
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <iterator>
+#include <map>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+#include "block_cache/block_cache.h"
+#include "block_cache/kv_cache.h"
+#include "column/chunk.h"
+#include "column/column.h"
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -409,6 +429,82 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             }
         }
     }
+<<<<<<< HEAD
+=======
+    return false;
+}
+
+bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_group) {
+    // runtime_in_filter, the sql-original in_filter and is_null/not_null filter will be in
+    // _scanner_ctx->conjunct_ctxs_by_slot
+    for (const auto& kv : _scanner_ctx->conjunct_ctxs_by_slot) {
+        StatisticsHelper::StatSupportedFilter filter_type;
+        for (auto ctx : kv.second) {
+            if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
+                const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
+                SlotDescriptor* slot = tuple_desc.get_slot_by_id(kv.first);
+                if (UNLIKELY(slot == nullptr)) {
+                    // it shouldn't be here, just some defensive code
+                    DCHECK(false) << "couldn't find slot id " << kv.first << " in tuple desc";
+                    LOG(WARNING) << "couldn't find slot id " << kv.first << " in tuple desc";
+                    continue;
+                }
+                std::unordered_map<std::string, size_t> column_name_2_pos_in_meta{};
+                std::vector<SlotDescriptor*> slot_v{slot};
+                _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, row_group, slot_v);
+                const tparquet::ColumnMetaData* column_meta =
+                        _meta_helper->get_column_meta(column_name_2_pos_in_meta, row_group, slot->col_name());
+                if (column_meta == nullptr || !column_meta->__isset.statistics) continue;
+                if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NULL) {
+                    if (!column_meta->statistics.__isset.null_count) continue;
+                    if (column_meta->statistics.null_count == 0) {
+                        return true;
+                    }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NOT_NULL) {
+                    if (!column_meta->statistics.__isset.null_count) continue;
+                    if (column_meta->statistics.null_count == row_group.num_rows) {
+                        return true;
+                    }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
+                    std::vector<string> min_values;
+                    std::vector<string> max_values;
+
+                    const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
+                    if (field == nullptr) {
+                        LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
+                        continue;
+                    }
+                    auto st = _get_min_max_value(slot, column_meta, field, min_values, max_values);
+                    if (!st.ok()) continue;
+                    Filter selected(min_values.size(), 1);
+                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
+                                                                     _scanner_ctx->timezone, selected);
+                    if (!st.ok()) continue;
+                    if (!selected[0]) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
+// status and lead to the query failed.
+bool FileReader::_filter_group(const tparquet::RowGroup& row_group) {
+    if (_filter_group_with_min_max_conjuncts(row_group)) {
+        return true;
+    }
+
+    if (_filter_group_with_bloom_filter_min_max_conjuncts(row_group)) {
+        return true;
+    }
+
+    if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(row_group)) {
+        return true;
+    }
+>>>>>>> a6152a1b38 ([Tool] turn on clang-tidy for all source code files (#44990))
 
     return false;
 }
