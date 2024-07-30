@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -289,8 +290,17 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visit(ParseNode node, Context context) {
             Expr expr = (Expr) node;
+<<<<<<< HEAD
             if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
                 return expressionMapping.get(expr);
+=======
+            if (!expressionMapping.getExpressionToColumns().isEmpty() &&
+                    !expr.isConstant()) {
+                ScalarOperator res = Utils.getValueIfExists(expressionMapping.getExpressionToColumns(), expr);
+                if (res != null) {
+                    return res;
+                }
+>>>>>>> 73178fb135 ([Enhancement]speed up transform phase for complex expr (#49057))
             }
 
             return super.visit(node, context);
