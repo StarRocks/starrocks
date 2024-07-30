@@ -1,0 +1,40 @@
+-- name: test_spill_local_partition_top_n
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+insert into t0 values (null,null);
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select count(*), sum(c0) from (select c0, rn from (select c0, row_number() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+-- result:
+1638401	335545139200
+-- !result
+select count(*), sum(c0) from (select c0, rn from (select c0, rank() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+-- result:
+1638401	335545139200
+-- !result
+select count(*), sum(c0) from (select c0, rn from (select c0, rank() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+-- result:
+1638401	335545139200
+-- !result

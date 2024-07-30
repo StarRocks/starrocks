@@ -48,7 +48,7 @@ public:
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys,
                               int64_t offset, int64_t partition_limit, const TTopNType::type topn_type);
 
-    [[nodiscard]] Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
     // Add one chunk to partitioner
     [[nodiscard]] Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
@@ -69,6 +69,10 @@ public:
     [[nodiscard]] StatusOr<ChunkPtr> pull_one_chunk();
 
     bool is_passthrough() const { return _chunks_partitioner->is_passthrough(); }
+
+    void set_passthrough() { _chunks_partitioner->set_passthrough(true); }
+
+    bool is_full() const { return _chunks_partitioner->is_passthrough_buffer_full(); }
 
     size_t num_partitions() const { return _partition_num; }
 
