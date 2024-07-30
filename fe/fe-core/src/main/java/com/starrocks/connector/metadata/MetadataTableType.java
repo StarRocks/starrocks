@@ -16,7 +16,8 @@ package com.starrocks.connector.metadata;
 
 public enum MetadataTableType {
     LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
-    REFS("refs");
+    REFS("refs"),
+    HISTORY("history");
 
     public final String typeString;
 

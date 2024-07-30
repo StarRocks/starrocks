@@ -18,15 +18,25 @@ import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public class IcebergMetadataColumnValue implements ColumnValue {
+    private static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+
     private final Object fieldData;
+    private final String timezone;
 
     public IcebergMetadataColumnValue(Object fieldData) {
+        this(fieldData, DEFAULT_TIME_ZONE);
+    }
+
+    public IcebergMetadataColumnValue(Object fieldData, String timezone) {
         this.fieldData = fieldData;
+        this.timezone = timezone;
     }
 
     @Override
@@ -109,6 +119,11 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
-        return null;
+        if (type == ColumnType.TypeValue.DATETIME) {
+            Instant instant = Instant.ofEpochMilli((long) fieldData);
+            return LocalDateTime.ofInstant(instant, ZoneId.of(timezone));
+        } else {
+            return null;
+        }
     }
 }

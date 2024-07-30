@@ -42,7 +42,6 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
                                               long limit,
                                               ScalarOperator predicate,
                                               TableVersionRange versionRange) {
-
         super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
                 table,
                 colRefToColumnMetaMap,
