@@ -254,9 +254,13 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             }
             result.add(newOp);
         });
-        CompoundPredicateOperator res =
-                (CompoundPredicateOperator) (isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result));
-        return visitCompoundPredicate(res, context);
+
+        ScalarOperator res = isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+        if (res instanceof CompoundPredicateOperator) {
+            return visitCompoundPredicate((CompoundPredicateOperator) res, context);
+        } else {
+            return res;
+        }
     }
 
     // rewrite collection element to subfiled
