@@ -49,7 +49,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.channels.SocketChannel;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class ConnectContextTest {
     @Mocked
@@ -110,6 +112,12 @@ public class ConnectContextTest {
         ctx.setQualifiedUser("testCluster:testUser");
         Assert.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
 
+        // labelsLocation
+        Set<String> loc = new HashSet<>();
+        loc.add("default:all");
+        ctx.setLabelsLocation(loc);
+        Assert.assertEquals(loc, ctx.getLabelsLocation());
+
         // Serializer
         Assert.assertNotNull(ctx.getSerializer());
 
@@ -141,12 +149,13 @@ public class ConnectContextTest {
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
         Assert.assertEquals("testDb", row.get(3));
-        Assert.assertEquals("Ping", row.get(4));
-        Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(6));
-        Assert.assertEquals("OK", row.get(7));
-        Assert.assertEquals("", row.get(8));
-        Assert.assertEquals("false", row.get(9));
+        Assert.assertEquals("[default:all]", row.get(4));
+        Assert.assertEquals("Ping", row.get(5));
+        Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(7));
+        Assert.assertEquals("OK", row.get(8));
+        Assert.assertEquals("", row.get(9));
+        Assert.assertEquals("false", row.get(10));
 
         // Start time
         ctx.setStartTime();
