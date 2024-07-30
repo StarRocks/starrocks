@@ -180,7 +180,8 @@
                     "items": [
                         "loading/loading_introduction/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
-                        "loading/loading_introduction/loading_considerations"
+                        "loading/loading_introduction/loading_considerations",
+                        "loading/loading_introduction/feature-support-loading-and-unloading"
                     ]
                 },
                 {
@@ -244,7 +245,8 @@
                 "unloading/Export",
                 "unloading/Spark_connector",
                 "unloading/Flink_connector",
-                "unloading/unload_using_insert_into_files"
+                "unloading/unload_using_insert_into_files",
+                "unloading/feature-support-loading-and-unloading"
             ]
         },
         {
@@ -279,8 +281,13 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
+<<<<<<< HEAD
                 "data_source/data_cache",
                 "data_source/datalake_faq"
+=======
+                "data_source/datalake_faq",
+                "data_source/feature-support-data-lake-analytics"
+>>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -328,7 +335,8 @@
                                 "using_starrocks/usage/drop",
                                 "using_starrocks/usage/show",
                                 "using_starrocks/usage/information_schema-materialized_views",
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views"
+                                "using_starrocks/troubleshooting_asynchronous_materialized_views",
+                                "using_starrocks/feature-support-asynchronous-materialized-views"
                             ]
                         }
                     ]
@@ -1635,7 +1643,8 @@
                     "items": [
                         "loading/loading_introduction/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
-                        "loading/loading_introduction/loading_considerations"
+                        "loading/loading_introduction/loading_considerations",
+                        "loading/loading_introduction/feature-support-loading-and-unloading"
                     ]
                 },
                 {
@@ -1700,7 +1709,8 @@
                 "unloading/Export",
                 "unloading/Spark_connector",
                 "unloading/Flink_connector",
-                "unloading/unload_using_insert_into_files"
+                "unloading/unload_using_insert_into_files",
+                "unloading/feature-support-loading-and-unloading"
             ]
         },
         {
@@ -1735,8 +1745,13 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
+<<<<<<< HEAD
                 "data_source/data_cache",
                 "data_source/datalake_faq"
+=======
+                "data_source/datalake_faq",
+                "data_source/feature-support-data-lake-analytics"
+>>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -1784,7 +1799,8 @@
                                 "using_starrocks/usage/drop",
                                 "using_starrocks/usage/show",
                                 "using_starrocks/usage/information_schema-materialized_views",
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views"
+                                "using_starrocks/troubleshooting_asynchronous_materialized_views",
+                                "using_starrocks/feature-support-asynchronous-materialized-views"
                             ]
                         }
                     ]
