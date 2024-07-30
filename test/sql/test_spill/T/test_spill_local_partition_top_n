@@ -1,0 +1,19 @@
+-- name: test_spill_local_partition_top_n
+
+set enable_spill=true;
+set spill_mode="force";
+
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+insert into t0 select * from t0;
+insert into t0 select * from t0;
+insert into t0 values (null,null);
+
+set pipeline_dop = 1;
+
+select count(*), sum(c0) from (select c0, rn from (select c0, row_number() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+select count(*), sum(c0) from (select c0, rn from (select c0, rank() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+select count(*), sum(c0) from (select c0, rn from (select c0, rank() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;

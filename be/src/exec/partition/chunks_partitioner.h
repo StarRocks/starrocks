@@ -15,11 +15,14 @@
 #pragma once
 
 #include <any>
+#include <memory>
 #include <queue>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exec/chunk_buffer_memory_manager.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exprs/expr_context.h"
 #include "partition_hash_variant.h"
 #include "runtime/current_thread.h"
@@ -35,12 +38,18 @@ class ChunksPartitioner;
 
 using ChunksPartitionerPtr = std::shared_ptr<ChunksPartitioner>;
 
+// TODO: add more timer
+struct ChunksPartitionStatistics {
+    RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_memory{};
+    RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_size{};
+};
+
 class ChunksPartitioner {
 public:
     ChunksPartitioner(const bool has_nullable_partition_column, const std::vector<ExprContext*>& partition_exprs,
                       std::vector<PartitionColumnType> partition_types);
 
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
     // Chunk is divided into multiple parts by partition columns,
     // and each partition corresponds to a key-value pair in the hash map.
@@ -77,9 +86,18 @@ public:
     // Number of partitions
     size_t num_partitions() const { return _hash_map_variant.size(); }
 
+    void set_passthrough(bool passthrough) {
+        _is_passthrough = passthrough;
+        if (_is_passthrough) {
+            _hash_map_variant.set_passthrough();
+        }
+    }
+
     bool is_passthrough() const { return _is_passthrough; }
 
-    bool is_passthrough_buffer_empty() const { return _passthrough_buffer.empty(); }
+    bool is_passthrough_buffer_full() const { return _limited_buffer->is_full(); }
+
+    bool is_passthrough_buffer_empty() const { return _limited_buffer->is_empty(); }
 
     bool is_hash_map_eos() const { return _hash_map_eos && (!_hash_map_variant.is_nullable() || _null_key_eos); }
 
@@ -135,8 +153,7 @@ private:
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }
         if (_is_passthrough) {
-            std::lock_guard<std::mutex> l(_buffer_lock);
-            _passthrough_buffer.push(chunk);
+            _limited_buffer->push(chunk);
         }
     }
 
@@ -242,8 +259,8 @@ private:
 
     bool _is_passthrough = false;
     // We simply buffer chunks when partition cardinality is high
-    std::queue<ChunkPtr> _passthrough_buffer;
-    std::mutex _buffer_lock;
+    ChunksPartitionStatistics _statistics;
+    std::unique_ptr<LimitedPipelineChunkBuffer<ChunksPartitionStatistics>> _limited_buffer;
 
     // Iterator of partitions
     std::any _partition_it;

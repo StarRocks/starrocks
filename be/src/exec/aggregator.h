@@ -32,6 +32,7 @@
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -419,9 +420,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::queue<ChunkPtr> _buffer;
-    std::unique_ptr<pipeline::ChunkBufferMemoryManager> _buffer_mem_manager;
-    std::mutex _buffer_mutex;
+    std::unique_ptr<LimitedPipelineChunkBuffer<AggStatistics>> _limited_buffer;
 
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate

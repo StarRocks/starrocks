@@ -210,3 +210,7 @@ select count(*), sum(rk) from (select rank() over (partition by c0, c1) as rk fr
 -- result:
 16384	16384
 -- !result
+select count(*), sum(c0) from (select c0, rn from (select c0, row_number() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+-- result:
+16384	33562624
+-- !result
