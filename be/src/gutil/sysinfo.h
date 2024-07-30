@@ -30,8 +30,9 @@
 
 #pragma once
 
-#include <cstdint>
 #include <sys/resource.h>
+
+#include <cstdint>
 
 namespace base {
 void SleepForNanoseconds(int64_t nanoseconds);
