@@ -25,6 +25,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -109,6 +110,12 @@ public class QueryPlanLockFreeTest {
         Assert.assertTrue("original table should different from copied table in plan", table != node2.getOlapTable());
 
         Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
+    }
+
+    @After
+    public void after() {
+        connectContext.getSessionVariable().setCboUseDBLock(false);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
 
 }
