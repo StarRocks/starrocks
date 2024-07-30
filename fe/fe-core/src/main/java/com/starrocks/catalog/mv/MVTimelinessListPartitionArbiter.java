@@ -151,6 +151,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
             String mvPartitionName = addEntry.getKey();
             mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName);
         }
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
         return mvUpdateInfo;
     }
 }

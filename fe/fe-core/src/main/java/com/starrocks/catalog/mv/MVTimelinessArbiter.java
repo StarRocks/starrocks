@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
@@ -189,5 +190,19 @@ public abstract class MVTimelinessArbiter {
         for (Map.Entry<Table, Map<String, PCell>> entry : extraChangedPartitions.entrySet()) {
             consumer.accept(entry);
         }
+    }
+
+    protected void addEmptyPartitionsToRefresh(MvUpdateInfo mvUpdateInfo) {
+        Set<Table> refBaseTables = mv.getRefBaseTablePartitionColumns().keySet();
+        boolean allOlapTables = refBaseTables.stream().allMatch(t -> t instanceof OlapTable);
+        if (!allOlapTables) {
+            return;
+        }
+        mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
+            if (!mv.getPartition(mvPartitionName).hasStorageData()) {
+                // add empty partitions
+                mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
+            }
+        });
     }
 }
