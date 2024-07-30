@@ -14,14 +14,11 @@
 
 package com.starrocks.connector.metadata.iceberg;
 
-import com.google.common.base.Joiner;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -30,7 +27,6 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
@@ -62,21 +58,7 @@ public class IcebergHistoryTable extends MetadataTable {
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_HISTORY_TABLE,
                 fullSchema.size(), 0, getName(), METADATA_DB_NAME);
-        THdfsTable hdfsTable = new THdfsTable();
-
-        hdfsTable.setColumns(fullSchema.stream().map(Column::toThrift).collect(Collectors.toList()));
-        hdfsTable.setPartition_columnsIsSet(false);
-
-        String columnNames = Joiner.on(',').join(fullSchema.stream()
-                .map(Column::getName)
-                .collect(Collectors.toList()));
-        hdfsTable.setHive_column_names(columnNames);
-
-        String columnTypes = Joiner.on(',').join(fullSchema.stream()
-                .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
-                .collect(Collectors.toList()));
-        hdfsTable.setHive_column_types(columnTypes);
-        hdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
+        THdfsTable hdfsTable = buildThriftTable(fullSchema);
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
