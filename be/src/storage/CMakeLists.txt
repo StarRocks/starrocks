@@ -120,11 +120,7 @@ add_library(Storage STATIC
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
-<<<<<<< HEAD
-=======
-    rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
->>>>>>> 0f639ad566 ([Enhancement] metadata support LRU memory evict strategy in shared-nothing cluster (#48832))
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
