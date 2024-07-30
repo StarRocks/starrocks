@@ -249,7 +249,7 @@ public class ListPartitionPruner implements PartitionPruner {
         for (ColumnRefOperator partitionColumn : partitionColumnRefs) {
             Column column = scanOperator.getTable().getColumn(partitionColumn.getName());
             if (column != null && column.isGeneratedColumn()) {
-                Expr generatedExpr = column.getGeneratedColumnExpr();
+                Expr generatedExpr = column.generatedColumnExpr();
                 ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
                 ScalarOperator call =
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
