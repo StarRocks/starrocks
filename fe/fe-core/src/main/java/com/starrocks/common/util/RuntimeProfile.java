@@ -438,6 +438,7 @@ public class RuntimeProfile {
         return builder.toString();
     }
 
+    // concurrency safe
     public void addChild(RuntimeProfile child) {
         if (child == null) {
             return;
@@ -446,6 +447,18 @@ public class RuntimeProfile {
         childMap.put(child.name, child);
         Pair<RuntimeProfile, Boolean> pair = Pair.create(child, true);
         childList.add(pair);
+    }
+
+    // concurrency safe
+    public void addChildren(List<RuntimeProfile> children) {
+        if (children.isEmpty()) {
+            return;
+        }
+        final RuntimeProfile child = children.get(0);
+        childMap.put(child.name, child);
+        List<Pair<RuntimeProfile, Boolean>> childList =
+                children.stream().map(c -> new Pair<>(c, true)).collect(Collectors.toList());
+        this.childList.addAll(childList);
     }
 
     public void removeChild(String childName) {

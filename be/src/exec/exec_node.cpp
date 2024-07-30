@@ -50,6 +50,7 @@
 #include "exec/aggregate/distinct_streaming_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
+#include "exec/capture_version_node.h"
 #include "exec/connector_scan_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/dict_decode_node.h"
@@ -74,6 +75,7 @@
 #include "exec/union_node.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -562,6 +564,10 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     }
     case TPlanNodeType::STREAM_AGG_NODE: {
         *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::CAPTURE_VERSION_NODE: {
+        *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
         return Status::OK();
     }
     default:

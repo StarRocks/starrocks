@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
+import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
@@ -49,6 +50,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -285,6 +288,22 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         }
 
         return resultList;
+    }
+
+    @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params) {
+        final TReportFragmentFinishResponse result = new TReportFragmentFinishResponse();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.debug("reportFragmentFinish() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.OK));
+            return result;
+        }
+        final TUniqueId fragment_instance_id = params.fragment_instance_id;
+        Status status = info.getCoord().scheduleNextTurn(fragment_instance_id);
+        result.setStatus(status.toThrift());
+        return result;
     }
 
     @Override

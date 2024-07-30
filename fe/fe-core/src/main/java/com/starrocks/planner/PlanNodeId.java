@@ -21,12 +21,14 @@ import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
 
 public class PlanNodeId extends Id<PlanNodeId> {
+    public static final PlanNodeId DUMMY_PLAN_NODE_ID = new PlanNodeId(-1000);
+
     public PlanNodeId(int id) {
         super(id);
     }
 
     public static IdGenerator<PlanNodeId> createGenerator() {
-        return new IdGenerator<PlanNodeId>() {
+        return new IdGenerator<>() {
             @Override
             public PlanNodeId getNextId() {
                 return new PlanNodeId(nextId++);
