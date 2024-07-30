@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-sidebar_label: 能力边界
+sidebar_label: "能力边界"
 ---
 
 # 异步物化视图能力边界

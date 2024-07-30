@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-sidebar_label: 能力边界
+sidebar_label: "能力边界"
 ---
 
 # 数据湖分析能力边界

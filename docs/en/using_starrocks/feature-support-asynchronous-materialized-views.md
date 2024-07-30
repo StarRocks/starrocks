@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "English"
-sidebar_label: Feature Support
+sidebar_label: "Feature Support"
 ---
 
 # Feature Support: Asynchronous Materialized Views

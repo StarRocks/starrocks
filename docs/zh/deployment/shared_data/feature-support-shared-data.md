@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-sidebar_label: 能力边界
+sidebar_label: "能力边界"
 ---
 
 # 存算分离集群能力边界
