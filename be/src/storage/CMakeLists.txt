@@ -116,6 +116,7 @@ add_library(Storage STATIC
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
+    rowset/metadata_cache.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
