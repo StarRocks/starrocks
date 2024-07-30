@@ -188,23 +188,21 @@ Examples:
 - Drop a single partition:
 
 ```sql
--- Before 2.0
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>
--- 2.0 or later
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
 - Drop partitions in batch (Supported from v3.3.1):
 
 ```sql
--- Drop partitions by names.
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [IF EXISTS] (<partition_name>, ...) [FORCE]
--- Drop partitions by time range.
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [IF EXISTS] START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> ) [FORCE]
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] -- multi_range_partitions only appiles to Range Partitioning.
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
 ```
 
 For parameters involved, refer to [ADD PARTITION(S)](#add-partitions).
