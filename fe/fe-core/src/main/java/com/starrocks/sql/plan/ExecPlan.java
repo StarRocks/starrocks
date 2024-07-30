@@ -194,8 +194,8 @@ public class ExecPlan {
         if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
             if (FeConstants.showFragmentCost) {
                 AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
-                str.append("Plan CPU Cost:").append(auditEvent.planCpuCosts).append("\n");
-                str.append("Plan Memory Cost:").append(auditEvent.planMemCosts).append("\n\n");
+                str.append("Plan CPU Cost: ").append(auditEvent.planCpuCosts).append("\n");
+                str.append("Plan Memory Cost: ").append(auditEvent.planMemCosts).append("\n\n");
             }
         }
 
