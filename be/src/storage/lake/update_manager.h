@@ -130,9 +130,6 @@ public:
     // get del nums from rowset, for compaction policy
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
-    StatusOr<TabletSchemaPtr> get_output_rowset_schema(const TabletMetadata& metadata,
-                                                       const TxnLogPB_OpCompaction& op_compaction);
-
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                       const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);

@@ -45,16 +45,17 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
         // update tablet meta
-        // 1. rowset_to_schema is empty, maybe upgrade from old version or first time to do fast ddl
-        // 2. rowset_to_schema is not empty, add the origin tablet schema into historical_schemas and update the
-        //    rowset_to_schema
+        // 1. rowset_to_schema is empty, maybe upgrade from old version or first time to do fast ddl. So we will
+        //    add the tablet schema before alter into historical schema.
+        // 2. rowset_to_schema is not empty, no need to update historical schema because we historical schema already
+        //    keep the tablet schema before alter.
         if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
             // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the
             // `lake_enable_alter_struct` configuration. Once testing is complete, this configuration will be removed.
             if (config::lake_enable_alter_struct) {
-                if (metadata->rowset_to_schema().empty()) {
+                if (metadata->rowset_to_schema().empty() && metadata->rowsets_size() > 0) {
                     metadata->mutable_historical_schemas()->clear();
                     auto schema_id = metadata->schema().id();
                     auto& item = (*metadata->mutable_historical_schemas())[schema_id];

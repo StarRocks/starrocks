@@ -765,10 +765,9 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
 
     {
         for (int i = 0; i < 5; i++) {
-            std::vector<lake::RowsetPtr> input_rowsets;
-            auto rs = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, i);
-            input_rowsets.emplace_back(std::move(rs));
-            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet);
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
             ASSERT_TRUE(res.ok());
             auto schema_id = tablet_metadata->rowset_to_schema().at(tablet_metadata->rowsets(i).id());
             ASSERT_EQ(res.value()->id(), schema_id);
@@ -782,15 +781,15 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4);
 
     {
-        std::vector<lake::RowsetPtr> input_rowsets;
-        input_rowsets.emplace_back(rs1);
-        input_rowsets.emplace_back(rs2);
-        auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet);
+        std::vector<uint32_t> input_rowsets;
+        input_rowsets.emplace_back(tablet_metadata->rowsets(0).id());
+        input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
+        auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
         ASSERT_EQ(res.value()->id(), schema_id1);
 
-        input_rowsets.emplace_back(rs3);
-        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet);
+        input_rowsets.emplace_back(tablet_metadata->rowsets(2).id());
+        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
         ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
     }
@@ -798,10 +797,9 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     {
         tablet_metadata->mutable_rowset_to_schema()->clear();
         for (int i = 0; i < 5; i++) {
-            std::vector<lake::RowsetPtr> input_rowsets;
-            auto rs = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, i);
-            input_rowsets.emplace_back(std::move(rs));
-            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet);
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
             ASSERT_TRUE(res.ok());
             ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
         }

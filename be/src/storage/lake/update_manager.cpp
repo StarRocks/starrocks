@@ -684,27 +684,6 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
-StatusOr<TabletSchemaPtr> UpdateManager::get_output_rowset_schema(const TabletMetadata& metadata,
-                                                                  const TxnLogPB_OpCompaction& op_compaction) {
-    TabletSchemaPtr tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    if (op_compaction.input_rowsets_size() != 0 && !metadata.rowset_to_schema().empty()) {
-        auto last_rowset_id = op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1);
-        auto rowset_it = metadata.rowset_to_schema().find(last_rowset_id);
-        if (rowset_it != metadata.rowset_to_schema().end()) {
-            auto schema_it = metadata.historical_schemas().find(rowset_it->second);
-            if (schema_it != metadata.historical_schemas().end()) {
-                tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(schema_it->second).first;
-            } else {
-                return Status::InternalError(
-                        fmt::format("can not find output rowset schema, id {}", rowset_it->second));
-            }
-        } else {
-            return Status::InternalError(fmt::format("input rowset {} not exist", last_rowset_id));
-        }
-    }
-    return tablet_schema;
-}
-
 bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id) {
     // Is config enable ?
     if (!config::enable_light_pk_compaction_publish) {
@@ -724,7 +703,10 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                                        int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
-    ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(metadata, op_compaction));
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
+
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
@@ -775,7 +757,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
-    ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(metadata, op_compaction));
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
