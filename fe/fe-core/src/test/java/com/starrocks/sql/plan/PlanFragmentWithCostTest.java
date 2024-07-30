@@ -2321,11 +2321,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     distribution type: SHUFFLE\n" +
                     "     partition exprs: [4: t1a, VARCHAR, true]\n" +
                     "     cardinality: 9000");
-            assertContains(plan, "Plan CPU Cost: 1881002.0\n" +
-                    "Plan Memory Cost: 288001.0");
+            System.out.println(plan);
+            assertContains(plan, "Plan Cost\n" +
+                    "  CPU: 1881002.0\n" +
+                    "  Memory: 288001.0");
 
-            assertContains(getCostExplain(sql), "Plan CPU Cost: 1881002.0\n" +
-                    "Plan Memory Cost: 288001.0");
+            assertContains(getCostExplain(sql), "Plan Cost\n" +
+                    "  CPU: 1881002.0\n" +
+                    "  Memory: 288001.0");
 
             AuditEvent event = connectContext.getAuditEventBuilder().build();
             Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
