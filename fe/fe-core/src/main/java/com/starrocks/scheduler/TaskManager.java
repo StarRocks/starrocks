@@ -646,18 +646,18 @@ public class TaskManager implements MemoryTrackable {
         Consumer<TaskRunStatus> addResult = task ->
                 mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
 
-        // pending task runs
-        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
-        pendingTaskRuns.stream()
-                .map(TaskRun::getStatus)
-                .filter(taskRunFilter)
-                .forEach(addResult);
-
         // running
         taskRunScheduler.getCopiedRunningTaskRuns().stream()
                 .map(TaskRun::getStatus)
                 .filter(taskRunFilter)
                 .filter(duplicateFilter)
+                .forEach(addResult);
+
+        // pending task runs
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+        pendingTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(taskRunFilter)
                 .forEach(addResult);
 
         // history
