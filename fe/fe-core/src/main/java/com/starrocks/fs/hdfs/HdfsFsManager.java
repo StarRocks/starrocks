@@ -698,6 +698,12 @@ public class HdfsFsManager {
                 // Disable cache for KS3
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, "true");
 
+                // select * from files("path" = "s3://bucket/file", "format" = "parquet"),
+                // CloudConfigurationFactory.buildCloudConfigurationForStorage() returns CloudConfiguration,
+                // and FileSystem.getFileSystemClass() returns "No FileSystem for scheme s3" error.
+                // Set fs.s3.impl to report error explicitly.
+                conf.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+
                 FileSystem innerFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(innerFileSystem);
                 fileSystem.setConfiguration(conf);
