@@ -807,7 +807,9 @@ void ExecEnv::try_release_resource_before_core_dump() {
                                        &parse_resource_str, &modules);
     }
 
-    auto need_release = [&release_all, &modules](std::string name) { return release_all || modules.contains(name); };
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
 
     if (_connector_scan_executor != nullptr && need_release("connector_scan_executor")) {
         _connector_scan_executor->close();
