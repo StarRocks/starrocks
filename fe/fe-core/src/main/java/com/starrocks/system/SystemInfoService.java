@@ -944,7 +944,6 @@ public class SystemInfoService implements GsonPostProcessable {
             user = ConnectContext.get().getCurrentUserIdentity().getUser();
         } catch (Exception e) {
             if (user == null) {
-                //heartbeat
                 return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
             } else {
                 LOG.info("fail to get user info, msg: {}", e.getMessage());
