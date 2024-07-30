@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.profile.Timer;
@@ -44,7 +43,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.connector.hive.HiveWriteUtils.checkedDelete;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
@@ -181,7 +179,7 @@ public class RemoteFileOperations {
 
     private RemoteFileInfo buildRemoteFileInfo(Partition partition, List<RemoteFileDesc> fileDescs) {
         RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
-                .setFormat(partition.getInputFormat())
+                .setFormat(partition.getFileFormat())
                 .setFullPath(partition.getFullPath())
                 .setFiles(fileDescs.stream()
                         .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
@@ -305,30 +303,29 @@ public class RemoteFileOperations {
         }
     }
 
-    public List<RemoteFileInfo> getRemotePartitions(List<Partition> partitions) {
+    public List<PartitionInfo> getRemotePartitions(List<Partition> partitions) {
         List<Path> paths = Lists.newArrayList();
         for (Partition partition : partitions) {
             Path partitionPath = new Path(partition.getFullPath());
             paths.add(partitionPath);
         }
         FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
-        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        List<PartitionInfo> result = Lists.newArrayList();
         for (int i = 0; i < partitions.size(); i++) {
-            Partition partition = partitions.get(i);
-            FileStatus fileStatus = fileStatuses[i];
-            String locateName = fileStatus.getPath().toUri().getPath();
-            String fileName = PartitionUtil.getSuffixName(paths.get(i).toUri().getPath(), locateName);
-            RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", fileStatus.getLen(),
-                    fileStatus.getModificationTime(), ImmutableList.of());
-            RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
-                    .setFormat(partition.getInputFormat())
-                    .setFullPath(partition.getFullPath())
-                    .setFiles(Stream.of(fileDesc)
-                            .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
-                            .map(desc -> desc.setSplittable(partition.isSplittable()))
-                            .collect(Collectors.toList()));
-            remoteFileInfos.add(builder.build());
+            final Partition partition = partitions.get(i);
+            final FileStatus fileStatus = fileStatuses[i];
+            result.add(new PartitionInfo() {
+                @Override
+                public long getModifiedTime() {
+                    return fileStatus.getModificationTime();
+                }
+
+                @Override
+                public String getFullPath() {
+                    return partition.getFullPath();
+                }
+            });
         }
-        return remoteFileInfos;
+        return result;
     }
 }

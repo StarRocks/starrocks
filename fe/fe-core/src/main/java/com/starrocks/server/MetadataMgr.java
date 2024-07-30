@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -96,7 +95,8 @@ public class MetadataMgr {
     public class QueryMetadatas {
         private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
 
-        public QueryMetadatas() {}
+        public QueryMetadatas() {
+        }
 
         public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
             if (metadatas.containsKey(catalogName)) {
@@ -768,34 +768,30 @@ public class MetadataMgr {
 
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionNames)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemoteFileInfos(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to list partition file's metadata on catalog [{}], table [{}]",
                         table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
     }
 
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemotePartitions(table, partitionNames)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
                         table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {

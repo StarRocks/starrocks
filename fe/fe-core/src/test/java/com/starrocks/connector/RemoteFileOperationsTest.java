@@ -307,7 +307,7 @@ public class RemoteFileOperationsTest {
 
         RemoteFileOperations ops = new RemoteFileOperations(null, null, null,
                 false, true, null);
-        List<RemoteFileInfo> remoteFileInfos = ops.getRemotePartitions(partitionList);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitions = ops.getRemotePartitions(partitionList);
+        Assert.assertEquals(3, partitions.size());
     }
 }
