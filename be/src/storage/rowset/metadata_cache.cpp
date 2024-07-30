@@ -46,7 +46,7 @@ void MetadataCache::_erase(const std::string& key) {
 
 void MetadataCache::_cache_value_deleter(const CacheKey& /*key*/, void* value) {
     // close this rowset, release metadata memory
-    static_cast<Rowset*>(value)->close();
+    reinterpret_cast<Rowset*>(value)->close();
 }
 
 } // namespace starrocks
