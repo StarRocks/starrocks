@@ -2230,7 +2230,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
 
-    @VarAttr(name = CUSTOM_QUERY_ID)
+    @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
 
     public int getExprChildrenLimit() {
