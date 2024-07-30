@@ -217,7 +217,7 @@ public class ConnectContext {
 
     protected TWorkGroup resourceGroup;
 
-    private Set<String> labelsLocation = Sets.newHashSet();
+    protected Set<String> labelsLocation = Sets.newHashSet();
 
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
