@@ -141,6 +141,13 @@ message TabletMetadataPB {
     optional TabletSchemaPB source_schema = 14;
     optional PersistentIndexSstableMetaPB sstable_meta = 15;
     optional DeltaColumnGroupMetadataPB dcg_meta = 16;
+    // Keep the tablet schema before each Alter operation
+    // If no rowset use the tablet schema any more, it will be gc by compaction
+    // The latest schema is also saved here, and it is same with the above schema
+    // It can be removed in future versions
+    map<int64, TabletSchemaPB> historical_schemas = 17;
+    // rowset_id -> schema_id
+    map<uint32, int64> rowset_to_schema = 18;
 }
 
 message MetadataUpdateInfoPB {
