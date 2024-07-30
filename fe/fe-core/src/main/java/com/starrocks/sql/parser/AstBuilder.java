@@ -78,7 +78,6 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
@@ -1340,7 +1339,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         BranchOptions branchOptions = BranchOptions.empty();
         if (context.branchOptions() != null) {
             StarRocksParser.BranchOptionsContext branchOptionsContext = context.branchOptions();
-            Optional<Long> snapshotId =  Optional.ofNullable(branchOptionsContext.snapshotId())
+            Optional<Long> snapshotId = Optional.ofNullable(branchOptionsContext.snapshotId())
                     .map(id -> safeParseLong("snapshotId", id.number().getText()));
 
             Optional<Integer> minSnapshotsToKeep = Optional.empty();
@@ -1403,7 +1402,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String tagName = getIdentifierName(context.identifier());
 
         StarRocksParser.TagOptionsContext tagOptionsContext = context.tagOptions();
-        Optional<Long> snapshotId =  Optional.ofNullable(tagOptionsContext.snapshotId())
+        Optional<Long> snapshotId = Optional.ofNullable(tagOptionsContext.snapshotId())
                 .map(id -> safeParseLong("snapshotId", id.number().getText()));
 
         Optional<Long> tagRefAgeMs = Optional.ofNullable(tagOptionsContext.refRetain())
@@ -1997,7 +1996,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new CreateCatalogStmt(catalogName, comment, properties,  ifNotExists, createPos(context));
+        return new CreateCatalogStmt(catalogName, comment, properties, ifNotExists, createPos(context));
     }
 
     @Override
@@ -5047,10 +5046,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private QueryPeriod.PeriodType getPeriodType(Token token) {
         switch (token.getType()) {
-            case StarRocksLexer.TIMESTAMP :
+            case StarRocksLexer.TIMESTAMP:
             case StarRocksLexer.SYSTEM_TIME:
                 return QueryPeriod.PeriodType.TIMESTAMP;
-            case StarRocksLexer.VERSION :
+            case StarRocksLexer.VERSION:
                 return QueryPeriod.PeriodType.VERSION;
             default:
                 throw new ParsingException("Unsupported query period type: " + token.getText());
@@ -5416,22 +5415,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateUserStatement(StarRocksParser.CreateUserStatementContext context) {
-        UserDesc userDesc;
-        Token start = context.user().start;
-        Token stop;
         UserIdentity user = (UserIdentity) visit(context.user());
-        UserAuthOption authOption = context.authOption() == null ? null : (UserAuthOption) visit(context.authOption());
-        if (authOption == null) {
-            userDesc = new UserDesc(user, "", false, user.getPos());
-        } else if (authOption.getAuthPlugin() == null) {
-            stop = context.authOption().stop;
-            userDesc =
-                    new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain(), createPos(start, stop));
-        } else {
-            stop = context.authOption().stop;
-            userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
-                    authOption.isPasswordPlain(), createPos(start, stop));
-        }
+        UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
         boolean ifNotExists = context.IF() != null;
 
         List<String> roles = new ArrayList<>();
@@ -5440,7 +5425,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
 
-        return new CreateUserStmt(ifNotExists, userDesc, roles, createPos(context));
+        return new CreateUserStmt(user, ifNotExists, authOption, roles, createPos(context));
     }
 
     @Override
@@ -5451,10 +5436,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAlterUserStatement(StarRocksParser.AlterUserStatementContext context) {
-        UserDesc userDesc;
         UserIdentity user = (UserIdentity) visit(context.user());
-        Token start = context.user().start;
-        Token stop;
+
         if (context.ROLE() != null) {
             List<String> roles = new ArrayList<>();
             if (context.roleList() != null) {
@@ -5472,18 +5455,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
 
             return new SetDefaultRoleStmt(user, setRoleType, roles, createPos(context));
-        }
-
-        stop = context.authOption().stop;
-        UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
-        if (authOption.getAuthPlugin() == null) {
-            userDesc =
-                    new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain(), createPos(start, stop));
         } else {
-            userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
-                    authOption.isPasswordPlain(), createPos(start, stop));
+            UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
+            return new AlterUserStmt(user, context.EXISTS() != null, authOption, createPos(context));
         }
-        return new AlterUserStmt(userDesc, context.EXISTS() != null, createPos(context));
     }
 
     @Override
