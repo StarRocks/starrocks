@@ -195,23 +195,21 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 删除单个分区：
 
 ```sql
--- 2.0之前版本
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>
--- 2.0及之后版本
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
 批量删除分区（自 v3.3.1 起支持）：
 
 ```sql
--- 按分区名删除。
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [IF EXISTS] (<partition_name>, ...) [FORCE]
--- 按时间范围删除。
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [IF EXISTS] START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> ) [FORCE]
+DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] -- multi_range_partitions 仅适用于 Range 分区。
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 ```
 
 其中涉及的参数，参考 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions)
