@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TGetTasksParams;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -67,6 +68,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -633,33 +636,37 @@ public class TaskManager implements MemoryTrackable {
     public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName,
                                                                          Set<String> taskNames) {
         Map<String, List<TaskRunStatus>> mvNameRunStatusMap = Maps.newHashMap();
+        Predicate<TaskRunStatus> taskRunFilter = (task) ->
+                Objects.nonNull(task)
+                        && task.getSource() == Constants.TaskSource.MV
+                        && (dbName == null || task.getDbName().equals(dbName))
+                        && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
+        // Keep the first one of duplicated task runs
+        Predicate<TaskRunStatus> duplicateFilter = task -> isSameTaskRunJob(task, mvNameRunStatusMap);
+        Consumer<TaskRunStatus> addResult = task ->
+                mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
 
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
-                .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
-                .filter(Objects::nonNull)
-                .filter(u -> dbName == null || u.getDbName().equals(dbName))
-                .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
-                .forEach(task -> mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task));
+                .filter(taskRunFilter)
+                .forEach(addResult);
 
-        // Add a batch of task runs with the same job id
-        // TODO: only lookup the first and last task in this job
+        // running
+        taskRunScheduler.getCopiedRunningTaskRuns().stream()
+                .map(TaskRun::getStatus)
+                .filter(taskRunFilter)
+                .filter(duplicateFilter)
+                .forEach(addResult);
+
+        // history
         taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
                 .stream()
-                .filter(task -> isSameTaskRunJob(task, mvNameRunStatusMap))
-                .forEach(task -> mvNameRunStatusMap
-                        .computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList())
-                        .add(task));
+                .filter(taskRunFilter)
+                .filter(duplicateFilter)
+                .forEach(addResult);
 
-        taskRunScheduler.getCopiedRunningTaskRuns().stream()
-                .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                .map(TaskRun::getStatus)
-                .filter(u -> dbName == null || u != null && u.getDbName().equals(dbName))
-                .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
-                .filter(task -> isSameTaskRunJob(task, mvNameRunStatusMap))
-                .forEach(task -> mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task));
         return mvNameRunStatusMap;
     }
 
