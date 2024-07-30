@@ -165,6 +165,10 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
+    for (auto& col : chunk->columns()) {
+        col->check_field_rows();
+    }
+
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
