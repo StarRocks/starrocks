@@ -31,42 +31,45 @@ import java.util.Map;
 
 public interface MVRepairHandler {
 
-    public class PartitionRepairInfo {
-        private long partitionId; // partition id
-        private String partitionName; // partition name
-        private long version; // partition visible version
-        private long versionTime; // partition visible version time
+    class PartitionRepairInfo {
+        private final long partitionId; // partition id
+        private final String partitionName; // partition name
+        private final long curVersion; // new commit partition visible version
+        private final long curVersionTime; // new commit partition visible version time
+        private final long newVersion; // new commit partition visible version
+        private final long newVersionTime; // new commit partition visible version time
+
+        public PartitionRepairInfo(Partition partition, long newVersion, long newVersionTime) {
+            this.partitionId = partition.getId();
+            this.partitionName = partition.getName();
+            this.curVersion = partition.getVisibleVersion();
+            this.curVersionTime = partition.getVisibleVersionTime();
+            this.newVersion = newVersion;
+            this.newVersionTime = newVersionTime;
+        }
 
         public long getPartitionId() {
             return partitionId;
-        }
-
-        public void setPartitionId(long partitionId) {
-            this.partitionId = partitionId;
         }
 
         public String getPartitionName() {
             return partitionName;
         }
 
-        public void setPartitionName(String partitionName) {
-            this.partitionName = partitionName;
+        public long getNewVersion() {
+            return newVersion;
         }
 
-        public long getVersion() {
-            return version;
+        public long getNewVersionTime() {
+            return newVersionTime;
         }
 
-        public void setVersion(long version) {
-            this.version = version;
+        public long getCurVersion() {
+            return curVersion;
         }
 
-        public long getVersionTime() {
-            return versionTime;
-        }
-
-        public void setVersionTime(long versionTime) {
-            this.versionTime = versionTime;
+        public long getCurVersionTime() {
+            return curVersionTime;
         }
     }
 
@@ -105,11 +108,8 @@ public interface MVRepairHandler {
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
                     }
-                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo();
-                    partitionRepairInfo.setPartitionId(partitionId);
-                    partitionRepairInfo.setPartitionName(partition.getName());
-                    partitionRepairInfo.setVersion(partitionCommitInfo.getVersion());
-                    partitionRepairInfo.setVersionTime(partitionCommitInfo.getVersionTime());
+                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition,
+                            partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {

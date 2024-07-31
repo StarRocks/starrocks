@@ -532,7 +532,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabaseAndCheckExist(db, table, LockType.READ);
         try {
             for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
                 long partitionId = partitionVersion.getKey();
@@ -540,15 +540,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 if (partition == null || table.isTempPartition(partitionId)) {
                     continue;
                 }
-                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo();
-                partitionRepairInfo.setPartitionId(partitionId);
-                partitionRepairInfo.setPartitionName(partition.getName());
-                partitionRepairInfo.setVersion(partitionVersion.getValue());
-                partitionRepairInfo.setVersionTime(finishedTimeMs);
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition, partitionVersion.getValue(),
+                        finishedTimeMs);
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
         }
 
         if (partitionRepairInfos.isEmpty()) {
