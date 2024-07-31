@@ -244,6 +244,7 @@ void PythonEnvManager::close() {
     _running = false;
     if (_cleanup_thread != nullptr) {
         _cleanup_thread->join();
+        _cleanup_thread.reset();
     }
 }
 } // namespace starrocks
