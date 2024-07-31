@@ -312,17 +312,19 @@ public class RemoteFileOperations {
         FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
         List<PartitionInfo> result = Lists.newArrayList();
         for (int i = 0; i < partitions.size(); i++) {
-            final Partition partition = partitions.get(i);
-            final FileStatus fileStatus = fileStatuses[i];
+            Partition partition = partitions.get(i);
+            FileStatus fileStatus = fileStatuses[i];
+            final String fullPath = partition.getFullPath();
+            final long time = fileStatus.getModificationTime();
             result.add(new PartitionInfo() {
                 @Override
                 public long getModifiedTime() {
-                    return fileStatus.getModificationTime();
+                    return time;
                 }
 
                 @Override
                 public String getFullPath() {
-                    return partition.getFullPath();
+                    return fullPath;
                 }
             });
         }
