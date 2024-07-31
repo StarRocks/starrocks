@@ -1362,13 +1362,10 @@ CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 CONF_mBool(enable_pk_strict_memcheck, "false");
 
-<<<<<<< HEAD
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
 CONF_mBool(skip_lake_pk_preload, "false");
-=======
 // Experimental feature, this configuration will be removed after testing is complete.
-CONF_mBool(lake_enable_alter_struct, "true");
+CONF_mBool(lake_enable_alter_struct, "false");
 
->>>>>>> 3c8d168723 ([Feature] Support add/drop filed for struct column in share-data mode (#48430))
 } // namespace starrocks::config

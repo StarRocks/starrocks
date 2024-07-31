@@ -3040,5 +3040,5 @@ public class Config extends ConfigBase {
     public static boolean enable_colocate_restore = false;
     
     @ConfField
-    public static boolean enable_alter_struct_column = true;
+    public static boolean enable_alter_struct_column = false;
 }
