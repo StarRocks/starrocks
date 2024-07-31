@@ -14,17 +14,22 @@
 
 package com.starrocks.connector.metadata;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.thrift.THdfsTable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MetadataTable extends Table {
     private final MetadataTableType metadataTableType;
@@ -36,6 +41,7 @@ public class MetadataTable extends Table {
     protected static final List<Column> PLACEHOLDER_COLUMNS = ImmutableList.<Column>builder()
             .add(new Column("predicate", ScalarType.STRING, true))
             .build();
+
     public MetadataTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
                          String originDb, String originTable, MetadataTableType metadataTableType) {
         super(id, name, type, baseSchema);
@@ -71,6 +77,24 @@ public class MetadataTable extends Table {
 
     public boolean supportBuildPlan() {
         return false;
+    }
+
+    protected THdfsTable buildThriftTable(List<Column> columns) {
+        THdfsTable hdfsTable = new THdfsTable();
+        hdfsTable.setColumns(columns.stream().map(Column::toThrift).collect(Collectors.toList()));
+        hdfsTable.setPartition_columnsIsSet(false);
+
+        String columnNames = Joiner.on(',').join(columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_names(columnNames);
+
+        String columnTypes = Joiner.on(',').join(columns.stream()
+                .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_types(columnTypes);
+        hdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
+        return hdfsTable;
     }
 
     public static Builder builder() {

@@ -108,7 +108,7 @@ public class MultiUserLock extends Lock {
                         throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock ("
                                 + lockHolderRequest.getLocker().getLockerStackTrace() + ")"
                                 + " in the scope of Database " + lockOwnerLockType
-                                + "Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
+                                + " Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
                     }
 
                     /*

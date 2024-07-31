@@ -117,6 +117,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -235,6 +237,23 @@ public class OlapTableSink extends DataSink {
         complete();
     }
 
+    public List<Long> getOpenPartitions() {
+        if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+                || partitionIds.size() < Config.max_load_initial_open_partition_number) {
+            return partitionIds;
+        }
+        // bigger partition id means newer partition
+        // open last max_load_initial_open_partition_number partitions
+        Set<Long> openPartitionIds = partitionIds.stream().collect(
+                Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
+                .stream().limit(Config.max_load_initial_open_partition_number).collect(Collectors.toSet());;
+        if (!dstTable.getDoubleWritePartitions().isEmpty()) {
+            openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
+        }
+
+        return openPartitionIds.stream().collect(Collectors.toList());
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -252,7 +271,7 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
         TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                enableAutomaticPartition, automaticBucketSize, partitionIds);
+                enableAutomaticPartition, automaticBucketSize, getOpenPartitions());
         tSink.setPartition(partitionParam);
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId));

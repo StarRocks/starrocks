@@ -41,7 +41,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
@@ -295,6 +294,7 @@ public class GlobalStateMgr {
     private final RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
     private final ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
 
     private final ConsistencyChecker consistencyChecker;
     private final BackupHandler backupHandler;
@@ -607,13 +607,13 @@ public class GlobalStateMgr {
         this.alterJobMgr = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
+        this.materializedViewMgr = new MaterializedViewMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
@@ -1433,6 +1433,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+    // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
         File curFile = storage.getCurrentImageFile();
@@ -1471,7 +1473,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
                 .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
                 .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
-                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
                 .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
@@ -1606,6 +1608,8 @@ public class GlobalStateMgr {
         }
     }
 
+    // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
@@ -1644,7 +1648,7 @@ public class GlobalStateMgr {
                 insertOverwriteJobMgr.save(dos);
                 compactionMgr.save(dos);
                 streamLoadMgr.save(dos);
-                MaterializedViewMgr.getInstance().save(dos);
+                materializedViewMgr.save(dos);
                 globalFunctionMgr.save(dos);
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
@@ -2076,6 +2080,10 @@ public class GlobalStateMgr {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
+    }
+
+    public MaterializedViewMgr getMaterializedViewMgr() {
+        return this.materializedViewMgr;
     }
 
     public SmallFileMgr getSmallFileMgr() {

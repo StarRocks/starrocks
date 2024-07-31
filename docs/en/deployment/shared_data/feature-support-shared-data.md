@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: "Feature Support"
 ---
 
 # Feature Support: Shared-data Clusters
@@ -202,7 +203,7 @@ The cluster used in the test includes one FE node and five CN/BE nodes. The hard
 | **VM provider**       | Alibaba Cloud ECS   |
 | --------------------- | ------------------- |
 | **FE node**           | 8 Core 32 GB Memory |
-| **CN/****BE node**    | 8 Core 64 GB Memory |
+| **CN/BE node**        | 8 Core 64 GB Memory |
 | **Network bandwidth** | 8 Gbits/s           |
 | **Disk**              | ESSD                |
 

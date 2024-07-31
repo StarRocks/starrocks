@@ -538,6 +538,9 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+// Metadata cache limit for shared-nothing mode. Not working for PK table now.
+// Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
+CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
 // if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
 // the failed apply task will retry after `retry_apply_interval_second`
@@ -792,6 +795,8 @@ CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
+
+CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -1377,5 +1382,18 @@ CONF_mBool(enable_pk_strict_memcheck, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// Current supported modules:
+// 1. storage_page_cache
+// 2. connector_scan_executor
+// 3. non_pipeline_scan_thread_pool
+// 4. pipeline_prepare_thread_pool
+// 5. pipeline_sink_io_thread_pool
+// 6. query_rpc_thread_pool
+// use commas to separate:
+// * means release all above
+CONF_mString(try_release_resource_before_core_dump, "storage_page_cache");
+
+// Experimental feature, this configuration will be removed after testing is complete.
+CONF_mBool(lake_enable_alter_struct, "true");
 
 } // namespace starrocks::config

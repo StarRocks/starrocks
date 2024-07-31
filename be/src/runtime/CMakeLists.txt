@@ -17,10 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -75,6 +71,7 @@ set(RUNTIME_FILES
     statistic_result_writer.cpp
     metadata_result_writer.cpp
     variable_result_writer.cpp
+    memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp

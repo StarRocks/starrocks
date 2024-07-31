@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: "能力边界"
 ---
 
 # 存算分离集群能力边界
@@ -202,7 +203,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 | **VM 提供商**      | 阿里云 ECS          |
 | ----------------- | ------------------- |
 | **FE 节点**        | 8 Core 32 GB Memory |
-| **CN/****BE 节点** | 8 Core 64 GB Memory |
+| **CN/BE 节点**     | 8 Core 64 GB Memory |
 | **网络带宽**        | 8 Gbits/s           |
 | **磁盘**           | ESSD                |
 

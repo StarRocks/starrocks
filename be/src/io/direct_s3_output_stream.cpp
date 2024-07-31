@@ -23,6 +23,7 @@
 #include <fmt/format.h>
 
 #include "common/logging.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::io {
 
@@ -57,6 +58,7 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
     req.SetUploadId(_upload_id);
     req.SetContentLength(size);
     req.SetBody(std::make_shared<StringViewStream>(data, size));
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     auto outcome = _client->UploadPart(req);
     if (!outcome.IsSuccess()) {
         return Status::IOError(
@@ -72,7 +74,7 @@ Status DirectS3OutputStream::close() {
         return Status::OK();
     }
 
-    if (!_upload_id.empty()) {
+    if (!_upload_id.empty() && !_etags.empty()) {
         RETURN_IF_ERROR(complete_multipart_upload());
     }
 
@@ -84,6 +86,7 @@ Status DirectS3OutputStream::create_multipart_upload() {
     Aws::S3::Model::CreateMultipartUploadRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
@@ -110,6 +113,7 @@ Status DirectS3OutputStream::complete_multipart_upload() {
         multipart_upload.AddParts(part.WithETag(_etags[i]).WithPartNumber(i + 1));
     }
     req.SetMultipartUpload(multipart_upload);
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     auto outcome = _client->CompleteMultipartUpload(req);
     if (outcome.IsSuccess()) {
         return Status::OK();
