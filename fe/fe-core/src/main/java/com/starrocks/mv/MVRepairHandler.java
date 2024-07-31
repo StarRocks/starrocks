@@ -34,18 +34,23 @@ public interface MVRepairHandler {
     class PartitionRepairInfo {
         private final long partitionId; // partition id
         private final String partitionName; // partition name
-        private final long curVersion; // new commit partition visible version
-        private final long curVersionTime; // new commit partition visible version time
+        private final long lastVersion; // last commit partition visible version
+        private final long lastVersionTime; // last commit partition visible version time
         private final long newVersion; // new commit partition visible version
         private final long newVersionTime; // new commit partition visible version time
 
-        public PartitionRepairInfo(Partition partition, long newVersion, long newVersionTime) {
-            this.partitionId = partition.getId();
-            this.partitionName = partition.getName();
-            this.curVersion = partition.getVisibleVersion();
-            this.curVersionTime = partition.getVisibleVersionTime();
+        public PartitionRepairInfo(long partitionId,
+                                   String partitionName,
+                                   long lastVersion,
+                                   long lastVersionTime,
+                                   long newVersion,
+                                   long newVersionTime) {
+            this.partitionId = partitionId;
+            this.partitionName = partitionName;
             this.newVersion = newVersion;
             this.newVersionTime = newVersionTime;
+            this.lastVersion = lastVersion;
+            this.lastVersionTime = lastVersionTime;
         }
 
         public long getPartitionId() {
@@ -64,12 +69,12 @@ public interface MVRepairHandler {
             return newVersionTime;
         }
 
-        public long getCurVersion() {
-            return curVersion;
+        public long getLastVersion() {
+            return lastVersion;
         }
 
-        public long getCurVersionTime() {
-            return curVersionTime;
+        public long getLastVersionTime() {
+            return lastVersionTime;
         }
     }
 
@@ -100,7 +105,7 @@ public interface MVRepairHandler {
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
@@ -108,12 +113,14 @@ public interface MVRepairHandler {
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
                     }
-                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition,
+                    // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for n
+                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),
+                            partition.getName(), partitionCommitInfo.getVersion()  - 1, -1,
                             partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
             }
 
             if (partitionRepairInfos.isEmpty()) {

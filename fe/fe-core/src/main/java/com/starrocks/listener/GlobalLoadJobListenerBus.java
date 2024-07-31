@@ -83,8 +83,7 @@ public class GlobalLoadJobListenerBus {
         // only trigger the stream load transaction
         TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
         if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
-                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)
-                && !TransactionState.LoadJobSourceType.INSERT_STREAMING.equals(sourceType)) {
+                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)) {
             return;
         }
         listeners.stream().forEach(listener -> listener.onStreamLoadTransactionFinish(transactionState));

@@ -131,12 +131,13 @@ public class MVMetaVersionRepairer {
                 continue;
             }
             MaterializedView.BasePartitionInfo curBasePartitionInfo = partitionInfoMap.get(info.getPartitionName());
-            if (curBasePartitionInfo.getVersion() != info.getCurVersion() ||
-                    curBasePartitionInfo.getLastRefreshTime() != info.getCurVersionTime()) {
-                LOG.info("Base table {} partition {} version not match, cur version {}(mv)/{}(table), " +
-                                "version time {}(mv)/{}(table), skip to repair", table.getName(), info.getPartitionName(),
-                        curBasePartitionInfo.getVersion(), info.getCurVersion(), curBasePartitionInfo.getLastRefreshTime(),
-                        info.getCurVersionTime());
+            if (curBasePartitionInfo.getId() != info.getPartitionId()
+                    || curBasePartitionInfo.getVersion() != info.getLastVersion()) {
+                LOG.info("Base table {} partition {} version not match, id {}(mv)/{}(table), " +
+                                "version {}(mv)/{}(table), version time {}(mv)/{}(table), skip to repair",
+                        table.getName(), info.getPartitionName(), curBasePartitionInfo.getId(),
+                        info.getPartitionId(), curBasePartitionInfo.getVersion(), info.getLastVersion(),
+                        curBasePartitionInfo.getLastRefreshTime(), info.getLastVersionTime());
                 continue;
             }
             needToUpdatePartitionInfos.add(info);

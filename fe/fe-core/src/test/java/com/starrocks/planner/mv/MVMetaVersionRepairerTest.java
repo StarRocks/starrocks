@@ -52,6 +52,13 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
         );
     }
 
+    private MVRepairHandler.PartitionRepairInfo toPartitionInfo(Partition partition, long version,
+                                                                long versionTime) {
+        return new MVRepairHandler.PartitionRepairInfo(partition.getId(), partition.getName(),
+                partition.getVisibleVersion(), partition.getVisibleVersionTime(),
+                version, versionTime);
+    }
+
     @Test
     public void testRepairBaseTableVersionChanges1() {
         starRocksAssert.withTable(m1, () -> {
@@ -94,7 +101,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         long currentTs = System.currentTimeMillis();
                         // p1 has been refreshed, use curPartition as its partition
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
-                                new MVRepairHandler.PartitionRepairInfo(curPartition, 100L, currentTs);
+                                toPartitionInfo(curPartition, 100L, currentTs);
 
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
                         Table baseTable = getTable("test", "m1");
@@ -148,7 +155,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         Partition curPartition = m1.getPartition("p1");
                         long currentTs = System.currentTimeMillis();
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
-                                new MVRepairHandler.PartitionRepairInfo(curPartition, 100L, currentTs);
+                                toPartitionInfo(curPartition, 100L, currentTs);
 
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
                         Table baseTable = getTable("test", "m1");
@@ -207,7 +214,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         // p1 has been refreshed, but p2 has been compaction or fast schema changed, use curPartition as its
                         // partition
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
-                                new MVRepairHandler.PartitionRepairInfo(p2, 100L, currentTs);
+                                toPartitionInfo(p2, 100L, currentTs);
 
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
                         Table baseTable = getTable("test", "m1");
@@ -274,7 +281,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         // p1 has been updated, so the version of p1 should be updated
                         p1.setVisibleVersion(lastRefreshVersion + 1, lastRefreshVersionTime + 1);
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
-                                new MVRepairHandler.PartitionRepairInfo(p1, 100L, currentTs);
+                                toPartitionInfo(p1, 100L, currentTs);
 
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
                         Table baseTable = getTable("test", "m1");
