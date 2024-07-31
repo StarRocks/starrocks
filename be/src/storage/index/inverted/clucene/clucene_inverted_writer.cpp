@@ -21,7 +21,7 @@
 #include <boost/locale/encoding_utf.hpp>
 
 #include "common/status.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "types/logical_type.h"
 #include "util/faststring.h"
 
