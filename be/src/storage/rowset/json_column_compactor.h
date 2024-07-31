@@ -34,6 +34,10 @@ public:
 private:
     Status _compact_columns(std::vector<ColumnPtr>& json_datas);
 
+    Status _merge_columns(std::vector<ColumnPtr>& json_datas);
+
+    Status _flatten_columns(std::vector<ColumnPtr>& json_datas);
+
 private:
     std::vector<ColumnPtr> _json_datas;
     size_t _estimate_size = 0;

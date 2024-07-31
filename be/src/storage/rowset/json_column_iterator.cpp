@@ -145,9 +145,14 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     {
-        transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, _need_remain);
         SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
-        transformer->init_read_task(_source_paths, _source_types, has_remain);
+        if (_need_remain) {
+            transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, true);
+            transformer->init_compaction_task(_source_paths, _source_types, has_remain);
+        } else {
+            transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, false);
+            transformer->init_read_task(_source_paths, _source_types, has_remain);
+        }
     }
 
     // update stats

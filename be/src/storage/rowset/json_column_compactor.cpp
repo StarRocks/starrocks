@@ -30,6 +30,7 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
@@ -56,46 +57,71 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
 
     if (_flat_paths.empty()) {
         // write json directly
-        _is_flat = false;
-        _json_meta->mutable_json_meta()->set_has_remain(false);
-        _json_meta->mutable_json_meta()->set_is_flat(false);
+        return _merge_columns(json_datas);
+    }
+    return _flatten_columns(json_datas);
+}
 
-        for (auto& col : json_datas) {
-            JsonColumn* json_col;
-            NullColumnPtr null_col;
-            if (col->is_nullable()) {
-                auto nullable_column = down_cast<const NullableColumn*>(col.get());
-                json_col = down_cast<JsonColumn*>(nullable_column->data_column().get());
-                null_col = nullable_column->null_column();
-            } else {
-                json_col = down_cast<JsonColumn*>(col.get());
-            }
-
-            if (!json_col->is_flat_json()) {
-                RETURN_IF_ERROR(_json_writer->append(*col));
-            } else {
-                JsonMerger merger(json_col->flat_column_paths(), json_col->flat_column_types(), json_col->has_remain());
-                auto j = merger.merge(json_col->get_flat_fields());
-
-                if (col->is_nullable()) {
-                    auto n = NullableColumn::create(j, null_col);
-                    n->set_has_null(col->has_null());
-                    RETURN_IF_ERROR(_json_writer->append(*n));
-                } else {
-                    RETURN_IF_ERROR(_json_writer->append(*j));
-                }
-            }
-            col->resize_uninitialized(0);
-        }
-        return Status::OK();
+bool check_is_same_schema(JsonColumn* one, JsonColumn* two) {
+    if (one == nullptr) {
+        return false;
     }
 
+    if (one->is_flat_json() && two->is_flat_json()) {
+        return one->flat_column_paths() == two->flat_column_paths() &&
+               one->flat_column_types() == two->flat_column_types() && one->has_remain() == two->has_remain();
+    }
+    return false;
+}
+
+Status FlatJsonColumnCompactor::_merge_columns(std::vector<ColumnPtr>& json_datas) {
+    _is_flat = false;
+    _json_meta->mutable_json_meta()->set_has_remain(false);
+    _json_meta->mutable_json_meta()->set_is_flat(false);
+
+    JsonColumn* pre_col = nullptr;
+    std::unique_ptr<JsonMerger> merger = nullptr;
+    for (auto& col : json_datas) {
+        JsonColumn* json_col;
+        NullColumnPtr null_col;
+        if (col->is_nullable()) {
+            auto nullable_column = down_cast<const NullableColumn*>(col.get());
+            json_col = down_cast<JsonColumn*>(nullable_column->data_column().get());
+            null_col = nullable_column->null_column();
+        } else {
+            json_col = down_cast<JsonColumn*>(col.get());
+        }
+
+        if (!json_col->is_flat_json()) {
+            RETURN_IF_ERROR(_json_writer->append(*col));
+        } else {
+            if (!check_is_same_schema(pre_col, json_col)) {
+                merger = std::make_unique<JsonMerger>(json_col->flat_column_paths(), json_col->flat_column_types(),
+                                                      json_col->has_remain());
+                pre_col = json_col;
+            }
+            auto j = merger->merge(json_col->get_flat_fields());
+
+            if (col->is_nullable()) {
+                auto n = NullableColumn::create(j, null_col);
+                n->set_has_null(col->has_null());
+                RETURN_IF_ERROR(_json_writer->append(*n));
+            } else {
+                RETURN_IF_ERROR(_json_writer->append(*j));
+            }
+        }
+        col->resize_uninitialized(0);
+    }
+    return Status::OK();
+}
+
+Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_datas) {
     _is_flat = true;
     RETURN_IF_ERROR(_init_flat_writers());
+    JsonFlattener flattener(_flat_paths, _flat_types, _has_remain);
+    std::unique_ptr<HyperJsonTransformer> transformer = std::make_unique<HyperJsonTransformer>(_flat_paths, _flat_types, _has_remain);
 
-    JsonFlattener flattener(deriver);
-    HyperJsonTransformer transformer(deriver);
-
+    JsonColumn* pre_col = nullptr;
     for (auto& col : json_datas) {
         JsonColumn* json_col;
         if (col->is_nullable()) {
@@ -109,10 +135,13 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
             flattener.flatten(json_col);
             _flat_columns = flattener.mutable_result();
         } else {
-            transformer.init_compaction_task(json_col);
-            RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields()));
-            _flat_columns = transformer.mutable_result();
-            transformer.reset();
+            if (!check_is_same_schema(pre_col, json_col)) {
+                transformer->init_compaction_task(json_col->flat_column_paths(), json_col->flat_column_types(),
+                                                  json_col->has_remain());
+                pre_col = json_col;
+            }
+            RETURN_IF_ERROR(transformer->trans(json_col->get_flat_fields()));
+            _flat_columns = transformer->mutable_result();
         }
 
         // recode null column in 1st

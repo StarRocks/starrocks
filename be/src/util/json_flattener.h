@@ -68,6 +68,7 @@ public:
     ~JsonFlatPath() = default;
 
     // return the leaf node
+    // @info: string_view is not safe memory use, must be careful plz
     static JsonFlatPath* normalize_from_path(const std::string_view& path, JsonFlatPath* root);
 
     // set new root, other path will set to exclude, the node must include the root path
@@ -159,10 +160,10 @@ private:
     bool _has_remain = false;
     // note: paths may be less 1 than flat columns
     std::vector<std::string> _dst_paths;
+    std::shared_ptr<JsonFlatPath> _dst_root;
 
     std::vector<ColumnPtr> _flat_columns;
     JsonColumn* _remain;
-    std::shared_ptr<JsonFlatPath> _dst_root;
 };
 
 // merge flat json A,B,C to JsonColumn
@@ -195,9 +196,12 @@ private:
     void _merge_json(const JsonFlatPath* root, vpack::Builder* builder, size_t index);
 
 private:
+    std::vector<std::string> _src_paths;
     bool _has_remain = false;
+
     std::shared_ptr<JsonFlatPath> _src_root;
     std::vector<const Column*> _src_columns;
+    std::vector<std::string> _exclude_paths;
     bool _output_nullable = false;
 
     ColumnPtr _result;
@@ -222,15 +226,14 @@ public:
     void init_read_task(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
 
     // init for compaction
-    void init_compaction_task(JsonColumn* column);
+    void init_compaction_task(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
+                              bool has_remain);
 
     Status trans(std::vector<ColumnPtr>& columns);
 
     std::vector<ColumnPtr>& result() { return _dst_columns; }
 
     std::vector<ColumnPtr> mutable_result();
-
-    void reset();
 
     std::vector<std::string> cast_paths() const;
 
@@ -253,7 +256,6 @@ private:
         int dst_index = -1;
         std::vector<int> src_index;
 
-        std::unique_ptr<JsonPathDeriver> deriver;
         std::unique_ptr<JsonMerger> merger;
     };
 

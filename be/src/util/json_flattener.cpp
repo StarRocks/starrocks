@@ -149,14 +149,7 @@ static std::vector<uint8_t> JSON_TYPE_BITS((int)vpack::ValueType::Tagged + 1, 0)
 // starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
 static std::vector<LogicalType> JSON_BITS_TO_LOGICAL_TYPE(32, LogicalType::TYPE_JSON);
 
-static const FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
-    {LogicalType::TYPE_TINYINT,         JSON_TYPE_BITS[(int)vpack::ValueType::None]},
-    {LogicalType::TYPE_BIGINT,          JSON_TYPE_BITS[(int)vpack::ValueType::Int]},
-    {LogicalType::TYPE_LARGEINT,        JSON_TYPE_BITS[(int)vpack::ValueType::UInt]},
-    {LogicalType::TYPE_DOUBLE,          JSON_TYPE_BITS[(int)vpack::ValueType::Double]},
-    {LogicalType::TYPE_VARCHAR,         JSON_TYPE_BITS[(int)vpack::ValueType::String]},
-    {LogicalType::TYPE_JSON,            JSON_BASE_TYPE_BITS},
-};
+static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS;
 
 static const FlatJsonHashMap<uint8_t, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
     {LogicalType::TYPE_TINYINT,         &extract_number<LogicalType::TYPE_TINYINT>},
@@ -187,22 +180,30 @@ inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
 } // namespace flat_json
 
 void JsonFlatPath::init_vpack_types_info() {
+    using namespace flat_json;
     // clang-format off
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::None] = 31;       // 00011111, 31
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::SmallInt] = 15;   // 00001111, 15
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::Int] = 7;         // 00000111, 7
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::UInt] = 3;        // 00000011, 3
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::Double] = 1;      // 00000001, 1
-    flat_json::JSON_TYPE_BITS[(int) vpack::ValueType::String] = 16;     // 00010000, 8
-
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::None]] = LogicalType::TYPE_TINYINT;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::SmallInt]] = LogicalType::TYPE_BIGINT;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::Int]] = LogicalType::TYPE_BIGINT;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::UInt]] = LogicalType::TYPE_LARGEINT;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::Double]] = LogicalType::TYPE_DOUBLE;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::String]] = LogicalType::TYPE_VARCHAR;
-    flat_json::JSON_BITS_TO_LOGICAL_TYPE[flat_json::JSON_BASE_TYPE_BITS] = LogicalType::TYPE_JSON;
+    JSON_TYPE_BITS[(int) vpack::ValueType::None] = 31;       // 00011111, 31
+    JSON_TYPE_BITS[(int) vpack::ValueType::SmallInt] = 15;   // 00001111, 15
+    JSON_TYPE_BITS[(int) vpack::ValueType::Int] = 7;         // 00000111, 7
+    JSON_TYPE_BITS[(int) vpack::ValueType::UInt] = 3;        // 00000011, 3
+    JSON_TYPE_BITS[(int) vpack::ValueType::Double] = 1;      // 00000001, 1
+    JSON_TYPE_BITS[(int) vpack::ValueType::String] = 16;     // 00010000, 8
     // clang-format on
+
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::None]] = LogicalType::TYPE_TINYINT;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::SmallInt]] = LogicalType::TYPE_BIGINT;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::Int]] = LogicalType::TYPE_BIGINT;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::UInt]] = LogicalType::TYPE_LARGEINT;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::Double]] = LogicalType::TYPE_DOUBLE;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::String]] = LogicalType::TYPE_VARCHAR;
+    JSON_BITS_TO_LOGICAL_TYPE[JSON_BASE_TYPE_BITS] = LogicalType::TYPE_JSON;
+
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_TINYINT] = JSON_TYPE_BITS[(int)vpack::ValueType::None];
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_BIGINT] = JSON_TYPE_BITS[(int)vpack::ValueType::Int];
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_LARGEINT] = JSON_TYPE_BITS[(int)vpack::ValueType::UInt];
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_DOUBLE] = JSON_TYPE_BITS[(int)vpack::ValueType::Double];
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_VARCHAR] = JSON_TYPE_BITS[(int)vpack::ValueType::String];
+    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_JSON] = JSON_BASE_TYPE_BITS;
 }
 
 std::pair<std::string_view, std::string_view> JsonFlatPath::_split_path(const std::string_view& path) {
@@ -350,8 +351,8 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
             continue;
         }
 
-        auto paths = json_col->flat_column_paths();
-        auto types = json_col->flat_column_types();
+        const auto& paths = json_col->flat_column_paths();
+        const auto& types = json_col->flat_column_types();
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = JsonFlatPath::normalize_from_path(paths[i], _path_root.get());
@@ -544,6 +545,7 @@ JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::v
 void JsonFlattener::flatten(const Column* json_column) {
     for (auto& col : _flat_columns) {
         DCHECK_EQ(col->size(), 0);
+        col->reserve(json_column->size());
     }
     // input
     const JsonColumn* json_data = nullptr;
@@ -701,11 +703,11 @@ std::vector<ColumnPtr> JsonFlattener::mutable_result() {
 }
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
-        : _has_remain(has_remain) {
+        : _src_paths(paths), _has_remain(has_remain) {
     _src_root = std::make_shared<JsonFlatPath>();
 
-    for (size_t i = 0; i < paths.size(); i++) {
-        auto* leaf = JsonFlatPath::normalize_from_path(paths[i], _src_root.get());
+    for (size_t i = 0; i < _src_paths.size(); i++) {
+        auto* leaf = JsonFlatPath::normalize_from_path(_src_paths[i], _src_root.get());
         leaf->type = types[i];
         leaf->index = i;
     }
@@ -724,7 +726,8 @@ void dfs_exclude(JsonFlatPath* node) {
 }
 
 void JsonMerger::set_exclude_paths(const std::vector<std::string>& exclude_paths) {
-    for (auto& path : exclude_paths) {
+    this->_exclude_paths = exclude_paths;
+    for (auto& path : _exclude_paths) {
         auto* leaf = JsonFlatPath::normalize_from_path(path, _src_root.get());
         leaf->op = JsonFlatPath::OP_EXCLUDE;
     }
@@ -742,12 +745,13 @@ ColumnPtr JsonMerger::merge(const std::vector<ColumnPtr>& columns) {
     _result = NullableColumn::create(JsonColumn::create(), NullColumn::create());
     _json_result = down_cast<JsonColumn*>(down_cast<NullableColumn*>(_result.get())->data_column().get());
     _null_result = down_cast<NullColumn*>(down_cast<NullableColumn*>(_result.get())->null_column().get());
+    size_t rows = columns[0]->size();
+    _result->reserve(rows);
 
     for (auto& col : columns) {
         _src_columns.emplace_back(col.get());
     }
 
-    size_t rows = columns[0]->size();
     if (_src_root->op == JsonFlatPath::OP_INCLUDE) {
         _merge_impl<true>(rows);
     } else {
@@ -910,13 +914,12 @@ HyperJsonTransformer::HyperJsonTransformer(const std::vector<std::string>& paths
 
 void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                           bool has_remain) {
-    DCHECK(_src_paths.empty());
-    DCHECK(_src_types.empty());
+    _src_paths = paths;
+    _src_types = types;
 
-    _src_paths.assign(paths.begin(), paths.end());
-    _src_types.assign(types.begin(), types.end());
     _merge_tasks.clear();
     _flat_tasks.clear();
+    _pool.clear();
 
     std::vector<int> equals;
     std::vector<int> merges;
@@ -1037,15 +1040,14 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
     }
 }
 
-void HyperJsonTransformer::init_compaction_task(JsonColumn* column) {
-    DCHECK(column->is_flat_json());
-    _src_paths.clear();
-    _src_types.clear();
+void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& paths,
+                                                const std::vector<LogicalType>& types, bool has_remain) {
+    _src_paths = paths;
+    _src_types = types;
+
     _merge_tasks.clear();
     _flat_tasks.clear();
-
-    _src_paths.assign(column->flat_column_paths().begin(), column->flat_column_paths().end());
-    _src_types.assign(column->flat_column_types().begin(), column->flat_column_types().end());
+    _pool.clear();
 
     std::unordered_set<std::string> _src_set(_src_paths.begin(), _src_paths.end());
 
@@ -1082,7 +1084,7 @@ void HyperJsonTransformer::init_compaction_task(JsonColumn* column) {
     }
 
     std::vector<std::string> all_flat_paths; // for remove from remain
-    if (column->has_remain()) {
+    if (has_remain) {
         for (size_t i = 0; i < _dst_paths.size(); i++) {
             if (_src_set.find(_dst_paths[i]) == _src_set.end()) {
                 // merge to remain
@@ -1117,9 +1119,9 @@ void HyperJsonTransformer::init_compaction_task(JsonColumn* column) {
             p.emplace_back(_src_paths[index]);
             t.emplace_back(_src_types[index]);
         }
-        mk.merger = std::make_unique<JsonMerger>(p, t, column->has_remain());
+        mk.merger = std::make_unique<JsonMerger>(p, t, has_remain);
         mk.merger->set_exclude_paths(all_flat_paths);
-        if (column->has_remain()) {
+        if (has_remain) {
             _merge_tasks[0].src_index.emplace_back(_src_paths.size());
         }
     }
@@ -1251,17 +1253,6 @@ void HyperJsonTransformer::_flat(const FlatTask& task, std::vector<ColumnPtr>& c
 
     for (size_t i = 0; i < task.dst_index.size(); i++) {
         _dst_columns[task.dst_index[i]] = result[i];
-    }
-}
-
-void HyperJsonTransformer::reset() {
-    _src_paths.clear();
-    _src_types.clear();
-    _merge_tasks.clear();
-    _flat_tasks.clear();
-    _pool.clear();
-    for (size_t i = 0; i < _dst_columns.size(); i++) {
-        _dst_columns[i] = _dst_columns[i]->clone_empty();
     }
 }
 

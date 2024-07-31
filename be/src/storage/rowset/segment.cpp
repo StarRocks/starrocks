@@ -546,8 +546,9 @@ Status Segment::get_all_flat_jsons(std::vector<std::unique_ptr<ColumnAccessPath>
             auto sub_readers = reader->sub_readers();
             for (size_t k = start; k < end; k++) {
                 ColumnAccessPath::insert_json_path(res.get(), (*sub_readers)[k]->column_type(),
-                                                   (*sub_readers)[k]->name());
+                                                   std::string(col.name()) + "." + (*sub_readers)[k]->name());
             }
+            paths->emplace_back(std::move(res));
         }
     }
     return Status::OK();
