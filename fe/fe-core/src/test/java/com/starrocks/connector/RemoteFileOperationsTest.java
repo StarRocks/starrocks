@@ -307,7 +307,29 @@ public class RemoteFileOperationsTest {
 
         RemoteFileOperations ops = new RemoteFileOperations(null, null, null,
                 false, true, null);
-        List<RemoteFileInfo> remoteFileInfos = ops.getRemotePartitions(partitionList);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitions = ops.getRemotePartitions(partitionList);
+        Assert.assertEquals(3, partitions.size());
+        for (int i = 0; i < partitionNames.size(); i++) {
+            Assert.assertEquals(partitions.get(i).getFullPath(), "hdfs://path_to_table/" + partitionNames.get((i)));
+        }
     }
+
+    @Test
+    public void testAnonPartitionInfo() {
+        {
+            PartitionInfo x = new PartitionInfo() {
+                @Override
+                public long getModifiedTime() {
+                    return 0;
+                }
+            };
+            Assert.assertThrows(UnsupportedOperationException.class, () -> {
+                x.getFileFormat();
+            });
+            Assert.assertThrows(UnsupportedOperationException.class, () -> {
+                x.getFullPath();
+            });
+        }
+    }
+
 }

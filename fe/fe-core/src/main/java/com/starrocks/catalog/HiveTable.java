@@ -49,7 +49,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -135,7 +136,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
     // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
     // 2. Insert into statement could ignore the additional overhead caused by list partitions.
-    // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data is wrong.
+    // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data
+    // is wrong.
     // This error will happen when appending files to an existed partition on user side.
     private boolean useMetadataCache = true;
 
@@ -338,15 +340,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         // partitions
-        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<String> partitionNames = Lists.newArrayList();
         for (ReferencedPartitionInfo partition : partitions) {
-            partitionKeys.add(partition.getKey());
+            partitionNames.add(PartitionUtil.toHivePartitionName(getPartitionColumnNames(), partition.getKey()));
         }
-        List<RemoteFileInfo> hivePartitions;
+        List<PartitionInfo> hivePartitions;
         try {
             useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+                    .getPartitions(this.getCatalogName(), this, partitionNames);
         } catch (StarRocksConnectorException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;
@@ -358,7 +360,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             long partitionId = info.getId();
 
             THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
+            tPartition.setFile_format(hivePartitions.get(i).getFileFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));

@@ -33,6 +33,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -750,8 +751,8 @@ public class HiveMetadataTest {
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemotePartitions(table, partitionNames);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitionInfoList = hiveMetadata.getRemotePartitions(table, partitionNames);
+        Assert.assertEquals(3, partitionInfoList.size());
     }
 
     @Test

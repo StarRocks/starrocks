@@ -1752,11 +1752,15 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             if (partitionNames.isEmpty()) {
                 this.partitionInfoMap.put(table.getTableName(), new Partition(
                         ImmutableMap.of(Partition.TRANSIENT_LAST_DDL_TIME,
-                                        String.valueOf(System.currentTimeMillis() / 1000)), null, null, null, false));
+                                String.valueOf(System.currentTimeMillis() / 1000)), RemoteFileInputFormat.PARQUET, null,
+                        "MockedPartitionFullPath",
+                        false));
             } else {
                 this.partitionInfoMap = partitionNames.stream().collect(Collectors.toMap(k -> k, k -> new Partition(
                         ImmutableMap.of(Partition.TRANSIENT_LAST_DDL_TIME,
-                                        String.valueOf(System.currentTimeMillis() / 1000)), null, null, null, false)));
+                                String.valueOf(System.currentTimeMillis() / 1000)), RemoteFileInputFormat.PARQUET, null,
+                        "MockedPartitionFullPath/" + k,
+                        false)));
             }
         }
 
