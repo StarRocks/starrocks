@@ -281,13 +281,9 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
-<<<<<<< HEAD
                 "data_source/data_cache",
-                "data_source/datalake_faq"
-=======
                 "data_source/datalake_faq",
                 "data_source/feature-support-data-lake-analytics"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -1745,13 +1741,9 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
-<<<<<<< HEAD
                 "data_source/data_cache",
-                "data_source/datalake_faq"
-=======
                 "data_source/datalake_faq",
                 "data_source/feature-support-data-lake-analytics"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
