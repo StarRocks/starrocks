@@ -73,8 +73,7 @@
                     "items": [
                         "deployment/deploy_manually",
                         "deployment/sr_operator",
-                        "deployment/helm",
-                        "deployment/starrocks_on_aws"
+                        "deployment/helm"
                     ]
                 },
                 {
