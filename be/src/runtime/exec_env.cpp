@@ -851,7 +851,7 @@ void ExecEnv::try_release_resource_before_core_dump() {
     if (_block_cache != nullptr && need_release("block_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
-        (void) _block_cache->update_mem_quota(0, false);
+        (void)_block_cache->update_mem_quota(0, false);
         LOG(INFO) << "release block cache";
     }
 }
