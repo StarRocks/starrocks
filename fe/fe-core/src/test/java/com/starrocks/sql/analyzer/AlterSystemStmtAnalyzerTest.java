@@ -199,8 +199,6 @@ public class AlterSystemStmtAnalyzerTest {
         Boolean[] analyzeSuccess = {false, false, true, false, false, false, true, false, false, false};
         int i = 0;
         for (String location : testLocations) {
-            //String stmtStr = "ALTER SYSTEM ADD COMPUTE NODE '127.0.0.1:9091' PROPERTIES ('" +
-            //        AlterSystemStmtAnalyzer.PROP_KEY_LOCATION.split(".")[0] + "' = '" + label + "')";
             String stmtStr = "ALTER SYSTEM ADD COMPUTE NODE '127.0.0.1:9091' PROPERTIES ('" +
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + location + "')";
             System.out.println(stmtStr);
