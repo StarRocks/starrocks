@@ -30,7 +30,8 @@ public class IcebergMetaSplit implements RemoteMetaSplit {
             MetadataTableType.REFS,
             MetadataTableType.HISTORY,
             MetadataTableType.METADATA_LOG_ENTRIES,
-            MetadataTableType.SNAPSHOTS);
+            MetadataTableType.SNAPSHOTS,
+            MetadataTableType.MANIFESTS);
 
     private final String manifestFile;
     private final long length;
