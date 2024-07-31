@@ -50,7 +50,9 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
@@ -71,6 +73,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -918,19 +921,30 @@ public class FileSystemManager {
         }
     }
 
-    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> properties) {
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> properties,
+                                            boolean isRecursive) {
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         BrokerFileSystem fileSystem = getFileSystem(path, properties);
         Path pathPattern = new Path(pathUri.getPath());
         try {
-            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            if (files == null) {
+            ArrayList<FileStatus> fileStatusList = new ArrayList<>();
+            if (isRecursive) {
+                RemoteIterator<LocatedFileStatus> fileStatusIterator = fileSystem.getDFSFileSystem().listFiles(pathPattern, true);
+                while (fileStatusIterator.hasNext()) {
+                    fileStatusList.add(fileStatusIterator.next());
+                }
+            } else {
+                FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
+                Collections.addAll(fileStatusList, files);
+            }
+
+            if (fileStatusList.isEmpty()) {
                 resultFileStatus = new ArrayList<>(0);
                 return resultFileStatus;
             }
-            resultFileStatus = new ArrayList<>(files.length);
-            for (FileStatus fileStatus : files) {
+            resultFileStatus = new ArrayList<>(fileStatusList.size());
+            for (FileStatus fileStatus : fileStatusList) {
                 TBrokerFileStatus brokerFileStatus = new TBrokerFileStatus();
                 brokerFileStatus.setIsDir(fileStatus.isDirectory());
                 if (fileStatus.isDirectory()) {

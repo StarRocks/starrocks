@@ -140,7 +140,7 @@ public class TestFileSystemManager extends TestCase {
         properties.put("password", "passwd");
         
         List<TBrokerFileStatus> files2 = fileSystemManager.listPath(testHdfsHost + "/data/abc/logs/*.out",
-                false, properties);
+                false, properties, false);
         assertEquals(files2.size(), 2);
     }
     
@@ -167,7 +167,7 @@ public class TestFileSystemManager extends TestCase {
         assertTrue(isPathExist);
         
         // check file size
-        List<TBrokerFileStatus> files = fileSystemManager.listPath(tempFile, false, properties);
+        List<TBrokerFileStatus> files = fileSystemManager.listPath(tempFile, false, properties, false);
         assertEquals(files.size(), 1);
         assertFalse(files.get(0).isDir);
         assertEquals(1256, files.get(0).size);

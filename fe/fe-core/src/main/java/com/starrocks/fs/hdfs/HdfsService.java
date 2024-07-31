@@ -58,7 +58,7 @@ public class HdfsService {
                          boolean fileNameOnly) throws UserException {
         LOG.info("receive a list path request, path: {}", request.path);
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
-                request.properties);
+                request.properties, request.isRecursive);
 
         for (TBrokerFileStatus tBrokerFileStatus : allFileStatuses) {
             if (skipDir && tBrokerFileStatus.isDir) {

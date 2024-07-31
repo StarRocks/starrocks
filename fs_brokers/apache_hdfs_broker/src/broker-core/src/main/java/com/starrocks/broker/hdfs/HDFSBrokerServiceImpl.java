@@ -72,7 +72,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
                 fileNameOnly = request.isFileNameOnly();
             }
             List<TBrokerFileStatus> fileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
-                    request.properties);
+                    request.properties, request.isRecursive);
             response.setOpStatus(generateOKStatus());
             response.setFiles(fileStatuses);
             return response;
