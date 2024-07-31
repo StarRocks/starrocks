@@ -196,7 +196,7 @@ DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] -- multi_range_partitions only appiles to Range Partitioning.
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
 
 partion_name_list ::= ( <partition_name> [, ... ] )
 
@@ -205,7 +205,11 @@ multi_range_partitions ::=
     | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
 ```
 
-For parameters involved, refer to [ADD PARTITION(S)](#add-partitions).
+Notes for `multi_range_partitions`:
+
+- It only appiles to Range Partitioning.
+- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+- It only supports partitions with a single Partition Key.
 
 :::note
 
