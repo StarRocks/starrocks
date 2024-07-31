@@ -60,7 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SerializableTable implements Table, Serializable {
+public class SerializableTable implements Table, Serializable, HasTableOperations {
 
     private final String name;
     private final String location;
@@ -359,6 +359,11 @@ public class SerializableTable implements Table, Serializable {
 
     private String errorMsg(String operation) {
         return String.format("Operation %s is not supported after the table is serialized", operation);
+    }
+
+    @Override
+    public StaticTableOperations operations() {
+        return (StaticTableOperations) ((BaseTable) lazyTable()).operations();
     }
 
     private static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
