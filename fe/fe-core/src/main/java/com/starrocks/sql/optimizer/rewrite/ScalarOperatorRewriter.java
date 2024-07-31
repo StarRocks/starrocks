@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -41,7 +40,6 @@ public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
             new ImplicitCastRule()
     );
-
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -63,7 +61,6 @@ public class ScalarOperatorRewriter {
             SimplifiedCaseWhenRule.INSTANCE,
             PruneTediousPredicateRule.INSTANCE
     );
-
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_SCAN_PREDICATE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
