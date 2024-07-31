@@ -27,10 +27,6 @@ namespace starrocks {
 template <typename T>
 using HashSet = phmap::flat_hash_set<T, StdHash<T>>;
 
-template <typename T>
-using HashSetWithMemoryCounting =
-        phmap::flat_hash_set<T, StdHash<T>, phmap::priv::hash_default_eq<T>, STLCountingAllocator<T>>;
-
 // By storing hash value in slice, we can save the cost of
 // 1. re-calculate hash value of the slice
 // 2. touch slice memory area which may cause high latency of memory access.
@@ -84,8 +80,6 @@ public:
 };
 
 using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash>;
-using SliceHashSetWithMemoryCounting = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
-                                                            STLCountingAllocator<SliceWithHash>>;
 
 using SliceNormalHashSet = phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual>;
 
