@@ -154,23 +154,6 @@
             "items": [
                 {
                     "type": "category",
-<<<<<<< HEAD
-=======
-                    "label": "Loading overview",
-                    "link": {
-                        "type": "doc",
-                        "id": "loading/loading_introduction/loading_overview"
-                    },
-                    "items": [
-                        "loading/loading_introduction/Loading_intro",
-                        "loading/loading_introduction/loading_concepts",
-                        "loading/loading_introduction/loading_considerations",
-                        "loading/loading_introduction/feature-support-loading-and-unloading"
-                    ]
-                },
-                {
-                    "type": "category",
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
                     "label": "Load from Object Storage",
                     "link": {
                         "type": "doc",
@@ -215,7 +198,8 @@
                 "loading/Flink-connector-starrocks",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
-                "loading/load_concept/strict_mode"
+                "loading/load_concept/strict_mode",
+                "loading/loading_introduction/feature-support-loading-and-unloading"
             ]
         },
         {
@@ -228,13 +212,8 @@
             "items": [
                 "unloading/Export",
                 "unloading/Spark_connector",
-<<<<<<< HEAD
-                "unloading/Flink_connector"
-=======
                 "unloading/Flink_connector",
-                "unloading/unload_using_insert_into_files",
                 "unloading/feature-support-loading-and-unloading"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -267,13 +246,9 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
-<<<<<<< HEAD
                 "data_source/data_cache",
-                "data_source/datalake_faq"
-=======
                 "data_source/datalake_faq",
                 "data_source/feature-support-data-lake-analytics"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -308,27 +283,8 @@
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
                         },
-<<<<<<< HEAD
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views"
-=======
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "using_starrocks/usage/intro"
-                            },
-                            "items": [
-                                "using_starrocks/usage/create",
-                                "using_starrocks/usage/alter",
-                                "using_starrocks/usage/drop",
-                                "using_starrocks/usage/show",
-                                "using_starrocks/usage/information_schema-materialized_views",
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views",
                                 "using_starrocks/feature-support-asynchronous-materialized-views"
-                            ]
-                        }
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
                     ]
                 },
                 "using_starrocks/Colocate_join",
@@ -1447,23 +1403,6 @@
             "items": [
                 {
                     "type": "category",
-<<<<<<< HEAD
-=======
-                    "label": "导入概览",
-                    "link": {
-                        "type": "doc",
-                        "id": "loading/loading_introduction/loading_overview"
-                    },
-                    "items": [
-                        "loading/loading_introduction/Loading_intro",
-                        "loading/loading_introduction/loading_concepts",
-                        "loading/loading_introduction/loading_considerations",
-                        "loading/loading_introduction/feature-support-loading-and-unloading"
-                    ]
-                },
-                {
-                    "type": "category",
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
                     "label": "从对象存储导入",
                     "link": {
                         "type": "doc",
@@ -1508,7 +1447,8 @@
                 "loading/Flink-connector-starrocks",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
-                "loading/load_concept/strict_mode"
+                "loading/load_concept/strict_mode",
+                "loading/loading_introduction/feature-support-loading-and-unloading"
             ]
         },
         {
@@ -1521,13 +1461,8 @@
             "items": [
                 "unloading/Export",
                 "unloading/Spark_connector",
-<<<<<<< HEAD
-                "unloading/Flink_connector"
-=======
                 "unloading/Flink_connector",
-                "unloading/unload_using_insert_into_files",
                 "unloading/feature-support-loading-and-unloading"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -1560,13 +1495,9 @@
                 },
                 "data_source/External_table",
                 "data_source/file_external_table",
-<<<<<<< HEAD
                 "data_source/data_cache",
-                "data_source/datalake_faq"
-=======
                 "data_source/datalake_faq",
                 "data_source/feature-support-data-lake-analytics"
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
             ]
         },
         {
@@ -1601,27 +1532,8 @@
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
                         },
-<<<<<<< HEAD
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views"
-=======
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "using_starrocks/usage/intro"
-                            },
-                            "items": [
-                                "using_starrocks/usage/create",
-                                "using_starrocks/usage/alter",
-                                "using_starrocks/usage/drop",
-                                "using_starrocks/usage/show",
-                                "using_starrocks/usage/information_schema-materialized_views",
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views",
                                 "using_starrocks/feature-support-asynchronous-materialized-views"
-                            ]
-                        }
->>>>>>> e1b7a222dd ([Doc] Add Feature Support docs (#49111))
                     ]
                 },
                 "using_starrocks/Colocate_join",
