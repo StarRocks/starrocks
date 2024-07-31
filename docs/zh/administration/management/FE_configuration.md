@@ -3648,9 +3648,9 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### max_automatic_partition_number
+##### max_partition_number_per_table
 
-- 默认值：4096
+- 默认值：100000
 - 类型：Long
 - 单位：-
 - 是否动态：是

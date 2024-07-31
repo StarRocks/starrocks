@@ -1205,6 +1205,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         }
     }
 
+    private void checkPartitionNum(OlapTable olapTable) throws DdlException {
+        if (olapTable.getNumberOfPartitions() > Config.max_partition_number_per_table) {
+            throw new DdlException("Table " + olapTable.getName() + " created partitions exceeded the maximum limit: " +
+                    Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
+                    " max_partition_number_per_table larger.");
+        }
+    }
+
     private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
         DistributionInfo distributionInfo;
@@ -1222,6 +1230,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
             // check partition type
             checkPartitionType(partitionInfo);
+
+            // check partition num
+            checkPartitionNum(olapTable);
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
