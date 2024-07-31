@@ -159,12 +159,14 @@ public class Utils {
             return list;
         }
 
-        for (ScalarOperator child : root.getChildren()) {
-            if (list.isEmpty()) {
-                list = (LinkedList<ColumnRefOperator>) extractColumnRef(child);
-            } else {
-                list.addAll(extractColumnRef(child));
-            }
+        List<ScalarOperator> childs = root.getChildren();
+        if (childs.isEmpty()) {
+            return list;
+        }
+        
+        list = (LinkedList<ColumnRefOperator>) extractColumnRef(childs.get(0));
+        for (int i = 1; i < childs.size(); i++) {
+            list.addAll(extractColumnRef(childs.get(i)));
         }
 
         return list;
