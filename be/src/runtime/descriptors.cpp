@@ -738,7 +738,8 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
         case TTableType::ICEBERG_REFS_TABLE:
         case TTableType::ICEBERG_HISTORY_TABLE:
-        case TTableType::ICEBERG_METADATA_LOG_ENTRIES_TABLE: {
+        case TTableType::ICEBERG_METADATA_LOG_ENTRIES_TABLE:
+        case TTableType::ICEBERG_SNAPSHOTS_TABLE: {
             desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
             break;
         }

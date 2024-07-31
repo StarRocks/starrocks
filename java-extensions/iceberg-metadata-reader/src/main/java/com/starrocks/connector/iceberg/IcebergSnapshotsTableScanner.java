@@ -32,13 +32,13 @@ import static com.google.common.collect.Maps.immutableEntry;
 import static com.google.common.collect.Streams.mapWithIndex;
 import static org.apache.iceberg.MetadataTableUtils.createMetadataTableInstance;
 
-public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergMetadataLogEntriesScanner.class);
+public class IcebergSnapshotsTableScanner extends AbstractIcebergMetadataScanner {
+    private static final Logger LOG = LogManager.getLogger(IcebergSnapshotsTableScanner.class);
 
     private CloseableIterator<StructLike> reader;
-    Map<String, Integer> columnNameToPosition = new HashMap<>();
+    private Map<String, Integer> columnNameToPosition = new HashMap<>();
 
-    public IcebergMetadataLogEntriesScanner(int fetchSize, Map<String, String> params) {
+    public IcebergSnapshotsTableScanner(int fetchSize, Map<String, String> params) {
         super(fetchSize, params);
     }
 
@@ -80,7 +80,7 @@ public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataSca
 
     @Override
     protected void initReader() throws IOException {
-        TableScan tableScan = createMetadataTableInstance(table, MetadataTableType.METADATA_LOG_ENTRIES).newScan();
+        TableScan tableScan = createMetadataTableInstance(table, MetadataTableType.SNAPSHOTS).newScan();
 
         this.columnNameToPosition = mapWithIndex(tableScan.schema().columns().stream(),
                 (column, position) -> immutableEntry(column.name(), Long.valueOf(position).intValue()))
@@ -88,12 +88,12 @@ public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataSca
 
         for (String requiredField : requiredFields) {
             if (!columnNameToPosition.containsKey(requiredField)) {
-                throw new IOException("can not find column name in the metadata table" + requiredField);
+                throw new IOException("can not find column name in the snapshots table" + requiredField);
             }
         }
 
         try (CloseableIterator<FileScanTask> iterator = tableScan.planFiles().iterator()) {
-            // only one scan task for metadata log entries scan
+            // only one scan task for snapshots scan
             if (iterator.hasNext()) {
                 this.reader = iterator.next().asDataTask().rows().iterator();
             }
@@ -102,16 +102,18 @@ public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataSca
 
     private Object get(String columnName, StructLike dataRow) {
         switch (columnName) {
-            case "timestamp":
+            case "committed_at":
                 return dataRow.get(columnNameToPosition.get(columnName), Long.class) / 1000;
-            case "file":
+            case "snapshot_id":
+                return dataRow.get(columnNameToPosition.get(columnName), Long.class);
+            case "parent_id":
+                return dataRow.get(columnNameToPosition.get(columnName), Long.class);
+            case "operation":
                 return dataRow.get(columnNameToPosition.get(columnName), String.class);
-            case "latest_snapshot_id":
-                return dataRow.get(columnNameToPosition.get(columnName), Long.class);
-            case "latest_schema_id":
-                return dataRow.get(columnNameToPosition.get(columnName), Integer.class);
-            case "latest_sequence_number":
-                return dataRow.get(columnNameToPosition.get(columnName), Long.class);
+            case "manifest_list":
+                return dataRow.get(columnNameToPosition.get(columnName), String.class);
+            case "summary":
+                return dataRow.get(columnNameToPosition.get(columnName), Map.class);
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }

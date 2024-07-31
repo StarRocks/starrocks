@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 public class IcebergMetadataColumnValue implements ColumnValue {
     private static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
@@ -94,7 +95,11 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
-
+        Map data = (Map) fieldData;
+        data.forEach((key, value) -> {
+            keys.add(new IcebergMetadataColumnValue(key, timezone));
+            values.add(new IcebergMetadataColumnValue(value, timezone));
+        });
     }
 
     @Override

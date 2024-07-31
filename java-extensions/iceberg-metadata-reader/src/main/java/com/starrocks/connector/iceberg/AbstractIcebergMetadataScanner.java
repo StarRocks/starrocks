@@ -44,12 +44,13 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
         this.metadataColumnNames = params.get("metadata_column_names").split(",");
-        this.metadataColumnTypes = params.get("metadata_column_types").split(",");
+        this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
         this.timezone = params.getOrDefault("time_zone", TimeZone.getDefault().getID());
         this.classLoader = this.getClass().getClassLoader();
     }
 
+    @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             this.table = deserializeFromBase64(serializedTable);
@@ -65,7 +66,32 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         }
     }
 
+    public int getNext() throws IOException {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
+            return doGetNext();
+        } catch (Exception e) {
+            close();
+            LOG.error("Failed to get the next off-heap table chunk of {}.", this.getClass().getSimpleName(), e);
+            throw new IOException(String.format("Failed to get the next off-heap table chunk of %s.",
+                    this.getClass().getSimpleName()), e);
+        }
+    }
+
+    @Override
+    public void close() throws IOException {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
+            doClose();
+        } catch (IOException e) {
+            LOG.error("Failed to close the {}.", this.getClass().getSimpleName(), e);
+            throw new IOException(String.format("Failed to close the %s.", this.getClass().getSimpleName()), e);
+        }
+    }
+
     protected abstract void doOpen();
+
+    protected abstract int doGetNext();
+
+    protected abstract void doClose() throws IOException;
 
     protected abstract void initReader() throws IOException;
 
