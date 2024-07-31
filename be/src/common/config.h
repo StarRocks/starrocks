@@ -1389,9 +1389,13 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 // 4. pipeline_prepare_thread_pool
 // 5. pipeline_sink_io_thread_pool
 // 6. query_rpc_thread_pool
+// 7. publish_version_worker_pool
+// 8. olap_scan_executor
+// 9. wg_driver_executor
+// 10. block_cache
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "storage_page_cache");
+CONF_mString(try_release_resource_before_core_dump, "storage_page_cache,block_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
