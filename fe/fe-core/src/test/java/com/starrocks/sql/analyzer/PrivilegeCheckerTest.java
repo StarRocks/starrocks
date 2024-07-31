@@ -4207,4 +4207,56 @@ public class PrivilegeCheckerTest {
                 (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
         authenticationManager.dropUser(dropUserStmt);
     }
+
+    @Test
+    public void testAdminProtection() throws Exception {
+        // create admin user, it has two roles: db_admin and user_admin
+        String createUserSql = "CREATE USER 'admin' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+        authenticationManager.createUser(createUserStmt);
+        UserIdentity adminUser = createUserStmt.getUserIdentity();
+        grantRevokeSqlAsRoot("grant db_admin to admin");
+        grantRevokeSqlAsRoot("grant user_admin to admin");
+
+        Config.authorization_enable_admin_user_protection = true;
+        starRocksAssert.getCtx().setCurrentUserIdentity(adminUser);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(adminUser)
+        );
+        starRocksAssert.getCtx().setQualifiedUser(adminUser.getUser());
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(String warehouseName) {
+                return new LocalWarehouse(12343L, "waa", 11L, "no comments");
+            }
+        };
+
+        // test admin user cannot grant forbidden privilege to other user
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant alter on warehouse waa to admin",
+                    starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage()
+                    .contains("not allowed to grant ALTER on WAREHOUSE to another user or role"));
+        }
+
+        // test admin user cannot grant forbidden role to other user
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant root to test",
+                    starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage()
+                    .contains("not allowed to grant role root to another user"));
+        }
+
+        // clean, drop admin user
+        Config.authorization_enable_admin_user_protection = false;
+        starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr().dropUser(new DropUserStmt(adminUser, true));
+        ctxToTestUser();
+    }
 }

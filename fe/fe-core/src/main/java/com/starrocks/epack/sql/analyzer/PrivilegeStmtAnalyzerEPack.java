@@ -14,20 +14,29 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
+import com.starrocks.epack.authorization.PrivilegeTypeEPack;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -35,6 +44,20 @@ public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
     }
 
     static class PrivilegeStatementAnalyzerVisitorEPack extends PrivilegeStatementAnalyzerVisitor {
+        /**
+         * When 'authorization_enable_admin_user_protection' is set to true,
+         * these privileges cannot be granted to any user or role except by root.
+         */
+        private final Map<ObjectType, Set<PrivilegeType>> forbiddenPrivilegesMap = ImmutableMap.of(
+                ObjectType.SYSTEM, ImmutableSet.of(PrivilegeType.NODE, PrivilegeTypeEPack.CREATE_WAREHOUSE),
+                ObjectTypeEPack.WAREHOUSE, ImmutableSet.of(PrivilegeType.ALTER, PrivilegeType.DROP));
+
+        /**
+         * When 'authorization_enable_admin_user_protection' is set to true,
+         * these built-in roles cannot be granted to any user or role except by root.
+         */
+        private final Set<String> forbiddenRoles = ImmutableSet.of("root", "cluster_admin");
+
         public void analyze(StatementBase statement, ConnectContext session) {
             super.analyze(statement, session);
         }
@@ -126,6 +149,43 @@ public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
             }
 
             return objectTokenList;
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            super.visitGrantRevokePrivilegeStatement(stmt, session);
+            if (Config.authorization_enable_admin_user_protection &&
+                    !session.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
+                Set<PrivilegeType> forbiddenPrivileges = forbiddenPrivilegesMap.get(stmt.getObjectType());
+                if (forbiddenPrivileges != null) {
+                    for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                        if (forbiddenPrivileges.contains(privilegeType)) {
+                            throw new SemanticException(
+                                    "User " + session.getCurrentUserIdentity() + " is not allowed to grant " +
+                                            privilegeType + " on " + stmt.getObjectType() +
+                                            " to another user or role in protection mode");
+                        }
+
+                    }
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            super.visitGrantRevokeRoleStatement(stmt, session);
+            if (Config.authorization_enable_admin_user_protection &&
+                    !session.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
+                for (String role : stmt.getGranteeRole()) {
+                    if (forbiddenRoles.contains(role)) {
+                        throw new SemanticException(
+                                "User " + session.getCurrentUserIdentity() + " is not allowed to grant role " +
+                                        role + " to another user or role in protection mode");
+                    }
+                }
+            }
+            return null;
         }
     }
 }

@@ -37,6 +37,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -93,6 +94,12 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
 
     @Override
     public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+        PrivilegeStmtAnalyzerEPack.analyze(stmt, session);
+        return null;
+    }
+
+    @Override
+    public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
         PrivilegeStmtAnalyzerEPack.analyze(stmt, session);
         return null;
     }
