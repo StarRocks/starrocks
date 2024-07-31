@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: "Feature Support"
 ---
 
 # Boundaries of Competence: Shared-data Clusters
