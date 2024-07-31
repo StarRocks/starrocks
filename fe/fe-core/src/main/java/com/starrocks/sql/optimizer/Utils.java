@@ -153,23 +153,7 @@ public class Utils {
             return new LinkedList<>();
         }
 
-        List<ColumnRefOperator> list = new LinkedList<>();
-        if (OperatorType.VARIABLE.equals(root.getOpType())) {
-            list.add((ColumnRefOperator) root);
-            return list;
-        }
-
-        List<ScalarOperator> childs = root.getChildren();
-        if (childs.isEmpty()) {
-            return list;
-        }
-
-        list = extractColumnRef(childs.get(0));
-        for (int i = 1; i < childs.size(); i++) {
-            list.addAll(extractColumnRef(childs.get(i)));
-        }
-
-        return list;
+        return root.getColumnRefs();
     }
 
     public static int countColumnRef(ScalarOperator root) {
