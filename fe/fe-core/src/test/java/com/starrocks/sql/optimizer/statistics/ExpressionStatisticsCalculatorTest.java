@@ -533,6 +533,7 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnStatistic leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
         ColumnStatistic rightStatistic = new ColumnStatistic(1, 1, 0, 1, 1);
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         CallOperator week = new CallOperator(FunctionSet.WEEK, Type.INT, Lists.newArrayList(left, right));
@@ -543,6 +544,7 @@ public class ExpressionStatisticsCalculatorTest {
         max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-08-01", DateUtils.DATE_FORMATTER_UNIX));
         leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
         builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
@@ -552,6 +554,7 @@ public class ExpressionStatisticsCalculatorTest {
         max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
         leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
         builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
@@ -561,6 +564,7 @@ public class ExpressionStatisticsCalculatorTest {
         max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
         leftStatistic = new ColumnStatistic(min, max, 0, 0, 2);
         builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
