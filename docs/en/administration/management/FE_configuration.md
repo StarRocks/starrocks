@@ -3642,9 +3642,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
-##### max_automatic_partition_number
+##### max_partition_number_per_table
 
-- Default: 4096
+- Default: 100000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
