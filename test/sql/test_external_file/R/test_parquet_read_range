@@ -150,6 +150,13 @@ select count(*) from read_range_test a join[broadcast] read_range_big_page_test 
 -- result:
 800
 -- !result
+set enable_shared_scan = true;
+-- result:
+-- !result
+select count(distinct c2) from read_range_big_page_test;
+-- result:
+90
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
