@@ -30,35 +30,35 @@ import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
-public class IcebergRefsTable extends MetadataTable {
-    public static final String TABLE_NAME = "iceberg_refs_table";
+public class IcebergMetadataLogEntriesTable extends MetadataTable {
+    public static final String TABLE_NAME = "iceberg_metadata_log_entries_table";
 
-    public IcebergRefsTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
-                            String originDb, String originTable, MetadataTableType metadataTableType) {
+    public IcebergMetadataLogEntriesTable(String catalogName, long id, String name, Table.TableType type,
+                                          List<Column> baseSchema, String originDb, String originTable,
+                                          MetadataTableType metadataTableType) {
         super(catalogName, id, name, type, baseSchema, originDb, originTable, metadataTableType);
     }
 
-    public static IcebergRefsTable create(String catalogName, String originDb, String originTable) {
-        return new IcebergRefsTable(catalogName,
+    public static IcebergMetadataLogEntriesTable create(String catalogName, String originDb, String originTable) {
+        return new IcebergMetadataLogEntriesTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("name", ScalarType.createVarcharType())
-                        .column("type", ScalarType.createVarcharType())
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("max_reference_age_in_ms", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("min_snapshots_to_keep", ScalarType.createType(PrimitiveType.INT))
-                        .column("max_snapshot_age_in_ms", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("timestamp", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("file", ScalarType.createVarcharType())
+                        .column("latest_snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("latest_schema_id", ScalarType.createType(PrimitiveType.INT))
+                        .column("latest_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(),
                 originDb,
                 originTable,
-                MetadataTableType.REFS);
+                MetadataTableType.METADATA_LOG_ENTRIES);
     }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_REFS_TABLE,
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ICEBERG_METADATA_LOG_ENTRIES_TABLE,
                 fullSchema.size(), 0, getName(), METADATA_DB_NAME);
         THdfsTable hdfsTable = buildThriftTable(fullSchema);
         tTableDescriptor.setHdfsTable(hdfsTable);
@@ -69,5 +69,4 @@ public class IcebergRefsTable extends MetadataTable {
     public boolean supportBuildPlan() {
         return true;
     }
-
 }

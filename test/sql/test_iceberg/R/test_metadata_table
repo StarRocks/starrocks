@@ -46,6 +46,15 @@ select is_current_ancestor from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ic
 true
 true
 -- !result
+select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null order by latest_schema_id;
+-- result:
+0
+0
+0
+0
+0
+0
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result
