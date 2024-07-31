@@ -105,8 +105,6 @@ public class FunctionSet {
     public static final String UTC_TIME = "utc_time";
     public static final String LOCALTIME = "localtime";
     public static final String LOCALTIMESTAMP = "localtimestamp";
-
-    public static final String WEEK = "week";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String WEEK = "week";
     public static final String YEAR = "year";
