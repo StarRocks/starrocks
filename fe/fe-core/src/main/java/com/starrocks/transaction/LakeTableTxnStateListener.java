@@ -195,6 +195,37 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
+    // Collect the failure txn_id for the Partition without generated txn log
+    // and GC those garbage files in a aysnchronous way (e.g Vacuum)
+    private void addAbortedTxnIdToUnFinishedPartition(TransactionState txnState) {
+        Set<Long> finishedPartitionIds = Sets.newHashSet();
+
+        if (txnState.getTabletCommitInfos() != null && !txnState.getTabletCommitInfos().isEmpty()) {
+            TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
+            List<Long> finishedTabletIds = txnState.getTabletCommitInfos().stream()
+                                            .map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+            List<TabletMeta> finishedTabletMetaList = tabletInvertedIndex.getTabletMetaList(finishedTabletIds);
+            for (int i = 0; i < finishedTabletMetaList.size(); i++) {
+                TabletMeta tabletMeta = finishedTabletMetaList.get(i);
+                if (tabletMeta.getTableId() != table.getId()) {
+                    continue;
+                }
+                if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
+                    // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
+                    continue;
+                }
+                finishedPartitionIds.add(tabletMeta.getPartitionId());
+            }
+        }
+
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            if (finishedPartitionIds.contains(partition.getId())) {
+                continue;
+            }
+            partition.addAbortedTxnId(txnState.getTransactionId());
+        }
+    }
+
     @Override
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) {
@@ -202,6 +233,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
+        addAbortedTxnIdToUnFinishedPartition(txnState);
         if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {

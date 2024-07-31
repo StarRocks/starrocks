@@ -18,6 +18,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -32,7 +33,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Physical Partition implementation
@@ -108,6 +111,12 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
+
+    // Aborted transactions wait to be GC on the files generated
+    // in share data mode
+    @SerializedName(value = "lakeAbortedTxnsWaitedForGC")
+    private Set<Long> lakeAbortedTxnsWaitedForGC = Sets.newLinkedHashSet();
+    private ReentrantLock lakeAbortedTxnsWaitedForGCLock = new ReentrantLock();
 
     public PhysicalPartitionImpl(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
@@ -476,6 +485,37 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
         return (visibleVersion == partition.visibleVersion)
                 && (baseIndex.equals(partition.baseIndex));
+    }
+
+    public void addAbortedTxnId(long txnId) {
+        lakeAbortedTxnsWaitedForGCLock.lock();
+        try {
+            lakeAbortedTxnsWaitedForGC.add(txnId);
+        } finally {
+            lakeAbortedTxnsWaitedForGCLock.unlock();
+        }
+    }
+
+    public void addAbortedTxnIds(Set<Long> txnIds) {
+        lakeAbortedTxnsWaitedForGCLock.lock();
+        try {
+            lakeAbortedTxnsWaitedForGC.addAll(txnIds);
+        } finally {
+            lakeAbortedTxnsWaitedForGCLock.unlock();
+        }
+    }
+
+    public Set<Long> getCopiedAbortedTxnIdAndReset() {
+        Set<Long> copied = Sets.newLinkedHashSet();
+        lakeAbortedTxnsWaitedForGCLock.lock();
+        try {
+            copied = Sets.newLinkedHashSet(lakeAbortedTxnsWaitedForGC);
+            lakeAbortedTxnsWaitedForGC.clear();
+        } finally {
+            lakeAbortedTxnsWaitedForGCLock.unlock();
+        }
+
+        return copied;
     }
 
     @Override

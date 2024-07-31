@@ -18,6 +18,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.transaction.TransactionType;
 
 import java.util.List;
+import java.util.Set;
 
 /* 
  * PhysicalPartition is the interface that describes the physical storage of a partition.
@@ -101,5 +102,7 @@ public interface PhysicalPartition {
     public void setMinRetainVersion(long minRetainVersion);
     public long getLastVacuumTime();
     public void setLastVacuumTime(long lastVacuumTime);
-
+    public void addAbortedTxnId(long txnId);
+    public void addAbortedTxnIds(Set<Long> txnIds);
+    public Set<Long> getCopiedAbortedTxnIdAndReset();
 }

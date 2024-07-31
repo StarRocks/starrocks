@@ -64,6 +64,7 @@ static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
 static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
 static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
+static bvar::LatencyRecorder g_vacuum_aborted_txn_file_latency("lake_vacuum_delete_abort_txn_file");
 static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_delete_file_tasks",
                                                            get_num_delete_file_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
@@ -444,6 +445,53 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
     return ret;
 }
 
+static Status vacuum_aborted_txn_file(std::string_view root_location, const std::vector<int64_t>& abort_txn_ids,
+                                      int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
+    DCHECK(vacuumed_files != nullptr);
+    DCHECK(vacuumed_file_size != nullptr);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    auto t0 = butil::gettimeofday_s();
+    auto deleter = AsyncFileDeleter(config::lake_vacuum_min_batch_delete_size);
+    auto ret = Status::OK();
+
+    auto data_dir = join_path(root_location, kSegmentDirectoryName);
+    std::vector<std::string> prefix_dirs;
+    prefix_dirs.resize(abort_txn_ids.size());
+    for (int i = 0; i < abort_txn_ids.size(); ++i) {
+        // use prefix dir to list Objects:
+        // root_loc/data/abortTxnId -> {root_loc/data/abortTxnId_uuid1, root_loc/data/abortTxnId_uuid2, ...}
+        prefix_dirs[i] = join_path(data_dir, fmt::format("{:016X}", abort_txn_ids[i]));
+    }
+
+    for (const auto& prefix_dir : prefix_dirs) {
+        auto iter_st = ignore_not_found(fs->iterate_dir2(prefix_dir, [&](DirEntry entry) {
+            if (!is_segment(entry.name) || !is_del(entry.name)) {
+                return true;
+            }
+
+            *vacuumed_files += 1;
+            *vacuumed_file_size += entry.size.value_or(0);
+
+            auto st = deleter.delete_file(join_path(data_dir, entry.name));
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to delete " << join_path(data_dir, entry.name) << ": " << st;
+                ret.update(st);
+            }
+            return st.ok(); // Stop list if delete failed
+        }));
+        if (!iter_st.ok()) {
+            ret.update(iter_st);
+            break;
+        }
+    }
+    ret.update(deleter.finish());
+
+    auto t1 = butil::gettimeofday_s();
+    g_vacuum_aborted_txn_file_latency << (t1 - t0);
+
+    return ret;
+}
+
 Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
     if (UNLIKELY(tablet_mgr == nullptr)) {
         return Status::InvalidArgument("tablet_mgr is null");
@@ -473,6 +521,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
                                            &vacuumed_files, &vacuumed_file_size));
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+    }
+    if (request.aborted_txn_ids().size() != 0) {
+        auto abort_txn_ids = std::vector<int64_t>(request.aborted_txn_ids().begin(), request.aborted_txn_ids().end());
+        RETURN_IF_ERROR(vacuum_aborted_txn_file(root_loc, abort_txn_ids, &vacuumed_files, &vacuumed_file_size));
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);

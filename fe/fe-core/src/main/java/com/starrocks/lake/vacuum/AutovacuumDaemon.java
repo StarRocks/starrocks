@@ -106,6 +106,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
         }
+        partitions = table.getPhysicalPartitions().stream().collect(Collectors.toList());
 
         for (PhysicalPartition partition : partitions) {
             if (vacuumingPartitions.add(partition.getId())) {
@@ -129,6 +130,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        Set<Long> abortTxnIds = partition.getCopiedAbortedTxnIdAndReset();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
@@ -158,6 +160,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
         boolean needDeleteTxnLog = true;
+        boolean needDeleteAbotedTxnsFiles = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
@@ -169,8 +172,13 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            if (needDeleteAbotedTxnsFiles) {
+                vacuumRequest.abortedTxnIds = Lists.newArrayList(abortTxnIds);
+            }
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
+            // Perform deletion of files for the aborted txns on the first node only.
+            needDeleteAbotedTxnsFiles = false;
             try {
                 LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 responseFutures.add(service.vacuum(vacuumRequest));
@@ -202,6 +210,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                         e.getMessage());
                 hasError = true;
             }
+        }
+
+        if (hasError) {
+            // re-Vacuum if error happen
+            partition.addAbortedTxnIds(abortTxnIds);
         }
 
         partition.setLastVacuumTime(startTime);
