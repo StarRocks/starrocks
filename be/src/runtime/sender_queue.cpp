@@ -107,7 +107,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics,
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        RETURN_IF_ERROR(_build_chunk_meta(pchunk));
+        //RETURN_IF_ERROR(_build_chunk_meta(pchunk));
         SCOPED_TIMER(metrics.deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
@@ -126,7 +126,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
         }
         {
             SCOPED_TIMER(metrics.deserialize_chunk_timer);
-            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
+            //RETURN_IF_ERROR(_build_chunk_meta(pchunk));
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
@@ -684,8 +684,8 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
     ChunkList chunks;
     faststring uncompressed_buffer;
     for (auto i = 0; i < request.chunks().size(); i++) {
-        auto& chunk_pb = request.chunks(i);
-        RETURN_IF_ERROR(_build_chunk_meta(chunk_pb));
+        //auto& chunk_pb = request.chunks(i);
+        //RETURN_IF_ERROR(_build_chunk_meta(chunk_pb));
         auto& pchunk = request.chunks().Get(i);
         int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
         int64_t chunk_bytes = pchunk.data().size();

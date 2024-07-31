@@ -39,6 +39,7 @@ size_t StructColumn::size() const {
 }
 
 void StructColumn::check_field_rows() {
+    LOG(INFO) << "call struct column check field rows";
     auto row_num = _fields[0]->size();
     for (int i = 0; i < _fields.size(); i++) {
         if (_fields[i]->is_struct()) {

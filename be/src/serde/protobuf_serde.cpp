@@ -225,6 +225,8 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
 
+    for (auto)
+
     if (_encode_level.empty()) {
         for (auto& column : columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
@@ -237,6 +239,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     }
 
     for (int i = 0; i < columns.size(); ++i) {
+        columns[i]->check_field_rows();
         size_t col_num_rows = columns[i]->size();
         if (col_num_rows != rows) {
             SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
