@@ -379,7 +379,6 @@ echo "Finished patching $LIBRDKAFKA_SOURCE"
 cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
     patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
-    touch $PATCHED_MARK
 fi
 cd -
 echo "Finished patching $CROARINGBITMAP_SOURCE"
