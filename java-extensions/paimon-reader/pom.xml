@@ -114,13 +114,17 @@
                     <artifactId>jetty-client</artifactId>
                     <groupId>org.eclipse.jetty</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-client</artifactId>
-            <version>9.4.47.v20220610</version>
+            <version>9.4.53.v20231009</version>
         </dependency>
 
         <dependency>
