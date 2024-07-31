@@ -187,6 +187,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
 }
 
 void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
+    config::lake_enable_alter_struct = true;
     std::shared_ptr<TabletMetadata> tablet_metadata = generate_simple_tablet_metadata(keys_type);
     auto rs1 = tablet_metadata->add_rowsets();
     rs1->set_id(next_id());
