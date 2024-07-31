@@ -632,7 +632,7 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
-#### 设置随机分桶表中分桶大小
+#### 设置随机分桶表中分桶大小 (`bucket_size`)
 
 自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
 
