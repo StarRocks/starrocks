@@ -26,6 +26,7 @@
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
 #include "util/phmap/phmap.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 
 namespace starrocks {
 
@@ -50,7 +51,7 @@ struct ApproxTopKState {
     int32_t k = 0;
     int32_t counter_num = 0;
     int32_t unused_idx = 0;
-    mutable std::vector<Counter> counters;
+    mutable VectorWithAggStateAllocator<Counter> counters;
     mutable Counter null_counter{0};
     using HASH =
             std::conditional_t<IsSlice<CppType>, SliceHashWithSeed<PhmapSeed1>, StdHashWithSeed<CppType, PhmapSeed1>>;
