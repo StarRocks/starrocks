@@ -636,12 +636,12 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
 StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges, size_t scan_dop) {
-    int64_t lake_scan_dop = 0;
+        size_t num_total_scan_ranges, size_t scan_parallelism) {
+    int64_t lake_scan_parallelism = 0;
     if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                       tablet_internal_parallel_mode, &lake_scan_dop,
-                                                                       &splitted_scan_rows));
+                                                                       tablet_internal_parallel_mode,
+                                                                       &lake_scan_parallelism, &splitted_scan_rows));
         if (_could_split) {
             ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
         }
@@ -649,12 +649,12 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
 
     return DataSourceProvider::convert_scan_range_to_morsel_queue(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges, (size_t)lake_scan_dop);
+            num_total_scan_ranges, (size_t)lake_scan_parallelism);
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
-        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
     //if (_t_lake_scan_node.use_pk_index) {
     //    return false;
@@ -688,15 +688,14 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     *splitted_scan_rows =
             std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
-    // scan_dop is restricted in the range [1, dop].
-    *scan_dop = num_table_rows / *splitted_scan_rows;
-    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+    *scan_parallelism = num_table_rows / *splitted_scan_rows;
 
     if (force_split) {
         return true;
     }
 
-    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    bool could =
+            *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
 
