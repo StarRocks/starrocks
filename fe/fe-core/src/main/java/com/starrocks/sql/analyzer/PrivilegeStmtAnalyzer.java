@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaUtils;
@@ -130,6 +131,9 @@ public class PrivilegeStmtAnalyzer {
                     throw new SemanticException("Operation CREATE USER failed for " + createUserStmt.getUserIdentity()
                             + " : user already exists");
                 }
+                if (!createUserStmt.getDefaultRoles().isEmpty()) {
+                    createUserStmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
+                }
             } else {
                 AlterUserStmt alterUserStmt = (AlterUserStmt) stmt;
                 if (!authenticationManager.doesUserExist(stmt.getUserIdentity()) && !alterUserStmt.isIfExists()) {
@@ -140,14 +144,20 @@ public class PrivilegeStmtAnalyzer {
 
             byte[] password = MysqlPassword.EMPTY_PASSWORD;
             String authPluginUsing;
-            if (stmt.getAuthPluginName() == null) {
+            UserAuthOption userAuthOption = stmt.getAuthOption();
+            if (userAuthOption == null) {
                 authPluginUsing = authenticationManager.getDefaultPlugin();
-                password = analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain());
             } else {
-                authPluginUsing = stmt.getAuthPluginName();
-                if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
-                    // In this case, authString is the password
-                    password = analysePassword(stmt.getAuthStringUnResolved(), stmt.isPasswordPlain());
+                authPluginUsing = userAuthOption.getAuthPlugin();
+                if (authPluginUsing == null) {
+                    authPluginUsing = authenticationManager.getDefaultPlugin();
+                    password = analysePassword(userAuthOption.getPassword(), userAuthOption.isPasswordPlain());
+                } else {
+                    authPluginUsing = userAuthOption.getAuthPlugin();
+                    if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
+                        // In this case, authString is the password
+                        password = analysePassword(userAuthOption.getAuthString(), userAuthOption.isPasswordPlain());
+                    }
                 }
             }
 
@@ -155,13 +165,14 @@ public class PrivilegeStmtAnalyzer {
                 AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
                 UserIdentity userIdentity = stmt.getUserIdentity();
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
-                        userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
+                        userIdentity, new String(password, StandardCharsets.UTF_8),
+                        userAuthOption == null ? null : userAuthOption.getAuthString());
                 info.setAuthPlugin(authPluginUsing);
                 info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
                 if (stmt instanceof AlterUserStmt) {
                     session.getGlobalStateMgr().getAuthenticationMgr().checkPasswordReuse(
-                            userIdentity, stmt.getOriginalPassword());
+                            userIdentity, userAuthOption == null ? null : userAuthOption.getPassword());
                 }
             } catch (AuthenticationException | DdlException e) {
                 SemanticException exception = new SemanticException("invalidate authentication: " + e.getMessage());
@@ -169,9 +180,6 @@ public class PrivilegeStmtAnalyzer {
                 throw exception;
             }
 
-            if (!stmt.getDefaultRoles().isEmpty()) {
-                stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
-            }
             return null;
         }
 
