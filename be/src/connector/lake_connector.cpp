@@ -506,6 +506,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+    _pushdown_access_paths_counter =
+            ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownAccessPaths", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
     _get_delta_column_group_timer = ADD_TIMER(_runtime_profile, "GetDeltaColumnGroup");
@@ -588,6 +590,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+
+    _json_flatten_timer = ADD_CHILD_TIMER(_runtime_profile, "JsonFlattern", segment_read_name);
+    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
+    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -712,6 +718,35 @@ void LakeDataSource::update_counter() {
         _runtime_state->update_num_datacache_write_time_ns(_reader->stats().io_ns_write_local_disk);
         _runtime_state->update_num_datacache_count(1);
     }
+
+    if (_reader->stats().flat_json_hits.size() > 0) {
+        std::string access_path_hits = "AccessPathHits";
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Hit]{}", k));
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(_access_path_hits_counter, total);
+    }
+    if (_reader->stats().dynamic_json_hits.size() > 0) {
+        std::string access_path_unhits = "AccessPathUnhits";
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Unhit]{}", k));
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+
+    COUNTER_UPDATE(_json_flatten_timer, _reader->stats().json_flatten_ns);
 }
 
 // ================================

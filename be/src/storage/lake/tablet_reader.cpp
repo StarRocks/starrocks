@@ -102,6 +102,25 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::NotSupported("reader type not supported now");
     }
 
+    if (is_compaction(read_params.reader_type) && _tablet_schema->keys_type() == DUP_KEYS &&
+        read_params.column_access_paths != nullptr && read_params.column_access_paths->empty()) {
+        // init compaction flat json paths
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->segments()) {
+                // only get one segment's paths
+                if (segment->get_all_flat_jsons(read_params.column_access_paths).ok()) {
+                    break;
+                } else {
+                    read_params.column_access_paths->clear();
+                }
+            }
+        }
+
+        for (auto& p : *read_params.column_access_paths) {
+            p->set_from_compaction(true);
+        }
+    }
+
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
         auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
@@ -253,6 +272,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+
+    rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
