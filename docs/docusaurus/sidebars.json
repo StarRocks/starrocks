@@ -34,7 +34,7 @@
           "type": "category",
           "label": "Shared-nothing deployment",
           "link": {"type": "doc", "id": "cover_pages/shared_nothing_deployment"},
-          "items": ["deployment/deploy_manually", "deployment/sr_operator", "deployment/helm", "deployment/starrocks_on_aws"]
+          "items": ["deployment/deploy_manually", "deployment/sr_operator", "deployment/helm"]
         },
         {
           "type": "category",
