@@ -159,6 +159,9 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
     if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
         // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
@@ -167,8 +170,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
-    } else if (!ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage)) {
-        // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    } else if (build_hash_table) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
