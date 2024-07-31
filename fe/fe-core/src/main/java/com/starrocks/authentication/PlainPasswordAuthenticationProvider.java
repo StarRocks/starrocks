@@ -15,9 +15,10 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
@@ -61,14 +62,24 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public UserAuthenticationInfo validAuthenticationInfo(
-            UserIdentity userIdentity,
-            String password,
-            String textForAuthPlugin) throws AuthenticationException {
-        validatePassword(password);
+    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+            throws AuthenticationException {
+        byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
+        if (userAuthOption != null) {
+            boolean isPasswordPlain = userAuthOption.isPasswordPlain();
+            String password = userAuthOption.getAuthPlugin() == null ?
+                    userAuthOption.getPassword() : userAuthOption.getAuthString();
+            if (isPasswordPlain) {
+                validatePassword(password);
+            }
+            passwordScrambled = scramblePassword(password, isPasswordPlain);
+        }
+
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setPassword(password.getBytes(StandardCharsets.UTF_8));
-        info.setTextForAuthPlugin(textForAuthPlugin);
+        info.setAuthPlugin(PLUGIN_NAME);
+        info.setPassword(passwordScrambled);
+        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
         return info;
     }
 
@@ -101,14 +112,17 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
     }
 
-    @Override
-    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
-            throws AuthenticationException {
-        UserAuthenticationInfo ret = new UserAuthenticationInfo();
-        ret.setPassword(password.getPassword() == null ? MysqlPassword.EMPTY_PASSWORD : password.getPassword());
-        ret.setAuthPlugin(PLUGIN_NAME);
-        ret.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
-        return ret;
+    /**
+     * Get scrambled password from plain password
+     */
+    private byte[] scramblePassword(String originalPassword, boolean isPasswordPlain) {
+        if (Strings.isNullOrEmpty(originalPassword)) {
+            return MysqlPassword.EMPTY_PASSWORD;
+        }
+        if (isPasswordPlain) {
+            return MysqlPassword.makeScrambledPassword(originalPassword);
+        } else {
+            return MysqlPassword.checkPassword(originalPassword);
+        }
     }
 }
