@@ -31,7 +31,7 @@ import java.util.List;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
 public class IcebergHistoryTable extends MetadataTable {
-    public static final String ICEBERG_REFS_TABLE_NAME = "iceberg_history_table";
+    public static final String TABLE_NAME = "iceberg_history_table";
 
     public IcebergHistoryTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
                             String originDb, String originTable, MetadataTableType metadataTableType) {
@@ -41,7 +41,7 @@ public class IcebergHistoryTable extends MetadataTable {
     public static IcebergHistoryTable create(String catalogName, String originDb, String originTable) {
         return new IcebergHistoryTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                ICEBERG_REFS_TABLE_NAME,
+                TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
                         .column("made_current_at", ScalarType.createType(PrimitiveType.DATETIME))

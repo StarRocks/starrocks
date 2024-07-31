@@ -100,3 +100,5 @@ select count(*) from (select distinct c0, c1 from t5 limit 10) tb;
 -- test full sort
 select count(*), sum(rn) from (select row_number() over (partition by c0, c1) as rn from t0) tb;
 select count(*), sum(rk) from (select rank() over (partition by c0, c1) as rk from t0) tb;
+select count(*), sum(c0) from (select c0, rn from (select c0, row_number() over(partition by c0 order by c1) rn from t0) tb where rn <= 100 ) r;
+

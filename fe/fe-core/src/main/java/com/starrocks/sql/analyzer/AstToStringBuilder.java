@@ -85,9 +85,9 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -134,6 +134,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -190,42 +191,56 @@ public class AstToStringBuilder {
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
         @Override
-        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+        public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            if (statement instanceof CreateUserStmt) {
-                sb.append("CREATE");
-            } else {
-                sb.append("ALTER");
+            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        stmt.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
             }
 
-            sb.append(" USER ").append(statement.getUserIdentity());
-            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
-                if (statement.isPasswordPlain()) {
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            return sb.toString();
+        }
+
+
+        public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
+            StringBuilder sb = new StringBuilder();
+            if (authOption == null) {
+                return sb;
+            }
+
+            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
+                if (authOption.isPasswordPlain()) {
                     sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
                 } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
                 }
             }
 
-            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
-                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
-                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
-                    if (statement.isPasswordPlain()) {
+            if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                    sb.append(authOption.getAuthString()).append("'");
                 }
             }
-
-            if (!statement.getDefaultRoles().isEmpty()) {
-                sb.append(" DEFAULT ROLE ");
-                sb.append(Joiner.on(",").join(
-                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
-            }
-
-            return sb.toString();
+            return sb;
         }
 
         @Override

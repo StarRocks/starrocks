@@ -694,5 +694,4 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(0, ngram_set.size());
 }
-
 } // namespace starrocks

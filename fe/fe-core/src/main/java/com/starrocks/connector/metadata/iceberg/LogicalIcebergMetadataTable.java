@@ -34,7 +34,7 @@ import static com.starrocks.catalog.Type.ARRAY_INT;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
-    public static final String ICEBERG_LOGICAL_METADATA_TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
+    public static final String TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
 
     public LogicalIcebergMetadataTable(String catalogName, long id, String name, TableType type,
                                        List<Column> baseSchema, String originDb, String originTable,
@@ -45,7 +45,7 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
     public static LogicalIcebergMetadataTable create(String catalogName, String originDb, String originTable) {
         return new LogicalIcebergMetadataTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                ICEBERG_LOGICAL_METADATA_TABLE_NAME,
+                TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
                         .columns(PLACEHOLDER_COLUMNS)
