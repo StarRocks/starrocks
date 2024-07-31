@@ -58,6 +58,7 @@ DECLARE_int32(fslib_s3client_max_instance_per_item);
 DECLARE_int32(fslib_s3client_nonread_max_retries);
 DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
 DECLARE_int32(fslib_s3client_connect_timeout_ms);
+DECLARE_bool(fslib_s3client_use_list_objects_v1);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -447,6 +448,11 @@ void init_staros_worker() {
     FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
+<<<<<<< HEAD
+=======
+    FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
+    fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+>>>>>>> b736663f96 ([Enhancement] Associate be config s3_use_list_objects_v1 with starlet fslib_s3client_use_list_objects_v1 (#49110))
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
