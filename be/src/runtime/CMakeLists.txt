@@ -71,6 +71,7 @@ set(RUNTIME_FILES
     statistic_result_writer.cpp
     metadata_result_writer.cpp
     variable_result_writer.cpp
+    memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
