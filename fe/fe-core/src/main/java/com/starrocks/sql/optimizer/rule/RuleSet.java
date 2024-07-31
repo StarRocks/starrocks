@@ -83,6 +83,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.PredicateJoinOnPropagationJoinPrepareRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
@@ -305,19 +306,9 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.PRE_PREDICATE_JOIN_ON_PROPAGATION, ImmutableList.of(
                 new CastToEmptyRule(),
                 new PruneTrueFilterRule(),
-                new PushDownPredicateCTEAnchor(),
-                new PushDownPredicateAggRule(),
-                new PushDownPredicateWindowRule(),
-                new PushDownPredicateJoinRule(),
-                new PushDownJoinOnClauseRule(),
+                new PredicateJoinOnPropagationJoinPrepareRule(),
                 new PushDownPredicateProjectRule(),
-                new PushDownPredicateUnionRule(),
-                new PushDownPredicateExceptRule(),
-                new PushDownPredicateIntersectRule(),
-                new PushDownPredicateTableFunctionRule(),
-                new PushDownPredicateRepeatRule(),
-                new MergeTwoFiltersRule(),
-                new PushDownPredicateCTEConsumeRule()
+                new MergeTwoFiltersRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(

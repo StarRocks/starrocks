@@ -709,12 +709,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: v1 = 1, 1: v1 IS NOT NULL\n" +
+                "     PREDICATES: 1: v1 = 1\n" +
                 "     partitions=1/1"
         );
         assertContains(plan, "TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 = 1, 4: v4 IS NOT NULL\n" +
+                "     PREDICATES: 4: v4 = 1\n" +
                 "     partitions=1/1"
         );
     }

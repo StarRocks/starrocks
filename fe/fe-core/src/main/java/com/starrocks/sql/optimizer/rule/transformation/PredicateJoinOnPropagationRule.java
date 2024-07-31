@@ -53,21 +53,15 @@ public class PredicateJoinOnPropagationRule extends TransformationRule {
 
         List<BinaryPredicateOperator> joinOnPredicates = getJoinOnEqPredicate(joinOptExpression);
         List<ColumnRefOperator> joinOnColumnRefs = getJoinOnColumn(joinOptExpression);
-        Collection<ScalarOperator> filterPredicateSets = getFilterPredicateSets(input);
-        if (checkJoinChild(joinOptExpression.getInputs().get(0), joinOperator, joinOnPredicates,
-                joinOnColumnRefs, filterPredicateSets)) {
-            return true;
-        }
-        if (checkJoinChild(joinOptExpression.getInputs().get(1), joinOperator, joinOnPredicates,
-                joinOnColumnRefs, filterPredicateSets)) {
-            return true;
-        }
-        return false;
+        Collection<ScalarOperator> filterPredicateSet = getFilterPredicateSets(input);
+        Set<ScalarOperator> additionFilterPredicates = getAddictionPredicate(joinOptExpression,
+                joinOperator, joinOnPredicates, joinOnColumnRefs, filterPredicateSet);
+        return !additionFilterPredicates.isEmpty();
     }
 
     private List<ColumnRefOperator> getJoinOnColumn(OptExpression joinOptExpression) {
-        List<BinaryPredicateOperator> joinOnEqPredicateList = getJoinOnEqPredicate(joinOptExpression);
         List<ColumnRefOperator> joinOnColumnRefs = Lists.newLinkedList();
+        List<BinaryPredicateOperator> joinOnEqPredicateList = getJoinOnEqPredicate(joinOptExpression);
         for (BinaryPredicateOperator eqPredicate : joinOnEqPredicateList) {
             joinOnColumnRefs.addAll(Utils.extractColumnRef(eqPredicate));
         }
@@ -93,10 +87,40 @@ public class PredicateJoinOnPropagationRule extends TransformationRule {
         return filterPredicateSets;
     }
 
-    private boolean checkJoinChild(
-            OptExpression childOptExpression, LogicalJoinOperator joinOperator, List<BinaryPredicateOperator> joinOnPredicates,
+    private OptExpression getOffspringFilter(OptExpression optExpression) {
+        if (OperatorType.LOGICAL_FILTER.equals(optExpression.getOp().getOpType())) {
+            return optExpression;
+        } else if (optExpression.getInputs().size() == 1) {
+            OptExpression subOptExpression = optExpression.getInputs().get(0);
+            if (OperatorType.LOGICAL_FILTER.equals(subOptExpression.getOp().getOpType())) {
+                return subOptExpression;
+            } else if (OperatorType.LOGICAL_PROJECT.equals(subOptExpression.getOp().getOpType())) {
+                if (subOptExpression.getInputs().size() == 1) {
+                    OptExpression subSubOptExpression = subOptExpression.getInputs().get(0);
+                    if (OperatorType.LOGICAL_FILTER.equals(subSubOptExpression.getOp().getOpType())) {
+                        return subSubOptExpression;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private Set<ScalarOperator> getAddictionPredicate(
+            OptExpression joinOptExpression, LogicalJoinOperator joinOperator, List<BinaryPredicateOperator> joinOnPredicates,
             List<ColumnRefOperator> joinOnColumnRefs, Collection<ScalarOperator> filterPredicateSet) {
-        OptExpression offspringFilter = getOffspringFilter(childOptExpression);
+        Set<ScalarOperator> leftSubAddictionPredicates = getSubAddictionPredicate(
+                joinOptExpression.getInputs().get(0), joinOperator, joinOnPredicates, joinOnColumnRefs, filterPredicateSet);
+        Set<ScalarOperator> rightSubAddictionPredicates = getSubAddictionPredicate(
+                joinOptExpression.getInputs().get(1), joinOperator, joinOnPredicates, joinOnColumnRefs, filterPredicateSet);
+        return Sets.union(leftSubAddictionPredicates, rightSubAddictionPredicates);
+    }
+
+    private Set<ScalarOperator> getSubAddictionPredicate(
+            OptExpression subOptExpression, LogicalJoinOperator joinOperator, List<BinaryPredicateOperator> joinOnPredicates,
+            List<ColumnRefOperator> joinOnColumnRefs, Collection<ScalarOperator> filterPredicateSet) {
+        Set<ScalarOperator> additionFilterPredicates = Sets.newHashSet();
+        OptExpression offspringFilter = getOffspringFilter(subOptExpression);
         if (offspringFilter != null) {
             ScalarOperator offspringFilterPredicate = offspringFilter.getOp().getPredicate();
             ScalarOperator compoundPredicate = Utils.compoundAnd(joinOperator.getOnPredicate(),
@@ -109,29 +133,12 @@ public class PredicateJoinOnPropagationRule extends TransformationRule {
                     boolean isAdditionPredicate = !so.getOpType().equals(OperatorType.IS_NULL) &&
                             !isInJoinPredicate(joinOnPredicates, so) && !filterPredicateSet.contains(so);
                     if (isAdditionPredicate) {
-                        return true;
+                        additionFilterPredicates.add(so);
                     }
                 }
             }
         }
-        return false;
-    }
-
-    private OptExpression getOffspringFilter(OptExpression optExpression) {
-        if (optExpression.getInputs().size() == 1) {
-            OptExpression subOptExpression = optExpression.getInputs().get(0);
-            if (subOptExpression.getOp().getOpType() == OperatorType.LOGICAL_FILTER) {
-                return subOptExpression;
-            } else if (subOptExpression.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
-                if (subOptExpression.getInputs().size() == 1) {
-                    OptExpression subSubOptExpression = subOptExpression.getInputs().get(0);
-                    if (subSubOptExpression.getOp().getOpType() == OperatorType.LOGICAL_FILTER) {
-                        return subSubOptExpression;
-                    }
-                }
-            }
-        }
-        return null;
+        return additionFilterPredicates;
     }
 
     private boolean isInJoinPredicate(List<BinaryPredicateOperator> joinOnPredicates, ScalarOperator filterSo) {
@@ -155,16 +162,12 @@ public class PredicateJoinOnPropagationRule extends TransformationRule {
         List<BinaryPredicateOperator> joinOnPredicates = getJoinOnEqPredicate(joinOptExpression);
         List<ColumnRefOperator> joinOnColumnRefs = getJoinOnColumn(joinOptExpression);
         Collection<ScalarOperator> filterPredicateSet = getFilterPredicateSets(input);
-        Set<ScalarOperator> additionFilterPredicates = Sets.newHashSet();
-        collectAdditionPredicate(joinOptExpression.getInputs().get(0), joinOperator, joinOnPredicates,
-                joinOnColumnRefs, filterPredicateSet, additionFilterPredicates);
-        collectAdditionPredicate(joinOptExpression.getInputs().get(1), joinOperator, joinOnPredicates,
-                joinOnColumnRefs, filterPredicateSet, additionFilterPredicates);
-
+        Set<ScalarOperator> additionFilterPredicates = getAddictionPredicate(joinOptExpression,
+                joinOperator, joinOnPredicates, joinOnColumnRefs, filterPredicateSet);
         if (input.getOp().getOpType() == OperatorType.LOGICAL_FILTER) {
-            additionFilterPredicates.addAll(filterPredicateSet);
+            filterPredicateSet.addAll(additionFilterPredicates);
             LogicalFilterOperator filterOperator = (LogicalFilterOperator) input.getOp();
-            filterOperator.setPredicate(Utils.compoundAnd(additionFilterPredicates));
+            filterOperator.setPredicate(Utils.compoundAnd(filterPredicateSet));
         } else {
             LogicalFilterOperator newFilterOperator = new LogicalFilterOperator(Utils.compoundAnd(additionFilterPredicates));
             OptExpression newFilterOptExpression = new OptExpression(newFilterOperator);
@@ -173,29 +176,5 @@ public class PredicateJoinOnPropagationRule extends TransformationRule {
             input.getInputs().add(newFilterOptExpression);
         }
         return Lists.newArrayList(input);
-    }
-
-    private void collectAdditionPredicate(
-            OptExpression childOptExpression, LogicalJoinOperator joinOperator, List<BinaryPredicateOperator> joinOnPredicates,
-            List<ColumnRefOperator> joinOnColumnRefs, Collection<ScalarOperator> filterPredicateSet,
-            Set<ScalarOperator> additionFilterPredicate) {
-        OptExpression offspringFilter = getOffspringFilter(childOptExpression);
-        if (offspringFilter != null) {
-            ScalarOperator offspringFilterPredicate = offspringFilter.getOp().getPredicate();
-            ScalarOperator compoundPredicate = Utils.compoundAnd(joinOperator.getOnPredicate(),
-                    offspringFilterPredicate, joinOperator.getPredicate());
-            List<ScalarOperator> compoundPredicateList = Utils.extractConjuncts(compoundPredicate);
-            ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
-            scalarEquivalenceExtractor.union(compoundPredicateList);
-            for (ColumnRefOperator joinOnColumnRef : joinOnColumnRefs) {
-                for (ScalarOperator so : scalarEquivalenceExtractor.getEquivalentScalar(joinOnColumnRef)) {
-                    boolean isAdditionPredicate = !so.getOpType().equals(OperatorType.IS_NULL) &&
-                            !isInJoinPredicate(joinOnPredicates, so) && !filterPredicateSet.contains(so);
-                    if (isAdditionPredicate) {
-                        additionFilterPredicate.add(so);
-                    }
-                }
-            }
-        }
     }
 }
