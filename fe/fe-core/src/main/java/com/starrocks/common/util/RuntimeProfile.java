@@ -55,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Formatter;
 import java.util.HashSet;
 import java.util.List;
@@ -80,13 +79,13 @@ public class RuntimeProfile {
 
     private final Counter counterTotalTime;
 
-    private final Map<String, String> infoStrings = Collections.synchronizedMap(Maps.newLinkedHashMap());
+    private final Map<String, String> infoStrings = Maps.newLinkedHashMap();
 
     // These will be hold by other thread.
-    private final Map<String, Pair<Counter, String>> counterMap = Maps.newConcurrentMap();
-    private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
+    private final Map<String, Pair<Counter, String>> counterMap = Maps.newHashMap();
+    private final Map<String, RuntimeProfile> childMap = Maps.newHashMap();
 
-    private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
+    private final Map<String, Set<String>> childCounterMap = Maps.newHashMap();
     private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newCopyOnWriteArrayList();
 
     private String name;
@@ -127,35 +126,20 @@ public class RuntimeProfile {
         return childMap.get(childName);
     }
 
-    public void removeAllChildren() {
-        childList.clear();
-        childMap.clear();
-    }
-
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
         return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
-        if (strategy == null) {
-            strategy = Counter.createStrategy(type);
-        }
-        Pair<Counter, String> pair = this.counterMap.get(name);
-        if (pair != null) {
-            return pair.first;
-        } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
-            Counter newCounter = new Counter(type, strategy, 0);
-            this.counterMap.put(name, Pair.create(newCounter, parentName));
+        return this.counterMap.computeIfAbsent(name, (key) -> {
+            assert (parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName));
 
-            if (!childCounterMap.containsKey(parentName)) {
-                childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
-            }
-            Set<String> childNames = childCounterMap.get(parentName);
-            childNames.add(name);
-            return newCounter;
-        }
+            TCounterStrategy newStrategy = strategy == null ? Counter.createStrategy(type) : strategy;
+            Counter newCounter = new Counter(type, newStrategy, 0);
+
+            childCounterMap.computeIfAbsent(parentName, x -> Sets.newHashSet()).add(name);
+            return Pair.create(newCounter, parentName);
+        }).first;
     }
 
     public void removeCounter(String name) {
@@ -459,20 +443,6 @@ public class RuntimeProfile {
         List<Pair<RuntimeProfile, Boolean>> childList =
                 children.stream().map(c -> new Pair<>(c, true)).collect(Collectors.toList());
         this.childList.addAll(childList);
-    }
-
-    public void removeChild(String childName) {
-        RuntimeProfile childProfile = childMap.remove(childName);
-        if (childProfile == null) {
-            return;
-        }
-        childList.removeIf(childPair -> childPair.first == childProfile);
-    }
-
-    // Because the profile of summary and child fragment is not a real parent-child relationship
-    // Each child profile needs to calculate the time proportion consumed by itself
-    public void computeTimeInChildProfile() {
-        childMap.values().forEach(RuntimeProfile::computeTimeInProfile);
     }
 
     public void computeTimeInProfile() {
