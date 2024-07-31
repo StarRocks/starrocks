@@ -86,4 +86,8 @@ template <typename T>
 using HashSetWithAggStateAllocator = phmap::flat_hash_set<T, StdHash<T>, phmap::priv::hash_default_eq<T>, AggregateStateAllocator<T>>;
 
 using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash, AggregateStateAllocator<SliceWithHash>>;
+
+template <typename T>
+using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;
+
 }
