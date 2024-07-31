@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "clucene_plugin.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 
 #include "types/array_type_info.h"
 

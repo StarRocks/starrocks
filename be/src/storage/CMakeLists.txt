@@ -246,15 +246,11 @@ add_library(Storage STATIC
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
-    inverted/index_descriptor.hpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_option.cpp
-    inverted/inverted_index_common.hpp
-    inverted/inverted_plugin_factory.cpp
-    inverted/clucene/clucene_plugin.cpp
-    inverted/clucene/clucene_roaring_hit_collector.hpp
-    inverted/clucene/clucene_inverted_writer.cpp
-    inverted/clucene/clucene_inverted_reader.cpp
-    inverted/clucene/clucene_inverted_util.hpp
-    inverted/clucene/match_operator.cpp)
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_option.cpp
+    index/inverted/inverted_plugin_factory.cpp
+    index/inverted/clucene/clucene_plugin.cpp
+    index/inverted/clucene/clucene_inverted_writer.cpp
+    index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/match_operator.cpp)

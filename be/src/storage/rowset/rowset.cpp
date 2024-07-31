@@ -48,7 +48,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"

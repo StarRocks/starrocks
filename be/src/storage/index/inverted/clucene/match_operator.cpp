@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/inverted/clucene/match_operator.h"
+#include "match_operator.h"
 
 #include <boost/algorithm/string/replace.hpp>
 
-#include "storage/inverted/clucene/clucene_inverted_util.hpp"
-#include "storage/inverted/clucene/clucene_roaring_hit_collector.hpp"
+#include "storage/index/inverted/clucene/clucene_inverted_util.h"
+#include "storage/index/inverted/clucene/clucene_roaring_hit_collector.h"
 
 namespace starrocks {
 
