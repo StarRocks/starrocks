@@ -27,10 +27,12 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/memory/roaring_allocator.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/runtime_profile.h"
@@ -199,7 +201,22 @@ void AggregatorParams::init() {
 #define ALIGN_TO(size, align) ((size + align - 1) / align * align)
 #define PAD(size, align) (align - (size % align)) % align;
 
-Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
+class ThreadLocalStateAllocatorSetter {
+public:
+    ThreadLocalStateAllocatorSetter(Allocator* allocator): _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
+    ~ThreadLocalStateAllocatorSetter() = default;
+private:
+    ThreadLocalAggregateStateAllocatorSetter _agg_state_allocator_setter;
+    ThreadLocalRoaringAllocatorSetter _roaring_allocator_setter;
+};
+
+#define SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalStateAllocatorSetter(allocator)
+
+
+Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {
+    _allocator = std::make_unique<CountingAllocatorWithHook>();
+}
 
 Status Aggregator::open(RuntimeState* state) {
     if (_is_opened) {
@@ -527,6 +544,7 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
 }
 
 Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     _is_ht_eos = false;
     _num_input_rows = 0;
     _is_prepared = false;
@@ -621,6 +639,7 @@ void Aggregator::close(RuntimeState* state) {
         if (_mem_pool != nullptr) {
             // Note: we must free agg_states object before _mem_pool free_all;
             if (_single_agg_state != nullptr) {
+                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                 for (int i = 0; i < _agg_functions.size(); i++) {
                     _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
                 }
@@ -771,6 +790,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
@@ -793,6 +813,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
@@ -814,7 +835,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
-
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                         _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
@@ -1098,6 +1119,7 @@ void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, const Colu
 }
 
 void Aggregator::_destroy_state(AggDataPtr __restrict state) {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->destroy(_agg_fn_ctxs[i], state + _agg_states_offsets[i]);
     }
@@ -1563,6 +1585,7 @@ void Aggregator::_release_agg_memory() {
     // If all function states are of POD type,
     // then we don't have to traverse the hash table to call destroy method.
     //
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
                                         [](auto* func) { return func->is_pod_state(); });
