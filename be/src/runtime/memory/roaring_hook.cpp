@@ -20,31 +20,32 @@
 
 #include "roaring/memory.h"
 #include "util/logging.h"
+#include "runtime/memory/roaring_allocator.h"
 
 namespace starrocks {
 
 void* my_roaring_malloc(size_t bytes) {
-    return malloc(bytes);
+    return tls_roaring_allocator->alloc(bytes);
 }
 
 void* my_roaring_realloc(void* ptr, size_t size) {
-    return realloc(ptr, size);
+    return tls_roaring_allocator->realloc(ptr, size);
 }
 
 void* my_roaring_calloc(size_t n, size_t size) {
-    return calloc(n, size);
+    return tls_roaring_allocator->calloc(n, size);
 }
 
 void my_roaring_free(void* ptr) {
-    return free(ptr);
+    return tls_roaring_allocator->free(ptr);
 }
 
 void* my_roaring_aligned_malloc(size_t align, size_t size) {
-    return aligned_alloc(align, size);
+    return tls_roaring_allocator->aligned_alloc(align, size);
 }
 
 void my_roaring_aligned_free(void* ptr) {
-    return free(ptr);
+    return tls_roaring_allocator->free(ptr);
 }
 
 void init_roaring_hook() {
