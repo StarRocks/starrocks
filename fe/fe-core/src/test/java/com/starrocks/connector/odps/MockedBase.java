@@ -60,7 +60,6 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -184,9 +183,9 @@ public class MockedBase {
 
         RemoteFileInfo fileInfo = new RemoteFileInfo();
         fileInfo.setFiles(ImmutableList.of(OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
-        when(metadataMgr.getRemoteFileInfos(any(), any(), any(), any(), any(), any(), anyLong())).thenReturn(
+        when(metadataMgr.getRemoteFiles(any(), any())).thenReturn(
                 ImmutableList.of(fileInfo));
-        when(odpsMetadata.getRemoteFileInfos(any(), any(), any(), any(), any(), anyLong(), any())).thenReturn(
+        when(odpsMetadata.getRemoteFileInfos(any(), any(), any())).thenReturn(
                 ImmutableList.of(fileInfo));
     }
 }

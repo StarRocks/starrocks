@@ -23,9 +23,8 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.odps.OdpsRemoteFileDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
@@ -89,8 +88,9 @@ public class OdpsScanNode extends ScanNode {
                                         List<PartitionKey> partitionKeys) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                table.getCatalogName(), table, partitionKeys, TableVersionRange.empty(), predicate, fieldNames, -1);
+        GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setPartitionKeys(partitionKeys).setPredicate(predicate)
+                .setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, request);
         OdpsRemoteFileDesc remoteFileDesc = (OdpsRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
         if (splitsInfo.isEmpty()) {
@@ -151,7 +151,6 @@ public class OdpsScanNode extends ScanNode {
         helper.addValue("odpsTable=" + table.getName());
         return helper.toString();
     }
-
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {

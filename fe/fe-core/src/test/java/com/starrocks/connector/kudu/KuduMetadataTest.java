@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -144,8 +145,8 @@ public class KuduMetadataTest {
         };
         Table table = metadata.getTable("db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
-        List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFileInfos(kuduTable, null, TableVersionRange.empty(),
-                null, requiredNames, -1);
+        GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setFieldNames(requiredNames).build();
+        List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFiles(kuduTable, request);
         Assert.assertEquals(1, remoteFileInfos.size());
         Assert.assertEquals(1, remoteFileInfos.get(0).getFiles().size());
         KuduRemoteFileDesc desc = (KuduRemoteFileDesc) remoteFileInfos.get(0).getFiles().get(0);
@@ -182,7 +183,7 @@ public class KuduMetadataTest {
 
         Constructor<RpcRemoteException>
                 constructor = RpcRemoteException.class.getDeclaredConstructor(
-                        Status.class, RpcHeader.ErrorStatusPB.class);
+                Status.class, RpcHeader.ErrorStatusPB.class);
         constructor.setAccessible(true);
         return constructor.newInstance(status, errPb);
     }

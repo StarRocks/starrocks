@@ -21,6 +21,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -280,8 +281,8 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null,
-                TableVersionRange.empty(), null, requiredNames, -1);
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesRequest.newBuilder().setFieldNames(requiredNames).build());
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);

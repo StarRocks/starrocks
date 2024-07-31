@@ -21,16 +21,22 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.*;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,8 +96,9 @@ public class KuduScanNode extends ScanNode {
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                kuduTable.getCatalogName(), kuduTable, null, TableVersionRange.empty(), predicate, fieldNames, -1);
+        GetRemoteFilesRequest request =
+                GetRemoteFilesRequest.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(kuduTable, request);
         KuduRemoteFileDesc remoteFileDesc = (KuduRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {

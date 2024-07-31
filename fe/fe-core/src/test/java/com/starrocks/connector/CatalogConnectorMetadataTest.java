@@ -164,6 +164,8 @@ public class CatalogConnectorMetadataTest {
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
         ctx.setThreadLocalInfo();
+        GetRemoteFilesRequest getRemoteFilesRequest =
+                GetRemoteFilesRequest.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
 
         new Expectations() {
             {
@@ -195,7 +197,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
                 connectorMetadata.dropDb("test_db", false);
-                connectorMetadata.getRemoteFileInfos(null, null, TableVersionRange.empty(), null, null, -1);
+                connectorMetadata.getRemoteFiles(null, getRemoteFilesRequest);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
                 connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
@@ -232,7 +234,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
         catalogConnectorMetadata.dropDb("test_db", false);
-        catalogConnectorMetadata.getRemoteFileInfos(null, null, TableVersionRange.empty(), null, null, -1);
+        connectorMetadata.getRemoteFiles(null, getRemoteFilesRequest);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
         catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());

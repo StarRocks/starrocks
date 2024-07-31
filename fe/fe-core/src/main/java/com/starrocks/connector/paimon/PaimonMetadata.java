@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
@@ -142,7 +143,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                         .split(",");
                 if (partitionValues.length != partitionColumnNames.size()) {
                     String errorMsg = String.format("The length of partitionValues %s is not equal to " +
-                                    "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
+                            "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
                     throw new IllegalArgumentException(errorMsg);
                 }
                 StringBuilder sb = new StringBuilder();
@@ -232,16 +233,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange versionRange, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
-        PaimonFilter filter = new PaimonFilter(paimonTable.getDbName(), paimonTable.getTableName(), predicate, fieldNames);
+        PaimonFilter filter = new PaimonFilter(paimonTable.getDbName(), paimonTable.getTableName(), request.getPredicate(), request.getFieldNames());
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
-            int[] projected = fieldNames.stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
-            List<Predicate> predicates = extractPredicates(paimonTable, predicate);
+            int[] projected = request.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
+            List<Predicate> predicates = extractPredicates(paimonTable, request.getPredicate());
             List<Split> splits = readBuilder.withFilter(predicates).withProjection(projected).newScan().plan().splits();
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
@@ -271,8 +270,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, table, null, TableVersionRange.empty(), predicate, fieldNames, limit);
+        GetRemoteFilesRequest request =
+                GetRemoteFilesRequest.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, request);
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
         long rowCount = getRowCount(splits);

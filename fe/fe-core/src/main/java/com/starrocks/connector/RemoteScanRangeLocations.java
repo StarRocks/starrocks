@@ -334,7 +334,8 @@ public class RemoteScanRangeLocations {
         List<RemoteFileInfo> partitions;
 
         try {
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(catalogName, table, partitionKeys);
+            GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setPartitionKeys(partitionKeys).build();
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, request);
         } catch (Exception e) {
             LOG.error("Failed to get remote files", e);
             throw e;

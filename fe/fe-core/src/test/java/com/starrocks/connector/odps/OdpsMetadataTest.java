@@ -23,6 +23,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -155,9 +156,10 @@ public class OdpsMetadataTest extends MockedBase {
         PartitionKey partitionKey =
                 PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
                         odpsTable.getPartitionColumns());
+        GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setFieldNames(odpsTable.getPartitionColumnNames())
+                .setPartitionKeys(ImmutableList.of(partitionKey)).build();
         List<RemoteFileInfo> remoteFileInfos =
-                odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), TableVersionRange.empty(), null,
-                        odpsTable.getPartitionColumnNames(), -1, mockTableReadSessionBuilder);
+                odpsMetadata.getRemoteFileInfos(odpsTable, request, mockTableReadSessionBuilder);
         Assert.assertEquals(1, remoteFileInfos.size());
     }
 

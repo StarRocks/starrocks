@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesRequest;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
@@ -48,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -134,22 +136,31 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange version, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
         if (((HiveMetaStoreTable) table).isUnPartitioned()) {
             partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
         } else {
-            Map<String, Partition> existingPartitions = hmsOps.getPartitionByPartitionKeys(table, partitionKeys);
-            for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
+            // convert partition keys to partition names.
+            // and handle partition names in following code.
+            // in most cases, we use partition keys. but in some cases,  we use partition names.
+            // so partition keys has higher priority than partition names.
+            List<String> partitionNames = request.getPartitionNames();
+            if (request.getPartitionKeys() != null) {
+                partitionNames =
+                        request.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                                .collect(
+                                        Collectors.toList());
+            }
+            // check existences
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+            for (String hivePartitionName : partitionNames) {
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);
-                } else {
+                } else if (request.isCheckPartitionExistence()) {
                     LOG.error("Partition {} doesn't exist", hivePartitionName);
                     throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
                 }

@@ -83,7 +83,7 @@ public class ObjectBasedUpdateArbitratorTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getRemoteFileInfos((Table) any, (List<String>) any);
+                metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesRequest) any);
                 result = remoteFileInfos;
                 minTimes = 0;
             }
@@ -115,7 +115,7 @@ public class ObjectBasedUpdateArbitratorTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getRemoteFileInfos((Table) any, (List<String>) any);
+                metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesRequest) any);
                 result = remoteFileInfos;
                 minTimes = 0;
             }
