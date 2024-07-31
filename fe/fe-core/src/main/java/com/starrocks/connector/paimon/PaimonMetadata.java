@@ -236,10 +236,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
-        PaimonFilter filter = new PaimonFilter(paimonTable.getDbName(), paimonTable.getTableName(), request.getPredicate(), request.getFieldNames());
+        PaimonFilter filter = new PaimonFilter(paimonTable.getDbName(), paimonTable.getTableName(), request.getPredicate(),
+                request.getFieldNames());
         if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
-            int[] projected = request.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
+            int[] projected =
+                    request.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, request.getPredicate());
             List<Split> splits = readBuilder.withFilter(predicates).withProjection(projected).newScan().plan().splits();
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
