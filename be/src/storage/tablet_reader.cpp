@@ -218,6 +218,18 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
     // single row fetch, no need to use delvec
     rs_opts.is_primary_keys = false;
+    rs_opts.use_vector_index = _reader_params->use_vector_index;
+    rs_opts.k = _reader_params->k;
+    rs_opts.query_vector = _reader_params->query_vector;
+    rs_opts.vector_distance_column_name = _reader_params->vector_distance_column_name;
+    rs_opts.vector_range = _reader_params->vector_range;
+    rs_opts.result_order = _reader_params->result_order;
+    rs_opts.use_ivfpq = _reader_params->use_ivfpq;
+    rs_opts.vector_column_id = _reader_params->vector_column_id;
+    rs_opts.vector_slot_id = _reader_params->vector_slot_id;
+    rs_opts.query_params = _reader_params->query_params;
+    rs_opts.pq_refine_factor = _reader_params->pq_refine_factor;
+    rs_opts.k_factor = _reader_params->k_factor;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     auto rowid_range = std::make_shared<SparseRange<>>();
@@ -290,6 +302,18 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.k = params.k;
+    rs_opts.query_vector = params.query_vector;
+    rs_opts.use_vector_index = params.use_vector_index;
+    rs_opts.vector_distance_column_name = params.vector_distance_column_name;
+    rs_opts.vector_column_id = params.vector_column_id;
+    rs_opts.vector_slot_id = params.vector_slot_id;
+    rs_opts.query_params = params.query_params;
+    rs_opts.pq_refine_factor = params.pq_refine_factor;
+    rs_opts.k_factor = params.k_factor;
+    rs_opts.vector_range = params.vector_range;
+    rs_opts.result_order = params.result_order;
+    rs_opts.use_ivfpq = params.use_ivfpq;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;

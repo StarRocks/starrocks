@@ -87,6 +87,31 @@ public:
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
+
+    // vector index params
+    int64_t k;
+
+    std::vector<float> query_vector;
+
+    bool use_vector_index = false;
+    
+    bool use_ivfpq = false;
+
+    std::string vector_distance_column_name;
+
+    int vector_column_id;
+
+    SlotId vector_slot_id;
+
+    std::map<std::string, std::string> query_params;
+
+    double vector_range;
+
+    int result_order;
+
+    double pq_refine_factor;
+
+    double k_factor;
 };
 
 } // namespace starrocks

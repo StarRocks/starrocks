@@ -69,6 +69,7 @@ import com.starrocks.thrift.TSpillOptions;
 import com.starrocks.thrift.TSpillToRemoteStorageOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
+import com.starrocks.thrift.TVectorSearchOptions;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +82,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -105,6 +107,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The optional values are "compute_nodes_only" and "all_nodes".
     public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+    public static final String VECTOR_DISTANCE_COLUMN_NAME = "vector_distance_column_name";
 
     /**
      * configure the mem limit of load process on BE.
@@ -697,6 +700,46 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String WAREHOUSE_NAME = "warehouse";
 
+    public static final String ENABLE_USE_ANN = "enable_use_ann";
+
+    public static final String USE_IVFPQ = "use_ivfpq";
+
+    public static final String ANN_TYPE = "ann_type";
+
+    public static final String VECTOR_LIMIT_K = "vector_limit_k";
+
+    public static final String IS_REWRITTEN_VECTOR_PLAN = "is_rewritten_vector_plan";
+
+    public static final String QUERY_VECTOR = "query_vector";
+
+    public static final String VECTOR_RANGE = "vector_range";
+
+    public static final String RESULT_ORDER = "result_order";
+
+    public static final String QUERY_PARAMS = "query_params";
+
+    public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
+
+    public static final String K_FACTOR = "k_factor";
+
+    public enum ANNAlgorithmType {
+        APPROX_L2_DISTANCE,                 // L2 distance
+        APPROX_COSINE_SIMILARITY,             // Cosine distance
+        BRUTE,              // Brute
+        DEFAULT;            // default Type: Brute
+
+        public static String TYPE_L2 = APPROX_L2_DISTANCE.toString();
+        public static String TYPE_COSINE = APPROX_COSINE_SIMILARITY.toString();
+        public static String TYPE_BRUTE = BRUTE.toString();
+        public static String TYPE_DEFAULT = DEFAULT.toString();
+
+        public static ANNAlgorithmType parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(ANNAlgorithmType.class, str);
+        }
+    }
+
+    public static final String DEFAULT_VECTOR_DISTANCE_COLUMN_NAME = "vector_distance";
+
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -1264,7 +1307,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double broadcastRightTableScaleFactor = 10.0;
 
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
-    private long optimizerExecuteTimeout = 3000;
+    private long optimizerExecuteTimeout = 300000000;
 
     @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
     private String queryDebugOptions = "";
@@ -1947,6 +1990,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionColumnValueOnlyOptimization = true;
+
+    @VarAttr(name = ENABLE_USE_ANN)
+    private boolean enableUseANN = false;
+
+    @VarAttr(name = USE_IVFPQ)
+    private boolean useIVFPQ = false;
+
+    @VarAttr(name = ANN_TYPE)
+    private String annType = ANNAlgorithmType.TYPE_DEFAULT;
+
+    @VarAttr(name = VECTOR_DISTANCE_COLUMN_NAME)
+    private String vectorDistanceColumnName = DEFAULT_VECTOR_DISTANCE_COLUMN_NAME;
+
+    @VarAttr(name = VECTOR_LIMIT_K)
+    private long vectorLimitK;
+
+    @VarAttr(name = IS_REWRITTEN_VECTOR_PLAN)
+    private boolean isRewrittenVectorPlan = false;
+
+    @VarAttr(name = QUERY_VECTOR)
+    private List<String> queryVector = new ArrayList<>();
+
+    @VarAttr(name = VECTOR_RANGE)
+    private double vectorRange = -1;
+
+    @VarAttr(name = RESULT_ORDER)
+    private int resultOrder = 0;
+
+    @VarAttr(name = QUERY_PARAMS)
+    private Map<String, String> queryParams = Maps.newHashMap();
+
+    @VarAttr(name = PQ_REFINE_FACTOR)
+    private double pqRefineFactor = 1;
+
+    @VarAttr(name = K_FACTOR)
+    private double kFactor = 1;
 
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
@@ -3920,6 +3999,102 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
 
+    public boolean isEnableUseANN() {
+        return enableUseANN;
+    }
+
+    public void setEnableUseANN(boolean v) {
+        enableUseANN = v;
+    }
+
+    public boolean isUseIVFPQ() {
+        return useIVFPQ;
+    }
+
+    public void setUseIVFPQ(boolean useIVFPQ) {
+        this.useIVFPQ = useIVFPQ;
+    }
+
+    public String getANNType() {
+        return annType;
+    }
+
+    public void setANNType(String annType) {
+        this.annType = annType;
+    }
+
+    public String getVectorDistanceColumnName() {
+        return vectorDistanceColumnName;
+    }
+
+    public void setVectorDistanceColumnName(String vectorDistanceColumnName) {
+        this.vectorDistanceColumnName = vectorDistanceColumnName;
+    }
+
+    public long getVectorLimitK() {
+        return vectorLimitK;
+    }
+
+    public void setVectorLimitK(long vectorLimitK) {
+        this.vectorLimitK = vectorLimitK;
+    }
+
+    public boolean isRewrittenVectorPlan() {
+        return isRewrittenVectorPlan;
+    }
+
+    public void setIsRewrittenVectorPlan(boolean isRewrittenVectorPlan) {
+        this.isRewrittenVectorPlan = isRewrittenVectorPlan;
+    }
+
+    public List<String> getQueryVector() {
+        return queryVector;
+    }
+
+    public void setQueryVector(List<String> queryVector) {
+        this.queryVector = queryVector;
+    }
+
+    public double getVectorRange() {
+        return vectorRange;
+    }
+
+    public void setVectorRange(double vectorRange) {
+        this.vectorRange = vectorRange;
+    }
+
+    public int getResultOrder() {
+        return resultOrder;
+    }
+
+    public void setResultOrder(int resultOrder) {
+        this.resultOrder = resultOrder;
+    }
+
+    public Map<String, String> getQueryParams() {
+        return queryParams;
+    }
+
+    public void setQueryParams(Map<String, String> queryParams) {
+        this.queryParams = queryParams;
+    }
+
+    public double getPqRefineFactor() {
+        return pqRefineFactor;
+    }
+
+    public void setPqRefineFactor(double pqRefineFactor) {
+        this.pqRefineFactor = pqRefineFactor;
+    }
+
+    public double getKFactor() {
+        return kFactor;
+    }
+
+    public void setKFactor(double kFactor) {
+        this.kFactor = kFactor;
+    }
+
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
     }
@@ -4166,6 +4341,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
+        if (enableUseANN) {
+            TVectorSearchOptions tVectorSearchOptions = new TVectorSearchOptions();
+            tVectorSearchOptions.setVector_distance_column_name(vectorDistanceColumnName);
+            tVectorSearchOptions.setVector_limit_k(vectorLimitK);
+            tVectorSearchOptions.setQuery_vector(queryVector);
+            tVectorSearchOptions.setQuery_params(queryParams);
+            tVectorSearchOptions.setPq_refine_factor(pqRefineFactor);
+            tVectorSearchOptions.setK_factor(kFactor);
+            tVectorSearchOptions.setVector_range(vectorRange);
+            tVectorSearchOptions.setResult_order(resultOrder);
+            tVectorSearchOptions.setUse_ivfpq(useIVFPQ);
+            tResult.setVector_search_options(tVectorSearchOptions);
+        }
+        tResult.setEnable_use_ann(enableUseANN);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);

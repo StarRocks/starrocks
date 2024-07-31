@@ -66,6 +66,7 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -74,6 +75,9 @@ import java.util.StringJoiner;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+import static com.starrocks.qe.SessionVariable.QUERY_PARAMS;
 
 /**
  * Variable manager, merge session variable and global variable.
@@ -255,6 +259,9 @@ public class VariableMgr {
                 case "String":
                     field.set(obj, convertedVal);
                     break;
+                case "List":
+                case "Map":
+                    break;
                 default:
                     // Unsupported type variable.
                     ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
@@ -303,6 +310,14 @@ public class VariableMgr {
     //      setVar: variable information that needs to be set
     public static void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
             throws DdlException {
+        if (setVar.getVariable().equalsIgnoreCase(QUERY_PARAMS) && setVar.getType() != SetType.GLOBAL) {
+            String value = setVar.getResolvedExpression().getStringValue().replaceAll("[{}]", "");
+            Map<String, String> queryParamsMap = Arrays.stream(value.split(","))
+                    .map(s -> s.split("="))
+                    .collect(Collectors.toMap(s -> s[0], s -> s[1]));
+            sessionVariable.setQueryParams(queryParamsMap);
+            return;
+        }
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }

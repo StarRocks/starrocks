@@ -257,4 +257,9 @@ add_library(Storage STATIC
     inverted/clucene/clucene_inverted_writer.cpp
     inverted/clucene/clucene_inverted_reader.cpp
     inverted/clucene/clucene_inverted_util.hpp
-    inverted/clucene/match_operator.cpp)
+    inverted/clucene/match_operator.cpp
+    ten_ann_reader.cpp
+    del_id_filter.cpp
+    empty_index_reader.cpp
+    index_builder.cpp
+    vector_index_reader_factory.cpp)

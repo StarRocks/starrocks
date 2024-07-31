@@ -38,6 +38,7 @@
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/del_id_filter.h"
 #include "storage/del_vector.h"
 #include "storage/inverted/index_descriptor.hpp"
 #include "storage/lake/update_manager.h"
@@ -57,8 +58,11 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
+#include "storage/ten_ann_reader.h"
+#include "storage/tenann_index_utils.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
+#include "storage/vector_index_reader_factory.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
@@ -213,8 +217,10 @@ private:
     StatusOr<SparseRange<>> _get_row_ranges_by_key_ranges();
     StatusOr<SparseRange<>> _get_row_ranges_by_short_key_ranges();
     Status _get_row_ranges_by_zone_map();
+    Status _get_row_ranges_by_vector_index();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
+    Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
 
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
@@ -248,6 +254,8 @@ private:
     void _build_final_chunk(ScanContext* ctx);
 
     Status _encode_to_global_id(ScanContext* ctx);
+
+    FieldPtr _make_field(size_t i);
 
     Status _switch_context(ScanContext* to);
 
@@ -287,6 +295,9 @@ private:
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
+    Status _unfold_vector_distance_column(std::vector<uint8_t>* result_distances, ColumnPtr& vector_column_iterator);
+    Status _init_ann_reader();
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -296,6 +307,7 @@ private:
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
+    std::shared_ptr<VectorIndexReader> _ann_reader;
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
@@ -350,6 +362,25 @@ private:
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
 
     std::unordered_set<ColumnId> _prune_cols_candidate_by_inverted_index;
+
+    // vector index params
+    int64_t _k;
+    tenann::PrimitiveSeqView _query_view;
+    bool _use_vector_index;
+    std::string _vector_distance_column_name;
+    std::shared_ptr<tenann::IndexMeta> _index_meta;
+    int _vector_column_id;
+    SlotId _vector_slot_id;
+    std::unordered_map<rowid_t, float> _id2distance_map;
+    std::vector<rowid_t> _first_rowids;
+    std::map<std::string, std::string> _query_params;
+    double _vector_range;
+    int _result_order;
+    bool _use_ivfpq;
+    Buffer<uint8_t> _filter_selection;
+    Buffer<uint8_t> _filter_by_expr_selection;
+
+    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta);
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -357,7 +388,28 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _segment(std::move(segment)),
           _opts(std::move(options)),
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
-          _predicate_columns(_opts.pred_tree.num_columns()) {
+          _predicate_columns(_opts.pred_tree.num_columns()),
+          _use_vector_index(_opts.use_vector_index) {
+    if (_use_vector_index) {
+        // The K in front of Fe is long, which can be changed to uint32. This can be a problem,
+        // but this k is wasted memory allocation, so it should not exceed the accuracy of uint32
+        // options.query_vector is a string, passed to tenann as a float string, see if you need to use the stof function to convert
+        // and consider precision loss
+        _vector_distance_column_name = _opts.vector_distance_column_name;
+        _vector_column_id = _opts.vector_column_id;
+        _vector_slot_id = _opts.vector_slot_id;
+        _vector_range = _opts.vector_range;
+        _result_order = _opts.result_order;
+        _use_ivfpq = _opts.use_ivfpq;
+        if (_vector_range > 0 && _use_ivfpq) {
+            _k = _opts.k * _opts.pq_refine_factor * _opts.k_factor;
+        } else {
+            _k = _opts.k * _opts.k_factor;
+        }
+        _query_view = tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(_opts.query_vector.data()),
+                                               .size = static_cast<uint32_t>(_opts.query_vector.size()),
+                                               .elem_type = tenann::PrimitiveType::kFloatType};
+    }
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
     // especially when there are many columns, many small files, many versions,
@@ -433,7 +485,7 @@ Status SegmentIterator::_init() {
     _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-
+    RETURN_IF_ERROR(_init_ann_reader());
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
@@ -450,6 +502,7 @@ Status SegmentIterator::_init() {
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
     }
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -466,6 +519,158 @@ Status SegmentIterator::_init() {
     for (auto column_index : _io_coalesce_column_index) {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
+
+    return Status::OK();
+}
+
+Status SegmentIterator::_unfold_vector_distance_column(std::vector<uint8_t>* result_distances,
+                                                       ColumnPtr& vector_column_iterator) {
+    std::shared_ptr<UInt8Column> distance_column = UInt8Column::create();
+    distance_column->append(*result_distances);
+    vector_column_iterator = distance_column;
+    return Status::OK();
+}
+
+inline Status SegmentIterator::_init_reader_from_file(const std::string& index_path,
+                                                      const std::shared_ptr<TabletIndex>& tablet_index_meta) {
+    // todo: support query params
+    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta))
+    _index_meta = std::make_shared<tenann::IndexMeta>(meta);
+    RETURN_IF_ERROR(VectorIndexReaderFactory::create_from_file(index_path, _index_meta, &_ann_reader));
+    auto status = _ann_reader->init_searcher(*_index_meta.get(), index_path);
+    // means empty ann reader
+    if (status.is_not_supported()) {
+        _use_vector_index = false;
+        return Status::OK();
+    }
+    return status;
+}
+
+Status SegmentIterator::_init_ann_reader() {
+    RETURN_IF(!_use_vector_index, Status::OK());
+    std::unordered_map<int32_t, TabletIndex> col_map_index;
+    for (const auto& index : *_segment->tablet_schema().indexes()) {
+        if (index.index_type() == VECTOR) {
+            col_map_index.emplace(index.col_unique_ids()[0], index);
+        }
+    }
+
+    std::vector<TabletIndex> hit_indexes;
+    for (auto& field : _schema.fields()) {
+        if (col_map_index.count(field->uid()) > 0) {
+            hit_indexes.emplace_back(col_map_index.at(field->uid()));
+        }
+    }
+
+    // TODO: Support more index in one segment iterator, only support one index for now
+    CHECK(hit_indexes.size() <= 1) << "Only support query no more than one index now";
+
+    if (hit_indexes.empty()) {
+        return Status::OK();
+    }
+
+    auto tablet_index_meta = std::make_shared<TabletIndex>(hit_indexes[0]);
+    // TODO: to support below when tenann support this interface
+    // tenann::IndexMeta::Deserialize(tablet_index_meta.properties_to_json());
+
+    // std::string index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
+    //                                                                  segment_id(), tablet_index_meta->index_id());
+
+    return _init_reader_from_file("index_path", tablet_index_meta);
+}
+
+Status SegmentIterator::_get_row_ranges_by_vector_index() {
+    RETURN_IF(!_use_vector_index, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
+    SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+
+    Status st;
+    std::map<rowid_t, float> id2distance_map;
+    std::vector<int64_t> result_ids;
+    std::vector<float> result_distances;
+    std::vector<int64_t> filtered_result_ids;
+    DelIdFilter del_id_filter(_scan_range);
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
+        if (_vector_range > 0) {
+            st = _ann_reader->range_search(_query_view, _k, &result_ids, &result_distances, &del_id_filter,
+                                           static_cast<float>(_vector_range), _result_order);
+            if (!st.ok()) {
+                // fall over to normal search and host range search to column expression predicate
+                LOG(WARNING) << "Vector index search failed with range_serach: " << st.to_string();
+                result_ids.resize(_k);
+                result_distances.resize(_k);
+                st = _ann_reader->search(_query_view, _k, (result_ids.data()),
+                                         reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+            }
+        } else {
+            result_ids.resize(_k);
+            result_distances.resize(_k);
+            st = _ann_reader->search(_query_view, _k, (result_ids.data()),
+                                     reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+        }
+    }
+
+    if (!st.ok()) {
+        LOG(WARNING) << "Vector index search failed: " << st.to_string();
+        return Status::InternalError(st.to_string());
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->process_vector_distance_and_id_timer);
+
+    for (size_t i = 0; i < result_ids.size() && result_ids[i] != -1; i++) {
+        id2distance_map[result_ids[i]] = result_distances[i];
+    }
+
+    SparseRange r;
+    RETURN_IF_ERROR(_get_row_ranges_by_row_ids(&result_ids, &r));
+
+    size_t prev_size = _scan_range.span_size();
+    _scan_range = _scan_range.intersection(r);
+    _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());
+
+    SparseRangeIterator range_iter = _scan_range.new_iterator();
+    size_t to_read = _scan_range.span_size();
+    while (range_iter.has_more()) {
+        Range r = range_iter.next(to_read);
+        for (uint32_t i = r.begin(); i < r.end(); i++) {
+            filtered_result_ids.emplace_back(i);
+        }
+    }
+
+    _id2distance_map.reserve(filtered_result_ids.size());
+    for (size_t i = 0; i < filtered_result_ids.size(); i++) {
+        _id2distance_map[static_cast<rowid_t>(filtered_result_ids[i])] = id2distance_map[filtered_result_ids[i]];
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
+    if (result_ids->empty()) {
+        return Status::OK();
+    }
+
+    std::sort(result_ids->begin(), result_ids->end());
+
+    // filter -1 above
+    size_t first_valid_id = 0;
+    for (; (*result_ids)[first_valid_id] < 0; first_valid_id++);
+
+    int64_t range_start = (*result_ids)[first_valid_id];
+    int64_t range_end = range_start + 1;
+
+    for (size_t i = first_valid_id + 1; i < result_ids->size(); ++i) {
+        if ((*result_ids)[i] == range_end) {
+            ++range_end;
+        } else {
+            r->add(Range<>(range_start, range_end));
+            range_start = (*result_ids)[i];
+            range_end = range_start + 1;
+        }
+    }
+
+    r->add(Range<>(range_start, range_end));
 
     return Status::OK();
 }
@@ -1097,6 +1302,12 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         chunk->check_or_die();
     }
 
+    if (_use_vector_index) {
+        for (uint32_t i = range.begin(); i < range.end(); i++) {
+            _first_rowids.push_back(i);
+        }
+    }
+
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
         SparseRangeIterator<> iter = range.new_iterator();
@@ -1278,6 +1489,37 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk = _context->_adapt_global_dict_chunk.get();
     }
 
+    if (_use_vector_index && !_use_ivfpq) {
+        std::shared_ptr<FloatColumn> distance_column = FloatColumn::create();
+        vector<rowid_t> rowids;
+        for (const auto& id : _first_rowids) {
+            auto it = _id2distance_map.find(id);
+            if (it != _id2distance_map.end()) {
+                rowids.emplace_back(it->first);
+            }
+        }
+        if (rowid != nullptr) {
+            for (auto id : *rowid) {
+                auto it = _id2distance_map.find(id);
+                if (it != _id2distance_map.end()) {
+                    rowids.emplace_back(it->first);
+                }
+            }
+        }
+        if (!rowids.empty()) {
+            // is sorted?
+            std::sort(rowids.begin(), rowids.end());
+            for (const auto& vrid : rowids) {
+                distance_column->append(_id2distance_map[vrid]);
+            }
+        }
+        if (has_non_expr_predicate && _filter_selection.size() == distance_column->size()) {
+            distance_column->filter_range(_filter_selection, 0, distance_column->size());
+        }
+        // distance_column->filter_range(_filter_by_expr_selection, 0, distance_column->size());
+        chunk->append_vector_column(distance_column, _make_field(_vector_column_id), _vector_slot_id);
+    }
+
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -1285,6 +1527,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     }
 
     return Status::OK();
+}
+
+FieldPtr SegmentIterator::_make_field(size_t i) {
+    return std::make_shared<Field>(i, _vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
@@ -1380,6 +1626,9 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         }
     }
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    for (int i = from; i < to; i++) {
+        _filter_selection.push_back(_selection[i]);
+    }
     return chunk_size;
 }
 
@@ -1405,6 +1654,9 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
             }
         }
         _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        for (int i = 0; i < chunk_size; i++) {
+            _filter_by_expr_selection.push_back(_selection[i]);
+        }
         chunk_size = new_size;
     }
     return chunk_size;
@@ -2195,7 +2447,9 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
     } else {
         Schema ordered_schema = reorder_schema(schema, options.pred_tree);
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
-        return new_projection_iterator(schema, seg_iter);
+        return new_projection_iterator(schema, seg_iter, options.use_vector_index && !options.use_ivfpq,
+                                       options.vector_column_id, options.vector_slot_id,
+                                       options.vector_distance_column_name);
     }
 }
 

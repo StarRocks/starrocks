@@ -19,9 +19,12 @@
 #include <cstdint>
 #include <string>
 
+#include "common/statusor.h"
 #include "storage/olap_common.h"
 
 #define INVERTED_INDEX_MARK_NAME "ivt"
+#define MARK_WORD "TENANNEMPTYMARK"
+#define MARK_WORD_LEN 15
 
 namespace starrocks {
 class IndexDescriptor {
