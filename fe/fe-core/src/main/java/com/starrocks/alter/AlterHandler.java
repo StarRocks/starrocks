@@ -43,7 +43,6 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,7 +72,7 @@ public abstract class AlterHandler extends FrontendDaemon {
      * and this requires atomic operations. So the lock must be held to do this operations.
      * Operations like Get or Put do not need lock.
      */
-    protected ReentrantLock lock = new FairReentrantLock();
+    protected ReentrantLock lock = new ReentrantLock();
 
     protected ThreadPoolExecutor executor;
 

@@ -795,6 +795,8 @@ struct TMasterOpRequest {
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
     35: optional string session_id
+
+    101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 
 struct TColumnDefinition {
@@ -1446,6 +1448,9 @@ struct TPartitionMetaInfo {
     23: optional double p50_cs
     24: optional double max_cs
     25: optional string storage_path
+    26: optional i64 data_version
+    27: optional i64 version_epoch
+    28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
 }
 
 struct TGetTablesInfoRequest {
@@ -1738,6 +1743,7 @@ struct TPartitionReplicationInfo {
     1: optional i64 partition_id
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
+    4: optional i64 src_version_epoch
 }
 
 struct TTableReplicationRequest {
@@ -1781,6 +1787,13 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TGetKeysRequest {
+}
+
+struct TGetKeysResponse {
+    1: optional list<binary> key_metas;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1792,6 +1805,8 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
+
+    TGetKeysResponse getKeys(1:TGetKeysRequest params);
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)

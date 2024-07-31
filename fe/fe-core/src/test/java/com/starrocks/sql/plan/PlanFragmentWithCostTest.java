@@ -136,6 +136,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE t1_single(\n" +
+                "    id bigint  ,\n" +
+                "    user_id  bigint  ,\n" +
+                "    recharge_money decimal(32,2) , \n" +
+                "    province varchar(255) not null ,\n" +
+                "    dt varchar\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "   PARTITION p1 VALUES IN (\"beijing\",\"chongqing\"),\n" +
+                "   PARTITION p2 VALUES IN (\"shanghai\",\"tianjing\")\n" +
+                ") PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.withTable("CREATE TABLE t1_multi_col(\n" +
+                "    id bigint  ,\n" +
+                "    user_id  bigint  ,\n" +
+                "    recharge_money decimal(32,2) , \n" +
+                "    province varchar(255) not null ,\n" +
+                "    dt varchar(255) not null\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt,province) (\n" +
+                "   PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")),\n" +
+                "   PARTITION p2 VALUES IN ((\"2022-04-02\", \"beijing\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
         FeConstants.runningUnitTest = true;
     }
 
@@ -2267,31 +2296,46 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPlanCost() throws Exception {
-        String plan = getVerboseExplain("select t1a, v1 " +
-                "from t0 join [broadcast] test_all_type " +
-                "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1");
-        assertContains(plan, "  11:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 1, build_expr = (16: cast), remote = true\n" +
-                "  |  output columns: 1, 4\n" +
-                "  |  cardinality: 9000\n" +
-                "  |  \n" +
-                "  |----10:EXCHANGE\n" +
-                "  |       distribution type: SHUFFLE\n" +
-                "  |       partition exprs: [16: cast, VARCHAR, false]\n" +
-                "  |       cardinality: 1\n" +
-                "  |    \n" +
-                "  6:EXCHANGE\n" +
-                "     distribution type: SHUFFLE\n" +
-                "     partition exprs: [4: t1a, VARCHAR, true]\n" +
-                "     cardinality: 9000");
+        final boolean prevShowFragmentCost = FeConstants.showFragmentCost;
+        try {
+            FeConstants.showFragmentCost = true;
 
-        AuditEvent event = connectContext.getAuditEventBuilder().build();
-        Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
-        Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+            String sql = "select t1a, v1 " +
+                    "from t0 join [broadcast] test_all_type " +
+                    "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  11:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                    "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR, false]\n" +
+                    "  |  build runtime filters:\n" +
+                    "  |  - filter_id = 1, build_expr = (16: cast), remote = true\n" +
+                    "  |  output columns: 1, 4\n" +
+                    "  |  cardinality: 9000\n" +
+                    "  |  \n" +
+                    "  |----10:EXCHANGE\n" +
+                    "  |       distribution type: SHUFFLE\n" +
+                    "  |       partition exprs: [16: cast, VARCHAR, false]\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |    \n" +
+                    "  6:EXCHANGE\n" +
+                    "     distribution type: SHUFFLE\n" +
+                    "     partition exprs: [4: t1a, VARCHAR, true]\n" +
+                    "     cardinality: 9000");
+            System.out.println(plan);
+            assertContains(plan, "PLAN COST\n" +
+                    "  CPU: 1881002.0\n" +
+                    "  Memory: 288001.0");
 
+            assertContains(getCostExplain(sql), "PLAN COST\n" +
+                    "  CPU: 1881002.0\n" +
+                    "  Memory: 288001.0");
+
+            AuditEvent event = connectContext.getAuditEventBuilder().build();
+            Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
+            Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+        } finally {
+            FeConstants.showFragmentCost = prevShowFragmentCost;
+        }
     }
 
     @Test
@@ -2351,5 +2395,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         tQueryPlanInfo.output_names = execPlan.getColNames();
         Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
         Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+    }
+
+    @Test
+    public void testListPartitionTable() throws Exception {
+        String sql = "select * from t1_single";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 4.0]");
+
+        sql = "select * from t1_multi_col";
+        plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
+        assertContains(plan, "dt-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
     }
 }

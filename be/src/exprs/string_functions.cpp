@@ -2765,7 +2765,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
-        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+        list.emplace_back(col);
     }
     const auto num_rows = columns[0]->size();
     auto dst_bytes_max_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.end());
@@ -2918,7 +2918,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     // skip only null
     for (int i = 1; i < columns.size(); ++i) {
         if (!columns[i]->only_null()) {
-            list.emplace_back(ColumnViewer<TYPE_VARCHAR>(columns[i]));
+            list.emplace_back(columns[i]);
         }
     }
 

@@ -18,7 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
-import com.starrocks.common.util.StringUtils;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -194,7 +194,7 @@ public class ConcurrentDDLTest {
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }
-                        String randomStr = StringUtils.generateRandomString(24);
+                        String randomStr = SRStringUtils.generateRandomString(24);
                         int idx = time % 3;
                         String sql = null;
                         try {

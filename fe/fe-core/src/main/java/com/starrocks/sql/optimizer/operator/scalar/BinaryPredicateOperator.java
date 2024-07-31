@@ -45,7 +45,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.GT, BinaryType.LE)
                     .build();
 
-    private final BinaryType type;
+    private BinaryType type;
 
     public BinaryPredicateOperator(BinaryType type, ScalarOperator... arguments) {
         super(OperatorType.BINARY, arguments);
@@ -57,6 +57,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.size() == 2);
+    }
+
+    public void setBinaryType(BinaryType type) {
+        this.type = type;
     }
 
     public BinaryType getBinaryType() {
@@ -87,6 +91,25 @@ public class BinaryPredicateOperator extends PredicateOperator {
         } else {
             return null;
         }
+    }
+
+    /**
+     * For Non-Strict Monotonic function, we need to convert
+     * 1. > to >=, and < to <=
+     * 2. !=, not supported
+     */
+    public BinaryPredicateOperator normalizeNonStrictMonotonic() {
+        if (getBinaryType() == BinaryType.NE) {
+            return null;
+        }
+        BinaryPredicateOperator result = (BinaryPredicateOperator) clone();
+        if (getBinaryType() == BinaryType.LT) {
+            result.setBinaryType(BinaryType.LE);
+        }
+        if (getBinaryType() == BinaryType.GT) {
+            result.setBinaryType(BinaryType.GE);
+        }
+        return result;
     }
 
     @Override

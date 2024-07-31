@@ -573,6 +573,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_TASK = 10085;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ARCHIVE_TASK_RUNS = 10086;
+
     // materialized view 10091 ~ 10100
     @IgnorableOnReplayFailed
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -673,7 +676,6 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
-
 
     // constraint properties
 
@@ -916,7 +918,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
 
-
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
@@ -925,6 +926,9 @@ public class OperationType {
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_PARTITION_RECOVERY = 13511;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_KEY = 13512;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

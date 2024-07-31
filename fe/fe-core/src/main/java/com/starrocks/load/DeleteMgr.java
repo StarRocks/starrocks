@@ -85,7 +85,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
@@ -99,6 +98,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -147,7 +147,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Set<Long> killJobSet;
 
     public DeleteMgr() {
@@ -190,7 +190,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.lockDatabase(db, LockType.READ);
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -212,10 +212,17 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
+        } catch (QueryStateException e) {
+            // If delete success, it will throw QueryStateException(QueryState.MysqlStateType.OK, sb.toString()).
+            if (e.getQueryState().getStateType() == QueryState.MysqlStateType.OK) {
+                // trigger after a delete job finished
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDeleteJobTransactionFinish(db, table);
+            }
+            throw e;
         } finally {
             if (!FeConstants.runningUnitTest) {
                 clearJob(deleteJob);
@@ -334,7 +341,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             partitionNames.addAll(olapTable.getPartitionNames());
         } else {
             RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+                    rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn()), columnFilters);
             Collection<Long> selectedPartitionIds = pruner.prune();
 
             if (selectedPartitionIds == null) {
@@ -353,7 +360,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                                                    List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
         List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
@@ -379,7 +386,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 if (table.isExprPartitionTable() && !rangePartitionInfo.isAutomaticPartition()) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 =
                             (ExpressionRangePartitionInfoV2) rangePartitionInfo;
-                    Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs().get(0);
+                    Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn()).get(0);
                     List<FunctionCallExpr> functionCallExprs = new ArrayList<>();
                     partitionExpr.collect((com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr,
                             functionCallExprs);
@@ -611,7 +618,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             // set schema column name
-            slotRef.setCol(column.getName());
+            slotRef.setColumnName(column.getName());
         }
         // check materialized index.
         // only need check the first partition because each partition has same materialized view

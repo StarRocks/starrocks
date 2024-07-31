@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -50,15 +51,20 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
+                if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                    partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+                }
             }
         }
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
@@ -79,6 +85,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
+            }
 
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
@@ -88,7 +101,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -103,7 +116,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

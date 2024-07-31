@@ -31,10 +31,11 @@ public class PartitionStatistics {
     private long nextCompactionTime;
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
-
     // default priority is 0, manual compaction will have priority value 1
     @SerializedName(value = "priority")
     private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
+    // not persist on purpose, used to control the interval of continuous partial success compaction
+    private int punishFactor = 1;
 
     public enum CompactionPriority {
         DEFAULT(0),
@@ -55,6 +56,7 @@ public class PartitionStatistics {
         this.partition = partition;
         this.compactionVersion = null;
         this.nextCompactionTime = 0;
+        this.punishFactor = 1;
     }
 
     public PartitionIdentifier getPartition() {
@@ -93,7 +95,27 @@ public class PartitionStatistics {
         return getCurrentVersion().getVersion() - getCompactionVersion().getVersion();
     }
 
+    public int getPunishFactor() {
+        return punishFactor;
+    }
+
+    private void adjustPunishFactor(Quantiles newCompactionScore) {
+        if (compactionScore != null && newCompactionScore != null) {
+            if (compactionScore.getMax() == newCompactionScore.getMax()) {
+                // this means partial compaction succeeds, need increase punish factor,
+                // so that other partitions' compaction can proceed.
+                // max interval will be CompactionScheduler.MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * punishFactor
+                punishFactor = Math.min(punishFactor * 2, 360);
+            } else {
+                punishFactor = 1;
+            }
+        } else {
+            punishFactor = 1;
+        }
+    }
+
     public void setCompactionScore(@Nullable Quantiles compactionScore) {
+        adjustPunishFactor(compactionScore);
         this.compactionScore = compactionScore;
     }
 

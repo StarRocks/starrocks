@@ -90,7 +90,9 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
     if (off >= _len) {
         return {};
     }
-    return std::string(reinterpret_cast<char*>(_data) + off, _len - off);
+
+    auto len = std::min(_len - off, sz);
+    return std::string(reinterpret_cast<char*>(_data) + off, len);
 }
 
 Status JsonArrayParser::parse(char* data, size_t len, size_t allocated) noexcept {
@@ -174,7 +176,8 @@ std::string JsonArrayParser::left_bytes_string(size_t sz) noexcept {
         return {};
     }
 
-    return std::string(reinterpret_cast<const char*>(_data) + off, _len - off);
+    auto len = std::min(_len - off, sz);
+    return std::string(reinterpret_cast<const char*>(_data) + off, len);
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {

@@ -39,17 +39,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
@@ -60,7 +58,7 @@ import java.util.stream.Collectors;
 /**
  * Internal representation of partition-related metadata.
  */
-public class Partition extends MetaObject implements PhysicalPartition, Writable {
+public class Partition extends MetaObject implements PhysicalPartition, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -84,6 +82,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private PartitionState state;
     @SerializedName(value = "idToSubPartition")
     private Map<Long, PhysicalPartitionImpl> idToSubPartition = Maps.newHashMap();
+    private Map<String, PhysicalPartitionImpl> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
@@ -119,16 +118,34 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     // not have committedVersion because committedVersion = nextVersion - 1
     @SerializedName(value = "visibleVersion")
-    private long visibleVersion;
+    private volatile long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
-    private long visibleVersionTime;
+    private volatile long visibleVersionTime;
+    @SerializedName(value = "nextVersion")
+    private volatile long nextVersion;
+
+    /*
+     * in shared-nothing mode, data version is always equals to visible version
+     * in shared-data mode, compactions increase visible version but not data version
+     */
+    @SerializedName(value = "dataVersion")
+    private volatile long dataVersion;
+    @SerializedName(value = "nextDataVersion")
+    private volatile long nextDataVersion;
+
+    /*
+     * if the visible version and version epoch are unchanged, the data is unchanged
+     */
+    @SerializedName(value = "versionEpoch")
+    private volatile long versionEpoch;
+    @SerializedName(value = "versionTxnType")
+    private volatile TransactionType versionTxnType;
+
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
-    private long visibleTxnId = -1;
-    @SerializedName(value = "nextVersion")
-    private long nextVersion;
+    private volatile long visibleTxnId = -1;
 
     private volatile long lastVacuumTime = 0;
 
@@ -149,7 +166,11 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
         // PARTITION_INIT_VERSION == 1, so the first load version is 2 !!!
-        this.nextVersion = PARTITION_INIT_VERSION + 1;
+        this.nextVersion = this.visibleVersion + 1;
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        this.versionEpoch = this.nextVersionEpoch();
+        this.versionTxnType = TransactionType.TXN_NORMAL;
 
         this.distributionInfo = distributionInfo;
     }
@@ -172,9 +193,14 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         partition.visibleVersion = this.visibleVersion;
         partition.visibleVersionTime = this.visibleVersionTime;
         partition.nextVersion = this.nextVersion;
+        partition.dataVersion = this.dataVersion;
+        partition.nextDataVersion = this.nextDataVersion;
+        partition.versionEpoch = this.versionEpoch;
+        partition.versionTxnType = this.versionTxnType;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
+        partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
     }
 
@@ -206,11 +232,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     public void addSubPartition(PhysicalPartition subPartition) {
         if (subPartition instanceof PhysicalPartitionImpl) {
             idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
+            nameToSubPartition.put(subPartition.getName(), (PhysicalPartitionImpl) subPartition);
         }
     }
 
     public void removeSubPartition(long id) {
-        idToSubPartition.remove(id);
+        PhysicalPartitionImpl subPartition = idToSubPartition.remove(id);
+        if (subPartition != null) {
+            nameToSubPartition.remove(subPartition.getName());
+        }
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {
@@ -221,6 +251,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public PhysicalPartition getSubPartition(long id) {
         return this.id == id ? this : idToSubPartition.get(id);
+    }
+
+    public PhysicalPartition getSubPartition(String name) {
+        return this.name.equals(name) ? this : nameToSubPartition.get(name);
     }
 
     public long getParentId() {
@@ -307,6 +341,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return distributionInfo;
     }
 
+    public void setDistributionInfo(DistributionInfo distributionInfo) {
+        this.distributionInfo = distributionInfo;
+    }
+
     public void createRollupIndex(MaterializedIndex mIndex) {
         if (mIndex.getState().isVisible()) {
             this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);
@@ -343,6 +381,46 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return this.nextVersion - 1;
     }
 
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    public long getNextDataVersion() {
+        return nextDataVersion;
+    }
+
+    public void setNextDataVersion(long nextDataVersion) {
+        this.nextDataVersion = nextDataVersion;
+    }
+
+    public long getCommittedDataVersion() {
+        return this.nextDataVersion - 1;
+    }
+
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    public long nextVersionEpoch() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
+    public TransactionType getVersionTxnType() {
+        return versionTxnType;
+    }
+
+    public void setVersionTxnType(TransactionType versionTxnType) {
+        this.versionTxnType = versionTxnType;
+    }
+
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;
@@ -372,27 +450,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
                 break;
         }
         return indices;
-    }
-
-    public int getMaterializedIndicesCount(IndexExtState extState) {
-        switch (extState) {
-            case ALL:
-                return 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
-            case VISIBLE:
-                return 1 + idToVisibleRollupIndex.size();
-            case SHADOW:
-                return idToVisibleRollupIndex.size();
-            default:
-                return 0;
-        }
-    }
-
-    public int getVisibleMaterializedIndicesCount() {
-        int count = 0;
-        for (PhysicalPartition subPartition : getSubPartitions()) {
-            count += subPartition.getMaterializedIndices(IndexExtState.VISIBLE).size();
-        }
-        return count;
     }
 
     @Override
@@ -496,85 +553,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return true;
     }
 
-    public static Partition read(DataInput in) throws IOException {
-        Partition partition = new Partition();
-        partition.readFields(in);
-        return partition;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        out.writeLong(id);
-        Text.writeString(out, name);
-        Text.writeString(out, state.name());
-
-        baseIndex.write(out);
-
-        int rollupCount = (idToVisibleRollupIndex != null) ? idToVisibleRollupIndex.size() : 0;
-        out.writeInt(rollupCount);
-        if (idToVisibleRollupIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                entry.getValue().write(out);
-            }
-        }
-
-        out.writeInt(idToShadowIndex.size());
-        for (MaterializedIndex shadowIndex : idToShadowIndex.values()) {
-            shadowIndex.write(out);
-        }
-
-        out.writeLong(visibleVersion);
-        out.writeLong(visibleVersionTime);
-        out.writeLong(0); // write a version_hash for compatibility
-
-        out.writeLong(nextVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeLong(0); // write a version_hash for compatibility
-
-        Text.writeString(out, distributionInfo.getType().name());
-        distributionInfo.write(out);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-        name = Text.readString(in);
-        state = PartitionState.valueOf(Text.readString(in));
-
-        baseIndex = MaterializedIndex.read(in);
-
-        int rollupCount = in.readInt();
-        for (int i = 0; i < rollupCount; ++i) {
-            MaterializedIndex rollupTable = MaterializedIndex.read(in);
-            idToVisibleRollupIndex.put(rollupTable.getId(), rollupTable);
-        }
-
-        int shadowIndexCount = in.readInt();
-        for (int i = 0; i < shadowIndexCount; i++) {
-            MaterializedIndex shadowIndex = MaterializedIndex.read(in);
-            idToShadowIndex.put(shadowIndex.getId(), shadowIndex);
-        }
-
-        visibleVersion = in.readLong();
-        visibleVersionTime = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        nextVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        in.readLong(); // read a version_hash for compatibility
-        DistributionInfoType distriType = DistributionInfoType.valueOf(Text.readString(in));
-        if (distriType == DistributionInfoType.HASH) {
-            distributionInfo = HashDistributionInfo.read(in);
-        } else if (distriType == DistributionInfoType.RANDOM) {
-            distributionInfo = RandomDistributionInfo.read(in);
-        } else {
-            throw new IOException("invalid distribution type: " + distriType);
-        }
-    }
-
     @Override
     public int hashCode() {
         return Objects.hashCode(id, visibleVersion, baseIndex, distributionInfo);
@@ -619,19 +597,16 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         buffer.append("committedVersionHash: ").append(0).append("; ");
         buffer.append("nextVersion: ").append(nextVersion).append("; ");
 
+        buffer.append("dataVersion: ").append(dataVersion).append("; ");
+        buffer.append("committedDataVersion: ").append(getCommittedDataVersion()).append("; ");
+
+        buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
+        buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
+
         buffer.append("distribution_info.type: ").append(distributionInfo.getType().name()).append("; ");
         buffer.append("distribution_info: ").append(distributionInfo.toString());
 
         return buffer.toString();
-    }
-
-    public boolean convertRandomDistributionToHashDistribution(List<Column> baseSchema) {
-        boolean hasChanged = false;
-        if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
-            distributionInfo = ((RandomDistributionInfo) distributionInfo).toHashDistributionInfo(baseSchema);
-            hasChanged = true;
-        }
-        return hasChanged;
     }
 
     public long getLastVacuumTime() {
@@ -648,5 +623,32 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    public String generatePhysicalPartitionName(long physicalParitionId) {
+        return this.name + '_' + physicalParitionId;
+    }
+        
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (dataVersion == 0) {
+            dataVersion = visibleVersion;
+        }
+        if (nextDataVersion == 0) {
+            nextDataVersion = nextVersion;
+        }
+        if (versionEpoch == 0) {
+            versionEpoch = nextVersionEpoch();
+        }
+        if (versionTxnType == null) {
+            versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        for (PhysicalPartitionImpl subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
     }
 }

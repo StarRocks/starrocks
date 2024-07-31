@@ -192,10 +192,12 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
 
         // check [read_offset_cursor, read_size) is already in SharedBuffer
         // If existed, we can use zero copy to avoid copy data from SharedBuffer to _buffer
+        SharedBufferPtr sb = nullptr;
         auto ret = _sb_stream->find_shared_buffer(read_offset_cursor, read_size);
         if (ret.ok()) {
+            sb = ret.value();
             const uint8_t* buffer = nullptr;
-            RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, read_offset_cursor, read_size, ret.value()));
+            RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, read_offset_cursor, read_size, sb));
             src = (char*)buffer;
         } else {
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
@@ -215,7 +217,7 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
         }
 
         if (_enable_populate_cache) {
-            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src));
+            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src, sb));
         }
 
         read_offset_cursor += read_size;
@@ -227,7 +229,8 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
     return Status::OK();
 }
 
-Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t size, char* src) {
+Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t size, char* src,
+                                            const SharedBufferPtr& sb) {
     SCOPED_RAW_TIMER(&_stats.write_cache_ns);
     const int64_t write_end_offset = offset + size;
     char* src_cursor = src;
@@ -237,23 +240,20 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
         WriteCacheOptions options{};
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
-        SharedBufferPtr sb = nullptr;
-        if (options.async) {
-            auto ret = _sb_stream->find_shared_buffer(write_offset_cursor, write_size);
-            if (ret.ok() && ret.value()->buffer.capacity() > 0) {
-                sb = ret.value();
-                auto cb = [sb](int code, const std::string& msg) {
-                    // We only need to keep the shared buffer pointer
-                    LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
-                };
-                options.callback = cb;
-                options.allow_zero_copy = true;
-            }
+        if (options.async && sb) {
+            auto cb = [sb](int code, const std::string& msg) {
+                // We only need to keep the shared buffer pointer
+                LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
+            };
+            options.callback = cb;
+            options.allow_zero_copy = true;
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
-        if (r.ok() || r.is_already_exist()) {
+        if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += write_size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
@@ -431,7 +431,9 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
-        if (options.async) {
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
+        if (options.async && sb) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
                 LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
@@ -440,7 +442,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
             options.allow_zero_copy = true;
         }
         Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
-        if (r.ok() || r.is_already_exist()) {
+        if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
@@ -462,7 +464,8 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
 }
 
 bool CacheInputStream::_can_ignore_populate_error(const Status& status) const {
-    if (status.is_resource_busy() || status.is_mem_limit_exceeded() || status.is_capacity_limit_exceeded()) {
+    if (status.is_already_exist() || status.is_resource_busy() || status.is_mem_limit_exceeded() ||
+        status.is_capacity_limit_exceeded()) {
         return true;
     }
     return false;

@@ -136,7 +136,7 @@ public class LakeRestoreJob extends RestoreJob {
                         computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
                 snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
             } catch (Exception e) {
-                LOG.error(e.getMessage());
+                LOG.error(e.getMessage(), e);
                 status = new Status(Status.ErrCode.COMMON_ERROR,
                         "failed to choose replica to make snapshot for tablet " + tablet.getId());
             }

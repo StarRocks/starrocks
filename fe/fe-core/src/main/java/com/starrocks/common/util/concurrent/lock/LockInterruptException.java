@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
-public class LockInterruptException extends IllegalLockStateException {
+public class LockInterruptException extends LockException {
     public LockInterruptException(Exception throwable) {
         super("", throwable);
     }

@@ -63,7 +63,7 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
 # handle mac m1 platform, change arm64 to aarch64
-if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
     MACHINE_TYPE="aarch64"
 fi
 
@@ -115,10 +115,10 @@ GFLAGS_SOURCE=gflags-2.2.2
 GFLAGS_MD5SUM="1a865b93bacfa963201af3f75b7bd64c"
 
 # glog
-GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.4.0.tar.gz"
-GLOG_NAME=glog-0.4.0.tar.gz
-GLOG_SOURCE=glog-0.4.0
-GLOG_MD5SUM="0daea8785e6df922d7887755c3d100d0"
+GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.7.1.tar.gz"
+GLOG_NAME=glog-0.7.1.tar.gz
+GLOG_SOURCE=glog-0.7.1
+GLOG_MD5SUM="128e2995cc33d794ff24f785a3060346"
 
 # gtest
 GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
@@ -163,10 +163,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
-SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
-SIMDJSON_SOURCE=simdjson-2.2.0
-SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.4.tar.gz"
+SIMDJSON_NAME=simdjson-v3.9.4.tar.gz
+SIMDJSON_SOURCE=simdjson-3.9.4
+SIMDJSON_MD5SUM="bdc1dfcb2a89dc0c09e8370808a946f5"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
@@ -193,10 +193,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=brpc-1.3.0.tar.gz
-BRPC_SOURCE=brpc-1.3.0
-BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
+BRPC_NAME=brpc-1.9.0.tar.gz
+BRPC_SOURCE=brpc-1.9.0
+BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -247,10 +247,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz"
-ARROW_NAME="arrow-apache-arrow-5.0.0.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-5.0.0"
-ARROW_MD5SUM="9caf5dbd36ef4972c3a591bcfeaf59c8"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-16.1.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-16.1.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-16.1.0"
+ARROW_MD5SUM="d9d019aaef586bd1a7493416d78954b9"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -409,9 +409,15 @@ CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
 CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
 CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
+# simdutf
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
+SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
+SIMDUTF_SOURCE="simdutf-5.2.8"
+SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM SIMDUTF"

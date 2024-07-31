@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -64,17 +65,21 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
             } else if (txnState.isVersionOverwrite()) {
                 // overwrite empty partition, it's next version will less than overwrite version
                 // otherwise, it's next version will not change
                 if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
                     partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                    partition.setNextDataVersion(partition.getNextVersion());
                 }
             } else if (partitionCommitInfo.isDoubleWrite()) {
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextVersion());
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + 1);
             }
             LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
         }
@@ -89,7 +94,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
@@ -165,16 +170,28 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 } // end for tablets
             } // end for indices
+
             long versionTime = partitionCommitInfo.getVersionTime();
             if (txnState.isVersionOverwrite()) {
                 if (partition.getVisibleVersion() < version) {
                     partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                    partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                    if (partitionCommitInfo.getVersionEpoch() > 0) {
+                        partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                    }
+                    partition.setVersionTxnType(txnState.getTransactionType());
                 }
             } else {
                 partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
             }
+
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -189,7 +206,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

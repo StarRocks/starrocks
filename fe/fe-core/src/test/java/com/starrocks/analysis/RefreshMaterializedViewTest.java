@@ -33,7 +33,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -799,7 +799,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
      * Intersected UNION partition must be same, otherwise will report error
      */
     @Test
-    public void testMvOnUnion_IntersectedPartition() throws Exception {
+    public void testMvOnUnion_IntersectedPartition1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t1 (\n" +
                 "    leg_id VARCHAR(100) NOT NULL,\n" +
                 "    cabin_class VARCHAR(1) NOT NULL,\n" +
@@ -842,29 +842,25 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                 ") ");
 
         {
-            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
-                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
-                            "PARTITION BY date_trunc('day', observation_date)\n" +
-                            "DISTRIBUTED BY HASH(leg_id)\n" +
-                            "REFRESH ASYNC\n" +
-                            "AS \n" +
-                            "SELECT * FROM mv_union_t1 t1\n" +
-                            "UNION ALL\n" +
-                            "SELECT * FROM mv_union_t2 t2\n"));
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION BY date_trunc('day', observation_date)\n" +
+                    "DISTRIBUTED BY HASH(leg_id)\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM mv_union_t1 t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM mv_union_t2 t2\n", () -> {});
         }
 
         {
-            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
-                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
-                            "PARTITION BY date_trunc('day', observation_date)\n" +
-                            "DISTRIBUTED BY HASH(leg_id)\n" +
-                            "REFRESH ASYNC\n" +
-                            "AS \n" +
-                            "SELECT * FROM mv_union_t1 t1\n" +
-                            "UNION ALL\n" +
-                            "SELECT * FROM mv_union_t3 t2\n"));
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION BY date_trunc('day', observation_date)\n" +
+                    "DISTRIBUTED BY HASH(leg_id)\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM mv_union_t1 t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM mv_union_t3 t2\n", () -> {});
         }
 
         {
@@ -875,14 +871,10 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
-                    "SELECT * FROM mv_union_t4 t2\n");
+                    "SELECT * FROM mv_union_t4 t2\n", () -> {});
             // add partition to child table
             starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
             starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
-
-            Exception e = Assert.assertThrows(DmlException.class, () ->
-                    starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         // cleanup
@@ -891,4 +883,199 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("mv1");
     }
 
+    @Test
+    public void testMvOnUnion_IntersectedPartition2() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-02')),\n" +
+                        "    PARTITION p2 values [('2022-02-02'),('2022-02-03')),\n" +
+                        "    PARTITION p3 values [('2022-02-03'),('2022-02-04')),\n" +
+                        "    PARTITION p4 values [('2022-02-04'),('2022-02-05'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p2 values [('2022-02-02'),('2022-02-03')),\n" +
+                        "    PARTITION p4 values [('2022-03-02'),('2022-03-04'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                "PARTITION BY date_trunc('day', k1)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "SELECT * FROM t1\n" +
+                "UNION ALL\n" +
+                "SELECT * FROM t2\n");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("t2");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testMvOnUnion_IntersectedPartition3() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        // auto create partitions for t1/t2
+        {
+            String sql1 = "INSERT INTO t1 VALUES ('2022-02-01', 1, 1), ('2022-02-02', 2, 2), " +
+                    "('2022-02-03', 3, 3), ('2022-02-04', 4, 4)";
+            executeInsertSql(connectContext, sql1);
+
+            String sql2 = "INSERT INTO t2 values ('2022-02-02', 2, 2), ('2022-03-02', 5, 5)";
+            executeInsertSql(connectContext, sql2);
+        }
+
+        {
+            withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION BY date_trunc('day', k1)\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM t2\n", () -> {
+
+                Database db = GlobalStateMgr.getCurrentState().getDb("test");
+                MaterializedView  mv = (MaterializedView) db.getTable("mv1");
+                System.out.println(mv.getPartitionNames());
+            });
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("t2");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testMvOnUnion_IntersectedPartition4() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        // auto create partitions for t1/t2
+        {
+            String sql1 = "INSERT INTO t1 VALUES ('2022-02-01', 1, 1), ('2022-02-02', 2, 2), " +
+                    "('2022-02-03', 3, 3), ('2022-02-04', 4, 4)";
+            executeInsertSql(connectContext, sql1);
+
+            String sql2 = "INSERT INTO t2 values ('2022-03-02', 2, 2), ('2022-03-02', 5, 5)";
+            executeInsertSql(connectContext, sql2);
+        }
+
+        {
+            withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION BY date_trunc('day', k1)\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM t2\n", () -> {
+                Database db = GlobalStateMgr.getCurrentState().getDb("test");
+                MaterializedView  mv = (MaterializedView) db.getTable("mv1");
+                Assert.assertEquals(2, mv.getPartitionExprMaps().size());
+                System.out.println(mv.getPartitionNames());
+            });
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("t2");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testMvOnUnion_IntersectedPartition5() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        // auto create partitions for t1/t2
+        {
+            String sql1 = "INSERT INTO t1 VALUES ('2022-02-01', 1, 1), ('2022-02-02', 2, 2), " +
+                    "('2022-02-03', 3, 3), ('2022-02-04', 4, 4)";
+            executeInsertSql(connectContext, sql1);
+
+            String sql2 = "INSERT INTO t2 values ('2022-03-02', 2, 2), ('2022-03-02', 5, 5)";
+            executeInsertSql(connectContext, sql2);
+        }
+
+        {
+            withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION BY date_trunc('day', k1)\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
+                Database db = GlobalStateMgr.getCurrentState().getDb("test");
+                MaterializedView  mv = (MaterializedView) db.getTable("mv1");
+                System.out.println(mv.getPartitionExprMaps());
+                Assert.assertEquals(2, mv.getPartitionExprMaps().size());
+                System.out.println(mv.getPartitionNames());
+            });
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("t2");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
 }

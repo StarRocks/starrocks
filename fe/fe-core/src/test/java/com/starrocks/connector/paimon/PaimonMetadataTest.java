@@ -22,7 +22,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -112,17 +111,17 @@ public class PaimonMetadataTest {
 
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, new byte[] {}));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, new byte[] {}));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
         meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, new byte[] {}));
-        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
-                .isStreaming(false).withBucketPath("dummy").build());
-        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1).withDataFiles(meta2)
-                .isStreaming(false).withBucketPath("dummy").build());
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta2).isStreaming(false).build());
     }
 
     @Test
@@ -215,8 +214,9 @@ public class PaimonMetadataTest {
         row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {
@@ -282,7 +282,8 @@ public class PaimonMetadataTest {
         List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
-        Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());
+        PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
+        Assert.assertEquals(2, desc.getPaimonSplitsInfo().getPaimonSplits().size());
     }
 
     @Test
@@ -313,8 +314,9 @@ public class PaimonMetadataTest {
 
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {
@@ -367,8 +369,9 @@ public class PaimonMetadataTest {
 
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {
@@ -408,7 +411,7 @@ public class PaimonMetadataTest {
                                                            long snapshotId, ScalarOperator predicate, List<String> fieldNames,
                                                            long limit) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(RemoteFileDesc.createPamonRemoteFileDesc(
+                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
             }

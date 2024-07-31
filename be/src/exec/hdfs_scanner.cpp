@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner.h"
 
+#include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
@@ -236,6 +237,8 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
         _cache_input_stream->set_enable_async_populate_mode(_scanner_params.enable_datacache_async_populate_mode);
         _cache_input_stream->set_enable_cache_io_adaptor(_scanner_params.enable_datacache_io_adaptor);
+        _cache_input_stream->set_priority(_scanner_params.datacache_priority);
+        _cache_input_stream->set_ttl_seconds(_scanner_params.datacache_ttl_seconds);
         _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
         _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
         input_stream = _cache_input_stream;
@@ -376,6 +379,8 @@ void HdfsScanner::update_counter() {
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
             _runtime_state->update_num_datacache_count(1);
         }
+
+        BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

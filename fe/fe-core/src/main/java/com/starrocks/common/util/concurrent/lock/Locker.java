@@ -17,7 +17,9 @@ package com.starrocks.common.util.concurrent.lock;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -35,6 +37,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class Locker {
@@ -75,7 +78,7 @@ public class Locker {
      * @throws LockTimeoutException    when the transaction time limit was exceeded.
      * @throws NotSupportLockException when not support param or operation
      */
-    public void lock(long rid, LockType lockType, long timeout) throws IllegalLockStateException {
+    public void lock(long rid, LockType lockType, long timeout) throws LockException {
         if (timeout < 0) {
             throw new NotSupportLockException("lock timeout value cannot be less than 0");
         }
@@ -86,7 +89,7 @@ public class Locker {
         LOG.debug(this + " | LockManager acquire lock : rid " + rid + ", lock type " + lockType);
     }
 
-    public void lock(long rid, LockType lockType) throws IllegalLockStateException {
+    public void lock(long rid, LockType lockType) throws LockException {
         this.lock(rid, lockType, 0);
     }
 
@@ -99,7 +102,11 @@ public class Locker {
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
-        lockManager.release(rid, this, lockType);
+        try {
+            lockManager.release(rid, this, lockType);
+        } catch (LockException e) {
+            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        }
     }
 
     /**
@@ -110,7 +117,7 @@ public class Locker {
             Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, 0);
-            } catch (IllegalLockStateException e) {
+            } catch (LockException e) {
                 ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
@@ -136,12 +143,13 @@ public class Locker {
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
         if (Config.lock_manager_enabled) {
             Preconditions.checkNotNull(database);
+
             try {
                 lock(database.getId(), lockType, timeout);
                 return true;
             } catch (LockTimeoutException e) {
                 return false;
-            } catch (IllegalLockStateException e) {
+            } catch (LockException e) {
                 ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
                 return false;
             }
@@ -309,6 +317,17 @@ public class Locker {
         }
     }
 
+    private boolean checkExistenceInLock(Database database, LockType lockType) {
+        if (database.isExist()) {
+            return true;
+        } else {
+            unLockDatabase(database, lockType);
+            return false;
+        }
+    }
+
+    // --------------- Table locking API ---------------
+
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
@@ -327,13 +346,22 @@ public class Locker {
                 for (Long rid : tableListClone) {
                     this.lock(rid, lockType, 0);
                 }
-            } catch (IllegalLockStateException e) {
+            } catch (LockException e) {
                 ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             //Fallback to db lock
             lockDatabase(database, lockType);
         }
+    }
+
+    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, 
+                                                    long timeout, TimeUnit unit) {
+        long timeoutMillis = timeout;
+        if (!unit.equals(TimeUnit.MILLISECONDS)) {
+            timeoutMillis = TimeUnit.MILLISECONDS.convert(Duration.of(timeout, unit.toChronoUnit()));
+        }
+        return tryLockTablesWithIntensiveDbLock(database, tableList, lockType, timeoutMillis);
     }
 
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
@@ -346,7 +374,7 @@ public class Locker {
                 } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, timeout);
                 }
-            } catch (IllegalLockStateException e) {
+            } catch (LockException e) {
                 return false;
             }
 
@@ -359,7 +387,7 @@ public class Locker {
                 }
 
                 return true;
-            } catch (IllegalLockStateException e) {
+            } catch (LockException e) {
                 if (lockType == LockType.WRITE) {
                     release(database.getId(), LockType.INTENTION_EXCLUSIVE);
                 } else {
@@ -396,6 +424,148 @@ public class Locker {
         } else {
             //Fallback to db lock
             unLockDatabase(database, lockType);
+        }
+    }
+
+    /**
+     * Lock database and table with intensive db lock.
+     *
+     * @param database database for intensive db lock
+     * @param table    table to be locked
+     * @param lockType lock type
+     * @return true if database exits, false otherwise
+     */
+    public boolean lockDatabaseAndCheckExist(Database database, Table table, LockType lockType) {
+        return lockDatabaseAndCheckExist(database, table.getId(), lockType);
+    }
+
+    /**
+     * Lock database and table with intensive db lock.
+     */
+    public boolean lockDatabaseAndCheckExist(Database database, long tableId, LockType lockType) {
+        if (Config.lock_manager_enabled) {
+            lockTableWithIntensiveDbLock(database, tableId, lockType);
+            return checkExistenceInLock(database, tableId, lockType);
+        } else {
+            //Fallback to db lock
+            lockDatabase(database, lockType);
+            return checkExistenceInLock(database, lockType);
+        }
+    }
+
+    private boolean checkExistenceInLock(Database database, long tableId, LockType lockType) {
+        if (database.isExist()) {
+            return true;
+        } else {
+            unLockTablesWithIntensiveDbLock(database, ImmutableList.of(tableId), lockType);
+            return false;
+        }
+    }
+
+    public void unLockTableWithIntensiveDbLock(Database database, Table table, LockType lockType) {
+        unLockTablesWithIntensiveDbLock(database, ImmutableList.of(table.getId()), lockType);
+    }
+
+    public void unLockDatabase(Database database, Long tableId, LockType lockType) {
+        unLockTablesWithIntensiveDbLock(database, ImmutableList.of(tableId), lockType);
+    }
+
+    /**
+     * Lock table with intensive db lock.
+     *
+     * @param database db for intensive db lock
+     * @param tableId  table to be locked
+     * @param lockType lock type
+     */
+    public void lockTableWithIntensiveDbLock(Database database, Long tableId, LockType lockType) {
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
+            try {
+                if (lockType == LockType.WRITE) {
+                    this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
+                } else {
+                    this.lock(database.getId(), LockType.INTENTION_SHARED, 0);
+                }
+                this.lock(tableId, lockType, 0);
+            } catch (LockException e) {
+                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            }
+        } else {
+            //Fallback to db lock
+            lockDatabase(database, lockType);
+        }
+    }
+
+    /**
+     * Try lock database and table with intensive db lock.
+     *
+     * @return try if try lock success, false otherwise.
+     */
+    public boolean tryLockTableWithIntensiveDbLock(Database db, Table table, LockType lockType, long timeout, TimeUnit unit) {
+        return tryLockTableWithIntensiveDbLock(db, table.getId(), lockType, timeout, unit);
+    }
+
+    /**
+     * Try lock database and table id with intensive db lock.
+     *
+     * @return try if try lock success, false otherwise.
+     */
+    public boolean tryLockTableWithIntensiveDbLock(Database db, Long tableId, LockType lockType, long timeout, TimeUnit unit) {
+        boolean isLockSuccess = false;
+        try {
+            if (!tryLockTablesWithIntensiveDbLock(db, ImmutableList.of(tableId), lockType, timeout, unit)) {
+                return false;
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                unLockTablesWithIntensiveDbLock(db, ImmutableList.of(tableId), lockType);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Try lock database and tables with intensive db lock.
+     *
+     * @return try if try lock success, false otherwise.
+     */
+    public boolean tryLockTableWithIntensiveDbLock(LockParams lockParams, LockType lockType, long timeout, TimeUnit unit) {
+        boolean isLockSuccess = false;
+        List<Database> lockedDbs = Lists.newArrayList();
+        Map<Long, Database> dbs = lockParams.getDbs();
+        Map<Long, Set<Long>> tables = lockParams.getTables();
+        try {
+            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+                Database database = dbs.get(entry.getKey());
+                if (!tryLockTablesWithIntensiveDbLock(database, new ArrayList<>(entry.getValue()),
+                        lockType, timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(database);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                for (Database database : lockedDbs) {
+                    unLockTablesWithIntensiveDbLock(database, new ArrayList<>(tables.get(database.getId())), lockType);
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Unlock db and tables with intensive db lock.
+     */
+    public void unLockTableWithIntensiveDbLock(LockParams params, LockType lockType) {
+        Map<Long, Database> dbs = params.getDbs();
+        Map<Long, Set<Long>> tables = params.getTables();
+        Locker locker = new Locker();
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.unLockTablesWithIntensiveDbLock(database, tableIds, lockType);
         }
     }
 

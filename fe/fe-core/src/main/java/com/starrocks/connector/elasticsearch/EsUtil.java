@@ -56,35 +56,27 @@ import java.util.List;
 import java.util.TimeZone;
 
 public class EsUtil {
-
-    public static void analyzePartitionAndDistributionDesc(PartitionDesc partitionDesc,
-                                                           DistributionDesc distributionDesc) {
-        if (partitionDesc == null && distributionDesc == null) {
-            return;
-        }
-
+    public static void analyzePartitionDesc(PartitionDesc partitionDesc) {
         if (partitionDesc != null) {
             if (!(partitionDesc instanceof RangePartitionDesc)) {
                 throw new SemanticException("Elasticsearch table only permit range partition");
             }
 
             RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-            analyzePartitionDesc(rangePartitionDesc);
-        }
+            if (rangePartitionDesc.getPartitionColNames() == null || rangePartitionDesc.getPartitionColNames().isEmpty()) {
+                throw new SemanticException("No partition columns.");
+            }
 
-        if (distributionDesc != null) {
-            throw new SemanticException("could not support distribution clause");
+            if (rangePartitionDesc.getPartitionColNames().size() > 1) {
+                throw new SemanticException(
+                        "Elasticsearch table's parition column could only be a single column");
+            }
         }
     }
 
-    private static void analyzePartitionDesc(RangePartitionDesc partDesc) {
-        if (partDesc.getPartitionColNames() == null || partDesc.getPartitionColNames().isEmpty()) {
-            throw new SemanticException("No partition columns.");
-        }
-
-        if (partDesc.getPartitionColNames().size() > 1) {
-            throw new SemanticException(
-                    "Elasticsearch table's parition column could only be a single column");
+    public static void analyzeDistributionDesc(DistributionDesc distributionDesc) {
+        if (distributionDesc != null) {
+            throw new SemanticException("could not support distribution clause");
         }
     }
 

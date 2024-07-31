@@ -22,7 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -149,13 +149,18 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "srcVersion")
         private final long srcVersion;
 
+        @SerializedName(value = "srcVersionEpoch")
+        private final long srcVersionEpoch;
+
         @SerializedName(value = "indexInfos")
         private final Map<Long, IndexInfo> indexInfos;
 
-        public PartitionInfo(long partitionId, long version, long srcVersion, Map<Long, IndexInfo> indexInfos) {
+        public PartitionInfo(long partitionId, long version, long srcVersion, long srcVersionEpoch,
+                Map<Long, IndexInfo> indexInfos) {
             this.partitionId = partitionId;
             this.version = version;
             this.srcVersion = srcVersion;
+            this.srcVersionEpoch = srcVersionEpoch;
             this.indexInfos = indexInfos;
         }
 
@@ -169,6 +174,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
         public long getSrcVersion() {
             return srcVersion;
+        }
+
+        public long getSrcVersionEpoch() {
+            return srcVersionEpoch;
         }
 
         public Map<Long, IndexInfo> getIndexInfos() {
@@ -585,7 +594,7 @@ public class ReplicationJob implements GsonPostProcessable {
             tableDataSize = olapTable.getDataSize();
 
             for (TPartitionReplicationInfo tPartitionInfo : request.partition_replication_infos.values()) {
-                Partition partition = olapTable.getPartition(tPartitionInfo.partition_id);
+                PhysicalPartition partition = olapTable.getPhysicalPartition(tPartitionInfo.partition_id);
                 if (partition == null) {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
@@ -611,19 +620,19 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private static PartitionInfo initPartitionInfo(OlapTable olapTable, TPartitionReplicationInfo tPartitionInfo,
-            Partition partition) throws MetaNotFoundException {
+            PhysicalPartition partition) throws MetaNotFoundException {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (TIndexReplicationInfo tIndexInfo : tPartitionInfo.index_replication_infos.values()) {
             MaterializedIndex index = partition.getIndex(tIndexInfo.index_id);
             if (index == null) {
-                throw new MetaNotFoundException("Index " + tIndexInfo.index_id + " in partition " + partition.getName()
+                throw new MetaNotFoundException("Index " + tIndexInfo.index_id + " in partition " + partition.getId()
                         + " in table " + olapTable.getName() + " not found");
             }
             IndexInfo indexInfo = initIndexInfo(olapTable, tIndexInfo, index);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
         return new PartitionInfo(tPartitionInfo.partition_id, partition.getVisibleVersion(),
-                tPartitionInfo.src_version, indexInfos);
+                tPartitionInfo.src_version, tPartitionInfo.src_version_epoch, indexInfos);
     }
 
     private static IndexInfo initIndexInfo(OlapTable olapTable, TIndexReplicationInfo tIndexInfo,
@@ -677,8 +686,8 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (Partition partition : table.getPartitions()) {
-            Partition srcPartition = srcTable.getPartition(partition.getName());
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
             Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
                     "Partition " + partition.getName() + " in table " + table.getName()
                             + " publish version not finished");
@@ -695,8 +704,8 @@ public class ReplicationJob implements GsonPostProcessable {
         return partitionInfos;
     }
 
-    private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, Partition partition,
-            Partition srcPartition, SystemInfoService srcSystemInfoService) {
+    private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, PhysicalPartition partition,
+            PhysicalPartition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToId().entrySet()) {
             long indexId = indexNameToId.getValue();
@@ -707,7 +716,7 @@ public class ReplicationJob implements GsonPostProcessable {
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
         return new PartitionInfo(partition.getId(), partition.getVisibleVersion(), srcPartition.getVisibleVersion(),
-                indexInfos);
+                srcPartition.getVersionEpoch(), indexInfos);
     }
 
     private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
@@ -773,10 +782,13 @@ public class ReplicationJob implements GsonPostProcessable {
         Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
 
         Map<Long, Long> partitionVersions = Maps.newHashMap();
+        Map<Long, Long> partitionVersionEpochs = Maps.newHashMap();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             partitionVersions.put(partitionInfo.getPartitionId(), partitionInfo.getSrcVersion());
+            partitionVersionEpochs.put(partitionInfo.getPartitionId(), partitionInfo.getSrcVersionEpoch());
         }
-        ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(partitionVersions);
+        ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(
+                partitionVersions, partitionVersionEpochs);
 
         GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
                 transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);

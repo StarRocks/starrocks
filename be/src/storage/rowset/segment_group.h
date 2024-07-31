@@ -137,6 +137,8 @@ public:
         return _segments[0]->num_short_keys();
     }
 
+    uint32_t num_rows() const;
+
 private:
     std::vector<SegmentSharedPtr> _segments;
     ShortKeyIndexDecoderGroup _decoder_group;

@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -82,7 +83,7 @@ public class DropPartitionTest {
 
     private static void dropPartition(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
     }
 
     @Test

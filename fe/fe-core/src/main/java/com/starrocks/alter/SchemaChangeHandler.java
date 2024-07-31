@@ -46,12 +46,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ForeignKeyConstraint;
@@ -67,6 +67,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
@@ -96,16 +98,21 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -119,6 +126,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -129,6 +137,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -343,8 +352,13 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        Column droppedColumn = olapTable.getColumn(dropColName);
         // Remove all Index that contains a column with the name dropColName.
-        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(dropColName)));
+        if (droppedColumn != null) {
+            indexes.removeIf(index -> index.getColumns()
+                    .stream()
+                    .anyMatch(c -> c.equalsIgnoreCase(droppedColumn.getColumnId())));
+        }
 
         if (targetIndexName == null) {
             // if not specify rollup index, column should be dropped from both base and rollup indexes.
@@ -404,6 +418,217 @@ public class SchemaChangeHandler extends AlterHandler {
         return fastSchemaEvolution;
     }
 
+    // Get specified type of modfyColumn according to nestFieldName
+    // Only support Struct column right now. If the column is array column, the element type must be struct and
+    // we will use '[*]' to represent all elements in the array
+    // The nestedFieldName stores field names hierarchically. When searching, follow the nestedFieldName step by step.
+    // e.g.
+    //   column: Struct<c1 int, c2 Struct<c3 int, c4 Array<Struct<c5 int, c6 int>>>>
+    //   1. nestedFieldName: {c1}
+    //            Find `c1` and return Type INT
+    //   2. nestedFieldName: {c2, c3}
+    //            Find `c3` and return Type INT
+    //   3. nestedFieldName: {c2, c4, [*]}
+    //            Find element in `c4` and return Type Struct<INT, INT>
+    //   3. nestedFieldName: {c2, c4, [*], c6}
+    //            Find `c6` and return Type INT
+    private Type getModifiedType(Column modifyColumn, List<String> nestedFieldName) throws DdlException {
+        Type modifyFieldType = modifyColumn.getType();
+        String modifyFieldName = modifyColumn.getName();
+
+        if (nestedFieldName != null && !nestedFieldName.isEmpty()) {
+            Function<Map.Entry<Type, String>, Type> getFieldType = entry -> {
+                Type fieldType = entry.getKey();
+                String name = entry.getValue();
+                if (fieldType.isStructType()) {
+                    StructField field = ((StructType) fieldType).getField(name);
+                    if (field == null) {
+                        return null;
+                    } else {
+                        return field.getType();
+                    }
+                } else {
+                    return ((ArrayType) fieldType).getItemType();
+                }
+            };
+
+            modifyFieldType = modifyColumn.getType();
+            for (int i = 0; i < nestedFieldName.size(); i++) {
+                Map.Entry<Type, String> entry = new SimpleEntry<>(modifyFieldType, nestedFieldName.get(i));
+                modifyFieldType = getFieldType.apply(entry);
+                if (modifyFieldType == null) {
+                    throw new DdlException("Field[" + nestedFieldName.get(i) + "] not exist in Field[" + modifyFieldName + "]");
+                }
+                modifyFieldName = nestedFieldName.get(i);
+                if (!modifyFieldType.isStructType() && !modifyFieldType.isArrayType()) {
+                    throw new DdlException("Field " + modifyFieldName + " is invalid, add/drop field only support for Struct");
+                }
+            }
+        }
+
+        return modifyFieldType;
+    }
+
+    /**
+     * @param alterClause
+     * @param olapTable
+     * @param indexSchemaMap
+     * @param id
+     * @return void
+     * @throws DdlException
+     */
+    private void processAddField(AddFieldClause alterClause, OlapTable olapTable,
+                                 Map<Long, LinkedList<Column>> indexSchemaMap,
+                                 int id, List<Index> indexes) throws DdlException {
+        String modifyColumnName = alterClause.getColName();
+
+        // Struct column can not be key column or sort key column right now. 
+        long baseIndexId = olapTable.getBaseIndexId();
+        List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
+        Optional<Column> col = baseSchema.stream().filter(c -> c.getName().equalsIgnoreCase(modifyColumnName)).findFirst();
+        if (!col.isPresent()) {
+            throw new DdlException("Column[" + modifyColumnName + "] not exists");
+        }
+        // we will modify the field type of col, so we deep copy a new modifyColumn to prevent corrupt memory
+        Column modifyColumn = col.get().deepCopy();
+        if (!modifyColumn.getType().isStructType() && !modifyColumn.getType().isArrayType()) {
+            throw new DdlException("Column[" + modifyColumnName + "] type is invalid, add field only support Struct");
+        }
+
+        List<String> nestedParentFieldNames = alterClause.getNestedParentFieldNames();
+        Type modifyFieldType = getModifiedType(modifyColumn, nestedParentFieldNames);
+        String modifyFieldName = null;
+        // If nestedParentFieldNames is empty, this means we add a new field directly to this column. 
+        // Otherwise, it means adding a new field to the specified field within the column.
+        // But the specified field type must be Struct.
+        if (nestedParentFieldNames == null || nestedParentFieldNames.isEmpty()) {
+            modifyFieldName = modifyColumn.getName();
+        } else {
+            modifyFieldName = nestedParentFieldNames.get(nestedParentFieldNames.size() - 1);
+        }
+        if (!modifyFieldType.isStructType()) {
+            throw new DdlException("Field " + modifyFieldName + " is invalid, add field only support for Struct");
+        }
+
+        // Remove all Index that contains a column with the name modifyColumnName
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(col.get().getColumnId())));
+        // Add new field into the pecified field. If no `fieldPos`, the new field will be added to the end.
+        StructType oriFieldType = ((StructType) modifyFieldType);
+        String fieldName = alterClause.getFieldName();
+        Type fieldType = alterClause.getType();
+        StructField addField = new StructField(fieldName, id, fieldType, null);
+        ColumnPosition fieldPos = alterClause.getFieldPos();
+        ArrayList<StructField> oriFields = oriFieldType.getFields();
+        int posIndex = -1;
+        boolean hasPos = (fieldPos != null);
+        if (fieldPos != null) {
+            if (fieldPos.isFirst()) {
+                posIndex = 0;
+            } else {
+                if (oriFieldType.getField(fieldPos.getLastCol()) == null) {
+                    throw new DdlException("Field[" + fieldPos.getLastCol() + "] is not exist in Field[" + modifyFieldName + "]");
+                }
+                posIndex = oriFieldType.getFieldPos(fieldPos.getLastCol()) + 1;
+            }
+        } else {
+            posIndex = oriFields.size();
+        }
+
+        // update the modifyColumn int index schema.
+        ArrayList<StructField> fields = new ArrayList<>();
+        for (StructField field : oriFieldType.getFields()) {
+            fields.add(field);
+        }
+        fields.add(posIndex, addField);
+        oriFieldType.updateFields(fields);
+        for (Map.Entry<Long, LinkedList<Column>> entry : indexSchemaMap.entrySet()) {
+            List<Column> modIndexSchema = entry.getValue();
+            Optional<Column> oneCol = modIndexSchema.stream().filter(c -> c.nameEquals(modifyColumnName, true)).findFirst();
+            if (!oneCol.isPresent()) {
+                continue;
+            } else {
+                int idx = modIndexSchema.indexOf(oneCol.get());
+                modIndexSchema.set(idx, modifyColumn);
+            }
+        }
+    }
+
+    /**
+     * @param alterClause
+     * @param olapTable
+     * @param indexSchemaMap
+     * @return void
+     * @throws DdlException
+     */
+    private void processDropField(DropFieldClause alterClause, OlapTable olapTable,
+                                  Map<Long, LinkedList<Column>> indexSchemaMap,
+                                  List<Index> indexes) throws DdlException {
+        String modifyColumnName = alterClause.getColName();
+        String baseIndexName = olapTable.getName();
+
+        // Struct column can not be key column or sort key column right now. 
+        long baseIndexId = olapTable.getBaseIndexId();
+        List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
+        Optional<Column> col = baseSchema.stream().filter(c -> c.getName().equalsIgnoreCase(modifyColumnName)).findFirst();
+        if (!col.isPresent()) {
+            throw new DdlException("Column[" + modifyColumnName + "] not exists");
+        }
+        // we will modify the field type of col, so we deep copy a new modifyColumn to prevent corrupt memory
+        Column modifyColumn = col.get().deepCopy();
+        if (!modifyColumn.getType().isStructType() && !modifyColumn.getType().isArrayType()) {
+            throw new DdlException("Column[" + modifyColumnName + "] type is invalid, drop field only support Struct");
+        }
+
+        // If nestedFieldName is empty, this means we drop a field directly from this column. 
+        // Otherwise, it means dropping a field from the specified field within the column.
+        // But the specified field type must be Struct.
+        List<String> nestedFieldName = alterClause.getNestedParentFieldNames();
+        Type modifyFieldType = getModifiedType(modifyColumn, nestedFieldName);
+        String modifyFieldName = null;
+        if (nestedFieldName == null || nestedFieldName.isEmpty()) {
+            modifyFieldName = modifyColumn.getName();
+        } else {
+            modifyFieldName = nestedFieldName.get(nestedFieldName.size() - 1);
+        }
+        if (!modifyFieldType.isStructType()) {
+            throw new DdlException("Field " + modifyFieldName + " is invalid, drop field only support for Struct");
+        }
+
+        StructType oriFieldType = ((StructType) modifyFieldType);
+        String dropFieldName = alterClause.getFieldName();
+        if (oriFieldType.getField(dropFieldName) == null) {
+            throw new DdlException("Field[" + dropFieldName + "] is not exist in Field[" + modifyFieldName + "]");
+        }
+
+        // Remove all Index that contains a column with the name modifyColumnName
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(col.get().getColumnId())));
+        // remove the dropped field from fields and update StructFields
+        ArrayList<StructField> fields = new ArrayList<>();
+        for (StructField field : oriFieldType.getFields()) {
+            if (field.getName().equalsIgnoreCase(dropFieldName)) {
+                continue;
+            }
+            fields.add(field);
+        }
+        if (fields.isEmpty()) {
+            throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
+                                   "], can not drop any more.");
+        }
+        oriFieldType.updateFields(fields);
+
+        // update the modifyColumn int index schema.
+        for (Map.Entry<Long, LinkedList<Column>> entry : indexSchemaMap.entrySet()) {
+            List<Column> modIndexSchema = entry.getValue();
+            Optional<Column> oneCol = modIndexSchema.stream().filter(c -> c.nameEquals(modifyColumnName, true)).findFirst();
+            if (!oneCol.isPresent()) {
+                continue;
+            } else {
+                int idx = modIndexSchema.indexOf(oneCol.get());
+                modIndexSchema.set(idx, modifyColumn);
+            }
+        }
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
@@ -453,12 +678,12 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        if (modColumn.generatedColumnExpr() == null && olapTable.hasGeneratedColumn()) {
+        if (!modColumn.isGeneratedColumn() && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
                 if (!column.isGeneratedColumn()) {
                     continue;
                 }
-                List<SlotRef> slots = column.getGeneratedColumnRef();
+                List<SlotRef> slots = column.getGeneratedColumnRef(olapTable.getIdToColumn());
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(modColumn.getName())) {
                         throw new DdlException("Do not support modify column: " + modColumn.getName() +
@@ -534,7 +759,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
-                if (index.getColumns().contains(oriColumn.getName()) &&
+                if (index.getColumns().contains(oriColumn.getColumnId()) &&
                         !modColumn.getType().isStringType()) {
                     throw new DdlException("Cannot modify a column with GIN into non-string type");
                 }
@@ -889,14 +1114,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     "Can not add column which already exists in base table: " + newColName);
         }
 
-        // check if the new column already exist in physical column.
-        // do not support adding new column which already exist in physical column.
-        Optional<Column> foundPhysicalColumn = olapTable.getBaseSchema().stream()
-                .filter(c -> c.getDirectPhysicalName().equalsIgnoreCase(newColName)).findFirst();
-        if (foundPhysicalColumn.isPresent()) {
+        // check if the new column already exist in column id.
+        // do not support adding new column which already exist in column id.
+        foundColumn = olapTable.getBaseSchema().stream()
+                .filter(c -> c.getColumnId().getId().equalsIgnoreCase(newColName)).findFirst();
+        if (foundColumn.isPresent()) {
             throw new DdlException(
-                    "Can not add column which already exists in physical column: " + newColName
-                            + ", you can remove " + foundPhysicalColumn.get() + " and try again.");
+                    "Can not add column which already exists in column id: " + newColName
+                            + ", you can remove " + foundColumn.get() + " and try again.");
         }
 
         /*
@@ -1081,7 +1306,8 @@ public class SchemaChangeHandler extends AlterHandler {
     private SchemaChangeData finalAnalyze(Database db, OlapTable olapTable,
                                           Map<Long, LinkedList<Column>> indexSchemaMap,
                                           Map<String, String> propertyMap,
-                                          List<Index> indexes) throws UserException {
+                                          List<Index> indexes,
+                                          Set<String> modifyFieldColumns) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1139,7 +1365,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // check bloom filter has change
         boolean hasBfChange = false;
-        Set<String> oriBfColumns = olapTable.getCopiedBfColumns();
+        Set<String> oriBfColumns = olapTable.getBfColumnNames();
         double oriBfFpp = olapTable.getBfFpp();
         if (bfColumns != null) {
             if (bfFpp == 0) {
@@ -1187,7 +1413,19 @@ public class SchemaChangeHandler extends AlterHandler {
             bfFpp = 0;
         }
 
-        BloomFilterIndexUtil.analyseBfWithNgramBf(newSet, bfColumns);
+        Set<ColumnId> bfColumnIds = null;
+        if (bfColumns != null) {
+            bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String columnName : bfColumns) {
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    throw new DdlException("can not find column by name: " + columnName);
+                }
+                bfColumnIds.add(column.getColumnId());
+            }
+        }
+
+        BloomFilterIndexUtil.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -1198,7 +1436,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTable(olapTable)
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
-                .withBloomFilterColumns(bfColumns, bfFpp)
+                .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange);
 
         if (RunMode.isSharedDataMode()) {
@@ -1214,6 +1452,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
+        Map<Integer, Column> columnUniqueIdToColumn = Maps.newHashMap();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1280,6 +1519,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // 2. check compatible
             for (Column alterColumn : alterSchema) {
+                if (modifyFieldColumns.contains(alterColumn.getName())) {
+                    continue;
+                }
                 Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
                 if (col.isPresent() && !alterColumn.equals(col.get())) {
                     col.get().checkSchemaChangeAllowed(alterColumn);
@@ -1333,6 +1575,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 dataBuilder.withNewIndexShortKeyCount(alterIndexId,
                         newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
             }
+
+            // 6. check the uniqueness of column unique id
+            if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                for (Column alterColumn : alterSchema) {
+                    Column existedColumn = columnUniqueIdToColumn.putIfAbsent(alterColumn.getUniqueId(), alterColumn);
+                    if (existedColumn != null && !existedColumn.getName().equals(alterColumn.getName())) {
+                        LOG.warn(
+                                "Table {} column {} has same unique id {} with column {}, table max column unique id: {}",
+                                olapTable.getName(), alterColumn.getName(), alterColumn.getUniqueId(),
+                                existedColumn.getName(), olapTable.getMaxColUniqueId());
+                        throw new DdlException("Column " + alterColumn.getName() + " has same unique id "
+                                + alterColumn.getUniqueId() + " with column " + existedColumn.getName());
+                    }
+                }
+            }
         } // end for indices
 
         return dataBuilder.build();
@@ -1347,7 +1604,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns();
+        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
@@ -1374,7 +1631,8 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> distributionColumns = olapTable.getDefaultDistributionInfo().getDistributionColumns();
+        List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
+                olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
@@ -1531,6 +1789,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
+        Set<String> modifyFieldColumns = new HashSet<>();
         for (AlterClause alterClause : alterClauses) {
             Map<String, String> properties = alterClause.getProperties();
             if (properties != null) {
@@ -1565,7 +1824,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     if (!olapTable.dynamicPartitionExists()) {
                         try {
                             DynamicPartitionUtil
-                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                                    .checkInputDynamicPartitionProperties(olapTable, properties, olapTable.getPartitionInfo());
                         } catch (DdlException e) {
                             // This table is not a dynamic partition table and didn't supply all dynamic partition properties
                             throw new DdlException("Table " + db.getOriginName() + "." +
@@ -1648,6 +1907,29 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
+            } else if (alterClause instanceof AddFieldClause) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
+                    throw new DdlException("Add field for struct column not support shared-data mode so far");
+                }
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Add field for struct column require table enable fast schema evolution");
+                }
+                AddFieldClause addFieldClause = (AddFieldClause) alterClause;
+                modifyFieldColumns = Set.of(addFieldClause.getColName());
+                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                int id = colUniqueIdSupplier.getAsInt();
+                processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
+            } else if (alterClause instanceof DropFieldClause) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
+                    throw new DdlException("Drop field for struct column not support shared-data mode so far");
+                }
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Drop field for struct column require table enable fast schema evolution");
+                }
+                DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
+                modifyFieldColumns = Set.of(dropFieldClause.getColName());
+                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 fastSchemaEvolution = false;
@@ -1679,7 +1961,8 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
-        SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexSchemaMap, propertyMap, newIndexes);
+        SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexSchemaMap, propertyMap, newIndexes,
+                modifyFieldColumns);
 
         if (schemaChangeData.getNewIndexSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
@@ -1700,8 +1983,8 @@ public class SchemaChangeHandler extends AlterHandler {
      * Check related synchronous materialized views before modified columns, throw exceptions
      * if modified columns affect the related rollup/synchronous mvs.
      */
-    private void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
-                                                         Set<String> modifiedColumns) throws DdlException {
+    public void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
+                                                        Set<String> modifiedColumns) throws DdlException {
         if (modifiedColumns == null || modifiedColumns.isEmpty()) {
             return;
         }
@@ -1841,7 +2124,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private void sendClearAlterTask(Database db, OlapTable olapTable) {
         AgentBatchTask batchTask = new AgentBatchTask();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             for (Partition partition : olapTable.getPartitions()) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -1858,7 +2141,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         AgentTaskExecutor.submit(batchTask);
@@ -1869,14 +2152,14 @@ public class SchemaChangeHandler extends AlterHandler {
                                 TTabletMetaType metaType)
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
-        OlapTable olapTable;
+        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
-            olapTable = (OlapTable) db.getTable(tableName);
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean metaValue = false;
@@ -1923,11 +2206,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -1937,17 +2220,17 @@ public class SchemaChangeHandler extends AlterHandler {
     public boolean updateBinlogConfigMeta(Database db, Long tableId, Map<String, String> properties,
                                           TTabletMetaType metaType) {
         List<Partition> partitions = Lists.newArrayList();
-        OlapTable olapTable;
         BinlogConfig newBinlogConfig;
         boolean hasChanged = false;
         boolean isModifiedSuccess = true;
+
+        OlapTable olapTable = (OlapTable) db.getTable(tableId);
+        if (olapTable == null) {
+            return false;
+        }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
-            olapTable = (OlapTable) db.getTable(tableId);
-            if (olapTable == null) {
-                return false;
-            }
             partitions.addAll(olapTable.getPartitions());
             if (!olapTable.containsBinlogConfig()) {
                 newBinlogConfig = new BinlogConfig();
@@ -1956,7 +2239,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 newBinlogConfig = new BinlogConfig(olapTable.getCurBinlogConfig());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         // judge whether the attribute has changed
@@ -1990,18 +2273,19 @@ public class SchemaChangeHandler extends AlterHandler {
             return true;
         }
 
-        locker.lockDatabase(db, LockType.WRITE);
-        // check for concurrent modifications by version
-        if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
-            // binlog config has been modified,
-            // no need to judge whether the binlog config is the same as previous one,
-            // just modify even if they are the same
-            Map<String, String> newProperties = olapTable.getCurBinlogConfig().toProperties();
-            newProperties.putAll(properties);
-            newBinlogConfig.buildFromProperties(newProperties);
-        }
-        newBinlogConfig.incVersion();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            // check for concurrent modifications by version
+            if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
+                // binlog config has been modified,
+                // no need to judge whether the binlog config is the same as previous one,
+                // just modify even if they are the same
+                Map<String, String> newProperties = olapTable.getCurBinlogConfig().toProperties();
+                newProperties.putAll(properties);
+                newBinlogConfig.buildFromProperties(newProperties);
+            }
+            newBinlogConfig.incVersion();
+
             BinlogConfig oldBinlogConfig = olapTable.getCurBinlogConfig();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyBinlogMeta(db, olapTable, newBinlogConfig);
             if (oldBinlogConfig != null) {
@@ -2020,7 +2304,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.warn("update binlog config of table {} failed", olapTable.getName());
             isModifiedSuccess = false;
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
         // TODO optimize by asynchronous rpc
@@ -2046,11 +2330,10 @@ public class SchemaChangeHandler extends AlterHandler {
                                              String tableName,
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
-        OlapTable olapTable;
+        OlapTable olapTable = (OlapTable) db.getTable(tableName);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
-            olapTable = (OlapTable) db.getTable(tableName);
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -2059,7 +2342,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean isInMemory = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
@@ -2090,10 +2373,11 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 TTabletMetaType metaType) throws DdlException {
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
+        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
                 throw new DdlException(
@@ -2111,7 +2395,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletId.keySet().size();
@@ -2175,10 +2459,11 @@ public class SchemaChangeHandler extends AlterHandler {
                                           TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
                 throw new DdlException(
@@ -2196,7 +2481,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletSet.keySet().size();
@@ -2289,8 +2574,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 } catch (SemanticException e) {
                     throw new DdlException(
-                            String.format("analyze table unique constraint:%s failed",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)), e);
+                            String.format("analyze table unique constraint:%s failed, msg: %s",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT), e.getDetailMsg()), e);
                 }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
@@ -2309,8 +2594,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 } catch (SemanticException e) {
                     throw new DdlException(
-                            String.format("analyze table foreign key constraint:%s failed",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)), e);
+                            String.format("analyze table foreign key constraint:%s failed, msg: %s",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT), e.getDetailMsg()), e);
                 }
             }
         }
@@ -2318,11 +2603,11 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2344,17 +2629,18 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
+        }
+
         AlterJobV2 schemaChangeJobV2 = null;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
-            if (!(table instanceof OlapTable)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
-            }
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
@@ -2371,7 +2657,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -2409,7 +2695,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("index `" + indexDef.getIndexName() + "` already exist.");
             }
             Set<String> existedIdxColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            existedIdxColSet.addAll(existedIdx.getColumns());
+            existedIdxColSet.addAll(MetaUtils.getColumnNamesByColumnIds(olapTable, existedIdx.getColumns()));
             if (newColset.equals(existedIdxColSet)) {
                 throw new DdlException(
                         "index for columns (" + String.join(",", indexDef.getColumns()) + " ) already exist.");
@@ -2460,13 +2746,23 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     // the invoker should keep write lock
-    public void modifyTableAddOrDropColumns(Database db, OlapTable olapTable,
-                                            Map<Long, List<Column>> indexSchemaMap,
-                                            List<Index> indexes, long jobId, long txnId,
-                                            Map<Long, Long> indexToNewSchemaId, boolean isReplay)
+    // this function will update the table index meta according to the `indexSchemaMap` and the
+    // `indexSchemaMap` keep the latest column set for each index.
+    // there are two scenarios:
+    //   1. add/drop column with fast schema evolution in shared-nothing mode
+    //   2. add/drop field for a struct colum with fast schema evolution in shared-nothing mode(modify column actually)
+    // e.g:
+    //   origin table schema: {c1: int, c2: int, c3: Struct<v1 int, v2 int>}
+    //       a. add a new column `c4 int` and the table schema will be set {c1: int, c2: int, c3: Struct<v1 int, v2 int>, c4: int}
+    //       b. add a new field `v3 int` into `c3` column and the table schema will be set"
+    //          {c1: int, c2: int, c3: Struct<v1 int, v2 int, v3 int>}
+    public void modifyTableAddOrDrop(Database db, OlapTable olapTable,
+                                     Map<Long, List<Column>> indexSchemaMap,
+                                     List<Index> indexes, long jobId, long txnId,
+                                     Map<Long, Long> indexToNewSchemaId, boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
@@ -2532,8 +2828,8 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),
                         indexSchemaMap, indexes, jobId, txnId, indexToNewSchemaId);
-                LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
+                LOG.debug("logModifyTableAddOrDrop info:{}", info);
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDrop(info);
             }
 
             schemaChangeJob.setWatershedTxnId(txnId);
@@ -2542,14 +2838,14 @@ public class SchemaChangeHandler extends AlterHandler {
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-            LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
+            LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
-    public void replayModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) throws
+    public void replayModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) throws
             MetaNotFoundException {
         LOG.debug("info:{}", info);
         long dbId = info.getDbId();
@@ -2566,8 +2862,8 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) table;
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db, LockType.WRITE);
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            modifyTableAddOrDrop(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                     indexToNewSchemaId, true);
         } catch (DdlException e) {
             // should not happen
@@ -2575,7 +2871,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } catch (NotImplementedException e) {
             LOG.error("InternalError", e);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2596,7 +2892,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // for schema change add/drop value column optimize, direct modify table meta.
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
         // try to copy first before modifying, avoiding in-place changes.
-        modifyTableAddOrDropColumns(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
+        modifyTableAddOrDrop(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
                 schemaChangeData.getNewIndexSchema(), schemaChangeData.getIndexes(), jobId, txnId,
                 indexToNewSchemaId, false);
     }

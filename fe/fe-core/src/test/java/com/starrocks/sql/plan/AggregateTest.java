@@ -1522,6 +1522,32 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 27: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 28: expr");
+        // count distinct with grouping sets
+
+        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
+                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by rollup(t1c, t1b)";
+        plan = getFragmentPlan(sql);
+        // make sure repeat + project + multi cast sink
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 10\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 17\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 13> : 13: expr\n" +
+                "  |  <slot 14> : 14: expr\n" +
+                "  |  <slot 18> : 18: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [3], [2, 3]]");
     }
 
     @Test
@@ -2791,5 +2817,19 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
                 "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testHavingAggregate() throws Exception {
+        String sql = "select * from (" +
+                "select sum(v1), f2, v3 from " +
+                "   (select v1, v2, v2 + 2 as f2, v3 from t0) cc " +
+                "group by v2, f2, v3 having (f2 + sum(v1)) > 0" +
+                ") xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2, 3: v3\n" +
+                "  |  having: 2: v2 + 2 + 5: sum > 0");
     }
 }

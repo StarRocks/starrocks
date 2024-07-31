@@ -57,7 +57,7 @@ void ColumnChunkWriter::write(const LevelBuilderResult& result) {
     case ParquetType: {                                                                                         \
         auto typed_column_writer =                                                                              \
                 down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<ParquetType>>*>(_column_writer); \
-        return typed_column_writer->EstimatedBufferedValueBytes();                                              \
+        return typed_column_writer->estimated_buffered_value_bytes();                                           \
     }
 
 int64_t ColumnChunkWriter::estimated_buffered_value_bytes() {

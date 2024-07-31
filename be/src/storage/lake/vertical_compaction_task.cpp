@@ -34,7 +34,6 @@ namespace starrocks::lake {
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    _tablet_schema = _tablet.get_schema();
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
@@ -48,8 +47,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool,
-                                                     true /** is compaction**/));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer_with_schema(kVertical, _txn_id, max_rows_per_segment, flush_pool,
+                                                                 true /** is compaction**/, _tablet_schema));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -63,7 +62,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     for (size_t i = 0; i < column_group_size; ++i) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
 
         bool is_key = (i == 0);
@@ -95,6 +94,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     for (auto& file : writer->files()) {
         op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
+        op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
     }
 
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
@@ -155,7 +155,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer,
+                        _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -178,11 +179,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
-        if (cancel_func()) {
-            return Status::Cancelled("cancelled");
-        }
+
+        RETURN_IF_ERROR(cancel_func());
+
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif

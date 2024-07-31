@@ -209,8 +209,13 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
         }
     }
 
+    // if there is only one non-overlapping rowset, but the input rowset schema is different with output schema
+    // we can not do shortcut compaction too.
+    // the reason is after we support add/drop field for struct column, we need to make sure the rowset schema is
+    // consistent with segment data because of some compatible issue. so we will skip shortcut compaction when we
+    // found the scheam id is different.
     if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping() &&
-        _tablet->enable_shortcut_compaction()) {
+        _tablet->enable_shortcut_compaction() && data_rowsets[0]->schema()->id() == _tablet_schema->id()) {
         TRACE("[Compaction] start shortcut comapction data");
         int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
                 config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);

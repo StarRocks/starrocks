@@ -29,7 +29,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
@@ -96,7 +95,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         idToStreamLoadTask = Maps.newConcurrentMap();
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
-        lock = new FairReentrantReadWriteLock();
+        lock = new ReentrantReadWriteLock(true);
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,

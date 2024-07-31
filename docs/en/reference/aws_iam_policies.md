@@ -62,8 +62,9 @@ If you want to query data from your S3 bucket, configure the following IAM polic
           "Sid": "s3",
           "Effect": "Allow",
           "Action": [
-              "s3:GetObject", 
-              "s3:PutObject"
+              "s3:PutObject",
+              "s3:GetObject",
+              "s3:DeleteObject"
           ],
           "Resource": [
               "arn:aws:s3:::<bucket_name>/*"
@@ -94,18 +95,29 @@ If you want to integrate with your AWS Glue Data Catalog, configure the followin
       {
           "Effect": "Allow",
           "Action": [
-              "glue:GetDatabase",
-              "glue:GetDatabases",
-              "glue:GetPartition",
-              "glue:GetPartitions",
-              "glue:GetTable",
-              "glue:GetTableVersions",
-              "glue:GetTables",
-              "glue:GetConnection",
-              "glue:GetConnections",
-              "glue:GetDevEndpoint",
-              "glue:GetDevEndpoints",
-              "glue:BatchGetPartition"
+                "glue:BatchCreatePartition",
+                "glue:UpdateDatabase",
+                "glue:GetConnections",
+                "glue:CreateTable",
+                "glue:DeleteDatabase",
+                "glue:BatchUpdatePartition",
+                "glue:GetTables",
+                "glue:GetTableVersions",
+                "glue:GetPartitions",
+                "glue:UpdateTable",
+                "glue:BatchGetPartition",
+                "glue:DeleteTable",
+                "glue:GetDatabases",
+                "glue:GetDevEndpoint",
+                "glue:GetTable",
+                "glue:GetDatabase",
+                "glue:GetPartition",
+                "glue:GetDevEndpoints",
+                "glue:GetConnection",
+                "glue:CreateDatabase",
+                "glue:CreatePartition",
+                "glue:DeletePartition",
+                "glue:UpdatePartition"
           ],
           "Resource": [
               "*"

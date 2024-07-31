@@ -242,5 +242,4 @@ class TracerImpl extends Tracer {
         buildVars(parent);
         buildReasons(parent);
     }
-
 }

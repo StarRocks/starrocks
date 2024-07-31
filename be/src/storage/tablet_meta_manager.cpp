@@ -63,6 +63,7 @@
 #include "util/coding.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/url_coding.h"
 
 namespace starrocks {
@@ -859,11 +860,17 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
                                       });
 }
 
+DEFINE_FAIL_POINT(tablet_meta_manager_apply_rowset_manager_internal_error);
+DEFINE_FAIL_POINT(tablet_meta_manager_apply_rowset_manager_fake_ok);
+
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
                                               const RowsetMetaPB* rowset_meta) {
+    FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_apply_rowset_manager_internal_error,
+                              Status::InternalError("inject tablet_meta_manager_apply_rowset_manager_internal_error"));
+    FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_apply_rowset_manager_fake_ok, Status::OK());
     auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
     span->SetAttribute("version", version.to_string());
     WriteBatch batch;

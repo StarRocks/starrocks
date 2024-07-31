@@ -128,5 +128,23 @@ public class DataCacheStmtAnalyzerTest {
         DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"verBose\"=\"true\")");
         Assert.assertTrue(stmt.isVerbose());
+        Assert.assertEquals(0, stmt.getPriority());
+        Assert.assertEquals(0, stmt.getTTLSeconds());
+
+        analyzeFail("cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\")",
+                "TTL must be specified when priority > 0");
+
+        analyzeFail(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1Y\")");
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1d\")");
+        Assert.assertEquals(1, stmt.getPriority());
+        Assert.assertEquals(24 * 3600, stmt.getTTLSeconds());
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
+        Assert.assertEquals(1, stmt.getPriority());
+        Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
     }
 }

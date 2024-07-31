@@ -51,7 +51,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -88,6 +87,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // 1. create etl job config and write it into jobconfig.json file
 // 2. submit spark etl job
@@ -367,12 +368,10 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         // distribution column refs
-        List<String> distributionColumnRefs = Lists.newArrayList();
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         Preconditions.checkState(distributionInfo.getType() == DistributionInfoType.HASH);
-        for (Column column : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
-            distributionColumnRefs.add(column.getName());
-        }
+        List<String> distributionColumnRefs = MetaUtils.getColumnNamesByColumnIds(
+                table.getIdToColumn(), distributionInfo.getDistributionColumns());
 
         return new EtlPartitionInfo(type.typeString, partitionColumnRefs, distributionColumnRefs, etlPartitions);
     }
@@ -380,9 +379,8 @@ public class SparkLoadPendingTask extends LoadTask {
     private List<EtlPartition> initEtlListPartition(
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
-        for (Column column : listPartitionInfo.getPartitionColumns()) {
-            partitionColumnRefs.add(column.getName());
-        }
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn()).
+                stream().map(Column::getName).collect(Collectors.toList()));
         List<EtlPartition> etlPartitions = Lists.newArrayList();
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
@@ -430,9 +428,8 @@ public class SparkLoadPendingTask extends LoadTask {
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<EtlPartition> etlPartitions = Lists.newArrayList();
-        for (Column column : rangePartitionInfo.getPartitionColumns()) {
-            partitionColumnRefs.add(column.getName());
-        }
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()));
 
         List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = null;
         try {

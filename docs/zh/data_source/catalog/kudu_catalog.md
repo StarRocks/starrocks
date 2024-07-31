@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Kudu catalog
+# [Experimental] Kudu catalog
 
 StarRocks 从 3.3 版本开始支持 Kudu Catalog。
 

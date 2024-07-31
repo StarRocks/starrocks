@@ -14,9 +14,13 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
 
 import java.util.Map;
 import java.util.Set;
@@ -28,24 +32,89 @@ public class MvBaseTableUpdateInfo {
     // The partition names of base table that have been updated
     private final Set<String> toRefreshPartitionNames = Sets.newHashSet();
     // The mapping of partition name to partition range
-    private final Map<String, Range<PartitionKey>> partitionNameWithRanges = Maps.newHashMap();
+    private final Map<String, PCell> nameToPartKeys = Maps.newHashMap();
+
+    // If the base table is a mv, needs to record the mapping of mv partition name to partition range
+    private final Map<String, PCell> mvPartitionNameToCellMap = Maps.newHashMap();
 
     public MvBaseTableUpdateInfo() {
+    }
+
+    public Map<String, PCell> getMvPartitionNameToCellMap() {
+        return mvPartitionNameToCellMap;
+    }
+
+    public void addMVPartitionNameToCellMap(Map<String, PCell> partitionNameToRangeMap) {
+        mvPartitionNameToCellMap.putAll(partitionNameToRangeMap);
     }
 
     public Set<String> getToRefreshPartitionNames() {
         return toRefreshPartitionNames;
     }
 
+    /**
+     * Add partition names that base table needs to be refreshed
+     * @param toRefreshPartitionNames the partition names that need to be refreshed
+     */
+    public void addToRefreshPartitionNames(Set<String> toRefreshPartitionNames) {
+        this.toRefreshPartitionNames.addAll(toRefreshPartitionNames);
+    }
+
+    /**
+     * Add partition name that needs to be refreshed and its associated range partition key
+     * @param partitionName mv partition name
+     * @param rangePartitionKey the associated range partition
+     */
+    public void addRangePartitionKeys(String partitionName,
+                                      Range<PartitionKey> rangePartitionKey) {
+        nameToPartKeys.put(partitionName, new PRangeCell(rangePartitionKey));
+    }
+
+    /**
+     * Add partition name that needs to be refreshed and its associated list partition key
+     * @param partitionName base table partition name
+     * @param listPartitionKey the associated list partition
+     */
+    public void addListPartitionKeys(String partitionName,
+                                     PListCell listPartitionKey) {
+        nameToPartKeys.put(partitionName, listPartitionKey);
+    }
+
+    public void addListPartitionKeys(Map<String, PListCell> listPartitionKeys) {
+        nameToPartKeys.putAll(listPartitionKeys);
+    }
+
+    /**
+     * Get the partition name with its associated range partition key when the mv is range partitioned.
+     */
     public Map<String, Range<PartitionKey>> getPartitionNameWithRanges() {
-        return partitionNameWithRanges;
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        for (Map.Entry<String, PCell> e : nameToPartKeys.entrySet()) {
+            Preconditions.checkState(e.getValue() instanceof PRangeCell);
+            PRangeCell rangeCell = (PRangeCell) e.getValue();
+            result.put(e.getKey(), rangeCell.getRange());
+        }
+        return result;
+    }
+
+    /**
+     * Get the partition name with its associated list partition key when the mv is list partitioned.
+     */
+    public Map<String, PListCell> getPartitionNameWithLists() {
+        Map<String, PListCell> result = Maps.newHashMap();
+        for (Map.Entry<String, PCell> e : nameToPartKeys.entrySet()) {
+            Preconditions.checkState(e.getValue() instanceof PRangeCell);
+            PListCell listCell = (PListCell) e.getValue();
+            result.put(e.getKey(), listCell);
+        }
+        return result;
     }
 
     @Override
     public String toString() {
         return "BaseTableRefreshInfo{" +
                 ", toRefreshPartitionNames=" + toRefreshPartitionNames +
-                ", partitionNameWithRanges=" + partitionNameWithRanges +
+                ", nameToPartKeys=" + nameToPartKeys +
                 '}';
     }
 }

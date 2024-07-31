@@ -3,11 +3,11 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE 配置项
 
@@ -158,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String[]
 - 单位：-
 - 是否动态：否
-- 描述：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 描述：打印审计日志的模块。默认打印 `slow_query` 和 `query` 模块的日志。自 v3.0 起 支持 `connection` 模块，即连接日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
 - 引入版本：-
 
 ##### qe_slow_log_ms
@@ -419,7 +419,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：为那些有多个 IP 地址的服务器声明一个选择策略。 请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
 - 引入版本：-
 
 ##### http_port
@@ -1084,7 +1093,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### lock_manager_enabled
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -1093,7 +1102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lock_manager_enable_using_fine_granularity_lock
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
@@ -1194,16 +1203,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许创建物化视图。
 - 引入版本：-
 
-<!--
 ##### enable_materialized_view_spill
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否为物化视图的刷新任务开启中间结果落盘功能。
+- 引入版本：v3.1.1
 
 ##### enable_backup_materialized_view
 
@@ -2985,20 +2992,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_compaction_history_size
 
-- 默认值：12
+- 默认值：20
 - 类型：Int
 - 单位：-
 - 是否动态：是
 - 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
-- 引入版本：v3.1.0
-
-##### lake_compaction_fail_history_size
-
-- 默认值：12
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -3063,11 +3061,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_autovacuum_grace_period_minutes
 
-- 默认值：5
+- 默认值：30
 - 类型：Long
 - 单位：Minutes
 - 是否动态：是
-- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。自 v3.3.0，v3.2.5 及 v3.1.10 起，默认值由 `5` 变更为 `30`。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold

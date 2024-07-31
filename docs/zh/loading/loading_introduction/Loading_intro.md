@@ -21,7 +21,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 这里主要介绍各种导入方案的特点及其适用场景。
 
-![Loading options overview](../../assets/loading_intro_overview.png)
+![Loading options overview](../../_assets/loading_intro_overview.png)
 
 :::note
 

@@ -49,9 +49,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -60,7 +58,6 @@ import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletLocation;
-import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.StringUtils;
@@ -336,7 +333,7 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-    private final ReentrantReadWriteLock txnLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
         if (Config.lock_manager_enable_using_fine_granularity_lock) {
@@ -798,12 +795,9 @@ public class TransactionState implements Writable {
         return sourceType;
     }
 
-    public TTxnType getTxnType() {
-        return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
-    }
-
-    public TxnTypePB getTxnTypePB() {
-        return sourceType == LoadJobSourceType.REPLICATION ? TxnTypePB.TXN_REPLICATION : TxnTypePB.TXN_NORMAL;
+    public TransactionType getTransactionType() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TransactionType.TXN_REPLICATION
+                : TransactionType.TXN_NORMAL;
     }
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
@@ -883,7 +877,7 @@ public class TransactionState implements Writable {
                     createTime,
                     this,
                     Config.enable_sync_publish,
-                    this.getTxnType(),
+                    this.getTransactionType(),
                     isVersionOverwrite());
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);

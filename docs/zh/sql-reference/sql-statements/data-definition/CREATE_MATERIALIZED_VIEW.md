@@ -261,7 +261,12 @@ AS
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
-- `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
+
+  > **注意**
+  >
+  > Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+
+- `resource_group`: 为物化视图刷新任务设置资源组。默认值为 `default_mv_wg`，即一个系统定义的，专门用于物化视图刷新的资源组。该资源组的 `cpu_core_limit` 为 `1`，`mem_limit` 为 `0.8`。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
 - `query_rewrite_consistency`: 指定当前异步物化视图的查询改写规则。该属性自 v3.2 起支持。有效值：
   - `disable`：禁用基于该异步物化视图进行自动查询改写。
   - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
@@ -278,10 +283,11 @@ AS
   - `default`（默认）：系统将不会针对物化视图执行语义检查，但只有 SPJG 类型的物化视图可以用于查询改写。请注意，如果启用了基于文本的查询改写，非 SPJG 类型的物化视图也可以用于查询改写。
   - `true`：系统将在创建或修改物化视图时执行语义检查。如果物化视图不符合查询改写的条件（即，物化视图的定义不是 SPJG 类型的查询），则会返回失败信息。
   - `false`：物化视图将不会用于查询改写。
-
-> **注意**
->
-> Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+- [Preview] `transparent_mv_rewrite_mode`：为 **直接针对物化视图的查询** 指定透明改写模式。此功能从 v3.3.0 版本开始支持。有效值如下：
+  - `false`（默认，与早期版本行为兼容）：直接针对物化视图的查询不会被改写，仅返回物化视图中现有的数据。根据物化视图的刷新状态（数据一致性），其结果可能与直接执行物化视图定义查询的结果不同。
+  - `true`：直接针对物化视图的查询将被改写，并返回最新数据，结果与物化视图定义查询的一致。请注意，当物化视图处于失效（Inactive）状态或不支持透明查询改写时，这些查询将路由至物化视图定义查询执行。
+  - `transparent_or_error`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回错误。
+  - `transparent_or_default`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回物化视图中现有的数据。
 
 **query_statement**（必填）
 

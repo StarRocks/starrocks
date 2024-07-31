@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "connector/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -23,7 +24,6 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
-#include "hive_chunk_sink.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -110,6 +110,12 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     if (state->query_options().__isset.datacache_evict_probability) {
         _datacache_evict_probability = state->query_options().datacache_evict_probability;
+    }
+    if (state->query_options().__isset.datacache_priority) {
+        _datacache_priority = state->query_options().datacache_priority;
+    }
+    if (state->query_options().__isset.datacache_ttl_seconds) {
+        _datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
     }
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
@@ -417,6 +423,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (_use_datacache) {
         static const char* prefix = "DataCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
+        _profile.runtime_profile->add_info_string("DataCachePriority", std::to_string(_datacache_priority));
+        _profile.runtime_profile->add_info_string("DataCacheTTLSeconds", std::to_string(_datacache_ttl_seconds));
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
@@ -562,11 +570,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
         scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
+    if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
+        scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
+    }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
     scanner_params.datacache_evict_probability = _datacache_evict_probability;
+    scanner_params.datacache_priority = _datacache_priority;
+    scanner_params.datacache_ttl_seconds = _datacache_ttl_seconds;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;

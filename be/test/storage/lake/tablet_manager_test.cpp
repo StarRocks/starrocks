@@ -31,6 +31,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/bthreads/util.h"
@@ -139,6 +140,51 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
+TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.__set_enable_tablet_creation_optimization(true);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_tablet_manager->tablet_initial_metadata_location(tablet_id)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+
+    ASSIGN_OR_ABORT(auto meta_iter, _tablet_manager->list_tablet_metadata(tablet_id));
+    EXPECT_TRUE(meta_iter.has_next());
+    ASSIGN_OR_ABORT(metadata, meta_iter.next());
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+}
+
 TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
     auto tablet_id = next_id();
     auto schema_id = next_id();
@@ -225,7 +271,7 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     metadata.set_version(2);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
-    ASSIGN_OR_ABORT(auto metaIter, _tablet_manager->list_tablet_metadata(23456, false));
+    ASSIGN_OR_ABORT(auto metaIter, _tablet_manager->list_tablet_metadata(12345));
 
     std::vector<std::string> objects;
     while (metaIter.has_next()) {
@@ -233,24 +279,8 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
         objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
     }
 
-    EXPECT_EQ(objects.size(), 3);
-    auto iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
-    EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
-    EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "0000000000005BA0_0000000000000002.meta");
-    EXPECT_TRUE(iter != objects.end());
-
-    ASSIGN_OR_ABORT(metaIter, _tablet_manager->list_tablet_metadata(12345, true));
-
-    objects.clear();
-    while (metaIter.has_next()) {
-        ASSIGN_OR_ABORT(auto tabletmeta_ptr, metaIter.next());
-        objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
-    }
-
     EXPECT_EQ(objects.size(), 2);
-    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
+    auto iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
     EXPECT_TRUE(iter != objects.end());
     iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
     EXPECT_TRUE(iter != objects.end());
@@ -693,14 +723,9 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
     _tablet_manager->add_in_writing_data_size(1, 100);
 
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
-    _tablet_manager->remove_in_writing_data_size(1);
-
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
-
     _tablet_manager->add_in_writing_data_size(1, 100);
     _tablet_manager->clean_in_writing_data_size();
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;
@@ -709,6 +734,76 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
+TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
+    std::shared_ptr<TabletMetadata> tablet_metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    for (int i = 0; i < 5; i++) {
+        auto rs = tablet_metadata->add_rowsets();
+        rs->set_id(next_id());
+    }
+
+    // set historical schema
+    auto schema_id1 = next_id();
+    auto& schema_pb1 = (*tablet_metadata->mutable_historical_schemas())[schema_id1];
+    schema_pb1.set_id(schema_id1);
+
+    auto schema_id2 = next_id();
+    auto& schema_pb2 = (*tablet_metadata->mutable_historical_schemas())[schema_id2];
+    schema_pb2.set_id(schema_id2);
+
+    auto schema_id3 = tablet_metadata->schema().id();
+    auto& schema_pb3 = (*tablet_metadata->mutable_historical_schemas())[schema_id3];
+    schema_pb3.set_id(schema_id3);
+
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(2).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(3).id()] = schema_id2;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(4).id()] = schema_id3;
+    lake::VersionedTablet tablet(_tablet_manager, tablet_metadata);
+
+    {
+        for (int i = 0; i < 5; i++) {
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+            ASSERT_TRUE(res.ok());
+            auto schema_id = tablet_metadata->rowset_to_schema().at(tablet_metadata->rowsets(i).id());
+            ASSERT_EQ(res.value()->id(), schema_id);
+        }
+    }
+
+    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0);
+    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1);
+    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2);
+    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3);
+    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4);
+
+    {
+        std::vector<uint32_t> input_rowsets;
+        input_rowsets.emplace_back(tablet_metadata->rowsets(0).id());
+        input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
+        auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), schema_id1);
+
+        input_rowsets.emplace_back(tablet_metadata->rowsets(2).id());
+        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+    }
+
+    {
+        tablet_metadata->mutable_rowset_to_schema()->clear();
+        for (int i = 0; i < 5; i++) {
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+            ASSERT_TRUE(res.ok());
+            ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+        }
+    }
 }
 
 #endif // USE_STAROS

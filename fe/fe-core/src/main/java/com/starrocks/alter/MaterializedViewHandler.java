@@ -333,7 +333,7 @@ public class MaterializedViewHandler extends AlterHandler {
             mvKeysType = olapTable.getKeysType();
         }
         // get rollup schema hash
-        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getCopiedBfColumns(),
+        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getBfColumnNames(),
                 olapTable.getBfFpp());
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
@@ -362,7 +362,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion, 
+                baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion,
                 mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
@@ -419,14 +419,14 @@ public class MaterializedViewHandler extends AlterHandler {
 
                     if (healthyReplicaNum < replicationNum / 2 + 1) {
                         /*
-                        * TODO(cmy): This is a bad design.
-                        * Because in the rollup job, we will only send tasks to the rollup replicas that have been created,
-                        * without checking whether the quorum of replica number are satisfied.
-                        * This will cause the job to fail until we find that the quorum of replica number
-                        * is not satisfied until the entire job is done.
-                        * So here we check the replica number strictly and do not allow to submit the job
-                        * if the quorum of replica number is not satisfied.
-                        */
+                         * TODO(cmy): This is a bad design.
+                         * Because in the rollup job, we will only send tasks to the rollup replicas that have been created,
+                         * without checking whether the quorum of replica number are satisfied.
+                         * This will cause the job to fail until we find that the quorum of replica number
+                         * is not satisfied until the entire job is done.
+                         * So here we check the replica number strictly and do not allow to submit the job
+                         * if the quorum of replica number is not satisfied.
+                         */
                         for (Tablet tablet : addedTablets) {
                             GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                         }
@@ -735,7 +735,7 @@ public class MaterializedViewHandler extends AlterHandler {
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             // check drop rollup index operation
             for (AlterClause alterClause : dropRollupClauses) {
@@ -762,7 +762,7 @@ public class MaterializedViewHandler extends AlterHandler {
             LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                     olapTable.getName());
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -899,16 +899,20 @@ public class MaterializedViewHandler extends AlterHandler {
                     dbId, tableId);
             return;
         }
+        OlapTable tbl = (OlapTable) db.getTable(tableId);
+        if (tbl == null) {
+            return;
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null || tbl.getState() == olapTableState) {
+            if (tbl.getState() == olapTableState) {
                 return;
             }
             tbl.setState(olapTableState);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
     }
 
@@ -1065,13 +1069,14 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         List<AlterJobV2> rollupJobV2List = new ArrayList<>();
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
             if (!(table instanceof OlapTable)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
@@ -1098,7 +1103,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException("Table[" + tableName + "] is under ROLLUP but job does not exist.");
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock

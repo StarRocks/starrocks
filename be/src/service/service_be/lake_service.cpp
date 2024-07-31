@@ -119,6 +119,10 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
+std::string txn_info_string(const TxnInfoPB& info) {
+    return info.DebugString();
+}
+
 } // namespace
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -142,8 +146,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         cntl->SetFailed("missing new version");
         return;
     }
-    if (request->txn_ids_size() == 0) {
-        cntl->SetFailed("missing txn_ids");
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
         return;
     }
     if (request->tablet_ids_size() == 0) {
@@ -176,19 +180,33 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
 
             auto run_ts = butil::gettimeofday_us();
-            auto base_version = request->base_version();
-            auto new_version = request->new_version();
-            auto txns = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
-            auto commit_time = request->commit_time();
             auto queuing_latency = run_ts - start_ts;
             g_publish_tablet_version_queuing_latency << queuing_latency;
+
+            auto base_version = request->base_version();
+            auto new_version = request->new_version();
+            auto txns = std::vector<TxnInfoPB>();
+            if (request->txn_infos_size() > 0) {
+                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+            } else { // This is a request from older version FE
+                // Construct TxnInfoPB from other fields
+                txns.reserve(request->txn_ids_size());
+                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                    auto& info = txns.emplace_back();
+                    info.set_txn_id(request->txn_ids(i));
+                    info.set_txn_type(TXN_NORMAL);
+                    info.set_combined_txn_log(false);
+                    info.set_commit_time(request->commit_time());
+                    info.set_force_publish(false);
+                }
+            }
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
             TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
             StatusOr<TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
-                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
+                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns);
             } else {
                 auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                 res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -202,10 +220,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
                     VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
+                            << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
                 } else {
                     LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
+                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
                 }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -618,8 +636,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                 return;
             }
 
-            auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
-            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
                              << ", error: " << tablet_metadata.status();

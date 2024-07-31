@@ -249,7 +249,7 @@ public class Load {
             connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
-            Expr expr = column.generatedColumnExpr();
+            Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
@@ -706,7 +706,7 @@ public class Load {
             OlapTable olaptable = ((OlapTable) tbl);
             if (olaptable.hasGeneratedColumn()) {
                 for (Column col : olaptable.getBaseSchema()) {
-                    List<SlotRef> slots = col.getGeneratedColumnRef();
+                    List<SlotRef> slots = col.getGeneratedColumnRef(tbl.getIdToColumn());
                     if (slots != null) {
                         for (SlotRef slot : slots) {
                             Column originColumn = olaptable.getColumn(slot.getColumnName());

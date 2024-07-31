@@ -187,7 +187,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             databases.put(dbName, db);
             return db;
         } else {
-            LOG.error("Paimon database {}.{} done not exist.", catalogName, dbName);
+            LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
             return null;
         }
     }
@@ -245,11 +245,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    RemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
+                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    RemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
+                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
@@ -271,7 +271,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 catalogName, table, null, -1, predicate, fieldNames, limit);
-        RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
         long rowCount = getRowCount(splits);
         if (rowCount == 0) {

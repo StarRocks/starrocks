@@ -1210,6 +1210,10 @@ vectorized_functions = [
     [150334, 'array_generate', True, False, 'ARRAY_LARGEINT', ['LARGEINT', 'LARGEINT', 'LARGEINT'],
      "ArrayFunctions::array_generate<TYPE_LARGEINT>"],
 
+    [150335, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_sortby_multi'],
+
+    [150340, 'array_repeat', True, False, 'ANY_ARRAY', ['ANY_ELEMENT', 'INT'], 'ArrayFunctions::repeat'],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
 

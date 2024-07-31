@@ -17,7 +17,6 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -40,6 +39,7 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -70,7 +70,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (UserException e) {
-            LOG.warn("Failed to create database " + e.getMessage());
+            LOG.warn("Failed to create database ", e);
             return false;
         }
         LOG.info("create statistics db down");
@@ -162,7 +162,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create sample statistics, " + e.getMessage());
+            LOG.warn("Failed to create sample statistics, ", e);
             return false;
         }
         LOG.info("create sample statistics table done");
@@ -194,7 +194,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create full statistics table, " + e.getMessage());
+            LOG.warn("Failed to create full statistics table", e);
             return false;
         }
         LOG.info("create full statistics table done");
@@ -225,7 +225,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create histogram statistics table, " + e.getMessage());
+            LOG.warn("Failed to create histogram statistics table", e);
             return false;
         }
         LOG.info("create histogram statistics table done");
@@ -263,7 +263,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create full statistics table, " + e.getMessage());
+            LOG.warn("Failed to create full statistics table", e);
             return false;
         }
         LOG.info("create external full statistics table done");
@@ -293,7 +293,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create external histogram statistics table, " + e.getMessage());
+            LOG.warn("Failed to create external histogram statistics table", e);
             return false;
         }
         LOG.info("create external histogram statistics table done");
@@ -332,7 +332,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
         } catch (DdlException e) {
-            LOG.warn("Failed to drop table" + e.getMessage());
+            LOG.warn("Failed to drop table", e);
             return false;
         }
         LOG.info("drop statistics table done");
@@ -343,7 +343,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
         }
     }
 

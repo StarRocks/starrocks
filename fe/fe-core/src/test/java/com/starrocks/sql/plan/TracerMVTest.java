@@ -15,10 +15,14 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.MaterializedViewTestBase;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
 
 public class TracerMVTest extends MaterializedViewTestBase {
 
@@ -166,5 +170,18 @@ public class TracerMVTest extends MaterializedViewTestBase {
         assertContains(pr, "[MV TRACE]");
         assertContains(pr, "has related materialized views");
         assertContains(pr, "Rewrite projection with aggregate group-by/agg expr failed");
+    }
+
+    @Test
+    public void testTracerToRuntimeProfileMV() {
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        RuntimeProfile runtimeProfile = new RuntimeProfile();
+        Tracers.toRuntimeProfile(runtimeProfile);
+
+        Map<String, String> result = runtimeProfile.getInfoStrings();
+        Assert.assertTrue(result.isEmpty());
     }
 }

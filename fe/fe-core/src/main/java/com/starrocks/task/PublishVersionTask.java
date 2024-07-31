@@ -46,8 +46,8 @@ import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TTxnType;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionType;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,12 +68,12 @@ public class PublishVersionTask extends AgentTask {
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
-    private TTxnType txnType;
+    private TransactionType txnType;
     private boolean isVersionOverwrite = false;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
+                              long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
         this(backendId, transactionId, dbId, commitTimestamp, partitionVersionInfos,
                 traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
     }
@@ -81,7 +81,7 @@ public class PublishVersionTask extends AgentTask {
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish,
-                              TTxnType txnType, boolean isVersionOverwrite) {
+                              TransactionType txnType, boolean isVersionOverwrite) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
@@ -107,7 +107,7 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
-        publishVersionRequest.setTxn_type(txnType);
+        publishVersionRequest.setTxn_type(txnType.toThrift());
         if (isVersionOverwrite) {
             publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
         }

@@ -34,8 +34,8 @@ class TabletWriter;
 class VerticalCompactionTask : public CompactionTask {
 public:
     explicit VerticalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                                    CompactionTaskContext* context)
-            : CompactionTask(std::move(tablet), std::move(input_rowsets), context) {}
+                                    CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema)) {}
 
     ~VerticalCompactionTask() override = default;
 
@@ -48,7 +48,6 @@ private:
                                 const std::vector<uint32_t>& column_group, std::unique_ptr<TabletWriter>& writer,
                                 RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks,
                                 const CancelFunc& cancel_func);
-    std::shared_ptr<const TabletSchema> _tablet_schema;
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;

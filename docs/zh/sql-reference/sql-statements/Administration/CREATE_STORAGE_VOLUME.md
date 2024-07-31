@@ -44,7 +44,7 @@ PROPERTIES
 | ----------------------------------- | ------------------------------------------------------------ |
 | enabled                             | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
 | aws.s3.region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
-| aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。 |
+| aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。 |
 | aws.s3.use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
 | aws.s3.use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws.s3.access_key` 和 `aws.s3.secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws.s3.iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要将此项设为 `true`，并额外指定 `aws.s3.iam_role_arn` 和 `aws.s3.external_id`。</li></ul> |
 | aws.s3.access_key                   | 访问 S3 存储空间的 Access Key。                              |

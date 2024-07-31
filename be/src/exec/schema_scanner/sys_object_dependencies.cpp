@@ -24,17 +24,17 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysObjectDependencies::_s_columns[] = {
-        {"OBJECT_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"OBJECT_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"REF_OBJECT_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"REF_OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"REF_OBJECT_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"REF_OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SysObjectDependencies::SysObjectDependencies()

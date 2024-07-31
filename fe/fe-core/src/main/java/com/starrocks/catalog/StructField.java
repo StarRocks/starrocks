@@ -28,19 +28,29 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class StructField {
     @SerializedName(value = "name")
-    private final String name;
+    private String name;
     @SerializedName(value = "type")
-    private final Type type;
+    private Type type;
 
     // comment is not used now, it's always null.
     @SerializedName(value = "comment")
-    private final String comment;
+    private String comment;
     private int position;  // in struct
 
-    public StructField(String name, Type type, String comment) {
+    @SerializedName(value = "fieldId")
+    private int fieldId = -1;
+
+    public StructField() {}
+
+    public StructField(String name, int fieldId, Type type, String comment) {
         this.name = name;
         this.type = type;
         this.comment = comment;
+        this.fieldId = fieldId;
+    }
+
+    public StructField(String name, Type type, String comment) {
+        this(name, -1, type, comment);
     }
 
     public StructField(String name, Type type) {
@@ -115,6 +125,7 @@ public class StructField {
         TStructField field = new TStructField();
         field.setName(name);
         field.setComment(comment);
+        field.setId(fieldId);
         node.struct_fields.add(field);
         type.toThrift(container);
     }
@@ -131,12 +142,17 @@ public class StructField {
         }
         StructField otherStructField = (StructField) other;
         // Both are named struct field
-        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
+        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
+                    (fieldId == otherStructField.fieldId);
     }
 
     @Override
     public StructField clone() {
-        return new StructField(name, type.clone(), comment);
+        return new StructField(name, fieldId, type.clone(), comment);
+    }
+
+    public int getMaxUniqueId() {
+        return Math.max(fieldId, type.getMaxUniqueId());
     }
 }
 

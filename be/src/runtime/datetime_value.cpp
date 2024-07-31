@@ -1040,7 +1040,7 @@ uint64_t DateTimeValue::calc_daynr(uint32_t year, uint32_t month, uint32_t day) 
     return delsum + y / 4 - y / 100 + y / 400;
 }
 
-static char* int_to_str(uint64_t val, char* to) {
+static char* int_to_str(uint64_t val, char* to, int32_t padding_zeros = 0) {
     char buf[64];
     char* ptr = buf;
     // Use do/while for 0 value
@@ -1048,6 +1048,10 @@ static char* int_to_str(uint64_t val, char* to) {
         *ptr++ = '0' + (val % 10);
         val /= 10;
     } while (val);
+
+    while (padding_zeros-- > 0) {
+        *to++ = '0';
+    }
 
     while (ptr > buf) {
         *to++ = *--ptr;
@@ -1410,7 +1414,11 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             for (int i = 0; i < 6 - same_ch_size; i++) {
                 val /= 10;
             }
-            pos = int_to_str(val, buf);
+            const uint64_t* log10 =
+                    std::upper_bound(log_10_int, log_10_int + sizeof(log_10_int) / sizeof(log_10_int[0]), val);
+            uint32_t width = std::max(1U, static_cast<uint32_t>(log10 - log_10_int));
+            uint32_t padding_zeros = same_ch_size < width ? 0 : (same_ch_size - width);
+            pos = int_to_str(val, buf, padding_zeros);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;

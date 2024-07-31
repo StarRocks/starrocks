@@ -25,25 +25,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-public class RangePartitionDiff {
+public class RangePartitionDiff extends PartitionDiff {
 
     private static final Logger LOG = LogManager.getLogger(RangePartitionDiff.class);
 
     private Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
-    private Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
     private Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
     public RangePartitionDiff() {
-    }
-
-    public Map<String, Set<String>> getRollupToBasePartitionMap() {
-        return rollupToBasePartitionMap;
-    }
-
-    public void setRollupToBasePartitionMap(Map<String, Set<String>> rollupToBasePartitionMap) {
-        this.rollupToBasePartitionMap = rollupToBasePartitionMap;
     }
 
     public Map<String, Range<PartitionKey>> getAdds() {
@@ -82,8 +72,7 @@ public class RangePartitionDiff {
                 if (!intersectedRange.isEmpty()) {
                     Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
                     if (intersectedRange.size() > 1 ||
-                            !existingRange.equals(add.getValue()) ||
-                            !addRanges.getEntry(existingRange.lowerEndpoint()).getKey().equals(add.getValue())) {
+                            !existingRange.equals(add.getValue())) {
                         throw new IllegalArgumentException(
                                 "partitions are intersected: " + existingRange + " and " + add);
                     }
@@ -91,5 +80,15 @@ public class RangePartitionDiff {
             }
             diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
         }
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("RangePartitionDiff{");
+        sb.append("adds=").append(adds);
+        sb.append(", deletes=").append(deletes);
+        sb.append('}');
+        return sb.toString();
     }
 }

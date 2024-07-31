@@ -30,6 +30,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -51,6 +52,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -124,6 +126,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
 
@@ -403,7 +409,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column())
+                .addColumn(new Column("k1", Type.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()

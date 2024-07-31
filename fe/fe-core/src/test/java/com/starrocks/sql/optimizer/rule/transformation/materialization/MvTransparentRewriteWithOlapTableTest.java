@@ -143,7 +143,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
     }
 
     private void withPartialJoinMv(StarRocksAssert.ExceptionRunnable runner) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
             cluster.runSql("test", "insert into m2 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -176,7 +176,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT * from mv0 where k1=1",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
@@ -193,7 +193,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                 };
                 for (String query : sqls) {
                     System.out.println(query);
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     System.out.println(plan);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
@@ -211,7 +211,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT k1, k2 from mv0 where k1<=2 ",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
@@ -227,7 +227,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT k1, k2 from mv0 where k1+1<6 and k2 like 'a%' ",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
@@ -244,7 +244,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT * from mv0 where k1<=2",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
@@ -260,7 +260,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT k1, k2 from mv0 where k1+1<6 and k2 like 'a%' ",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
@@ -275,7 +275,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT * from mv0 where k1=1",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
@@ -289,7 +289,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         "SELECT * from mv0 where k1 + 1>= 1 and k2 like 'a% ",
                 };
                 for (String query : sqls) {
-                    String plan = getFragmentPlan(query, "MV");
+                    String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
@@ -298,7 +298,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     @Test
     public void testJoin2() {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             // only update the non ref table, transparent plan should also works too
             cluster.runSql("test", "insert into m2 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -322,7 +322,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                     "SELECT * from mv0 where k1=1"
                             };
                             for (String query : sqls) {
-                                String plan = getFragmentPlan(query, "MV");
+                                String plan = getFragmentPlan(query);
                                 PlanTestBase.assertContains(plan, ":UNION", "mv0");
                                 // all data can be queried from mv0
                                 PlanTestBase.assertContains(plan, "     TABLE: m1\n" +
@@ -343,7 +343,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                     "SELECT * from mv0 where k1 !=1 or k2 < 10 union select * from mv0 where k1 = 1",
                             };
                             for (String query : sqls) {
-                                String plan = getFragmentPlan(query, "MV");
+                                String plan = getFragmentPlan(query);
                                 PlanTestBase.assertContains(plan, ":UNION", "mv0");
                             }
                         }
@@ -353,7 +353,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     private void withPartialSetOperator(StarRocksAssert.ExceptionRunnable runner,
                                         String setOperator) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1);");
             cluster.runSql("test", "insert into m2 values (4,2,1,1,1);");
             starRocksAssert.withMaterializedView((String.format("CREATE MATERIALIZED VIEW mv0 " +
@@ -391,7 +391,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             "SELECT * from mv0 where k1=1",
                     };
                     for (String query : sqls) {
-                        String plan = getFragmentPlan(query, "MV");
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION", "mv0");
                     }
                 }
@@ -404,7 +404,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             "SELECT * from mv0 where k1 + 1>= 1 and k2 like 'a% "
                     };
                     for (String query : sqls) {
-                        String plan = getFragmentPlan(query, "MV");
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                     }
                 }
@@ -414,7 +414,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     @Test
     public void testTransparentRewriteWithSetOperators2() {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1);");
             cluster.runSql("test", "insert into m2 values (4,2,1,1,1);");
             starRocksAssert.withMaterializedView((String.format("CREATE MATERIALIZED VIEW mv0 " +
@@ -440,7 +440,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                     "SELECT * from mv0 where k1=1",
                             };
                             for (String query : sqls) {
-                                String plan = getFragmentPlan(query, "ALL");
+                                String plan = getFragmentPlan(query);
                                 PlanTestBase.assertContains(plan, ":UNION", "mv0");
                             }
                         }
@@ -470,7 +470,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "ALL");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -500,7 +500,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -531,7 +531,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "ALL");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -563,7 +563,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "ALL");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -595,7 +595,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -625,7 +625,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                 "SELECT * from mv0 where k1=1",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                         }
@@ -684,7 +684,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
@@ -747,7 +747,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
@@ -810,7 +810,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
@@ -860,7 +860,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {
                             String query = sqls[i];
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             System.out.println(plan);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");

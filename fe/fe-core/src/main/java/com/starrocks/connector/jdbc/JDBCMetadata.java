@@ -71,7 +71,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             String driverName = getDriverName();
             Class.forName(driverName);
         } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
@@ -82,6 +82,10 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new MysqlSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
             schemaResolver = new ClickhouseSchemaResolver(properties);
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
+            schemaResolver = new OracleSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
+            schemaResolver = new SqlServerSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -103,11 +107,11 @@ public class JDBCMetadata implements ConnectorMetadata {
         return driverName;
     }
 
-    private String getJdbcUrl() {
+    String getJdbcUrl() {
         String jdbcUrl = properties.get(JDBCResource.URI);
         // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
-        if (jdbcUrl.contains("mysql")) {
-            jdbcUrl = jdbcUrl.replace("mysql", "mariadb");
+        if (jdbcUrl.startsWith("jdbc:mysql")) {
+            jdbcUrl = jdbcUrl.replaceFirst("jdbc:mysql", "jdbc:mariadb");
         }
         return jdbcUrl;
     }

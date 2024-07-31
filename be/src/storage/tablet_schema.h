@@ -162,7 +162,18 @@ public:
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
-    const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
+    const TabletColumn& subcolumn(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            throw std::out_of_range("Index i is out of range");
+        }
+        return _extra_fields->sub_columns[i];
+    }
+    const TabletColumn* subcolumn_ptr(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            return nullptr;
+        }
+        return &(_extra_fields->sub_columns[i]);
+    }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
@@ -286,6 +297,7 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+    int compression_level() const { return _compression_level; }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -365,6 +377,8 @@ private:
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
+    // only use for zstd compression type
+    int _compression_level = -1;
 
     std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 

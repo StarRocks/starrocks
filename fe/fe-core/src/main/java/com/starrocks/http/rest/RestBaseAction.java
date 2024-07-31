@@ -181,7 +181,7 @@ public class RestBaseAction extends BaseAction {
             resultUriObj = new URI("http", null, addr.getHostname(),
                     addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());
         }
         response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toString());

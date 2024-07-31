@@ -755,13 +755,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select empid, deptno,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid, deptno");
-        testRewriteOK(mv, "select empid,\n" +
+        testRewriteFail(mv, "select empid,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
-                " from emps group by empid")
-                .contains("  1:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
-                        "  |  output: sum(11: total), count(1)\n" +
-                        "  |  group by: 9: empid");
+                " from emps group by empid");
     }
 
     @Test

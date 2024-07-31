@@ -23,6 +23,16 @@
 
 namespace starrocks {
 
+/// If an ArrayColumn is nullable, it will be nested as follows:
+/// NullableColumn( ArrayColumn(data_column=NullableColumn, offsets_column=UInt32Column ) ).
+/// eg. (null, [1,2,3], [4, null, 6])
+/// NullableColumn
+///     - null_column: (1, 0, 0)
+///     - data_column (ArrayColumn):
+///         - data_column (NullableColumn):
+///             - null_column: (0, 0, 0, 0, 1, 0)
+///             - data_column: (1, 2, 3, 4, <default>, 6)
+///         - offsets_column: (0, 0, 3, 6)
 class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
     friend class ColumnFactory<Column, ArrayColumn>;
 

@@ -20,6 +20,7 @@
 #include <exception>
 #include <utility>
 
+#include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
@@ -581,6 +582,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
 
     flags |= O_CREAT;
 
+    // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
     int hdfs_write_buffer_size = 0;
     // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size
     if (_options.result_file_options != nullptr) {
@@ -602,7 +604,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
                     fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
-    return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);
+    return wrap_encrypted(std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0),
+                          opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const SequentialFileOptions& opts,
@@ -616,8 +619,8 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
-    return std::make_unique<SequentialFile>(std::move(stream), path);
+    auto stream = std::make_unique<HdfsInputStream>(std::move(handle));
+    return SequentialFile::from(std::move(stream), path, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
@@ -631,8 +634,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
-    return std::make_unique<RandomAccessFile>(std::move(stream), path);
+    auto stream = std::make_unique<HdfsInputStream>(std::move(handle));
+    return RandomAccessFile::from(std::move(stream), path, false, opts.encryption_info);
 }
 
 Status HdfsFileSystem::rename_file(const std::string& src, const std::string& target) {

@@ -14,12 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Table;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -27,7 +22,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
@@ -43,8 +37,6 @@ import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 
 import java.util.List;
-
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
 
 public class MVPartitionPruner {
     private final OptimizerContext optimizerContext;
@@ -149,109 +141,6 @@ public class MVPartitionPruner {
             return OptExpression.create(scanOperator);
         }
 
-        public OptExpression visit(OptExpression optExpression, Void context) {
-            List<OptExpression> children = Lists.newArrayList();
-            for (int i = 0; i < optExpression.arity(); ++i) {
-                children.add(optExpression.inputAt(i).getOp().accept(this, optExpression.inputAt(i), null));
-            }
-            return OptExpression.create(optExpression.getOp(), children);
-        }
-    }
-
-    /**
-     * Rewrite specific olap scan operator with specific selected partition ids.
-     */
-    public static OptExpression getOlapTableCompensatePlan(OptExpression optExpression,
-                                                           LogicalScanOperator mvRefScanOperator,
-                                                           List<Long> refTableCompensatePartitionIds) {
-        OptScanOperatorCompensator scanOperatorCompensator = new OptScanOperatorCompensator(
-                refTableCompensatePartitionIds, mvRefScanOperator);
-        return optExpression.getOp().accept(scanOperatorCompensator, optExpression, null);
-    }
-
-    /**
-     * Rewrite specific external scan operator with specific selected partition ids.
-     */
-    public static OptExpression getExternalTableCompensatePlan(OptExpression optExpression,
-                                                               LogicalScanOperator mvRefScanOperator,
-                                                               ScalarOperator extraPredicate) {
-        OptScanOperatorCompensator scanOperatorCompensator = new OptScanOperatorCompensator(
-                mvRefScanOperator, extraPredicate);
-        return optExpression.getOp().accept(scanOperatorCompensator, optExpression, null);
-    }
-
-    /**
-     * Rewrite specific olap scan operator with specific selected partition ids.
-     */
-    static class OptScanOperatorCompensator extends OptExpressionVisitor<OptExpression, Void> {
-        private final List<Long> olapTableCompensatePartitionIds;
-        private final LogicalScanOperator refScanOperator;
-        private final ScalarOperator externalExtraPredicate;
-
-        // for olap table
-        public OptScanOperatorCompensator(List<Long> refTableCompensatePartitionIds,
-                                          LogicalScanOperator scanOperator) {
-            this.refScanOperator = scanOperator;
-            this.olapTableCompensatePartitionIds = refTableCompensatePartitionIds;
-            this.externalExtraPredicate = null;
-        }
-
-        // for external table
-        public OptScanOperatorCompensator(LogicalScanOperator mvRefScanOperator,
-                                          ScalarOperator extraPredicate) {
-            this.refScanOperator = mvRefScanOperator;
-            this.olapTableCompensatePartitionIds = null;
-            this.externalExtraPredicate = extraPredicate;
-        }
-
-        @Override
-        public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
-            LogicalScanOperator scanOperator = optExpression.getOp().cast();
-            if (scanOperator != refScanOperator) {
-                return optExpression;
-            }
-            // reset the partition prune flag to be pruned again.
-            Utils.resetOpAppliedRule(scanOperator, Operator.OP_PARTITION_PRUNE_BIT);
-
-            if (scanOperator instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
-                final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-                Preconditions.checkState(olapTableCompensatePartitionIds != null);
-                // reset original partition predicates to prune partitions/tablets again
-                builder.withOperator(olapScanOperator)
-                        .setSelectedPartitionId(olapTableCompensatePartitionIds)
-                        .setSelectedTabletId(Lists.newArrayList());
-                return OptExpression.create(builder.build());
-            } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
-                final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(refScanOperator);
-                // reset original partition predicates to prune partitions/tablets again
-                builder.withOperator(refScanOperator);
-
-                Preconditions.checkState(externalExtraPredicate != null);
-                ScalarOperator finalPredicate = Utils.compoundAnd(refScanOperator.getPredicate(), externalExtraPredicate);
-                builder.setPredicate(finalPredicate);
-                if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                    // refresh iceberg table's metadata
-                    Table refBaseTable = refScanOperator.getTable();
-                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                    String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getRemoteDbName();
-                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
-                    if (currentTable == null) {
-                        return null;
-                    }
-                    // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
-                    builder.setTable(currentTable);
-                }
-                LogicalScanOperator newScanOperator = builder.build();
-                return OptExpression.create(newScanOperator);
-            } else {
-                return optExpression;
-            }
-        }
-
-        @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             List<OptExpression> children = Lists.newArrayList();
             for (int i = 0; i < optExpression.arity(); ++i) {

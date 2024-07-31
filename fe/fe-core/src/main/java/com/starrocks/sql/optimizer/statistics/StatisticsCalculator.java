@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
@@ -27,6 +28,7 @@ import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.KuduTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
@@ -38,6 +40,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -143,12 +146,11 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -299,7 +301,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
-        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
+        return computeOlapScanNode(node, context, node.getTable(), Lists.newArrayList(),
                 node.getColRefToColumnMetaMap());
     }
 
@@ -324,7 +326,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
-        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
+        return computeOlapScanNode(node, context, node.getTable(), Lists.newArrayList(),
                 node.getColRefToColumnMetaMap());
     }
 
@@ -341,17 +343,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         // 3. deal with column statistics for partition prune
         OlapTable olapTable = (OlapTable) table;
-        ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
-        if (partitionStatistic != null) {
-            String partitionColumnName = olapTable.getPartitionColumnNames().get(0);
-            Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry =
-                    colRefToColumnMetaMap.entrySet().stream().
-                            filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName))
-                            .findAny();
-            // partition prune maybe because partition has none data
-            partitionColumnEntry.ifPresent(entry -> builder.addColumnStatistic(entry.getKey(), partitionStatistic));
-        }
-
+        adjustPartitionColsStatistic(selectedPartitionIds, olapTable, builder, colRefToColumnMetaMap);
         builder.setOutputRowCount(tableRowCount);
         if (isRewrittenMvGE(node, table, context)) {
             adjustNestedMvStatistics(context.getGroupExpression().getGroup(), (MaterializedView) olapTable, builder);
@@ -421,23 +413,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalDeltaLakeScan(LogicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalDeltaLakeScan(PhysicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context,
+    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context, Table table,
                                           Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        // Use default statistics for now.
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), node.getLimit());
+            context.setStatistics(stats);
+
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalDeltaLakeScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
         }
-        builder.setOutputRowCount(1);
-        context.setStatistics(builder.build());
 
         return visitOperator(node, context);
     }
@@ -584,7 +582,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             } else {
                 predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
             }
-            List<PartitionKey> partitionKeys = predicates.getSelectedPartitionKeys();
+            // If partition pruned, we should use the selected partition keys to estimate the statistics,
+            // otherwise, we should use all partition keys to estimate the statistics.
+            List<PartitionKey> partitionKeys = predicates.hasPrunedPartition() ? predicates.getSelectedPartitionKeys() :
+                    PartitionUtil.getPartitionKeys(table);
 
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
@@ -701,64 +702,84 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * the statistics of the Partition column need to be adjusted to avoid subsequent estimation errors.
      * return new partition column statistics or else null
      */
-    private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
+    private void adjustPartitionColsStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable,
+                                              Statistics.Builder builder,
+                                              Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (CollectionUtils.isEmpty(selectedPartitionId)) {
-            return null;
+            return;
         }
-        int selectedPartitionsSize = selectedPartitionId.size();
-        int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
-        if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
-            if (olapTable.getPartitionColumnNames().size() != 1) {
-                return null;
-            }
-            String partitionColumn = olapTable.getPartitionColumnNames().get(0);
-            ColumnStatistic partitionColumnStatistic =
-                    GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
 
+        Map<String, ColumnRefOperator> colNameMap = Maps.newHashMap();
+        colRefToColumnMetaMap.entrySet().stream()
+                .forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
+        List<ColumnRefOperator> partitionCols = Lists.newArrayList();
+        for (String partitionColName : olapTable.getPartitionColumnNames()) {
+            if (!colNameMap.containsKey(partitionColName)) {
+                return;
+            }
+            partitionCols.add(colNameMap.get(partitionColName));
+        }
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo instanceof RangePartitionInfo) {
+            if (partitionCols.size() != 1) {
+                return;
+            }
             if (optimizerContext.getDumpInfo() != null) {
-                optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+                optimizerContext.getDumpInfo().addTableStatistics(olapTable,
+                        partitionCols.get(0).getName(),
+                        builder.getColumnStatistics(partitionCols.get(0)));
+            }
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Map.Entry<Long, Range<PartitionKey>>> rangeList = null;
+            try {
+                rangeList = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionId));
+            } catch (AnalysisException e) {
+                LOG.warn("get sorted range partition failed, msg : " + e.getMessage());
+            }
+            if (CollectionUtils.isEmpty(rangeList)) {
+                return;
+            }
+            Map.Entry<Long, Range<PartitionKey>> firstKey = rangeList.get(0);
+            Map.Entry<Long, Range<PartitionKey>> lastKey = rangeList.get(rangeList.size() - 1);
+
+            LiteralExpr minLiteral = firstKey.getValue().lowerEndpoint().getKeys().get(0);
+            LiteralExpr maxLiteral = lastKey.getValue().upperEndpoint().getKeys().get(0);
+            double min;
+            double max;
+            if (minLiteral instanceof DateLiteral) {
+                DateLiteral minDateLiteral = (DateLiteral) minLiteral;
+                DateLiteral maxDateLiteral;
+                maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                        (DateLiteral) maxLiteral;
+                min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
+                max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
+            } else {
+                min = firstKey.getValue().lowerEndpoint().getKeys().get(0).getDoubleValue();
+                max = lastKey.getValue().upperEndpoint().getKeys().get(0).getDoubleValue();
             }
 
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo instanceof RangePartitionInfo) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Map.Entry<Long, Range<PartitionKey>>> rangeList;
-                try {
-                    rangeList = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionId));
-                } catch (AnalysisException e) {
-                    LOG.warn("get sorted range partition failed, msg : " + e.getMessage());
-                    return null;
+            int selectedPartitionsSize = selectedPartitionId.size();
+            int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
+            double distinctValues =
+                    builder.getColumnStatistics(partitionCols.get(0)).getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
+                            allNoEmptyPartitionsSize;
+            ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(0)))
+                    .setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
+            builder.addColumnStatistic(partitionCols.get(0), columnStatistic);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            for (int i = 0; i < partitionCols.size(); i++) {
+                if (optimizerContext.getDumpInfo() != null) {
+                    optimizerContext.getDumpInfo().addTableStatistics(olapTable,
+                            partitionCols.get(i).getName(),
+                            builder.getColumnStatistics(partitionCols.get(i)));
                 }
-                if (rangeList.isEmpty()) {
-                    return null;
-                }
-
-                Map.Entry<Long, Range<PartitionKey>> firstKey = rangeList.get(0);
-                Map.Entry<Long, Range<PartitionKey>> lastKey = rangeList.get(rangeList.size() - 1);
-
-                LiteralExpr minLiteral = firstKey.getValue().lowerEndpoint().getKeys().get(0);
-                LiteralExpr maxLiteral = lastKey.getValue().upperEndpoint().getKeys().get(0);
-                double min;
-                double max;
-                if (minLiteral instanceof DateLiteral) {
-                    DateLiteral minDateLiteral = (DateLiteral) minLiteral;
-                    DateLiteral maxDateLiteral;
-                    maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
-                            (DateLiteral) maxLiteral;
-                    min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
-                    max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
-                } else {
-                    min = firstKey.getValue().lowerEndpoint().getKeys().get(0).getDoubleValue();
-                    max = lastKey.getValue().upperEndpoint().getKeys().get(0).getDoubleValue();
-                }
-                double distinctValues =
-                        partitionColumnStatistic.getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
-                                allNoEmptyPartitionsSize;
-                return buildFrom(partitionColumnStatistic).
-                        setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
+                long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i);
+                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(i)))
+                        .setDistinctValuesCount(ndv).build();
+                builder.addColumnStatistic(partitionCols.get(i), columnStatistic);
             }
         }
-        return null;
     }
 
     @Override
@@ -916,8 +937,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0));
-        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1));
+        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0), false);
+        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1), false);
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
         double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
@@ -1429,10 +1450,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeTopNNode(ExpressionContext context, Operator node) {
         Preconditions.checkState(context.arity() == 1);
 
+        long partitionLimit = 0;
+        List<ColumnRefOperator> partitions = Collections.emptyList();
+        if (node instanceof LogicalTopNOperator) {
+            partitionLimit = ((LogicalTopNOperator) node).getPartitionLimit();
+            partitions = ((LogicalTopNOperator) node).getPartitionByColumns();
+        } else if (node instanceof PhysicalTopNOperator) {
+            partitionLimit = ((PhysicalTopNOperator) node).getPartitionLimit();
+            partitions = ((PhysicalTopNOperator) node).getPartitionByColumns();
+        }
+
         Statistics.Builder builder = Statistics.builder();
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+
+        if (partitionLimit > 0 && !partitions.isEmpty()
+                && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
+            double partitionNums = partitions.stream()
+                    .map(inputStatistics::getColumnStatistic)
+                    .map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b).orElse(1D);
+            double rowCount = Math.min(inputStatistics.getOutputRowCount(), partitionLimit * partitionNums);
+            builder.setOutputRowCount(rowCount);
+        }
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -1670,5 +1710,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return partitionColumns.contains(StringUtils.lowerCase(colName));
         }
         return false;
+    }
+
+    private long extractDistinctPartitionValues(ListPartitionInfo listPartitionInfo, Collection<Long> selectedPartitionId,
+                                                int partitionColIdx) {
+        Set<String> distinctValues = Sets.newHashSet();
+        for (long partitionId : selectedPartitionId) {
+            if (listPartitionInfo.getIdToMultiValues().containsKey(partitionId)) {
+                List<List<String>> values = listPartitionInfo.getIdToMultiValues().get(partitionId);
+                values.forEach(v -> distinctValues.add(v.get(partitionColIdx)));
+            } else if (listPartitionInfo.getIdToValues().containsKey(partitionId)) {
+                distinctValues.addAll(listPartitionInfo.getIdToValues().get(partitionId));
+            }
+
+        }
+        return Math.max(1, distinctValues.size());
     }
 }

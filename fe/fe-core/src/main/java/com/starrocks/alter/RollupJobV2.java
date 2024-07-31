@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -49,6 +50,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -71,6 +73,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -94,6 +97,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -103,7 +107,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -115,6 +118,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -170,6 +174,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // save all create rollup tasks
     private AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
                        int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, 
@@ -209,6 +218,26 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return rollupIndexName;
     }
 
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
+    }
+
     /**
      * runPendingJob():
      * 1. Create all rollup replicas and wait them finished.
@@ -240,6 +269,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
+        createReplicaLatch = countDownLatch;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -267,7 +297,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
                         .setSchemaHash(rollupSchemaHash)
                         .setStorageType(TStorageType.COLUMN)
-                        .setBloomFilterColumnNames(tbl.getCopiedBfColumns())
+                        .setBloomFilterColumnNames(tbl.getBfColumnIds())
                         .setBloomFilterFpp(tbl.getBfFpp())
                         .setIndexes(tbl.getCopiedIndexes())
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
@@ -297,6 +327,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                 .setTabletType(tabletType)
                                 .setCompressionType(tbl.getCompressionType())
+                                .setCompressionLevel(tbl.getCompressionLevel())
                                 .setCreateSchemaFile(true)
                                 .setBaseTabletId(tabletIdMap.get(rollupTabletId))
                                 .setTabletSchema(tabletSchema)
@@ -317,10 +348,17 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
+                waitingCreatingReplica.set(true);
+                if (isCancelling.get()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                    return;
+                }
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
+            } finally {
+                waitingCreatingReplica.set(false);
             }
 
             if (!ok || !countDownLatch.getStatus().ok()) {
@@ -567,9 +605,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     "found in the base table.");
                         }
                     }
+
+                    List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
+                    for (String name : usedBaseTableColNames) {
+                        usedColIds.add(tbl.getColumn(name).getColumnId());
+                    }
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
-                                    Lists.newLinkedList(usedBaseTableColNames));
+                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
@@ -707,6 +749,24 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         tbl.rebuildFullSchema();
         tbl.lastSchemaUpdateTime.set(System.nanoTime());
+    }
+
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelImpl(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
     }
 
     /**
@@ -960,45 +1020,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long partitionId = in.readLong();
-            int size2 = in.readInt();
-            Map<Long, Long> tabletIdMap =
-                    physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
-            for (int j = 0; j < size2; j++) {
-                long rollupTabletId = in.readLong();
-                long baseTabletId = in.readLong();
-                tabletIdMap.put(rollupTabletId, baseTabletId);
-            }
-
-            physicalPartitionIdToRollupIndex.put(partitionId, MaterializedIndex.read(in));
-        }
-
-        baseIndexId = in.readLong();
-        rollupIndexId = in.readLong();
-        baseIndexName = Text.readString(in);
-        rollupIndexName = Text.readString(in);
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            Column column = Column.read(in);
-            rollupSchema.add(column);
-        }
-        baseSchemaHash = in.readInt();
-        rollupSchemaHash = in.readInt();
-
-        rollupKeysType = KeysType.valueOf(Text.readString(in));
-        rollupShortKeyColumnCount = in.readShort();
-
-        watershedTxnId = in.readLong();
-        Text.readString(in); // placeholder
     }
 
     @Override

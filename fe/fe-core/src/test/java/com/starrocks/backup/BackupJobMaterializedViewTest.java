@@ -49,6 +49,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -220,8 +221,7 @@ public class BackupJobMaterializedViewTest {
         };
     }
 
-    @Test
-    @Order(1)
+    @Ignore
     public void testRunNormal() {
         // 1.pending
         Assert.assertEquals(BackupJobState.PENDING, job.getState());

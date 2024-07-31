@@ -18,6 +18,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
@@ -334,6 +335,16 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     return Status::OK();
 }
 
+Status HdfsOrcScanner::build_paimon_delete_file_builder() {
+    if (_scanner_params.paimon_deletion_file == nullptr) {
+        return Status::OK();
+    }
+    std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
+            new PaimonDeleteFileBuilder(_scanner_params.fs, &_need_skip_rowids));
+    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.paimon_deletion_file.get()));
+    return Status::OK();
+}
+
 Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes) {
     uint64_t stripe_number = reader->getNumberOfStripes();
     std::vector<DiskRange> stripe_disk_ranges{};
@@ -527,6 +538,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
+    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 

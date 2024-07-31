@@ -48,6 +48,8 @@ public class DataCacheSelectExecutor {
         tmpSessionVariable.setEnableDataCacheAsyncPopulateMode(false);
         tmpSessionVariable.setEnableDataCacheIOAdaptor(false);
         tmpSessionVariable.setDataCacheEvictProbability(100);
+        tmpSessionVariable.setDataCachePriority(statement.getPriority());
+        tmpSessionVariable.setDatacacheTTLSeconds(statement.getTTLSeconds());
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();
@@ -57,7 +59,12 @@ public class DataCacheSelectExecutor {
         if (connectContext.getExecutor() != null) {
             connectContext.getExecutor().registerSubStmtExecutor(stmtExecutor);
         }
-        stmtExecutor.execute();
+        stmtExecutor.addRunningQueryDetail(insertStmt);
+        try {
+            stmtExecutor.execute();
+        } finally {
+            stmtExecutor.addFinishedQueryDetail();
+        }
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed

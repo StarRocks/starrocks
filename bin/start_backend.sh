@@ -18,6 +18,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+BIN_NAME=starrocks_be
 MACHINE_TYPE=$(uname -m)
 
 # ================== parse opts =======================
@@ -33,6 +34,7 @@ OPTS=$(getopt \
     -l 'logconsole' \
     -l 'meta_tool' \
     -l numa: \
+    -l 'check_mem_leak' \
 -- "$@")
 
 eval set -- "$OPTS"
@@ -43,6 +45,7 @@ RUN_BE=0
 RUN_NUMA="-1"
 RUN_LOG_CONSOLE=0
 RUN_META_TOOL=0
+RUN_CHECK_MEM_LEAK=0
 
 while true; do
     case "$1" in
@@ -52,6 +55,7 @@ while true; do
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --numa) RUN_NUMA=$2; shift 2 ;;
         --meta_tool) RUN_META_TOOL=1 ; shift ;;
+        --check_mem_leak) RUN_CHECK_MEM_LEAK=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -80,7 +84,11 @@ fi
 # export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
-    export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+    if [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
+      export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+    else
+      export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+    fi
 else
     echo "JEMALLOC_CONF from conf is '$JEMALLOC_CONF'"
 fi
@@ -156,7 +164,7 @@ export_cachelib_lib_path
 
 # ====== handle meta_tool sub command before any modification change
 if [ ${RUN_META_TOOL} -eq 1 ] ; then
-    ${STARROCKS_HOME}/lib/starrocks_be meta_tool "$@"
+    ${STARROCKS_HOME}/lib/$BIN_NAME meta_tool "$@"
     exit $?
 fi
 
@@ -181,21 +189,25 @@ if [ ${RUN_CN} -eq 1 ]; then
 fi
 
 if [ -f $pidfile ]; then
-    if kill -0 $(cat $pidfile) > /dev/null 2>&1; then
-        echo "Backend running as process `cat $pidfile`. Stop it first."
+    # check if the binary name can be grepped from the process cmdline.
+    # still it has chances to be false positive, but the possibility is greatly reduced.
+    oldpid=$(cat $pidfile)
+    pscmd=$(ps -q $oldpid -o cmd=)
+    if echo "$pscmd" | grep -q -w "$BIN_NAME" &>/dev/null ; then
+        echo "Backend running as process $oldpid. Stop it first."
         exit 1
     else
         rm $pidfile
     fi
 fi
 
-chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
+chmod 755 ${STARROCKS_HOME}/lib/$BIN_NAME
 
 if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
     ulimit -n 65535
 fi
 
-START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
+START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/$BIN_NAME"
 LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
     START_BE_CMD="${START_BE_CMD} --cn"

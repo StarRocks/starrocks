@@ -28,7 +28,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.Partition;
@@ -59,14 +59,14 @@ public class HudiMetadata implements ConnectorMetadata {
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
-    private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
 
     public HudiMetadata(String catalogName,
                         HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
-                        Optional<CacheUpdateProcessor> cacheUpdateProcessor) {
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;

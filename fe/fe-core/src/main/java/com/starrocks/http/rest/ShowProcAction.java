@@ -130,7 +130,7 @@ public class ShowProcAction extends RestBaseAction {
                     procNode = instance.open(path);
                 }
             } catch (AnalysisException e) {
-                LOG.warn(e.getMessage());
+                LOG.warn(e.getMessage(), e);
                 response.getContent().append("[]");
             }
 
@@ -144,7 +144,7 @@ public class ShowProcAction extends RestBaseAction {
                     response.setContentType("application/json");
                     response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
-                    LOG.warn(e.getMessage());
+                    LOG.warn(e.getMessage(), e);
                     response.getContent().append("[]");
                 }
             }

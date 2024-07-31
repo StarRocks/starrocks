@@ -20,8 +20,12 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -231,5 +235,19 @@ public class TableFunctionTableTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "illegal value of csv.trim_space: FALS, only true/false allowed",
                 () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testFilesCredentialDesensitization() {
+        String sql = "insert into files('path' = 's3://xxx/yyy', 'format' = 'parquet', 'aws.s3.access_key' = 'abc', " +
+                "'aws.s3.secret_key' = 'def', 'aws.s3.region' = 'us-west-2') " +
+                "select * from files('path' = 's3://xxx/zzz', 'format' = 'parquet', 'aws.s3.access_key' = 'ghi', " +
+                "'aws.s3.secret_key' = 'jkl', 'aws.s3.region' = 'us-west-1')";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String desensitizationSql = AstToSQLBuilder.toSQL(stmt);
+        Assert.assertEquals("INSERT INTO FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-2\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/yyy\") SELECT *\n" +
+                "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
     }
 }

@@ -35,6 +35,11 @@ public class RowDelimiter implements ParseNode {
         this.delimiter = Delimiter.convertDelimiter(oriDelimiter);
     }
 
+    // for show
+    public String getOriDelimiter() {
+        return oriDelimiter;
+    }
+
     public String getRowDelimiter() {
         return delimiter;
     }

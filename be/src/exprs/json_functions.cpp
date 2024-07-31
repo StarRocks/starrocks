@@ -588,7 +588,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             chunk.append_column(flat_column, 0);
             return state->cast_expr->evaluate_checked(nullptr, &chunk);
         }
-        return flat_column;
+        return flat_column->clone();
     }
 }
 
@@ -724,7 +724,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_array(FunctionContext* context, const Co
     ColumnBuilder<TYPE_JSON> result(rows);
     std::vector<ColumnViewer<TYPE_JSON>> viewers;
     for (auto& col : columns) {
-        viewers.emplace_back(ColumnViewer<TYPE_JSON>(col));
+        viewers.emplace_back(col);
     }
 
     for (int row = 0; row < rows; row++) {
@@ -764,7 +764,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
     ColumnBuilder<TYPE_JSON> result(rows);
     std::vector<ColumnViewer<TYPE_JSON>> viewers;
     for (auto& col : columns) {
-        viewers.emplace_back(ColumnViewer<TYPE_JSON>(col));
+        viewers.emplace_back(col);
     }
 
     for (int row = 0; row < rows; row++) {

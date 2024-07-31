@@ -86,19 +86,28 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         }
         cache_options.mem_space_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
         if (config::datacache_disk_path.value().empty()) {
-            // If the disk cache does not be configured for datacache, set default path according storage path,
-            // and turn on the automatic adjust switch.
+            // If the disk cache does not be configured for datacache, set default path according storage path.
             std::vector<std::string> datacache_paths;
             std::for_each(storage_paths.begin(), storage_paths.end(), [&](const StorePath& root_path) {
+                datacache_paths.push_back(root_path.path + "/datacache");
+                // Clear the residual datacache files
                 std::filesystem::path sp(root_path.path);
-                auto dp = sp.parent_path() / "datacache";
-                datacache_paths.push_back(dp.string());
+                auto old_path = sp.parent_path() / "datacache";
+                clean_residual_datacache(old_path.string());
             });
             config::datacache_disk_path = JoinStrings(datacache_paths, ";");
-            config::datacache_auto_adjust_enable = true;
         }
         RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
                                                          config::ignore_broken_disk, &cache_options.disk_spaces));
+
+        size_t total_quota_byts = 0;
+        for (auto& space : cache_options.disk_spaces) {
+            total_quota_byts += space.size;
+        }
+        if (!cache_options.disk_spaces.empty() && total_quota_byts == 0) {
+            // If disk cache quota is zero, turn on the automatic adjust switch.
+            config::datacache_auto_adjust_enable = true;
+        }
 
         // Adjust the default engine based on build switches.
         if (config::datacache_engine == "") {
@@ -191,6 +200,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
 
+    // set up thrift client before providing any service to the external
+    // because these services may use thrift client, for example, stream
+    // load will send thrift rpc to FE after http server is started
+    ThriftRpcHelper::setup(exec_env);
+
     // Start thrift server
     int thrift_port = config::be_port;
     if (as_cn && config::thrift_port != 0) {
@@ -210,9 +224,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
 
     // Configure keepalive.
-#ifdef WITH_BRPC_KEEPALIVE
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
-#endif
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
@@ -264,7 +276,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    ThriftRpcHelper::setup(exec_env);
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {

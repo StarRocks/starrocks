@@ -400,7 +400,10 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
             LOG(WARNING) << "failed to find column in schema: " << root;
             continue;
         }
-        RETURN_IF_ERROR(prune_field_by_access_paths(field.get(), path.get()));
+        // field maybe modified, so we need to deep copy
+        auto new_field = std::make_shared<Field>(*field);
+        schema->set_field_by_name(new_field, root);
+        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
     }
 
     return Status::OK();
@@ -417,15 +420,21 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
-    // if column_desc come from fe, reset tablet schema
-    if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
-        !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
-        _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema =
-                TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
-    } else {
-        // struct column prune will modify fields, so deep copy a new schema
-        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema());
+    // schema_id that not greater than 0 is invalid
+    if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->get(_scan_node->thrift_olap_scan_node().schema_id);
+    }
+
+    if (_tablet_schema == nullptr) {
+        // if column_desc come from fe, reset tablet schema
+        if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+            !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+            _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+            _tablet_schema =
+                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+        } else {
+            _tablet_schema = _tablet->tablet_schema();
+        }
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));

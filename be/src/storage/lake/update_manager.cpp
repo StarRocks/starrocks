@@ -15,6 +15,7 @@
 #include "storage/lake/update_manager.h"
 
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -31,6 +32,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
 #include "testutil/sync_point.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
 
@@ -94,10 +96,14 @@ void PersistentIndexBlockCache::update_memory_usage() {
 void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
     for (auto& rs : metadata.rowsets()) {
         bool has_segment_size = (rs.segments_size() == rs.segment_size_size());
+        bool has_encryption_meta = (rs.segments_size() == rs.segment_encryption_metas_size());
         for (int i = 0; i < rs.segments_size(); i++) {
             FileInfo segment_info{.path = rs.segments(i)};
             if (LIKELY(has_segment_size)) {
                 segment_info.size = rs.segment_size(i);
+            }
+            if (LIKELY(has_encryption_meta)) {
+                segment_info.encryption_meta = rs.segment_encryption_metas(i);
             }
             _rssid_to_file_info[rs.id() + i] = segment_info;
             _rssid_to_rowid[rs.id() + i] = rs.id();
@@ -114,9 +120,13 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
         _rssid_to_rowid[rowset_id + segment_id] = rowset_id;
     } else {
         bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
+        bool has_encryption_meta = (meta.segments_size() == meta.segment_encryption_metas_size());
         FileInfo segment_info{.path = meta.segments(segment_id)};
         if (LIKELY(has_segment_size)) {
             segment_info.size = meta.segment_size(segment_id);
+        }
+        if (LIKELY(has_encryption_meta)) {
+            segment_info.encryption_meta = meta.segment_encryption_metas(segment_id);
         }
         _rssid_to_file_info[rowset_id + segment_id] = segment_info;
         _rssid_to_rowid[rowset_id + segment_id] = rowset_id;
@@ -177,11 +187,16 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
+DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet, {
+        builder->apply_opwrite(op_write, {}, {});
+        return Status::OK();
+    });
     auto& index = index_entry->value();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
@@ -210,6 +225,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
+    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
+    // so we use max segment id as `op_offset`.
+    // TODO : support real order of mix upsert and delete in one transaction.
+    const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, true /*reslove conflict*/,
@@ -232,7 +251,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
-            RETURN_IF_ERROR(index.erase(*state.auto_increment_deletes(segment_id), &new_deletes));
+            RETURN_IF_ERROR(
+                    index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, del_rebuild_rssid));
         }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
@@ -243,7 +263,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(*state.deletes(del_id), &new_deletes));
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }
@@ -314,6 +334,26 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
     _print_memory_stats();
+    return Status::OK();
+}
+
+Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                         const TabletMetadataPtr& metadata, Tablet* tablet,
+                                                         MetaFileBuilder* builder, int64_t base_version) {
+    auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+    RssidFileInfoContainer rssid_fileinfo_container;
+    rssid_fileinfo_container.add_rssid_to_file(*metadata);
+
+    RowsetUpdateStateParams params{
+            .op_write = op_write,
+            .tablet_schema = tablet_schema,
+            .metadata = metadata,
+            .tablet = tablet,
+            .container = rssid_fileinfo_container,
+    };
+
+    ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
+    RETURN_IF_ERROR(handler.execute(params, builder));
     return Status::OK();
 }
 
@@ -481,7 +521,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
                                          const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
                                          const std::vector<uint32_t>& read_column_ids) -> Status {
-        FileInfo file_info{.path = params.tablet->segment_location(segment_info.path)};
+        FileInfo file_info{.path = params.tablet->segment_location(segment_info.path),
+                           .encryption_meta = segment_info.encryption_meta};
         if (segment_info.size.has_value()) {
             file_info.size = segment_info.size;
         }
@@ -495,10 +536,15 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             return Status::OK();
         }
 
+        RandomAccessFileOptions opts;
+        if (!file_info.encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+            opts.encryption_info = std::move(info);
+        }
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, file_info));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < read_column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
@@ -532,9 +578,12 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
         const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
-
-        RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = params.op_write.rowset().segments(segment_id)},
-                                                  segment_id,
+        FileInfo info;
+        info.path = params.op_write.rowset().segments(segment_id);
+        if (segment_id < params.op_write.rowset().segment_encryption_metas_size()) {
+            info.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+        }
+        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id,
                                                   // use partial segment column offset id to get the column
                                                   auto_increment_state->schema, rowids, auto_increment_col_partial_id));
     }
@@ -563,8 +612,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
                                           DelVector* delvec) {
-    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tsid.tablet_id, meta_ver, fill_cache));
     RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, delvec));
     return Status::OK();
 }
@@ -655,7 +703,10 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                                        int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
+
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
@@ -686,10 +737,16 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                  const TabletMetadata& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
+        builder->apply_opcompaction(op_compaction, *std::max_element(op_compaction.input_rowsets().begin(),
+                                                                     op_compaction.input_rowsets().end()));
+        return Status::OK();
+    });
     if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
         // conflict happens
         return Status::OK();
@@ -700,7 +757,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                 input_rowsets_id, &metadata));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
@@ -898,6 +957,10 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 }
 
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
+                                                                                             : nullptr);
     // use tabletid-txnid as update state cache's key, so it can retry safe.
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -950,6 +1013,10 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
+    // use process mem tracker instread of load mem tracker here.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
+                                                                                             : nullptr);
     // no need to preload if using light compaction publish
     if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
         return;

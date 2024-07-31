@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE Configuration
 
@@ -157,7 +157,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the `slow_query` module and the `query` module. The `connection` module is supported from v3.0. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ##### qe_slow_log_ms
@@ -418,8 +418,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
 
 ##### http_port
 
@@ -1083,7 +1092,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### lock_manager_enabled
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -1092,7 +1101,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lock_manager_enable_using_fine_granularity_lock
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -1193,16 +1202,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
-<!--
 ##### enable_materialized_view_spill
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
+- Introduced in: v3.1.1
 
 ##### enable_backup_materialized_view
 
@@ -2797,7 +2804,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The cloud-native meta service RPC port.
+- Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
 <!--
@@ -2983,20 +2990,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_history_size
 
-- Default: 12
+- Default: 20
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
-- Introduced in: v3.1.0
-
-##### lake_compaction_fail_history_size
-
-- Default: 12
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -3061,11 +3059,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_autovacuum_grace_period_minutes
 
-- Default: 5
+- Default: 30
 - Type: Long
 - Unit: Minutes
 - Is mutable: Yes
-- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold

@@ -16,6 +16,7 @@
 
 #include "exec/partition/chunks_partitioner.h"
 #include "storage/chunk_helper.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -29,7 +30,7 @@ class HashPartitionContext {
 public:
     HashPartitionContext(const std::vector<TExpr>& t_partition_exprs) : _t_partition_exprs(t_partition_exprs) {}
 
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state, RuntimeProfile* profile);
 
     // Add one chunk to partitioner
     Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);

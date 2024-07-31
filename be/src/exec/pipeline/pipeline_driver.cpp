@@ -55,8 +55,12 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
-                                   to_readable_string(), op->get_name(), func_name);
+            std::stringstream ss;
+            ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+               << " fragment_id="
+               << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+            auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
+                                   ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
@@ -602,9 +606,21 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
 
+        bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved)) {
+            need_spill = true;
             mem_resource_mgr.to_low_memory_mode();
         }
+
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto query_consumption = query_mem_tracker->consumption();
+        auto limited = query_mem_tracker->limit();
+        auto reserved_limit = query_mem_tracker->reserve_limit();
+
+        TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
+                        << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
+                        << " need_spill:" << need_spill << " query_consumption:" << query_consumption
+                        << " limit:" << limited << "query reserved limit:" << reserved_limit;
     }
 }
 

@@ -40,7 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -64,7 +63,7 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
     private final Map<String, Repository> repoNameMap = Maps.newConcurrentMap();
     private final Map<Long, Repository> repoIdMap = Maps.newConcurrentMap();
 
-    private final ReentrantLock lock = new FairReentrantLock();
+    private final ReentrantLock lock = new ReentrantLock();
 
     public RepositoryMgr() {
         super(Repository.class.getSimpleName(), 600L * 1000L /* 10min */);

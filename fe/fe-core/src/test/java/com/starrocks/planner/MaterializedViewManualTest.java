@@ -353,47 +353,26 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 " as select t1a, t1b, sum(t1f) as total from test.test_all_type group by t1a, t1b;", () -> {
             {
                 String query = "select t1a, sum(if(t1b=0, t1f, 0)) as total from test.test_all_type group by t1a;";
-                // TODO: fix this later.
                 sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(if(t1b=0, t1b, 0)) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(if(murmur_hash3_32(t1b %3) = 0, t1b, 0)) as total from test.test_all_type group" +
                         " by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(murmur_hash3_32(CAST(14: t1b % 3 AS VARCHAR)) = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
                         "group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
                         "group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
         });
     }
@@ -405,22 +384,27 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
             {
                 String query = "select t1a, sum(t1b) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(14: t1b)\n" +
-                                "  |  group by: 12: t1a\n" +
-                                "  |  ");
+                sql(query).nonMatch("mv0");
             }
             {
                 String query = "select t1a, sum(t1b + 1) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(CAST(15: t1b AS INT) + 1)\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).nonMatch("mv0");
+            }
+            {
+                String query = "select t1a, max(t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, max(concat(t1b,'.')), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, min(substr(t1b,1)), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, count(distinct t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
             }
         });
     }

@@ -89,6 +89,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
     _merge_condition = table_sink.merge_condition;
+    _encryption_meta = table_sink.encryption_meta;
     _partial_update_mode = table_sink.partial_update_mode;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);

@@ -146,6 +146,9 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
             // All struct fields all nullable now
             RETURN_IF_ERROR(type_desc_to_pb(types, index, field_pb));
             field_pb->set_name(field.name);
+            if (field.__isset.id && field.id >= 0) {
+                field_pb->set_unique_id(field.id);
+            }
         }
         return Status::OK();
     }

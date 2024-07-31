@@ -54,14 +54,14 @@ import java.util.stream.Collectors;
  */
 public class PlannerMetaLocker {
     // Map database id -> database
-    Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
+    private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
      * so the table ids do not need to be ordered here.
      */
-    Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
+    private Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
 
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
@@ -120,7 +120,17 @@ public class PlannerMetaLocker {
         }
     }
 
-    private Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
+    /**
+     * Collect tables that need to be protected by the PlannerMetaLock
+     */
+    public static void collectTablesNeedLock(StatementBase statement,
+                                             ConnectContext session,
+                                             Map<Long, Database> dbs,
+                                             Map<Long, Set<Long>> tables) {
+        new TableCollector(session, dbs, tables).visit(statement);
+    }
+
+    private static Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         String catalogName = tableName.getCatalog();
@@ -164,7 +174,7 @@ public class PlannerMetaLocker {
         return new Pair<>(db, table);
     }
 
-    private class TableCollector extends AstTraverser<Void, Void> {
+    private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
         private final Map<Long, Database> dbs;

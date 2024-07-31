@@ -208,7 +208,7 @@ public class DynamicPartitionUtil {
         return false;
     }
 
-    public static boolean checkInputDynamicPartitionProperties(Map<String, String> properties,
+    public static boolean checkInputDynamicPartitionProperties(OlapTable olapTable, Map<String, String> properties,
                                                                PartitionInfo partitionInfo) throws DdlException {
         if (properties == null || properties.isEmpty()) {
             return false;
@@ -252,7 +252,7 @@ public class DynamicPartitionUtil {
             }
 
             if (timeUnit.equalsIgnoreCase(TimestampArithmeticExpr.TimeUnit.HOUR.toString())) {
-                List<Column> partitionColumns = partitionInfo.getPartitionColumns();
+                List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
                 for (Column partitionColumn : partitionColumns) {
                     if (partitionColumn.getPrimitiveType() == PrimitiveType.DATE) {
                         throw new SemanticException("Date type partition does not support dynamic partitioning" +
@@ -405,12 +405,12 @@ public class DynamicPartitionUtil {
         return analyzedProperties;
     }
 
-    public static void checkAlterAllowed(OlapTable olapTable) throws DdlException {
+    public static void checkAlterAllowed(OlapTable olapTable) {
         TableProperty tableProperty = olapTable.getTableProperty();
         if (tableProperty != null && tableProperty.getDynamicPartitionProperty() != null &&
                 tableProperty.getDynamicPartitionProperty().isExists() &&
                 tableProperty.getDynamicPartitionProperty().isEnabled()) {
-            throw new DdlException("Cannot add/drop partition on a Dynamic Partition Table, " +
+            throw new SemanticException("Cannot add/drop partition on a Dynamic Partition Table, " +
                     "Use command `ALTER TABLE tbl_name SET (\"dynamic_partition.enable\" = \"false\")` firstly.");
         }
     }
@@ -432,7 +432,7 @@ public class DynamicPartitionUtil {
         boolean result = partitionInfo instanceof RangePartitionInfo;
         if (result) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-            partitionColumnSize = rangePartitionInfo.getPartitionColumns().size();
+            partitionColumnSize = rangePartitionInfo.getPartitionColumnsSize();
             if (partitionColumnSize != 1) {
                 result = false;
             }
@@ -479,7 +479,7 @@ public class DynamicPartitionUtil {
      */
     public static void checkAndSetDynamicPartitionProperty(OlapTable olapTable, Map<String, String> properties)
             throws DdlException {
-        if (DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo())) {
+        if (DynamicPartitionUtil.checkInputDynamicPartitionProperties(olapTable, properties, olapTable.getPartitionInfo())) {
             Map<String, String> dynamicPartitionProperties = DynamicPartitionUtil.analyzeDynamicPartition(properties);
             TableProperty tableProperty = olapTable.getTableProperty();
             if (tableProperty != null) {

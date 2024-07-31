@@ -228,13 +228,14 @@ public:
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
             MemTracker* tracker = _all_trackers[i];
-            if (tracker->limit() < 0) {
+            int64_t limit = tracker->reserve_limit();
+            if (limit < 0) {
+                limit = tracker->limit();
+            }
+            if (limit < 0) {
+                DCHECK_EQ(limit, -1);
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                int64_t limit = tracker->reserve_limit();
-                if (limit == -1) {
-                    limit = tracker->limit();
-                }
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
                     continue;
                 } else {
@@ -297,6 +298,17 @@ public:
     bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
 
     bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
+
+    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+
+    bool any_limit_exceeded_precheck(int64_t consume) const {
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded_precheck(consume)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void set_limit(int64_t limit) { _limit = limit; }
 

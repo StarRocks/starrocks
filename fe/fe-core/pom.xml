@@ -40,8 +40,8 @@ under the License.
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.5.0</iceberg.version>
         <paimon.version>0.8.1</paimon.version>
-        <delta-kernel.version>3.2.0</delta-kernel.version>
-        <staros.version>3.3-rc2</staros.version>
+        <delta-kernel.version>4.0.0rc1</delta-kernel.version>
+        <staros.version>3.3-rc3</staros.version>
         <python>python</python>
     </properties>
 
@@ -390,6 +390,11 @@ under the License.
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-layout-template-json</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
@@ -924,6 +929,23 @@ under the License.
             <artifactId>clickhouse-jdbc</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc10</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
@@ -991,10 +1013,6 @@ under the License.
                 <exclusion>
                     <groupId>org.eclipse.jetty</groupId>
                     <artifactId>jetty-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.codehaus.jackson</groupId>
-                    <artifactId>jackson-mapper-asl</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -1195,6 +1213,12 @@ under the License.
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/encryption.proto"/>
                                 </exec>
                                 <exec executable="${ant.python}">
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>

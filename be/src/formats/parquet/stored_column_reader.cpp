@@ -289,7 +289,7 @@ Status StoredColumnReaderImpl::read_range(const Range<uint64_t>& range, const Fi
 Status StoredColumnReaderImpl::_skip(uint64_t rows_to_skip) {
     uint64_t skipped_row = 0;
     while (skipped_row < rows_to_skip) {
-        uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)10000);
+        uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)BATCH_PROCESS_SIZE);
         size_t batch_skipped = 0;
         while (batch_skipped < batch_to_skip) {
             if (_num_values_left_in_cur_page > 0) {
@@ -386,7 +386,9 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
         size_t cur_to_skip = row_to_skip - row_skipped;
-        RETURN_IF_ERROR(_decode_levels(&cur_to_skip, &level_parsed, &def_levels));
+        // skip batch by batch to avoid big memory alloc
+        size_t batch_to_skip = std::min(cur_to_skip, (size_t)BATCH_PROCESS_SIZE);
+        RETURN_IF_ERROR(_decode_levels(&batch_to_skip, &level_parsed, &def_levels));
         values_to_skip += count_not_null(&def_levels[0], level_parsed, _field->max_def_level());
         row_skipped += level_parsed;
         // reset_levels() to avoiding using too much memory and prepare levels for new reading.

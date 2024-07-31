@@ -14,12 +14,8 @@
 
 #pragma once
 
-#include <column/datum.h>
-
 #include "exec/schema_scanner.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
@@ -33,6 +29,8 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
+    static TypeDescriptor _used_bytes_detail_type;
+    static TypeDescriptor _dir_spaces_type;
     static SchemaScanner::ColumnDesc _s_columns[];
 
     bool _is_fetched = false;

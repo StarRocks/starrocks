@@ -268,7 +268,7 @@ struct TBrokerScanRangeParams {
     29: optional i64 json_file_size_limit;
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
-    32: optional bool flexible_column_mapping 
+    32: optional bool flexible_column_mapping
 }
 
 // Broker scan range
@@ -301,6 +301,12 @@ struct TIcebergDeleteFile {
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional TIcebergFileContent file_content
     4: optional i64 length
+}
+
+struct TPaimonDeletionFile {
+    1: optional string path
+    2: optional i64 offset
+    3: optional i64 length
 }
 
 // Hdfs scan range
@@ -378,6 +384,9 @@ struct THdfsScanRange {
 
     // kudu scan token
     26: optional string kudu_scan_token
+
+    // Paimon Deletion Vector File
+    27: optional TPaimonDeletionFile paimon_deletion_file
 }
 
 struct TBinlogScanRange {
@@ -542,6 +551,7 @@ struct TOlapScanNode {
   34: optional bool partition_order_hint
   35: optional bool enable_prune_column_after_index_filter
   36: optional bool enable_gin_filter
+  37: optional i64 schema_id
 }
 
 struct TJDBCScanNode {

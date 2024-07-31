@@ -22,9 +22,9 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksRoleEdgesScanner::_s_role_edges_columns[] = {
         //   name,       type,          size
-        {"FROM_ROLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TO_ROLE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TO_USER", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"FROM_ROLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TO_ROLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TO_USER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 StarrocksRoleEdgesScanner::StarrocksRoleEdgesScanner()

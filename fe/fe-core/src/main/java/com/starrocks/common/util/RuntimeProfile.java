@@ -655,7 +655,8 @@ public class RuntimeProfile {
                         continue;
                     }
                     Pair<Counter, String> pair = profile.counterMap.get(name);
-                    Preconditions.checkNotNull(pair);
+                    Preconditions.checkNotNull(pair, "missing counter, profileName={}, counterName={}", profile.name,
+                            name);
                     Counter counter = pair.first;
                     String parentName = pair.second;
 

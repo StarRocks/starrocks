@@ -3,11 +3,11 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE 配置项
 
@@ -48,7 +48,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：以 CIDR 形式指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
 - 引入版本：-
 
 ##### mem_limit
@@ -490,6 +499,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
+
+##### primary_key_limit_size
+
+- 默认值：128
+- 类型：Int
+- 单位：Byte
+- 是否动态：是
+- 描述：主键表中单条主键值最大长度。
+- 引入版本：v2.5
 
 ##### drop_tablet_worker_count
 
@@ -1593,11 +1611,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- 默认值：30
+- 默认值：0
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
+- 描述：0表示禁止，其他上次更新时间大于stale_memtable_flush_time_sec的memtable会在内存不足时持久化
 - 引入版本：-
 -->
 
@@ -3201,7 +3219,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
+- 描述：BE 和 CN 的额外 Agent 服务端口。
 - 引入版本：-
 
 <!--
@@ -3314,7 +3332,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
+- 描述：存算分离模式下是否使用 Data Cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 
 <!--
@@ -3334,7 +3352,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
+- 描述：存算分离模式下，Data Cache 最多可使用的磁盘容量百分比。
 - 引入版本：v3.1
 
 <!--
@@ -3858,6 +3876,69 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
 - 引入版本：-
 
+##### datacache_auto_adjust_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_high_level
+
+- 默认值：80
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。
+- 引入版本：v3.3.0
+
+##### datacache_disk_safe_level
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_low_level
+
+- 默认值：60
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 引入版本：v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 容量自动调整周期。每隔这段时间系统会进行一次缓存磁盘使用率检测，必要时触发相应扩缩容操作。
+- 引入版本：v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- 默认值：7200
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 自动扩容最小等待时间。只有当磁盘使用率在 `datacache_disk_low_level` 以下持续时间超过该时长，才会触发自动扩容。
+- 引入版本：v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Data Cache 自动扩缩容时的最小有效容量。当需要调整的目标容量小于该值时，系统会直接将缓存空间调整为 `0`，以避免缓存空间过小导致频繁填充和淘汰带来负优化。
+- 引入版本：v3.3.0
+
 <!--
 ##### datacache_block_size
 
@@ -4277,39 +4358,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- 默认值：0.8
-- 类型：Double
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新所占用的资源组 Memory 上限，默认 80%。
-- 引入版本：v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- 默认值：1
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
-- 引入版本：-
--->
-
-<!--
-##### primary_key_limit_size
-
-- 默认值：128
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - 默认值：104857600
@@ -4569,6 +4617,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：UDF 存放的路径。
 - 引入版本：-
 
+##### default_mv_resource_group_memory_limit
+
+- 默认值：0.8
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 引入版本：v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 引入版本：-
+
+##### default_mv_resource_group_concurrency_limit
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 引入版本：-
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- 默认值：0.8
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 引入版本：v3.1
+
 <!--
 ##### pull_load_task_dir
 
@@ -4627,10 +4711,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- 默认值：60
+- 默认值：300
 - 类型：Int
 - 单位：Seconds
-- 是否动态：否
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->

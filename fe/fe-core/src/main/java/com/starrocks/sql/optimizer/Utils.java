@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -420,6 +421,8 @@ public class Utils {
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
+                return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -876,7 +879,7 @@ public class Utils {
         if (op == null) {
             return;
         }
-        op.setOpRuleMask(op.getOpRuleMask() | (~ ruleMask));
+        op.resetOpRuleMask(ruleMask);
     }
 
     /**

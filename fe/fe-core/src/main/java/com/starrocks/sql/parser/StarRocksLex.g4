@@ -476,6 +476,7 @@ LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
 DISK: 'DISK';
+FIELD: 'FIELD';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -484,6 +485,7 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
+ARRAY_ELEMENT: '[*]';
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';

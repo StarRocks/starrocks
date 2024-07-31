@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -90,8 +91,8 @@ public class CTASAutoTabletTest {
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
-        Assert.assertEquals(bucketNum1, 6);
+        Assert.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
         Assert.assertEquals(bucketNum2, 3);
-        Assert.assertEquals(bucketNum3, 6);
+        Assert.assertEquals(bucketNum3, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
     }
 }

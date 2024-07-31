@@ -30,10 +30,10 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeMetricsScanner::_s_columns[] = {
-        {"FE_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LABELS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VALUE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaFeMetricsScanner::SchemaFeMetricsScanner()

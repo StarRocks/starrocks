@@ -14,18 +14,15 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -39,27 +36,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-
-        new MockUp<MvRefreshArbiter>() {
-            /**
-             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
-             */
-            @Mock
-            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
-                                                                boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
     }
 
     @Before
@@ -232,5 +210,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
         //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
         assertNotContains(replayPair.second, "mv_tbl_mock_001");
+    }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
     }
 }

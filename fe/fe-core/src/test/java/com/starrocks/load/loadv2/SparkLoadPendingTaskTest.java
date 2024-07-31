@@ -40,6 +40,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -70,6 +71,7 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.common.MetaUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -97,6 +99,8 @@ public class SparkLoadPendingTaskTest {
         // columns
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("c1", Type.BIGINT, true, null, false, null, ""));
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(columns.get(0).getColumnId(), columns.get(0));
 
         // indexes
         Map<Long, List<Column>> indexIdToSchema = Maps.newHashMap();
@@ -144,6 +148,8 @@ public class SparkLoadPendingTaskTest {
                 result = KeysType.DUP_KEYS;
                 table.getBaseIndexId();
                 result = indexId;
+                table.getIdToColumn();
+                result = idToColumn;
             }
         };
 
@@ -233,6 +239,11 @@ public class SparkLoadPendingTaskTest {
         columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));
         columns.add(new Column("c3", Type.INT, false, AggregateType.SUM, false, null, ""));
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : columns) {
+            idToColumn.put(column.getColumnId(), column);
+        }
+
         // indexes
         Map<Long, List<Column>> indexIdToSchema = Maps.newHashMap();
         long index1Id = 3L;
@@ -261,15 +272,18 @@ public class SparkLoadPendingTaskTest {
         PartitionKeyDesc partitionKeyDesc1 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc1 = new SingleRangePartitionDesc(false, "p1", partitionKeyDesc1, null);
         partitionDesc1.analyze(1, null);
-        partitionInfo.handleNewSinglePartitionDesc(partitionDesc1, partition1Id, false);
+        partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
+                partitionDesc1, partition1Id, false);
         PartitionKeyDesc partitionKeyDesc2 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("20")));
         SingleRangePartitionDesc partitionDesc2 = new SingleRangePartitionDesc(false, "p2", partitionKeyDesc2, null);
         partitionDesc2.analyze(1, null);
-        partitionInfo.handleNewSinglePartitionDesc(partitionDesc2, partition2Id, false);
+        partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
+                partitionDesc2, partition2Id, false);
         PartitionKeyDesc partitionKeyDesc3 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc3 = new SingleRangePartitionDesc(false, "tp3", partitionKeyDesc1, null);
         partitionDesc3.analyze(1, null);
-        partitionInfo.handleNewSinglePartitionDesc(partitionDesc3, partition3Id, true);
+        partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
+                partitionDesc3, partition3Id, true);
 
         new Expectations() {
             {
@@ -301,6 +315,8 @@ public class SparkLoadPendingTaskTest {
                 result = KeysType.AGG_KEYS;
                 table.getBaseIndexId();
                 result = index1Id;
+                table.getIdToColumn();
+                result = idToColumn;
             }
         };
 

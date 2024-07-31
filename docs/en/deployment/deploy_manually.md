@@ -53,7 +53,8 @@ The following procedures are performed on an FE instance.
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -129,7 +130,8 @@ The following procedures are performed on the BE instances.
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -188,7 +190,8 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    c. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 

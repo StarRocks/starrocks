@@ -82,7 +82,7 @@ public class UpdateAnalyzer {
             }
         }
 
-        if (table.isOlapTable()) {
+        if (table.isOlapTable() || table.isCloudNativeTable()) {
             if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
@@ -147,7 +147,7 @@ public class UpdateAnalyzer {
                 selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (col.isGeneratedColumn()) {
-                Expr expr = col.generatedColumnExpr();
+                Expr expr = col.getGeneratedColumnExpr(table.getIdToColumn());
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
                 selectList.addItem(item);

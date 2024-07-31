@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -243,12 +244,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 return visit(optExpression, context);
             }
 
-            // no-group-by don't push down
-            if (aggOp.getGroupingKeys().isEmpty()) {
-                logMVRewrite(mvRewriteContext, "No group by can't push down");
-                return visit(optExpression, context);
-            }
-
             context = new AggregatePushDownContext();
             context.setAggregator(aggOp);
             return context;
@@ -321,7 +316,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
     // 3. return input AggRewriteInfo as return value if you want to rewrite upper nodes.
     private class PostVisitor extends OptExpressionVisitor<AggRewriteInfo, AggRewriteInfo> {
         private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
-            return context.isEmpty() || context.groupBys.isEmpty() || optExpression.getOp().hasLimit();
+            return context.isEmpty() || optExpression.getOp().hasLimit();
         }
 
         // Default visit method do nothing but just pass the AggRewriteInfo to its parent
@@ -395,6 +390,11 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                     List<ScalarOperator> newArgs = aggCall.getChildren();
                     newArgs.set(0, newArg0);
                     String rollupFuncName = getRollupFunctionName(aggCall, false);
+                    // eg: count(distinct) + rollup
+                    if (rollupFuncName == null) {
+                        logMVRewrite(mvRewriteContext, "Get rollup function name is null, aggCall:{}", aggCall);
+                        return AggRewriteInfo.NOT_REWRITE;
+                    }
                     Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                     Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -721,7 +721,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             logMVRewrite(mvRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
 
             MvRewriteContext newMvRewriteContext = new MvRewriteContext(mvRewriteContext.getMaterializationContext(),
-                    queryTables, optExpression, queryColumnRefRewriter, queryPredicateSplit, null, rule);
+                    queryTables, optExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
             // set aggregate push down context to be used in the final stage
             newMvRewriteContext.setAggregatePushDownContext(ctx);
             AggregatedMaterializedViewRewriter rewriter = new AggregatedMaterializedViewRewriter(newMvRewriteContext);

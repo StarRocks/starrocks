@@ -322,6 +322,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.2.3
 
+### connector_sink_target_max_file_size
+
+* **Description**: Specifies the maximum size of target file for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The limit is not exact and is applied on a best-effort basis.
+* **Unit**: Bytes
+* **Default**: 1073741824
+* **Data type**: Long
+* **Introduced in**: v3.3.0
+
 ### count_distinct_column_buckets
 
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
@@ -476,6 +484,23 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
 
+
+### enable_lake_tablet_internal_parallel
+
+* **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v3.3.0
+
+### tablet_internal_parallel_mode
+
+* **Description**: Internal Parallel Scan strategy of tablets. Valid Values:
+  * `auto`: When the number of Tablets to be scanned on BE or CN nodes is less than the Degree of Parallelism (DOP), the system automatically determines whether Parallel Scan is needed based on the estimated size of the Tablets.
+  * `force_split`: Forces the splitting of Tablets and performs Parallel Scan.
+* **Default**: auto
+* **Data type**: String
+* **Introduced in**: v2.5.0
+
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
@@ -487,6 +512,18 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
+
+### enable_datacache_io_adaptor
+
+* **Description**: Whether to enable the Data Cache I/O Adaptor. Setting this to `true` enables the feature. When this feature is enabled, the system automatically routes some cache requests to remote storage when the disk I/O load is high, reducing disk pressure.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
+### enable_file_metacache
+
+* **Description**: Whether to enable metadata cache for files in remote storage (Footer Cache). Setting this to `true` enables the feature. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing. This feature uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+* **Default**: true
+* **Introduced in**: v3.3.0
 
 ### enable_tablet_internal_parallel
 

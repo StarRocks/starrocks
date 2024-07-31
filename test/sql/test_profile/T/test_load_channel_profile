@@ -36,16 +36,4 @@ INSERT INTO `t0` (v1, v2, v3) values
     (2, 4, 11),
     (2, 4, 12);
 
-SET enable_profile="true";
-
-INSERT INTO `t0` SELECT * FROM `t0`;
-
-with
-    profile as (
-        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
-    ), result as (
-        select count(*) as value from profile where line like "%LoadChannel%"
-        UNION ALL
-        select count(*) as value from profile where line like "%Index (id=%"
-    )
-select * from result order by value;
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh

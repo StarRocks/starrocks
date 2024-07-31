@@ -317,6 +317,11 @@ private:
 class DefaultWorkGroupInitialization {
 public:
     DefaultWorkGroupInitialization();
+
+    // create or renew default group
+    std::shared_ptr<WorkGroup> create_default_workgroup();
+    // create or renew default mv group
+    std::shared_ptr<WorkGroup> create_default_mv_workgroup();
 };
 
 } // namespace workgroup

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
@@ -34,7 +33,7 @@ public class RemotePathKey {
     public static class HudiContext {
         // ---- concurrent initialization -----
         public AtomicBoolean init = new AtomicBoolean(false);
-        public ReentrantLock lock = new FairReentrantLock();
+        public ReentrantLock lock = new ReentrantLock();
         // ---- actual fields -----
         public HoodieTableFileSystemView fsView = null;
         public HoodieTimeline timeline = null;

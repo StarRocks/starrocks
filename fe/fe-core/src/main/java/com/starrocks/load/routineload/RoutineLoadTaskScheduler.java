@@ -37,7 +37,6 @@ package com.starrocks.load.routineload;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
@@ -48,9 +47,10 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TStatus;
@@ -198,7 +198,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
 
         } catch (RoutineLoadPauseException e) {
-            String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
+            String msg = "FE aborts the task with reason: failed to check task ready to execute, err: " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
                     JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg), false);
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -206,8 +206,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                     .build());
             return;
         } catch (Exception e) {
-            LOG.warn("check task ready to execute failed", e);
-            delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            LOG.warn("failed to check task ready to execute", e);
+            delayPutToQueue(routineLoadTaskInfo, "failed to check task ready to execute, err: " + e.getMessage());
             return;
         }
 
@@ -332,13 +332,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
-
-        boolean ok = false;
-        BackendService.Client client = null;
         try {
-            client = ClientPool.backendPool.borrowObject(address);
-            TStatus tStatus = client.submit_routine_load_task(Lists.newArrayList(tTask));
-            ok = true;
+            TStatus tStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    address,
+                    client -> client.submit_routine_load_task(Lists.newArrayList(tTask)));
 
             if (tStatus.getStatus_code() != TStatusCode.OK) {
                 throw new LoadException("failed to submit task. error code: " + tStatus.getStatus_code()
@@ -347,12 +345,6 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             LOG.debug("send routine load task {} to BE: {}", DebugUtil.printId(tTask.id), beId);
         } catch (Exception e) {
             throw new LoadException("failed to send task: " + e.getMessage(), e);
-        } finally {
-            if (ok) {
-                ClientPool.backendPool.returnObject(address, client);
-            } else {
-                ClientPool.backendPool.invalidateObject(address, client);
-            }
         }
     }
 

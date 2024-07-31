@@ -375,14 +375,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, 100,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100, 100,
                                                      indexToNewSchemaId, false));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, 101,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101, 101,
                                                      indexToNewSchemaId, true));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
@@ -391,7 +391,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
+                        .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
                                                      false));
         tbl.setState(beforeState);
     }
@@ -424,7 +424,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
             GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
         }
 
@@ -433,7 +433,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
             GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
         }
     }

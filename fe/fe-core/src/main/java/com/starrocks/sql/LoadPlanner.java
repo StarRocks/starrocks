@@ -377,8 +377,8 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                    col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                    col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }

@@ -50,6 +50,9 @@ void DiskSpaceMonitor::start() {
     if (!_stopped.load(std::memory_order_acquire)) {
         return;
     }
+    if (_dir_spaces.empty()) {
+        return;
+    }
     _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
     Thread::set_thread_name(_adjust_datacache_thread, "adjust_datacache");
@@ -168,8 +171,14 @@ void DiskSpaceMonitor::_init_spaces_by_cache_dir() {
     _total_cache_usage = 0;
     for (auto& dir_space : _dir_spaces) {
         auto ret = _fs->directory_size(dir_space.path);
-        if (ret.ok()) {
-            _total_cache_usage += ret.value();
+        if (ret.ok() && ret.value() > 0) {
+            int disk_id = _fs->disk_id(dir_space.path);
+            auto& disk = _disk_stats[disk_id];
+            // The space under datacache directories can be reused, so ignore their usage.
+            disk.available_bytes += ret.value();
+            if (disk.available_bytes > disk.capacity_bytes) {
+                disk.available_bytes = disk.capacity_bytes;
+            }
         }
         _total_cache_quota += dir_space.size;
     }

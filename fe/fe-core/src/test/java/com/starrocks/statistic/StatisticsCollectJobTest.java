@@ -27,9 +27,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -357,7 +357,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1), Maps.newHashMap());
-        basicStatsMeta.increaseUpdateRows(10000000L);
+        basicStatsMeta.increaseDeltaRows(10000000L);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -380,7 +380,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         BasicStatsMeta basicStatsMeta2 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap());
+                LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap(),
+                basicStatsMeta.getUpdateRows());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -390,7 +391,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(0, jobs2.size());
+        Assert.assertEquals(1, jobs2.size());
     }
 
     @Test
@@ -783,7 +784,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        new MockUp<ConnectorPartitionTraits.DefaultTraits>() {
+        new MockUp<DefaultTraits>() {
             @Mock
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 return ImmutableMap.of("date=2020-01-01", new com.starrocks.connector.iceberg.Partition(
@@ -816,7 +817,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         100));
             }
         };
-        new MockUp<ConnectorPartitionTraits.DefaultTraits>() {
+        new MockUp<DefaultTraits>() {
             @Mock
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 long needUpdateTime = statsUpdateTime.plusSeconds(120).
@@ -866,33 +867,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testSplitColumns() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
-                        StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
-                        Maps.newHashMap(),
-                        StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN));
-        Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
-
-        int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
-        Assert.assertEquals(5, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query);
-        Assert.assertEquals(2, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query + 1);
-        Assert.assertEquals(1, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
-        Assert.assertEquals(5, splitSize);
-    }
-
-    @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
                 .getDb("test").getTable("t0_stats_partition");
@@ -921,9 +895,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, collectSqlList.size());
         assertContains(collectSqlList.get(0).toString(), "v1", "v2", "v3", "v4", "v5");
         assertContains(collectSqlList.get(0).toString(), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
+        Assert.assertEquals(50, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`column_key`)"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p0`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p1`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p9`"));
@@ -1281,12 +1253,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
 
-        String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
-                dbid, olapTable.getId(), Lists.newArrayList("v1", "count"),
-                Lists.newArrayList(Type.BIGINT, Type.INT), 100L);
-        assertContains(sql, "`stats`.`tcount`  Tablet(");
-        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
-
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
                 db, olapTable,
                 olapTable.getAllPartitionIds(),
@@ -1294,7 +1260,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
-        sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
+        String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);

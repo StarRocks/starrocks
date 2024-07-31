@@ -36,7 +36,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
           _partition_limit(partition_limit),
           _topn_type(topn_type) {}
 
-Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
+Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
@@ -56,11 +56,11 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     }
 
     _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
-    return _chunks_partitioner->prepare(state);
+    return _chunks_partitioner->prepare(state, runtime_profile);
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    auto st = _chunks_partitioner->offer<true>(
+    RETURN_IF_ERROR(_chunks_partitioner->offer<true>(
             chunk,
             [this, state](size_t partition_idx) {
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
@@ -69,11 +69,11 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-            });
+            }));
     if (_chunks_partitioner->is_passthrough()) {
         RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
     }
-    return st;
+    return Status::OK();
 }
 
 void LocalPartitionTopnContext::sink_complete() {

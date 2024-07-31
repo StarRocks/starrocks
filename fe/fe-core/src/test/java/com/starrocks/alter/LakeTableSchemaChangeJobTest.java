@@ -28,6 +28,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,6 +53,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJobTest {
@@ -80,7 +82,7 @@ public class LakeTableSchemaChangeJobTest {
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
     private LakeTableSchemaChangeJob getAlterJob(Table table) {
@@ -210,7 +212,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
                 throw new AlterCancelException("Create tablet failed");
             }
         };
@@ -430,8 +433,8 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime, long warehouseId)
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId)
                     throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
@@ -495,8 +498,8 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime, long warehouseId) {
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId) {
                 // nothing to do
             }
         };
@@ -593,5 +596,16 @@ public class LakeTableSchemaChangeJobTest {
         alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
         schemaChangeHandler2.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+     
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
     }
 }

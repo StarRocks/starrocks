@@ -29,6 +29,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -139,7 +140,7 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            filters.add(p.toJDBCSQL());
+            filters.add(AstToStringBuilder.toString(p));
         }
     }
 

@@ -14,24 +14,17 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.api.client.util.Lists;
 import com.google.api.client.util.Preconditions;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.common.Pair;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -47,11 +40,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,7 +54,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
+import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
@@ -155,15 +148,12 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
 
         // mv's to refresh partition info
-        MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
-        logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
+        MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo(mv, true);
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             logMVRewrite(context, this, "Get mv to refresh partition info failed, and redirect to mv's defined query");
             return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
         }
-
-        Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-        logMVRewrite(context, this, "MV to refresh partitions: {}", partitionNamesToRefresh);
+        logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
@@ -210,7 +200,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
-        mvUpdateInfo.getMvToRefreshPartitionNames().addAll(mv.getPartitionNames());
+        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
@@ -240,7 +230,8 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             logMVRewrite(mvContext, "Failed to get mv to refresh partition info: {}", mvContext.getMv().getName());
             return null;
         }
-        MVCompensation mvCompensation = getMvCompensation(mvContext, mvUpdateInfo);
+        MVCompensationBuilder mvCompensationBuilder = new MVCompensationBuilder(mvContext, mvUpdateInfo);
+        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation();
         if (mvCompensation == null) {
             logMVRewrite(mvContext, "Failed to get mv compensation info: {}", mvContext.getMv().getName());
             return null;
@@ -254,70 +245,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                     mvCompensation);
             return null;
         }
-
         OptExpression transparentPlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, mvCompensation,
                 expectOutputColumns);
         return transparentPlan;
-    }
-
-    /**
-     * Get mv compensation info by mvToRefreshPartitionInfo.
-     */
-    private static MVCompensation getMvCompensation(MaterializationContext mvContext,
-                                                    MvUpdateInfo mvUpdateInfo) {
-        SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
-
-        // If no partition to refresh, return directly.
-        if (mvUpdateInfo.getMvToRefreshPartitionNames().isEmpty()) {
-            return MVCompensation.createNoCompensateState(sessionVariable);
-        }
-
-        MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
-        if (partitionTableAndColumns == null) {
-            logMVRewrite("MV's not partitioned, failed to get partition keys: {}", mv.getName());
-            return MVCompensation.createUnkownState(sessionVariable);
-        }
-
-        Table refBaseTable = partitionTableAndColumns.first;
-        Set<String> refTablePartitionNamesToRefresh = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
-        if (refTablePartitionNamesToRefresh == null) {
-            return MVCompensation.createUnkownState(sessionVariable);
-        }
-
-        if (refBaseTable.isNativeTableOrMaterializedView()) {
-            // What if nested mv?
-            List<Long> refTablePartitionIdsToRefresh = refTablePartitionNamesToRefresh.stream()
-                    .map(name -> refBaseTable.getPartition(name))
-                    .map(p -> p.getId())
-                    .collect(Collectors.toList());
-            return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, refTablePartitionIdsToRefresh, null);
-        } else if (MvPartitionCompensator.isTableSupportedPartitionCompensate(refBaseTable)) {
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo =
-                    mvUpdateInfo.getBaseTableUpdateInfos().get(refBaseTable);
-            if (mvBaseTableUpdateInfo == null) {
-                return null;
-            }
-            Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
-                    mvBaseTableUpdateInfo.getPartitionNameWithRanges();
-            List<PartitionKey> partitionKeys = Lists.newArrayList();
-            try {
-                for (String partitionName : refTablePartitionNamesToRefresh) {
-                    Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
-                    Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
-                    partitionKeys.add(partitionKeyRange.lowerEndpoint());
-                }
-            } catch (Exception e) {
-                logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
-                        DebugUtil.getStackTrace(e));
-                LOG.warn("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
-                        DebugUtil.getStackTrace(e));
-                return MVCompensation.createUnkownState(sessionVariable);
-            }
-            return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, null, partitionKeys);
-        } else {
-            return MVCompensation.createUnkownState(sessionVariable);
-        }
     }
 
     /**

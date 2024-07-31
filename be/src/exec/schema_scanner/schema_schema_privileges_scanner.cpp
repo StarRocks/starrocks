@@ -22,11 +22,11 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemaPrivilegesScanner::_s_db_privs_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaSchemaPrivilegesScanner::SchemaSchemaPrivilegesScanner()

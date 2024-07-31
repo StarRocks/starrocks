@@ -40,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,11 +126,16 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    LOG.info("failedTablets is {}", response.failedTablets);
-                    response.failedTablets.forEach(shards::remove);
+                    TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
+                    LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
+
+                    // ignore INVALID_ARGUMENT error, treat it as success
+                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
+                        response.failedTablets.forEach(shards::remove);
+                    }
                 }
             } catch (Throwable e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }

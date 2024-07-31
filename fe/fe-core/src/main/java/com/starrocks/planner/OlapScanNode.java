@@ -43,7 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -52,6 +51,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -83,6 +83,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
@@ -368,8 +369,10 @@ public class OlapScanNode extends ScanNode {
         } else {
             keyRangeById = partitionInfo.getIdToRange(false);
         }
-        PartitionPruner partitionPruner = new RangePartitionPruner(keyRangeById,
-                partitionInfo.getPartitionColumns(), columnFilters);
+        PartitionPruner partitionPruner = new RangePartitionPruner(
+                keyRangeById,
+                partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
+                columnFilters);
         return partitionPruner.prune();
     }
 
@@ -380,7 +383,7 @@ public class OlapScanNode extends ScanNode {
         if (DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
-                    info.getDistributionColumns(),
+                    MetaUtils.getColumnsByColumnIds(olapTable, info.getDistributionColumns()),
                     columnFilters,
                     info.getBucketNum());
             return distributionPruner.prune();
@@ -504,6 +507,13 @@ public class OlapScanNode extends ScanNode {
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
+                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+            }
+        }
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
@@ -529,12 +539,6 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
-                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
-                }
-
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash, warehouseId);
             } else {
@@ -871,7 +875,7 @@ public class OlapScanNode extends ScanNode {
                     // check partition column
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                     if (partitionInfo instanceof RangePartitionInfo) {
-                        List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
+                        List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
                         if (!partitionColumns.isEmpty() && partitionColumns.get(0).getName().equals(columnName)) {
                             partitionKeyAscHint = Optional.of(outputAscHint);
                         }
@@ -888,14 +892,16 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
-        Set<String> bfColumns = olapTable.getBfColumns();
+        Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
+        long schemaId = 0;
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
+                schemaId = indexMeta.getSchemaId();
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
-                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
+                    tColumn.setColumn_name(col.getColumnId().getId());
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
                     columnsDesc.add(tColumn);
                 }
@@ -961,6 +967,7 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.olap_scan_node.setColumns_desc(columnsDesc);
+            msg.olap_scan_node.setSchema_id(schemaId);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
@@ -1118,10 +1125,8 @@ public class OlapScanNode extends ScanNode {
         if (!(partitionInfo instanceof RangePartitionInfo)) {
             return Collections.emptySet();
         }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        Set<String> partColNames =
-                rangePartitionInfo.getPartitionColumns().stream().map(Column::getName).collect(
-                        Collectors.toSet());
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
+        Set<String> partColNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toSet());
 
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
         List<Pair<SlotId, String>> slotIdToColNames =
@@ -1171,9 +1176,9 @@ public class OlapScanNode extends ScanNode {
         return optPartitionSlotId;
     }
 
-    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode,
-                                                RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+    private List<Expr> decomposeRangePredicates(List<Column> partitionColumns, FragmentNormalizer normalizer,
+                                                TNormalPlanNode planNode, RangePartitionInfo rangePartitionInfo,
+                                                List<Expr> conjuncts) {
         Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
         selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
 
@@ -1185,7 +1190,7 @@ public class OlapScanNode extends ScanNode {
         } catch (AnalysisException ignored) {
         }
         Preconditions.checkState(optSlotId.isPresent());
-        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, optSlotId.get());
+        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, partitionColumns, optSlotId.get());
     }
 
     private void normalizeConjunctsNonLeft(FragmentNormalizer normalizer, TNormalPlanNode planNode) {
@@ -1205,14 +1210,15 @@ public class OlapScanNode extends ScanNode {
             return;
         }
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
         // TODO (by satanson): predicates' decomposition
         //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
         //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
         //  supported.
         if (partitionInfo.isRangePartition() &&
-                ((RangePartitionInfo) partitionInfo).getPartitionColumns().size() == 1) {
+                ((RangePartitionInfo) partitionInfo).getPartitionColumnsSize() == 1) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);
+            conjuncts = decomposeRangePredicates(partitionColumns, normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
             associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizer.createSimpleRangeMap(getSelectedPartitionIds());

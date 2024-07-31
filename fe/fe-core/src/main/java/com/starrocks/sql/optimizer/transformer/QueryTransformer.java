@@ -292,10 +292,22 @@ public class QueryTransformer {
         }
 
         final ExpressionMapping expressionMapping = subOpt.getExpressionMapping();
-        boolean allColumnRef = projectExpressions.stream()
-                .map(expression -> SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
-                        columnRefFactory))
-                .allMatch(ScalarOperator::isColumnRef);
+        boolean allColumnRef = true;
+        Map<Expr, ColumnRefOperator> tempMapping = new HashMap<>();
+        for (Expr expression : projectExpressions) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
+                    columnRefFactory);
+            if (!operator.isColumnRef()) {
+                allColumnRef = false;
+                tempMapping.clear();
+                break;
+            } else {
+                tempMapping.put(expression, (ColumnRefOperator) operator);
+            }
+        }
+        if (allColumnRef) {
+            expressionMapping.getExpressionToColumns().putAll(tempMapping);
+        }
 
         /*
          * If there is no expression calculate in partition and order by,
@@ -371,7 +383,7 @@ public class QueryTransformer {
     public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
-        if (aggregates.size() == 0 && groupByExpressions.size() == 0) {
+        if (aggregates.isEmpty() && groupByExpressions.isEmpty()) {
             return subOpt;
         }
 
@@ -498,7 +510,7 @@ public class QueryTransformer {
                 // causing the data to be aggregated in advance.
                 // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
                 while (groupingID.contains(gid)) {
-                    gid += Math.pow(2, groupByColumnRefs.size());
+                    gid += (1L << groupByColumnRefs.size());
                 }
                 groupingID.add(gid);
             }

@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Flat JSON
+# [Preview] Flat JSON
 
 This topic introduces the basic concepts of the Flat JSON feature and how to use this feature.
 
@@ -168,7 +168,7 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 
    The complete profile is long and the following figure shows only Flat JSON-related metrics.
 
-   ![flat_json_profile](../assets/flat_json.png)
+   ![flat_json_profile](../_assets/flat_json.png)
 
 ## Other optional BE configurations
 

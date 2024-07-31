@@ -41,7 +41,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
@@ -62,10 +61,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveView;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
@@ -114,6 +110,8 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -135,6 +133,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
+import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -186,9 +185,11 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.replication.ReplicationMgr;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -220,6 +221,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.lang3.StringUtils;
@@ -291,6 +293,7 @@ public class GlobalStateMgr {
     private final RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
     private final ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
 
     private final ConsistencyChecker consistencyChecker;
     private final BackupHandler backupHandler;
@@ -301,6 +304,7 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -454,12 +458,16 @@ public class GlobalStateMgr {
 
     private final ReplicationMgr replicationMgr;
 
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
     private LockManager lockManager;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
+    private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
@@ -469,6 +477,8 @@ public class GlobalStateMgr {
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
     private TemporaryTableMgr temporaryTableMgr;
     private TemporaryTableCleaner temporaryTableCleaner;
+
+    private final GtidGenerator gtidGenerator;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -595,16 +605,16 @@ public class GlobalStateMgr {
         this.alterJobMgr = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
+        this.materializedViewMgr = new MaterializedViewMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
-        this.lock = new QueryableReentrantLock();
+        this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteMgr = new DeleteMgr();
@@ -711,6 +721,8 @@ public class GlobalStateMgr {
 
         this.lockManager = new LockManager();
 
+        this.gtidGenerator = new GtidGenerator();
+
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -740,6 +752,10 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
@@ -950,6 +966,10 @@ public class GlobalStateMgr {
         return replicationMgr;
     }
 
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
+    }
+
     public LockManager getLockManager() {
         return lockManager;
     }
@@ -976,6 +996,10 @@ public class GlobalStateMgr {
 
     public ShowExecutor getShowExecutor() {
         return showExecutor;
+    }
+
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1066,6 +1090,7 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+            createTableKeeper();
 
             // 7. init starosAgent
             if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
@@ -1240,6 +1265,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        keyMgr.initDefaultMasterKey();
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1265,6 +1291,8 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+
+        keyRotationDaemon.start();
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -1403,6 +1431,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+    // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
         File curFile = storage.getCurrentImageFile();
@@ -1441,11 +1471,13 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
                 .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
                 .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
-                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
                 .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1479,6 +1511,10 @@ public class GlobalStateMgr {
                      */
                     metaMgrMustExists.remove(srMetaBlockID);
                     LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                } catch (Throwable t) {
+                    LOG.warn("load meta block {} failed", srMetaBlockID, t);
+                    // throw the exception again, because the following steps will depend on this error.
+                    throw t;
                 } finally {
                     reader.close();
                 }
@@ -1570,6 +1606,8 @@ public class GlobalStateMgr {
         }
     }
 
+    // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
@@ -1608,11 +1646,13 @@ public class GlobalStateMgr {
                 insertOverwriteJobMgr.save(dos);
                 compactionMgr.save(dos);
                 streamLoadMgr.save(dos);
-                MaterializedViewMgr.getInstance().save(dos);
+                materializedViewMgr.save(dos);
                 globalFunctionMgr.save(dos);
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
+                keyMgr.save(dos);
+                pipeManager.getRepo().save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -1646,8 +1686,13 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
+                setInterval(Config.task_check_interval_second * 1000L);
             }
         };
+    }
+
+    public void createTableKeeper() {
+        tableKeeper = TableKeeper.startDaemon();
     }
 
     public void createTxnTimeoutChecker() {
@@ -2035,6 +2080,10 @@ public class GlobalStateMgr {
         return this.exportMgr;
     }
 
+    public MaterializedViewMgr getMaterializedViewMgr() {
+        return this.materializedViewMgr;
+    }
+
     public SmallFileMgr getSmallFileMgr() {
         return this.smallFileMgr;
     }
@@ -2279,9 +2328,10 @@ public class GlobalStateMgr {
             request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
+                TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
                         timeout,
-                        Config.thrift_rpc_retry_times,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -2295,6 +2345,11 @@ public class GlobalStateMgr {
         new Thread(task).start();
 
         return task;
+    }
+
+    private boolean supportRefreshTableType(Table table) {
+        return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
+                || table.isJDBCTable() || table.isDeltalakeTable();
     }
 
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
@@ -2311,10 +2366,14 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
-                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
-                throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
+            if (table == null) {
+                throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
+                        tblName);
+            }
+            if (!supportRefreshTableType(table)) {
+                throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
+                        "do not support refresh external table which type is %s", catalogName, dbName,
+                        tblName, table.getType());
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -2482,6 +2541,10 @@ public class GlobalStateMgr {
 
     public SlotProvider getLocalSlotProvider() {
         return localSlotProvider;
+    }
+
+    public GlobalLoadJobListenerBus getOperationListenerBus() {
+        return operationListenerBus;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {

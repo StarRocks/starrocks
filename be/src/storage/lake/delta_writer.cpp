@@ -205,7 +205,6 @@ Status DeltaWriterImpl::check_immutable() {
     if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
         if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
-            _tablet_manager->remove_in_writing_data_size(_tablet_id);
         }
         VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
                 << ", immutable_tablet_size=" << _immutable_tablet_size
@@ -271,7 +270,6 @@ inline Status DeltaWriterImpl::flush_async() {
                 }
                 if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
-                    _tablet_manager->remove_in_writing_data_size(_tablet_id);
                 }
                 VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
                         << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
@@ -339,6 +337,14 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
+        // When loading memory usage is larger than hard limit, we will reject new loading task.
+        if (!config::enable_new_load_on_memory_limit_exceeded &&
+            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+                                      config::load_process_max_memory_hard_limit_ratio)) {
+            return Status::MemoryLimitExceeded(
+                    "memory limit exceeded, please reduce load frequency or increase config "
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
+        }
         RETURN_IF_ERROR(reset_memtable());
     }
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
@@ -439,8 +445,10 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
+            op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
+            op_write->add_del_encryption_metas(f.encryption_meta);
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
@@ -454,7 +462,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     }
 
     // handle partial update
-    bool skip_pk_preload = false;
+    bool skip_pk_preload = config::skip_lake_pk_preload;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {

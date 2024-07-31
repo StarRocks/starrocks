@@ -71,6 +71,24 @@ If you have enabled FQDN access (supported from v2.4 onwards) and need to downgr
 
 ## Downgrade FE
 
+:::note
+
+To downgrade a cluster from v3.3.0 or later to v3.2, follow these steps before downgrading:
+
+1. Ensure that all ALTER TABLE SCHEMA CHANGE transactions initiated in the v3.3 cluster are either completed or canceled before downgrading.
+2. Clear all transaction history by executing the following command:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. Verify that there are no remaining historical records by running the following command:
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+:::
+
 After the compatibility configuration and the availability test, you can downgrade the FE nodes. You must first downgrade the Follower FE nodes and then the Leader FE node.
 
 1. Create a metadata snapshot.

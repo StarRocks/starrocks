@@ -218,6 +218,8 @@ public:
 
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
 
+    const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
 private:
@@ -293,6 +295,8 @@ private:
     PageHandle _sk_index_handle;
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
+
+    std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;

@@ -23,6 +23,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.connector.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,7 +107,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 continue;
             }
 
-            for (HiveTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+            for (DatabaseTableName cachedTableName : updateProcessor.getCachedTableNames()) {
                 String dbName = cachedTableName.getDatabaseName();
                 String tableName = cachedTableName.getTableName();
                 Table table;

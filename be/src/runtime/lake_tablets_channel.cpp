@@ -495,6 +495,9 @@ static void null_callback(const Status& status) {
 }
 
 void LakeTabletsChannel::_flush_stale_memtables() {
+    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+        return;
+    }
     bool high_mem_usage = false;
     if (_mem_tracker->limit_exceeded_by_ratio(70) ||
         (_mem_tracker->parent() != nullptr && _mem_tracker->parent()->limit_exceeded_by_ratio(70))) {
@@ -514,7 +517,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
                     log_flushed = true;
                     writer->flush(null_callback);
                 }
-            } else {
+            } else if (config::stale_memtable_flush_time_sec > 0) {
                 if (high_mem_usage && now - last_write_ts > config::stale_memtable_flush_time_sec) {
                     log_flushed = true;
                     writer->flush(null_callback);

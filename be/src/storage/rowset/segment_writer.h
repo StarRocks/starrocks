@@ -76,6 +76,7 @@ struct SegmentWriterOptions {
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
+    std::string encryption_meta;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -142,6 +143,8 @@ public:
     const std::string& segment_path() const;
 
     uint64_t current_filesz() const;
+
+    const std::string& encryption_meta() const { return _opts.encryption_meta; }
 
 private:
     Status _write_short_key_index();

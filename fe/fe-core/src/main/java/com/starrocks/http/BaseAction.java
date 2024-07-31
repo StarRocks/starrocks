@@ -326,13 +326,17 @@ public abstract class BaseAction implements IAction {
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)
             throws AccessDeniedException {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-        if (!parseAuthInfo(request, authInfo)) {
-            LOG.info("parse auth info failed, Authorization header {}, url {}",
-                    request.getAuthorizationHeader(), request.getRequest().uri());
-            throw new AccessDeniedException("Need auth information.");
+        try {
+            if (!parseAuthInfo(request, authInfo)) {
+                LOG.info("parse auth info failed, Authorization header {}, url {}",
+                        request.getAuthorizationHeader(), request.getRequest().uri());
+                throw new AccessDeniedException("Need auth information.");
+            }
+            LOG.debug("get auth info: {}", authInfo);
+            return authInfo;
+        } catch (Exception e) {
+            throw new AccessDeniedException(e.getMessage());
         }
-        LOG.debug("get auth info: {}", authInfo);
-        return authInfo;
     }
 
     private boolean parseAuthInfo(BaseRequest request, ActionAuthorizationInfo authInfo) {
@@ -354,9 +358,15 @@ public abstract class BaseAction implements IAction {
             // a colon(':')
             decodeBuf = Base64.decode(buf);
             String authString = decodeBuf.toString(CharsetUtil.UTF_8);
+            if (authString.isEmpty()) {
+                return false;
+            }
             // Note that password may contain colon, so can not simply use a
             // colon to split.
             int index = authString.indexOf(":");
+            if (index == -1) {
+                return false;
+            }
             authInfo.fullUserName = authString.substring(0, index);
             final String[] elements = authInfo.fullUserName.split("@");
             if (elements.length == 2) {

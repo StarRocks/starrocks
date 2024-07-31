@@ -45,8 +45,17 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
           _tablet_id(tablet_metadata->id()),
           _metadata(&tablet_metadata->rowsets(rowset_index)),
           _index(rowset_index),
-          _tablet_schema(GlobalTabletSchemaMap::Instance()->emplace(tablet_metadata->schema()).first),
-          _tablet_metadata(std::move(tablet_metadata)) {}
+          _tablet_metadata(std::move(tablet_metadata)) {
+    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
+    if (_tablet_metadata->rowset_to_schema().empty()) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    } else {
+        auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
+        CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
+        _tablet_schema =
+                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+    }
+}
 
 Rowset::~Rowset() {
     if (_tablet_metadata) {
@@ -309,6 +318,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
         auto segment_info = FileInfo{.path = segment_path};
         if (LIKELY(has_segment_size)) {
             segment_info.size = files_to_size.Get(index);
+        }
+        auto segment_encryption_metas_size = metadata().segment_encryption_metas_size();
+        if (segment_encryption_metas_size > 0) {
+            if (index >= segment_encryption_metas_size) {
+                string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}", _tablet_id,
+                                         metadata().id(), index, segment_encryption_metas_size);
+                LOG(ERROR) << msg;
+                return Status::Corruption(msg);
+            }
+            segment_info.encryption_meta = metadata().segment_encryption_metas(index);
         }
         index++;
 

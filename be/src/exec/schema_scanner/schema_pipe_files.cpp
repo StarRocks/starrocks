@@ -24,24 +24,24 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePipeFiles::_s_columns[] = {
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PIPE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PIPE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PIPE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PIPE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"FILE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FILE_VERSION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FILE_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"FILE_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LAST_MODIFIED", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"FILE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FILE_VERSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FILE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"FILE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LAST_MODIFIED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"LOAD_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STAGED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"START_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FINISH_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LOAD_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STAGED_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"START_LOAD_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FINISH_LOAD_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ERROR_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ERROR_LINE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ERROR_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"ERROR_LINE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaTablePipeFiles::SchemaTablePipeFiles()

@@ -98,6 +98,8 @@ set(RUNTIME_FILES
     table_function_table_sink.cpp
     blackhole_table_sink.cpp
     dictionary_cache_sink.cpp
+    type_pack.cpp
+    customized_result_writer.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

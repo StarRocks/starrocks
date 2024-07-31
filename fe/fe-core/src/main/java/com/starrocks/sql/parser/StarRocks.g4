@@ -643,7 +643,7 @@ refreshMaterializedViewStatement
     ;
 
 cancelRefreshMaterializedViewStatement
-    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Admin Statement ---------------------------------------------------------
@@ -856,6 +856,8 @@ alterClause
     | compactionClause
     | modifyCommentClause
     | optimizeClause
+    | addFieldClause
+    | dropFieldClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1004,6 +1006,22 @@ rollupRenameClause
 
 compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
+    ;
+
+subfieldName
+    : identifier | ARRAY_ELEMENT
+    ;
+
+nestedFieldName
+    : subfieldName (DOT_IDENTIFIER | '.' subfieldName)*
+    ;
+
+addFieldClause
+    : MODIFY COLUMN identifier ADD FIELD subfieldDesc (FIRST | AFTER identifier)? properties?
+    ;
+
+dropFieldClause
+    : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
 // ---------Alter partition clause---------
@@ -2359,11 +2377,19 @@ listPartitionDesc
     ;
 
 singleItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN listPartitionValueList propertyList?
     ;
 
 multiItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' listPartitionValueList (',' listPartitionValueList)* ')' propertyList?
+    ;
+
+listPartitionValueList
+    : '(' listPartitionValue (',' listPartitionValue)* ')'
+    ;
+
+listPartitionValue
+    : NULL | string
     ;
 
 stringList
@@ -2526,7 +2552,7 @@ mapType
     ;
 
 subfieldDesc
-    : identifier type
+    : (identifier | nestedFieldName) type
     ;
 
 subfieldDescs
@@ -2663,4 +2689,6 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF
+    | FIELD
+    | ARRAY_ELEMENT
     ;

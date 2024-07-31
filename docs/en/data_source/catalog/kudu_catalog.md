@@ -2,7 +2,7 @@
 displayed_sidebar: "English" 
 ---
 
-# Kudu catalog
+# [Experimental] Kudu catalog
 
 StarRocks supports Kudu catalogs from v3.3 onwards.
 

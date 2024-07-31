@@ -21,17 +21,14 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
+import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -41,10 +38,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
@@ -54,17 +48,12 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -259,179 +248,6 @@ public class MaterializedViewTest {
         Assert.assertEquals("mv_name", tableDescriptor.getTableName());
     }
 
-    // This test is temporarily removed because it is unstable,
-    // and it will be added back when the cause of the problem is found and fixed.
-    public void testSinglePartitionSerialization(@Mocked GlobalStateMgr globalStateMgr,
-                                                 @Mocked Database database) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getDb(100);
-                result = database;
-
-                database.getTable(10L);
-                result = null;
-
-                database.getTable(20L);
-                result = null;
-
-                database.getTable(30L);
-                result = null;
-            }
-        };
-        PartitionInfo partitionInfo = new SinglePartitionInfo();
-        partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
-        partitionInfo.setReplicationNum(1, (short) 3);
-        partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
-        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
-        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(10, Lists.newArrayList(columns.get(0)));
-        MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
-                partitionInfo, hashDistributionInfo, refreshScheme);
-        mv.setBaseIndexId(1);
-        mv.setIndexMeta(1L, "mv_name", columns, 0,
-                111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
-        MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
-        Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
-        mv.addPartition(partition);
-
-        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 10L);
-        baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 20L);
-        baseTableInfos.add(baseTableInfo2);
-        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 30L);
-        baseTableInfos.add(baseTableInfo3);
-
-        mv.setBaseTableInfos(baseTableInfos);
-
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
-        mv.write(out);
-
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
-
-        Table table = Table.read(in);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView materializedView = (MaterializedView) table;
-        Assert.assertTrue(mv.equals(materializedView));
-        Assert.assertEquals(mv.getName(), materializedView.getName());
-        PartitionInfo partitionInfo1 = materializedView.getPartitionInfo();
-        Assert.assertTrue(partitionInfo1 != null);
-        Assert.assertEquals(PartitionType.UNPARTITIONED, partitionInfo1.getType());
-        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-        Assert.assertTrue(distributionInfo != null);
-        Assert.assertTrue(distributionInfo instanceof HashDistributionInfo);
-        Assert.assertEquals(10, ((HashDistributionInfo) distributionInfo).getBucketNum());
-        Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
-    }
-
-    public RangePartitionInfo generateRangePartitionInfo(Database database, OlapTable baseTable)
-            throws DdlException, AnalysisException, NotImplementedException {
-        //add columns
-        List<Column> partitionColumns = baseTable.getPartitionInfo().getPartitionColumns();
-        List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
-        int columns = partitionColumns.size();
-
-        //add RangePartitionDescs
-        PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20180101")),
-                Lists.newArrayList(new PartitionValue("20190101")));
-
-        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
-
-        List<Expr> exprs = Lists.newArrayList();
-        TableName tableName = new TableName(database.getFullName(), "mv_name");
-        SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        StringLiteral quarterStringLiteral = new StringLiteral("quarter");
-        FunctionCallExpr quarterFunctionCallExpr =
-                new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
-        exprs.add(quarterFunctionCallExpr);
-
-        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns, PartitionType.RANGE);
-
-        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(columns, null);
-            partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
-        }
-
-        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            singleRangePartitionDesc.analyze(columns, null);
-            partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20001L, true);
-        }
-
-        return partitionInfo;
-    }
-
-    @Test
-    public void testRangePartitionSerialization() throws Exception {
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable baseTable = ((OlapTable) testDb.getTable("tbl1"));
-
-        RangePartitionInfo partitionInfo = generateRangePartitionInfo(testDb, baseTable);
-        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
-        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(10, Lists.newArrayList(columns.get(0)));
-        MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv_name", columns, KeysType.AGG_KEYS,
-                partitionInfo, hashDistributionInfo, refreshScheme);
-        mv.setBaseIndexId(1);
-        mv.setIndexMeta(1L, "mv_name", columns, 0,
-                111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
-        MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
-        Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
-        mv.addPartition(partition);
-
-        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), testDb.getFullName(),
-                baseTable.getName(), baseTable.getId());
-        baseTableInfos.add(baseTableInfo);
-        mv.setBaseTableInfos(baseTableInfos);
-        mv.setViewDefineSql("select * from test.tbl1");
-
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
-        mv.write(out);
-
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
-
-        Table table = Table.read(in);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView materializedView2 = (MaterializedView) table;
-        Assert.assertTrue(mv.equals(materializedView2));
-        Assert.assertEquals(mv.getName(), materializedView2.getName());
-        PartitionInfo partitionInfo2 = materializedView2.getPartitionInfo();
-        Assert.assertTrue(partitionInfo2 != null);
-        Assert.assertEquals(PartitionType.RANGE, partitionInfo2.getType());
-        RangePartitionInfo rangePartitionInfo2 = (RangePartitionInfo) partitionInfo2;
-        Assert.assertTrue(partitionInfo.getRange(20000L).equals(rangePartitionInfo2.getRange(20000L)));
-        DistributionInfo distributionInfo2 = materializedView2.getDefaultDistributionInfo();
-        Assert.assertTrue(distributionInfo2 != null);
-        Assert.assertTrue(distributionInfo2 instanceof HashDistributionInfo);
-        Assert.assertEquals(10, distributionInfo2.getBucketNum());
-        Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo2).getDistributionColumns().size());
-    }
-
     @Test
     public void testRenameMaterializedView() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
@@ -465,7 +281,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(table);
         // test partition related info
         MaterializedView oldMv = (MaterializedView) table;
-        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
@@ -474,7 +290,7 @@ public class MaterializedViewTest {
         connectContext.executeSql("refresh materialized view mv_to_rename with sync mode");
         Optional<Long> maxTime = oldMv.maxBaseTableRefreshTimestamp();
         Assert.assertTrue(maxTime.isPresent());
-        Pair<Table, Column> pair = oldMv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> pair = MaterializedViewTestBase.getRefBaseTablePartitionColumn(oldMv);
         Assert.assertEquals("tbl1", pair.first.getName());
 
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
@@ -487,7 +303,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(mv);
         Assert.assertEquals("mv_new_name", mv.getName());
         ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) mv.getPartitionInfo();
-        List<Expr> exprs = partitionInfo.getPartitionExprs();
+        List<Expr> exprs = partitionInfo.getPartitionExprs(mv.getIdToColumn());
         Assert.assertEquals(1, exprs.size());
         Assert.assertTrue(exprs.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) exprs.get(0);
@@ -502,7 +318,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(mv2);
         Assert.assertEquals("mv_new_name2", mv2.getName());
         ExpressionRangePartitionInfo partitionInfo2 = (ExpressionRangePartitionInfo) mv2.getPartitionInfo();
-        List<Expr> exprs2 = partitionInfo2.getPartitionExprs();
+        List<Expr> exprs2 = partitionInfo2.getPartitionExprs(mv2.getIdToColumn());
         Assert.assertEquals(1, exprs2.size());
         Assert.assertTrue(exprs2.get(0) instanceof FunctionCallExpr);
         Expr rightChild = exprs2.get(0).getChild(1);
@@ -799,11 +615,11 @@ public class MaterializedViewTest {
         String bloomfilterSql = "alter table test.index_mv_to_check set (\"bloom_filter_columns\"=\"k2\")";
 
         AlterTableStmt alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        DDLStmtExecutor.execute(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bloomfilterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        DDLStmtExecutor.execute(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         Assert.assertEquals(QueryState.MysqlStateType.OK, connectContext.getState().getStateType());
@@ -842,7 +658,7 @@ public class MaterializedViewTest {
         AlterTableStmt alterViewStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
         Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
                 DdlException.class,
-                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
+                () -> DDLStmtExecutor.execute(alterViewStmt, connectContext));
     }
 
     public void testCreateMV(String mvSql) throws Exception {

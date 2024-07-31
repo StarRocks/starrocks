@@ -211,11 +211,15 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
+    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
+
     bool use_datacache = false;
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
     int32_t datacache_evict_probability = 0;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;

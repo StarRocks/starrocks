@@ -81,6 +81,24 @@ mysql> SELECT parse_json('{star: "rocks"}');
 +-------------------------------+
 ```
 
+Example 6: If a JSON key contains a '.', for example, 'a.1', it must be escaped with '\\' or you need to enclose the entire key value along with double quotes in single quotes.
+
+
+```plaintext
+mysql> select parse_json('{"b":4, "a.1": "1"}')->"a\\.1";
++--------------------------------------------+
+| parse_json('{"b":4, "a.1": "1"}')->'a\\.1' |
++--------------------------------------------+
+| "1"                                        |
++--------------------------------------------+
+mysql> select parse_json('{"b":4, "a.1": "1"}')->'"a.1"';
++--------------------------------------------+
+| parse_json('{"b":4, "a.1": "1"}')->'"a.1"' |
++--------------------------------------------+
+| "1"                                        |
++--------------------------------------------+
+```
+
 ## Keywords
 
 parse_json, parse json

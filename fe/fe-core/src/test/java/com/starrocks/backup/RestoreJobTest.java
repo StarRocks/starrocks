@@ -54,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -288,9 +289,6 @@ public class RestoreJobTest {
                     for (Tablet tablet : index.getTablets()) {
                         BackupTabletInfo tabletInfo = new BackupTabletInfo();
                         tabletInfo.id = tablet.getId();
-                        tabletInfo.files.add(tabletInfo.id + ".dat");
-                        tabletInfo.files.add(tabletInfo.id + ".idx");
-                        tabletInfo.files.add(tabletInfo.id + ".hdr");
                         idxInfo.tablets.add(tabletInfo);
                     }
                 }
@@ -469,9 +467,6 @@ public class RestoreJobTest {
                 for (Tablet tablet : index.getTablets()) {
                     BackupTabletInfo tabletInfo = new BackupTabletInfo();
                     tabletInfo.id = tablet.getId();
-                    tabletInfo.files.add(tabletInfo.id + ".dat");
-                    tabletInfo.files.add(tabletInfo.id + ".idx");
-                    tabletInfo.files.add(tabletInfo.id + ".hdr");
                     idxInfo.tablets.add(tabletInfo);
                 }
             }
@@ -561,5 +556,35 @@ public class RestoreJobTest {
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
+    @Test
+    public void testColocateRestore() {
+        Config.enable_colocate_restore = true;
+
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(db, LockType.READ);
+            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+
+        new Expectations() {
+            {
+                try {
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                            .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+                } catch (Exception e) {
+                }
+                result = true;
+            }
+        };
+        expectedRestoreTbl.setColocateGroup("test_group");
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+        expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
+
+        Config.enable_colocate_restore = false;
+    }
 }
 

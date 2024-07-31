@@ -15,7 +15,6 @@
 package com.starrocks.datacache;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QualifiedName;
 
@@ -27,13 +26,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DataCacheMgr {
 
     private static final DataCacheMgr INSTANCE = new DataCacheMgr();
 
     private final AtomicLong ids = new AtomicLong();
-    private final ReadWriteLock dataCacheMgrLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock dataCacheMgrLock = new ReentrantReadWriteLock();
     private final Map<Long, DataCacheRule> idToCacheRuleMap = new HashMap<>();
     private final CatalogMapping catalogMapping = new CatalogMapping();
     private static final String STAR_MATCH_ALL = "*";

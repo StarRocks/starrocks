@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Partition;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -168,19 +170,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query9 = "select sum(c3) from test_base_part";
         String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertContains(plan9, "UNION");
-        PlanTestBase.assertContains(plan9, "  1:OlapScanNode\n" +
-                "     TABLE: partial_mv_5\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=5/5");
-        PlanTestBase.assertContains(plan9, "  4:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: c2)\n" +
-                "  |  group by: 12: c1, 14: c3\n" +
-                "  |  \n" +
-                "  3:OlapScanNode\n" +
-                "     TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/6");
+        PlanTestBase.assertNotContains(plan9, "partial_mv_5");
         dropMv("test", "partial_mv_5");
     }
 
@@ -734,6 +724,36 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testPartitionQueryRewriteSkipEmptyPartitions() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        {
+            // Loose, empty mv partitions should be skipped
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test_loose_mv" +
+                    " partition by id_date" +
+                    " distributed by random" +
+                    " REFRESH ASYNC\n" +
+                    " PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"query_rewrite_consistency\" = \"loose\"," +
+                    "\"auto_refresh_partitions_limit\" = \"1\"" +
+                    ")\n" +
+                    " as" +
+                    " select id_date, sum(t1b) from table_with_day_partition group by id_date");
+            MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
+            mv.getPartition("p19910330")
+                    .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+            String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
+                    " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";
+            FeConstants.runningUnitTest = false;
+            String plan = getFragmentPlan(query5);
+            FeConstants.runningUnitTest = true;
+            PlanTestBase.assertContains(plan, "test_loose_mv", "partitions=3/4",
+                    "table_with_day_partition", "partitions=1/4", "UNION");
+            dropMv("test", "test_loose_mv");
+        }
+    }
+
+    @Test
     public void testPartialPartitionRewriteWithDateTruncExpr1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
                 " k1 datetime,\n" +
@@ -965,9 +985,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "test_mv1");
             // partition p2 has already been updated, so the mv should not be used anymore
             PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
-                    "     partitions=0/3");
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                            "     partitions=0/61");
             PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: time_slice(10: k1, 1, 'hour', 'floor') >= '2020-02-11 00:00:00', " +

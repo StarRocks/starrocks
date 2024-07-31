@@ -481,7 +481,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | enable_metastore_cache            | 否       | 指定 StarRocks 是否缓存 Hive 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
 | enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Hive 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
+| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`60`，即一分钟。自 v3.3.0 起，该属性默认值由 `7200` 变更为 `60`。 |
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
@@ -1305,7 +1305,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 如下图所示。
 
-![Update policy on timeline](../../assets/catalog_timeline_zh.png)
+![Update policy on timeline](../../_assets/catalog_timeline_zh.png)
 
 StarRocks 采用如下策略更新和淘汰缓存的元数据：
 

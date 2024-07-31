@@ -22,12 +22,12 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaCollationsScanner::_s_cols_columns[] = {
         //   name,       type,          size
-        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"IS_DEFAULT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_COMPILED", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SORTLEN", TYPE_BIGINT, sizeof(int64_t), false},
+        {"COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"IS_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_COMPILED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SORTLEN", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaCollationsScanner::CollationStruct SchemaCollationsScanner::_s_collations[] = {

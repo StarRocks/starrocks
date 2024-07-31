@@ -35,6 +35,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -128,6 +129,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "Warehouse")
+    public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -234,6 +237,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setSpilledBytes(long spilledBytes) {
             auditEvent.spilledBytes = spilledBytes;
+            return this;
+        }
+
+        public AuditEventBuilder setWarehouse(String warehouse) {
+            auditEvent.warehouse = warehouse;
             return this;
         }
 

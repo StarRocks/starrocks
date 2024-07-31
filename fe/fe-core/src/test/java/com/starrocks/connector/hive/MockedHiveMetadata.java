@@ -432,9 +432,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new RemoteFileBlockDesc(768 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
                         fileIO)
         );
-        RemoteFileDesc fileDesc1 = new RemoteFileDesc("file1", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        RemoteFileDesc fileDesc1 = new RemoteFileDesc("file1", "zlib", oneGigabytes, 0, blockDescs);
         fileDesc1.setSplittable(true);
-        RemoteFileDesc fileDesc2 = new RemoteFileDesc("file2", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        RemoteFileDesc fileDesc2 = new RemoteFileDesc("file2", "zlib", oneGigabytes, 0, blockDescs);
         fileDesc2.setSplittable(true);
         List<RemoteFileInfo> files =
                 ImmutableList.of(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(
@@ -1176,7 +1176,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         ImmutableList.of(
                                 new RemoteFileDesc("hello", "gzip", 1024, 1,
                                         ImmutableList.of(
-                                                new RemoteFileBlockDesc(10, 10, hostIds, null, hiveRemoteFileIO)), null)),
+                                                new RemoteFileBlockDesc(10, 10, hostIds, null, hiveRemoteFileIO)))),
                 "full_path");
     }
 

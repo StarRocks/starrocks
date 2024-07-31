@@ -15,11 +15,19 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -34,6 +42,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -258,5 +267,27 @@ public class WarehouseManagerTest {
         } catch (ErrorReportException e) {
             Assert.assertEquals(1, 2);   // can not be here
         }
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        OlapScanNode scanNode = newOlapScanNode();
+        Partition partition = new Partition(123, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
+    }
+
+    private OlapScanNode newOlapScanNode() {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        OlapTable table = new OlapTable();
+        table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
+        desc.setTable(table);
+        return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode");
     }
 }

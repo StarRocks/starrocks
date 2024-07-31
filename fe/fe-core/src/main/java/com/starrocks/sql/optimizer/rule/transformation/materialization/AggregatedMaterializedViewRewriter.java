@@ -725,14 +725,12 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
         } else {
-            if (targetColumn instanceof CallOperator) {
-                // if it's aggregate function, it should be rewritten by group by keys, return it directly.
-                CallOperator targetCall = (CallOperator) targetColumn;
-                if (targetCall.isAggregate()) {
-                    return targetCall;
-                }
-            }
             if (!targetColumn.isColumnRef()) {
+                if (targetColumn instanceof CallOperator
+                        && AggregateFunctionRollupUtils.isNonCumulativeFunction(aggCall)
+                        && equationRewriter.isColWithOnlyGroupByKeys(aggCall)) {
+                    return (CallOperator) targetColumn;
+                }
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
                         aggCall.toString());

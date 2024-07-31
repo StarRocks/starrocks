@@ -211,10 +211,15 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentCatalog(task.getCatalogName());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
-        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        if (status.getUserIdentity() != null) {
+            runCtx.setCurrentUserIdentity(status.getUserIdentity());
+        } else {
+            runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        }
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        runCtx.setIsLastStmt(true);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
@@ -317,6 +322,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setSource(task.getSource());
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
+        status.setUserIdentity(task.getUserIdentity());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());

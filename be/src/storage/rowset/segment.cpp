@@ -43,6 +43,7 @@
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -232,6 +233,12 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
 
+    if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
+    }
+
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
@@ -335,6 +342,13 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+    }
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
@@ -384,7 +398,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             continue;
         }
 
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
         if (!res.ok()) {
             return res.status();
         }
@@ -397,7 +411,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path));
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
         if (_column_readers[id]->column_type() == column.type()) {
             return source_iter;
         } else {
@@ -426,7 +440,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
     auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path));
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
         if (iter->second->column_type() == column.type()) {
             return source_iter;
         } else {

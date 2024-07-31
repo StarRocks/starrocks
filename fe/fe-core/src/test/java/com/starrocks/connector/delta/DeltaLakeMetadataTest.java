@@ -67,10 +67,11 @@ public class DeltaLakeMetadataTest {
 
         HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore,
                 new Configuration());
-        DeltaMetastoreOperations deltaOps = new DeltaMetastoreOperations(hmsBackedDeltaMetastore, false,
+        DeltaMetastoreOperations deltaOps = new DeltaMetastoreOperations(
+                CachingDeltaLakeMetastore.createQueryLevelInstance(hmsBackedDeltaMetastore, 10000), false,
                 MetastoreType.HMS);
 
-        deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps);
+        deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps, null);
     }
 
     @Test

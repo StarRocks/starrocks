@@ -244,6 +244,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+    @SerializedName(value = "compressionLevel")
+    // the default compression level of this table, only used for zstd for now.
+    private int compressionLevel = -1;
+
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
 
@@ -302,6 +306,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         newTableProperty.hasDelete = this.hasDelete;
         newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        if (this.storageInfo != null) {
+            newTableProperty.storageInfo =
+                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        }
         return newTableProperty;
     }
 
@@ -605,6 +613,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return this;
             }
         }
+
         compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
@@ -749,6 +758,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return replicationNum;
     }
 
+    public void setCompressionLevel(int compressionLevel) {
+        this.compressionLevel = compressionLevel;
+    }
+
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
     }
@@ -883,6 +896,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TCompressionType getCompressionType() {
         return compressionType;
+    }
+
+    public int getCompressionLevel() {
+        return compressionLevel;
     }
 
     public boolean hasDelete() {

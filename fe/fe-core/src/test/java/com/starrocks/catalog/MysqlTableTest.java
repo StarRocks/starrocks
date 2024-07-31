@@ -45,13 +45,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -82,49 +75,6 @@ public class MysqlTableTest {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
-    }
-
-    @Test
-    public void testNormal() throws DdlException, IOException {
-        MysqlTable mysqlTable = new MysqlTable(1000, "mysqlTable", columns, properties);
-        Assert.assertEquals("tbl", mysqlTable.getMysqlTableName());
-
-        String dirString = "mysqlTableFamilyGroup";
-        File dir = new File(dirString);
-        if (!dir.exists()) {
-            dir.mkdir();
-        } else {
-            File[] files = dir.listFiles();
-            for (File file : files) {
-                if (file.isFile()) {
-                    file.delete();
-                }
-            }
-        }
-
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        mysqlTable.write(dos);
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        MysqlTable table1 = (MysqlTable) Table.read(dis);
-
-        Assert.assertEquals(mysqlTable.toThrift(null), table1.toThrift(null));
-
-        dis.close();
-
-        dir = new File(dirString);
-        if (dir.exists()) {
-            File[] files = dir.listFiles();
-            for (File aFile : files) {
-                if (aFile.isFile()) {
-                    aFile.delete();
-                }
-            }
-            dir.delete();
-        }
     }
 
     @Test(expected = DdlException.class)

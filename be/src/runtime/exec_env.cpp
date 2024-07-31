@@ -338,7 +338,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
                             .set_min_threads(0)
-                            .set_max_threads(8)
+                            .set_max_threads(1000)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));

@@ -51,13 +51,12 @@ public class LockManager {
      * @param locker   The Locker to lock this on behalf of.
      * @param lockType Then lock type requested
      * @param timeout  milliseconds to time out after if lock couldn't be obtained. 0 means block indefinitely.
-     * @throws LockTimeoutException when the transaction time limit was exceeded.
-     * @throws DeadlockException    when deadlock was detected
+     * @throws LockTimeoutException    when the transaction time limit was exceeded.
+     * @throws DeadlockException       when deadlock was detected
+     * @throws LockInterruptException  when catch InterruptedException
+     * @throws NotSupportLockException when lock request not support, such as request (S or X) lock in (IS or IX) scope
      */
-
-    public void lock(long rid, Locker locker, LockType lockType, long timeout)
-            throws LockInterruptException, LockTimeoutException, DeadlockException {
-
+    public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
         final long startTime = System.currentTimeMillis();
         locker.setLockRequestTimeMs(startTime);
 
@@ -224,7 +223,7 @@ public class LockManager {
                 removeFromWaiterList(rid, currentLocker, lockType);
                 /* Failure to acquire lock within the timeout ms */
                 DeadlockException exception = DeadlockException.makeDeadlockException(dc, currentLocker, false);
-                LOG.warn(exception.getMessage());
+                LOG.warn(exception.getMessage(), exception);
                 throw exception;
             }
 
@@ -262,7 +261,7 @@ public class LockManager {
         }
     }
 
-    public void release(long rid, Locker locker, LockType lockType) {
+    public void release(long rid, Locker locker, LockType lockType) throws LockException {
         Set<Locker> newOwners;
 
         int lockTableIdx = getLockTableIndex(rid);
@@ -409,7 +408,7 @@ public class LockManager {
                     removeFromWaiterList(rid, locker, lockType);
                     DeadlockException exception =
                             DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
-                    LOG.warn(exception.getMessage());
+                    LOG.warn(exception.getMessage(), exception);
                     throw exception;
                 }
             } else {

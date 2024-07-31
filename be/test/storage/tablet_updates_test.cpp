@@ -18,6 +18,7 @@
 
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -1265,10 +1266,16 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     // stop apply
     best_tablet->updates()->stop_apply(true);
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
-    // check rows mapper file
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    // read from file
-    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+    RowsetSharedPtr output_rs;
+    size_t retry_cnt = 0;
+    while (output_rs == nullptr && retry_cnt <= 10) {
+        // check rows mapper file
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // read from file
+        output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+        retry_cnt++;
+    }
+    ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
     ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
@@ -1532,6 +1539,27 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+
+    {
+        _tablet2 = create_tablet(rand(), rand());
+        std::vector<std::vector<int64_t>> keys_by_segment;
+        keys_by_segment.resize(2);
+        for (int i = 0; i < 50; i++) {
+            keys_by_segment[0].emplace_back(i);
+        }
+        for (int i = 51; i < 100; i++) {
+            keys_by_segment[1].emplace_back(i);
+        }
+        auto rs1 = create_rowset_with_mutiple_segments(_tablet2, keys_by_segment);
+        rs1->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
+        ASSERT_TRUE(_tablet2->rowset_commit(2, rs1).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet2->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        ASSERT_EQ(_tablet2->updates()->num_rowsets(), 1);
+        ASSERT_EQ(_tablet2->updates()->version_history_count(), 3);
+    }
 }
 
 void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_persistent_index) {
@@ -1563,10 +1591,16 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     // stop apply
     best_tablet->updates()->stop_apply(true);
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
-    // check rows mapper file
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    // read from file
-    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+    RowsetSharedPtr output_rs;
+    size_t retry_cnt = 0;
+    while (output_rs == nullptr && retry_cnt <= 10) {
+        // check rows mapper file
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // read from file
+        output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+        retry_cnt++;
+    }
+    ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
     ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
@@ -3458,6 +3492,216 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
+}
+
+TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
+    config::retry_apply_interval_second = 1;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+
+    // 1. memory exceed limit
+    std::string fp_name = "tablet_apply_normal_rowset_commit_memory_exceed";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    auto rs0 = create_rowset(_tablet, keys, &deletes);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 2));
+
+    auto test_fail_point = [&](const std::string& fp_name, int version, int expected_read_result) {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(version, rs).ok());
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+
+        // Wait for a short duration and check error state
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+
+        // Disable fail point and reset error
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        _tablet->updates()->reset_update_state();
+        _tablet->updates()->reset_error();
+        _tablet->updates()->check_for_apply();
+
+        // Verify the read result
+        ASSERT_EQ(expected_read_result, read_tablet(_tablet, version));
+    };
+
+    // 2. internal error
+    test_fail_point("tablet_apply_normal_rowset_commit_internal_error", 3, N / 2);
+
+    // 3. load rowset_update_state failed
+    test_fail_point("tablet_apply_load_rowset_update_state_failed", 4, N / 2);
+
+    // 4. load index failed
+    test_fail_point("tablet_apply_load_index_failed", 5, N / 2);
+
+    // 5. apply_rowset_not_found
+    test_fail_point("tablet_apply_rowset_not_found", 6, N / 2);
+
+    // 6. index prepare failed
+    test_fail_point("tablet_apply_index_prepare_failed", 7, N / 2);
+
+    // 7. rowset_update_state load upsert failed
+    test_fail_point("tablet_apply_load_upserts_failed", 8, N / 2);
+
+    // 8. rowset_update_state load deletes failed
+    test_fail_point("tablet_apply_load_deletes_failed", 9, N / 2);
+
+    // 9. rowset_update_state apply failed
+    test_fail_point("tablet_apply_rowset_update_state_apply_failed", 10, N / 2);
+
+    // 10. index upsert failed
+    test_fail_point("tablet_apply_index_upsert_failed", 11, N / 2);
+
+    // 11. index delete failed
+    test_fail_point("tablet_apply_index_delete_failed", 12, N / 2);
+
+    // 12. index commit failed
+    test_fail_point("tablet_apply_index_commit_failed", 13, N / 2);
+
+    // 13. get pindex meta failed
+    test_fail_point("tablet_apply_get_pindex_meta_failed", 14, N / 2);
+
+    // 14. get del_vec failed
+    test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
+
+    // 15. write meta failed
+    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 16, N / 2);
+
+    // 16. cache del vec failed
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    test_fail_point("tablet_apply_cache_del_vec_failed", 17, N / 2);
+
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+}
+
+TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
+
+TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
+    config::retry_apply_interval_second = 1;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    _tablet->updates()->stop_compaction(true);
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+
+    // 1. load index failed
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    std::string fp_name = "tablet_apply_load_index_failed";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+
+    auto test_fail_point = [&](const std::string& fp_name1, const std::string& fp_name2) {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp1 = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name1);
+        fp1->setMode(trigger_mode);
+
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp2 = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name2);
+        fp2->setMode(trigger_mode);
+
+        _tablet->updates()->reset_error();
+        _tablet->updates()->check_for_apply();
+
+        // Verify the read result
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+        ASSERT_TRUE(!_tablet->updates()->compaction_running());
+    };
+
+    _tablet->updates()->stop_compaction(false);
+    _tablet->updates()->compaction(_compaction_mem_tracker.get());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->updates()->is_error());
+
+    // 2. get pindex meta failed
+    config::enable_pindex_rebuild_in_compaction = false;
+    test_fail_point("tablet_apply_load_index_failed", "tablet_apply_get_pindex_meta_failed");
+    config::enable_pindex_rebuild_in_compaction = true;
+
+    // 3. rowset not found
+    test_fail_point("tablet_apply_get_pindex_meta_failed", "tablet_apply_rowset_not_found");
+
+    // 4. load compaction state failed
+    config::enable_light_pk_compaction_publish = false;
+    test_fail_point("tablet_apply_rowset_not_found", "tablet_apply_load_compaction_state_failed");
+
+    // 5. index prepare failed
+    test_fail_point("tablet_apply_load_compaction_state_failed", "tablet_apply_index_prepare_failed");
+
+    // 6. compaction state load segment failed
+    test_fail_point("tablet_apply_index_prepare_failed", "tablet_apply_load_segments_failed");
+
+    // 7. index upsert failed
+    test_fail_point("tablet_apply_load_segments_failed", "tablet_apply_index_upsert_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 8. index replace failed
+    config::enable_pindex_rebuild_in_compaction = false;
+    test_fail_point("tablet_apply_index_upsert_failed", "tablet_apply_index_replace_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 9. index commit failed
+    config::enable_light_pk_compaction_publish = true;
+    test_fail_point("tablet_apply_index_replace_failed", "tablet_apply_index_commit_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 10. write meta failed
+    test_fail_point("tablet_apply_index_commit_failed", "tablet_meta_manager_apply_rowset_manager_internal_error");
+
+    // 11. cache del vec failed
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", "tablet_apply_cache_del_vec_failed");
+
+    // 12. normal apply
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+
+    _tablet->updates()->reset_error();
+    _tablet->updates()->check_for_apply();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
 } // namespace starrocks

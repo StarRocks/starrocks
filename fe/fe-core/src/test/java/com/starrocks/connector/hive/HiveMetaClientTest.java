@@ -103,7 +103,7 @@ public class HiveMetaClientTest {
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unable to instantiate"));
+            Assert.assertTrue(e.getMessage().contains("Invalid port 90303"));
         }
     }
 
@@ -279,8 +279,9 @@ public class HiveMetaClientTest {
         Assert.assertThrows(StarRocksConnectorException.class,
                 () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
 
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), Arrays.asList()));
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
-        client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
         client.getNextNotification(0, 0, null);
 
     }

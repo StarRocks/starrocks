@@ -1,4 +1,10 @@
 -- name: test_mv_refresh_with_event_trigger
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE `t1` (
     `k1`  date not null, 
     `k2`  datetime not null, 
@@ -117,7 +123,7 @@ INSERT INTO t2 VALUES ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,
 INSERT INTO t2 VALUES ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
 -- result:
 None
 -- !result
@@ -125,7 +131,7 @@ select count(1) from test_mv1;
 -- result:
 16
 -- !result
-function: wait_async_materialized_view_finish("test_mv2")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2")
 -- result:
 None
 -- !result

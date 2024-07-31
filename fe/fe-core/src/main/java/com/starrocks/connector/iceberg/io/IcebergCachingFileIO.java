@@ -75,6 +75,7 @@ import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -117,6 +118,20 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
             this.fileContentCache = MemoryCacheHolder.INSTANCE;
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            if (wrappedIO instanceof Closeable) {
+                ((Closeable) wrappedIO).close();
+            }
+            if (fileContentCache instanceof Closeable) {
+                ((Closeable) fileContentCache).close();
+            }
+        } catch (IOException e) {
+            LOG.error("Error closing resources", e);
         }
     }
 
@@ -400,7 +415,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     }
                 } catch (Exception e) {
                     // Ignore, exception would not have affection on Diskcache
-                    LOG.warn("Encountered exception when loading disk metadata " + e.getMessage());
+                    LOG.warn("Encountered exception when loading disk metadata ", e);
                 }
             });
             executor.shutdown();

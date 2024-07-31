@@ -37,8 +37,19 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
             const auto& field_type_desc = type_desc.children[i];
 
             auto field_column = struct_column->field_column(field_name);
-            simdjson::ondemand::value field_value = obj.find_field_unordered(field_name);
-            RETURN_IF_ERROR(add_nullable_column(field_column.get(), field_type_desc, name, &field_value, true));
+            simdjson::ondemand::value field_value;
+            auto err = obj.find_field_unordered(field_name).get(field_value);
+            simdjson::ondemand::value* field_value_ptr = nullptr;
+            if (err == simdjson::SUCCESS) {
+                field_value_ptr = &field_value;
+            } else if (err != simdjson::NO_SUCH_FIELD) {
+                // if returns error, the struct field columns may be inconsistent.
+                // so fill null if error.
+                auto err_msg = strings::Substitute("Failed to parse value, field=$0.$1, error=$2", name, field_name,
+                                                   simdjson::error_message(err));
+                LOG(WARNING) << err_msg;
+            }
+            RETURN_IF_ERROR(add_nullable_column(field_column.get(), field_type_desc, name, field_value_ptr, true));
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {

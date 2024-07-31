@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -268,7 +269,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(AlterTableStmt stmt) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
@@ -313,7 +314,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void cancelRefreshMaterializedView(String dbName, String mvName)
+    default void cancelRefreshMaterializedView(CancelRefreshMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException {
     }
 

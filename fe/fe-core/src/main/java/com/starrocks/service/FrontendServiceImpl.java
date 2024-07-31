@@ -137,12 +137,12 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -198,6 +198,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetKeysRequest;
+import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
@@ -322,6 +324,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -443,7 +446,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 try {
                     tbl = metadataMgr.getTable(catalogName, params.db, tableName);
                 } catch (Exception e) {
-                    LOG.warn(e.getMessage());
+                    LOG.warn(e.getMessage(), e);
                 }
 
                 if (tbl == null) {
@@ -850,7 +853,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(null);
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
 
         for (TaskRunStatus status : taskRunList) {
             if (status.getDbName() == null) {
@@ -912,6 +915,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTable_privs(tTablePrivs);
         // TODO(yiming): support showing user privilege info in information_schema later
         return result;
+    }
+
+    @Override
+    public TGetKeysResponse getKeys(TGetKeysRequest params) throws TException {
+        // get encrypted keys as binary meta format
+        LOG.debug("getKeys request: {}", params);
+        try {
+            return GlobalStateMgr.getCurrentState().getKeyMgr().getKeys(params);
+        } catch (IOException e) {
+            throw new TException(e);
+        }
     }
 
     @Override
@@ -1377,7 +1391,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
+    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException, LockTimeoutException {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1701,7 +1715,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
-    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException, LockTimeoutException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1975,7 +1989,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             result = updateImmutablePartitionInternal(request);
         } catch (Throwable t) {
-            LOG.warn(t);
+            LOG.warn(t.getMessage(), t);
             result = new TImmutablePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
@@ -2110,7 +2124,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(physicalPartition.getParentId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
@@ -2342,6 +2356,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(ctx, addPartitionClause);
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
@@ -2477,7 +2493,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
@@ -2575,7 +2591,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }
-        MaterializedViewMgr.getInstance().onReportEpoch(request);
+        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onReportEpoch(request);
         return new TMVReportEpochResponse();
     }
 
@@ -2660,6 +2676,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         result.setTrackingLoads(trackingLoadInfoList);
+        LOG.debug("get tracking load jobs size: {}", trackingLoadInfoList.size());
         return result;
     }
 

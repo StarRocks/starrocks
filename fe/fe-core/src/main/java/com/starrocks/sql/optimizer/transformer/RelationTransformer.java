@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -466,12 +467,14 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     private DistributionSpec getTableDistributionSpec(TableRelation node,
                                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
-        DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
+        OlapTable olapTable = ((OlapTable) node.getTable());
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
 
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             List<Integer> hashDistributeColumns = new ArrayList<>();
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(olapTable,
+                    hashDistributionInfo.getDistributionColumns());
 
             // NOTE: sync mv output columns may not contain the distribution columns,
             // set it as random distribution.
@@ -502,9 +505,13 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
     @Override
     public LogicalPlan visitTable(TableRelation node, ExpressionMapping context) {
-        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
-        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
-        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+        int size = node.getColumns().size();
+        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder =
+                ImmutableMap.builderWithExpectedSize(size);
+        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder =
+                ImmutableMap.builderWithExpectedSize(size);
+        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder =
+                ImmutableList.builderWithExpectedSize(size);
 
         int relationId = columnRefFactory.getNextRelationId();
         for (Map.Entry<Field, Column> column : node.getColumns().entrySet()) {
@@ -729,10 +736,10 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         int relationId = columnRefFactory.getNextRelationId();
         Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
         for (int i = 0; i < outputColumns.size(); i++) {
+            ColumnRefOperator outputColumn = outputColumns.get(i);
             Column column = viewSchema.get(i);
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(),
-                    column.isAllowNull());
+            ColumnRefOperator columnRef =
+                    columnRefFactory.create(column.getName(), outputColumn.getType(), outputColumn.isNullable());
             if (outputVariables != null) {
                 outputVariables.add(columnRef);
             }

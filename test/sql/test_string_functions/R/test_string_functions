@@ -496,6 +496,14 @@ select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 67. Detail message: ngram_search function 's second parameter and third parameter must be constant.")
 -- !result
+select ngram_search("chi","chi",0);
+-- result:
+E: (1064, "ngram search's third parameter must be a positive number")
+-- !result
+select ngram_search("chi","chi",-1);
+-- result:
+E: (1064, "ngram search's third parameter must be a positive number")
+-- !result
 select ngram_search(date('2020-06-23'), "2020", 4);
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 49. Detail message: ngram_search function 's first parameter and second parameter must be string type.")
@@ -503,4 +511,51 @@ E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 49. D
 select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
 -- result:
 4097.0
+-- !result
+-- name: test_ngram_search_with_low_cardinality
+CREATE TABLE __row_util_1 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
+-- result:
+-- !result
+CREATE TABLE left_table (
+    id int,
+    nation string,
+    exsit_hot_value int
+)
+ENGINE=olap
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) buckets 32
+PROPERTIES (
+    "replication_num" = "1" 
+);
+-- result:
+-- !result
+insert into left_table 
+select
+    cast(rand() * 100000000 as int),
+    CASE 
+        WHEN RAND() > 0.8 THEN 'china'
+        WHEN RAND() > 0.6 THEN 'usa'
+        WHEN RAND() > 0.4 THEN 'russian'
+        WHEN RAND() > 0.2 THEN 'canada'
+        ELSE 'japan'
+    END,
+   case when RAND() > 0.99 THEN k1
+       ELSE k1 % 5 
+   END
+from __row_util_1;
+-- result:
+-- !result
+select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
+-- result:
+1
 -- !result

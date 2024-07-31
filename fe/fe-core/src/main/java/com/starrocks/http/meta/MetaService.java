@@ -239,7 +239,7 @@ public class MetaService {
                 return;
             }
 
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) +
                     "/image?version=" + versionStr + "&subdir=" + subDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
@@ -316,7 +316,7 @@ public class MetaService {
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
             try {
-                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+                host = URLDecoder.decode(host, StandardCharsets.UTF_8.toString());
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
@@ -366,7 +366,7 @@ public class MetaService {
                 Storage storage = new Storage(imageDir.getAbsolutePath());
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
             }
             writeResponse(request, response);
         }

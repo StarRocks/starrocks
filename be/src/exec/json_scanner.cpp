@@ -105,7 +105,9 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
 
     if (src_chunk->num_rows() == 0) {
         if (status.is_end_of_file()) {
-            return Status::EndOfFile("EOF of reading json file, nothing read");
+            // NOTE: can not stop right here because could be more files to read.
+            // return Status::EndOfFile("EOF of reading json file, nothing read");
+            return src_chunk;
         } else if (status.is_time_out()) {
             // if timeout happens at the beginning of reading src_chunk, we return the error state
             // else we will _materialize the lines read before timeout and return ok()
@@ -151,6 +153,7 @@ static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
     case TYPE_INT:
     case TYPE_SMALLINT:
     case TYPE_TINYINT:
+    case TYPE_BOOLEAN:
     case TYPE_CHAR:
     case TYPE_VARCHAR:
     case TYPE_JSON: {
@@ -670,7 +673,7 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        auto buf = ByteBuffer::allocate(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        auto buf = ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
         std::swap(buf, _file_stream_buffer);

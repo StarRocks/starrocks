@@ -573,6 +573,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        const auto encryption_info = _segment->encryption_info();
+        if (encryption_info) {
+            opts.encryption_info = *encryption_info;
+        }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {

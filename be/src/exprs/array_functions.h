@@ -43,6 +43,8 @@ public:
 
     DEFINE_VECTORIZED_FN(array_slice);
 
+    DEFINE_VECTORIZED_FN(repeat);
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
         return ArrayOverlap<type>::process(context, columns);
@@ -122,6 +124,8 @@ public:
     DEFINE_VECTORIZED_FN(array_distinct_any_type);
     DEFINE_VECTORIZED_FN(array_reverse_any_types);
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
+
+    DEFINE_VECTORIZED_FN(array_sortby_multi);
 };
 
 } // namespace starrocks

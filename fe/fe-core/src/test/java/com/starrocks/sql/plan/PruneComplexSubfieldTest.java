@@ -1107,4 +1107,11 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
     }
+
+    @Test
+    public void testOtherFunctionJson() throws Exception {
+        String sql = "select v1 from js0 where LOWER( COALESCE( j1 -> 'a', j1 -> 'b' ) ) = 'x'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "lower(CAST(coalesce(json_query(2: j1, 'a'), json_query(2: j1, 'b')) AS VARCHAR)) = 'x'");
+    }
 }

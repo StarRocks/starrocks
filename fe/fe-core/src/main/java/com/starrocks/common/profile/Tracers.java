@@ -28,7 +28,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, PARSER
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -39,11 +39,11 @@ public class Tracers {
     // [empty tracer, real tracer]
     private final Tracer[] allTracer = new Tracer[] {EMPTY_TRACER, EMPTY_TRACER};
 
-    // mark enable module
-    private int moduleMask = 0;
+    // mark enable module, default enable parser module
+    private int moduleMask = 1 << Module.PARSER.ordinal();
 
-    // mark enable mode
-    private int modeMask = 0;
+    // mark enable mode, default enable timer mode
+    private int modeMask = 1 << Mode.TIMER.ordinal();
 
     private boolean isCommandLog = false;
 
@@ -79,13 +79,32 @@ public class Tracers {
         return THREAD_LOCAL.get();
     }
 
+    /**
+     * Init tracer with context and mode.
+     * @param context connect context
+     * @param mode tracer mode
+     * @param moduleStr tracer module
+     */
     public static void init(ConnectContext context, Mode mode, String moduleStr) {
-        Tracers tracers = THREAD_LOCAL.get();
         boolean enableProfile =
                 context.getSessionVariable().isEnableProfile() || context.getSessionVariable().isEnableBigQueryProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
-
         Module module = getTraceModule(moduleStr);
+        init(mode, module, enableProfile, checkMV);
+    }
+
+    /**
+     * Init tracer with params.
+     * @param mode tracer mode
+     * @param module tracer module
+     * @param enableProfile enable profile or not
+     * @param checkMV check mv or not
+     */
+    public static void init(Mode mode, Module module, boolean enableProfile, boolean checkMV) {
+        Tracers tracers = THREAD_LOCAL.get();
+        // reset all mark
+        tracers.moduleMask = 0;
+        tracers.modeMask = 0;
         if (Module.NONE == module || null == module) {
             tracers.moduleMask = 0;
         }
@@ -186,6 +205,10 @@ public class Tracers {
         tracers.tracer(module, Mode.REASON).reason(reason, args);
     }
 
+    public static void record(String name, String value) {
+        record(Module.BASE, name, value);
+    }
+
     public static void record(Module module, String name, String value) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.VARS).record(name, value);
@@ -233,5 +256,22 @@ public class Tracers {
     public static void toRuntimeProfile(RuntimeProfile profile) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.allTracer[1].toRuntimeProfile(profile);
+    }
+
+    public static String getTrace(Mode mode) {
+        switch (mode) {
+            case TIMER:
+                return Tracers.printScopeTimer();
+            case VARS:
+                return Tracers.printVars();
+            case TIMING:
+                return Tracers.printTiming();
+            case LOGS:
+                return Tracers.printLogs();
+            case REASON:
+                return Tracers.printReasons();
+            default:
+                return "";
+        }
     }
 }
