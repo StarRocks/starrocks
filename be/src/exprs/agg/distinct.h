@@ -87,7 +87,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         if (old_size == 0) {
             set.load(input);
         } else {
-            HashSetWithMemoryCounting<T> set_src{CountingAllocator<T>(&memory_usage)};
+            HashSetWithMemoryCounting<T> set_src{STLCountingAllocator<T>(&memory_usage)};
             set_src.load(input);
             set.merge(set_src);
         }
@@ -110,7 +110,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     inline int64_t mem_usage() const { return memory_usage; }
 
     int64_t memory_usage = 0;
-    HashSetWithMemoryCounting<T> set{CountingAllocator<T>(&memory_usage)};
+    HashSetWithMemoryCounting<T> set{STLCountingAllocator<T>(&memory_usage)};
 };
 
 template <LogicalType LT, LogicalType SumLT>
@@ -189,7 +189,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     inline int64_t mem_usage() const { return memory_usage; }
 
     int64_t memory_usage = 0;
-    SliceHashSetWithMemoryCounting set{CountingAllocator<SliceWithHash>(&memory_usage)};
+    SliceHashSetWithMemoryCounting set{STLCountingAllocator<SliceWithHash>(&memory_usage)};
 };
 
 // use a different way to do serialization to gain performance.
@@ -276,7 +276,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     inline int64_t mem_usage() const { return memory_usage; }
 
     int64_t memory_usage = 0;
-    MyHashSet set{CountingAllocator<T>(&memory_usage)};
+    MyHashSet set{STLCountingAllocator<T>(&memory_usage)};
 };
 
 template <LogicalType LT, LogicalType SumLT>
