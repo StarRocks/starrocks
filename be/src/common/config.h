@@ -1383,7 +1383,7 @@ CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
-// 1. storage_page_cache
+// 1. mem_cache (storage_page_cache, block_cache)
 // 2. connector_scan_executor
 // 3. non_pipeline_scan_thread_pool
 // 4. pipeline_prepare_thread_pool
@@ -1392,10 +1392,9 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 // 7. publish_version_worker_pool
 // 8. olap_scan_executor
 // 9. wg_driver_executor
-// 10. block_cache
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "storage_page_cache,block_cache");
+CONF_mString(try_release_resource_before_core_dump, "mem_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
