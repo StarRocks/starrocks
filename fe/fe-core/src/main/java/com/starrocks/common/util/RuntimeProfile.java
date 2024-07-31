@@ -803,6 +803,7 @@ public class RuntimeProfile {
     }
 
     public static void removeRedundantMinMaxMetrics(RuntimeProfile profile) {
+        List<String> toRemove = Lists.newArrayList();
         for (String name : profile.counterMap.keySet()) {
             Counter counter = profile.getCounter(name);
             Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
@@ -813,12 +814,13 @@ public class RuntimeProfile {
 
             if (Objects.equals(minCounter.getValue(), maxCounter.getValue()) &&
                     Objects.equals(minCounter.getValue(), counter.getValue())) {
-                profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+                toRemove.add(MERGED_INFO_PREFIX_MIN + name);
+                toRemove.add(MERGED_INFO_PREFIX_MAX + name);
             }
         }
 
         profile.getChildList().forEach(pair -> removeRedundantMinMaxMetrics(pair.first));
+        toRemove.forEach(profile::removeCounter);
     }
 
     interface ProfileFormatter {
