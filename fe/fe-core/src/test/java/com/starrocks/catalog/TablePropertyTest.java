@@ -75,7 +75,6 @@ public class TablePropertyTest {
         in.close();
     }
 
-
     @Test
     public void testBuildDataCachePartitionDuration() throws IOException {
         // 1. Write objects to file
@@ -97,4 +96,27 @@ public class TablePropertyTest {
         in.close();
     }
 
+    @Test
+    public void testPartitionTTLNumberSerialization() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "2");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.buildPartitionLiveNumber();
+        tableProperty.buildPartitionTTL();
+        Assert.assertEquals(2, tableProperty.getPartitionTTLNumber());
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        TableProperty readTableProperty = TableProperty.read(in);
+        Assert.assertEquals(2, readTableProperty.getPartitionTTLNumber());
+        in.close();
+    }
 }
