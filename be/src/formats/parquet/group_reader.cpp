@@ -57,7 +57,7 @@ Status GroupReader::init() {
     return Status::OK();
 }
 
-Status GroupReader::deal_with_pageindex() {
+Status GroupReader::_deal_with_pageindex() {
     if (config::parquet_page_index_enable) {
         SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
         _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
@@ -74,6 +74,28 @@ Status GroupReader::deal_with_pageindex() {
 }
 
 Status GroupReader::prepare() {
+    // we need deal with page index first, so that it can work on collect_io_range,
+    // and pageindex's io has been collected in FileReader
+    RETURN_IF_ERROR(_deal_with_pageindex());
+
+    // if coalesce read enabled, we have to
+    // 1. allocate shared buffered input stream and
+    // 2. collect io ranges of every row group reader.
+    // 3. set io ranges to the stream.
+    if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
+        int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
+        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
+            _param.stats->group_active_lazy_coalesce_together += 1;
+        } else {
+            _param.stats->group_active_lazy_coalesce_seperately += 1;
+        }
+        _set_end_offset(end_offset);
+        RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
+    }
+
     RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
     _init_read_chunk();
 

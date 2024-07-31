@@ -470,7 +470,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     // three columns, (5 + 1) * 3 = 18
     EXPECT_EQ(ranges.size(), 18);
 
-    EXPECT_EQ(shared_buffer->current_range_ref_num(), 28);
+    EXPECT_EQ(shared_buffer->current_range_ref_sum(), 28);
 
     // The second row group is not prepare yet
 
