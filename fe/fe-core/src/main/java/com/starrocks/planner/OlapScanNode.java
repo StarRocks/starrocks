@@ -179,13 +179,10 @@ public class OlapScanNode extends ScanNode {
 
     private boolean usePkIndex = false;
 
-<<<<<<< HEAD
-=======
     private long gtid = 0;
 
     private Map<Long, Long> scanPartitionVersions = Maps.newHashMap();
 
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);

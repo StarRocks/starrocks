@@ -188,13 +188,9 @@ message PTabletWriterOpenRequest {
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
     optional PLoadChannelProfileConfig load_channel_profile_config = 34;
-<<<<<<< HEAD
-=======
-    optional LakeTabletParams lake_tablet_params = 35;
 
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
 };
 
 message PTabletWriterOpenResult {

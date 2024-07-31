@@ -109,12 +109,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
-<<<<<<< HEAD
-=======
-                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
                 task.is_double_write = publish_version_req.partition_version_infos[i].__isset.is_double_write &&
                                        publish_version_req.partition_version_infos[i].is_double_write;
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
             }
         }
     }

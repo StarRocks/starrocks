@@ -69,20 +69,16 @@ public class PublishVersionTask extends AgentTask {
     private Span span;
     private boolean enableSyncPublish;
     private TTxnType txnType;
-<<<<<<< HEAD
-=======
-    private final long globalTransactionId;
     private boolean isVersionOverwrite = false;
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
-        this(backendId, transactionId, globalTransactionId, dbId, commitTimestamp, partitionVersionInfos,
+        this(backendId, transactionId, dbId, commitTimestamp, partitionVersionInfos,
                 traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
     }
 
-    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
+    public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish,
                               TTxnType txnType, boolean isVersionOverwrite) {
@@ -112,14 +108,10 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
         publishVersionRequest.setTxn_type(txnType);
-<<<<<<< HEAD
-=======
-        publishVersionRequest.setGtid(globalTransactionId);
         if (isVersionOverwrite) {
             publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
         }
         LOG.debug("publish version request: {}", publishVersionRequest);
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
         return publishVersionRequest;
     }
 

@@ -526,22 +526,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
         // remove temp partitions, and set state to NORMAL
         Database db = null;
         Locker locker = new Locker();
-        try {
-            db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                throw new AlterCancelException("database id:" + dbId + " does not exist");
-            }
 
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-                throw new AlterCancelException("insert overwrite commit failed because locking db:" + dbId + " failed");
-            }
-
-        } catch (Exception e) {
-            LOG.warn("get and write lock database failed when cancel job: {}", jobId, e);
+        db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
             return;
         }
 
         try {
+            locker.lockDatabase(db, LockType.WRITE);
             Table table = db.getTable(tableId);
             if (table == null) {
                 throw new AlterCancelException("table:" + tableId + " does not exist in database:" + db.getFullName());

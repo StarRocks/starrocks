@@ -353,16 +353,4 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
     return has_immutable_partition;
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::stream_load
-=======
-Status TabletSinkSender::_write_combined_txn_log() {
-    for (const auto& [partition_id, logs] : _txn_log_map) {
-        (void)partition_id;
-        RETURN_IF_ERROR(write_combined_txn_log(logs));
-    }
-    return Status::OK();
-}
-
 } // namespace starrocks
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))

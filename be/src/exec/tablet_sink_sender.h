@@ -16,14 +16,10 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
-<<<<<<< HEAD
-namespace starrocks::stream_load {
-=======
 namespace starrocks {
 
 class CombinedTxnLogPB;
 
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
 // TabletSinkSender will control one index/table's send chunks.
 class TabletSinkSender {
 public:

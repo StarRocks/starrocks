@@ -475,28 +475,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
-<<<<<<< HEAD
-        _load_channel->remove_tablets_channel(_index_id);
-=======
         _load_channel->remove_tablets_channel(_key);
-        if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
-            _txn_log_collector.notify();
-        }
-    }
-
-    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
-    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
-        response->status().status_code() == TStatusCode::OK) {
-        rolk.unlock();
-        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
-        auto ok = _txn_log_collector.wait(t);
-        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-        if (st.ok()) {
-            context->add_txn_logs(_txn_log_collector.logs());
-        } else {
-            context->update_status(st);
-        }
->>>>>>> 16acc2396b ([Enhancement] Support online optimize table (#43747))
     }
 }
 
