@@ -1976,6 +1976,7 @@ public class StmtExecutor {
                         label,
                         database.getFullName(),
                         targetTable.getId(),
+                        transactionId,
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,

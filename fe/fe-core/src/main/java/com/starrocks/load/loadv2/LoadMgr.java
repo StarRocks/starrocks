@@ -231,9 +231,17 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
             long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
             Coordinator coordinator) throws UserException {
+=======
+    public long registerLoadJob(String label, String dbName, long tableId, long txnId, EtlJobType jobType,
+                                long createTimestamp, long estimateScanRows,
+                                int estimateFileNum, long estimateFileSize,
+                                TLoadJobType type, long timeout, Coordinator coordinator)
+            throws UserException {
+>>>>>>> d9528297c4 ([BugFix] Fix transaction of insert load job can not be aborted when job has been cancelled (#48059))
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -243,8 +251,15 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
+<<<<<<< HEAD
             loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout,
                     coordinator);
+=======
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
+            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
+            loadJob.setEstimateScanRow(estimateScanRows);
+            loadJob.setTransactionId(txnId);
+>>>>>>> d9528297c4 ([BugFix] Fix transaction of insert load job can not be aborted when job has been cancelled (#48059))
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }

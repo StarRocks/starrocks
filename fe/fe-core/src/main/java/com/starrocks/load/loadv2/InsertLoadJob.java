@@ -253,4 +253,15 @@ public class InsertLoadJob extends LoadJob {
         super.readFields(in);
         tableId = in.readLong();
     }
+<<<<<<< HEAD
+=======
+
+    public void setEstimateScanRow(long rows) {
+        this.estimateScanRow = rows;
+    }
+
+    public void setTransactionId(long txnId) {
+        this.transactionId = txnId;
+    }
+>>>>>>> d9528297c4 ([BugFix] Fix transaction of insert load job can not be aborted when job has been cancelled (#48059))
 }
