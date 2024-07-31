@@ -407,7 +407,10 @@ enum TTableType {
     DELTALAKE_TABLE,
     TABLE_FUNCTION_TABLE,
     ODPS_TABLE,
-    LOGICAL_ICEBERG_METADATA_TABLE
+    LOGICAL_ICEBERG_METADATA_TABLE,
+    ICEBERG_REFS_TABLE,
+    ICEBERG_HISTORY_TABLE,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE
 }
 
 enum TKeysType {
@@ -580,4 +583,9 @@ struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+}
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
 }

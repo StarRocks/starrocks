@@ -55,6 +55,15 @@ jvm_arch() {
     echo $jvm_arch
 }
 
+read_var_from_conf() {
+    local var_name=$1
+    local conf_file=$2
+    local var_line=`grep $var_name $conf_file | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep ^$var_name=`
+    if [[ $var_line == *"="* ]]; then
+        eval "$var_line"
+    fi
+}
+
 export_env_from_conf() {
     while read line; do
         envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
@@ -84,12 +93,6 @@ export_shared_envvars() {
     # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
     export AWS_EC2_METADATA_DISABLED=${AWS_EC2_METADATA_DISABLED:-false}
     # ===================================================================================
-}
-
-# Export cachelib libraries
-export_cachelib_lib_path() {
-    CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
 
 update_submodules()

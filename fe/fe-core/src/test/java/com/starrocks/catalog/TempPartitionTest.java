@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -111,7 +112,7 @@ public class TempPartitionTest {
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, ctx);
             if (expectedException) {
                 Assert.fail("expected exception not thrown");
             }

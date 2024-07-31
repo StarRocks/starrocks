@@ -69,7 +69,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                      << ", you'd better use the configuration items prefixed `datacache` instead!";
     }
 
-#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
+#if !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
         config::datacache_enable = false;
@@ -113,8 +113,6 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         if (config::datacache_engine == "") {
 #if defined(WITH_STARCACHE)
             config::datacache_engine = "starcache";
-#else
-            config::datacache_engine = "cachelib";
 #endif
         }
         cache_options.meta_path = config::datacache_meta_path;
@@ -200,6 +198,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
 
+    // set up thrift client before providing any service to the external
+    // because these services may use thrift client, for example, stream
+    // load will send thrift rpc to FE after http server is started
+    ThriftRpcHelper::setup(exec_env);
+
     // Start thrift server
     int thrift_port = config::be_port;
     if (as_cn && config::thrift_port != 0) {
@@ -219,9 +222,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
 
     // Configure keepalive.
-#ifdef WITH_BRPC_KEEPALIVE
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
-#endif
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
@@ -273,7 +274,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    ThriftRpcHelper::setup(exec_env);
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
@@ -325,7 +325,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
-#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+#if defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";

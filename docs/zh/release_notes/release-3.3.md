@@ -4,16 +4,26 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.3
 
-## 3.3.1
+## 3.3.1（已下线）
 
 发布日期：2024 年 7 月 18 日
+
+:::tip
+
+此版本因存在主键模型表升级兼容性问题已经下线。
+
+- 问题：从 3.1.11、3.2.4 之前的版本升级至 3.3.1 时，查询主键模型表时，索引解压失败，导致查询报错。
+- 影响范围：对于不涉及主键模型表的查询，不受影响。
+- 临时解决方法：请回滚至 3.3.0 及以下版本规避此问题，此问题会在 3.3.2 版本中解决。
+
+:::
 
 ### 新增特性
 
 - [Preview] 支持临时表。
 - [Preview] JDBC Catalog 支持 Oracle 和 SQL Server。
 - [Preview] Unified Catalog 支持 Kudu。
-- INSERT INTO 导入主键表，支持部分列更新。
+- INSERT INTO 导入主键表，支持通过指定 Column List 实现部分列更新。
 - 用户自定义变量支持 ARRAY 类型。 [#42631](https://github.com/StarRocks/starrocks/pull/42613)
 - Stream Load 支持将 JSON 类型转化并导入至 STRUCT/MAP/ARRAY 类型目标列。[ #45406](https://github.com/StarRocks/starrocks/pull/45406)
 - 支持全局字典 Cache。
@@ -21,6 +31,7 @@ displayed_sidebar: "Chinese"
 - 支持读取 Iceberg 中的视图。 [#46273](https://github.com/StarRocks/starrocks/issues/46273)
 - 支持在 Apache Ranger 中设置列级别权限（物化视图和视图的列级别权限需要在表对象下设置）。 [#47702](https://github.com/StarRocks/starrocks/pull/47702)
 - 存算分离主键模型表支持列模式部份更新。[#46516](https://github.com/StarRocks/starrocks/issues/46516)
+- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
 
 ### 功能优化
 
@@ -43,6 +54,7 @@ displayed_sidebar: "Chinese"
 - 写出 Hive、Iceberg 默认打开 Spill。 [#47118](https://github.com/StarRocks/starrocks/pull/47118)
 - 修改 BE 配置项 `max_cumulative_compaction_num_singleton_deltas` 默认值为 `500`。[#47621](https://github.com/StarRocks/starrocks/pull/47621)
 - 用户创建分区表但未设置分桶数时，当分区数量超过 5 个后，系统自动设置分桶数的规则更改为 `max(2 * BE 或 CN 数量, 根据最大历史分区数据量计算得出的分桶数)`。（原来的规则是根据最大历史分区数据量计算的分桶数）。[#47949](https://github.com/StarRocks/starrocks/pull/47949)
+- INSERT INTO 导入主键表时指定 Column List 会执行部分列更新。先前版本中，指定 Column List 仍然导致 Full Upsert。
 
 ### 降级说明
 

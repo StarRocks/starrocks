@@ -59,6 +59,7 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -649,7 +650,8 @@ public class OlapTable extends Table {
             maxColUniqueId = Math.max(maxColUniqueId, column.getMaxUniqueId());
         }
         setMaxColUniqueId(maxColUniqueId);
-        LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
+        LOG.info("after rebuild full schema. table {}, schema: {}, max column unique id: {}",
+                name, fullSchema, maxColUniqueId);
     }
 
     public boolean deleteIndexInfo(String indexName) {
@@ -835,6 +837,9 @@ public class OlapTable extends Table {
             }
         }
 
+        // reset replication number for olaptable
+        setReplicationNum((short) restoreReplicationNum);
+
         // for each partition, reset rollup index map
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
@@ -857,7 +862,7 @@ public class OlapTable extends Table {
                     idx.clearTabletsForRestore();
                     Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                             partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
-                            schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId());
+                            schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), db);
                     if (!status.ok()) {
                         return status;
                     }
@@ -865,33 +870,93 @@ public class OlapTable extends Table {
             }
         }
 
-        // reset replication number for olaptable
-        setReplicationNum((short) restoreReplicationNum);
-
         return Status.OK;
     }
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId) {
-        for (int i = 0; i < tabletNum; i++) {
-            long newTabletId = globalStateMgr.getNextId();
-            LocalTablet newTablet = new LocalTablet(newTabletId);
-            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+                                          long partitionId, long shardGroupId, Database db) {
+        Preconditions.checkArgument(replicationNum > 0);
+        boolean isColocate = (this.colocateGroup != null && !this.colocateGroup.isEmpty() && db != null);
 
-            // replicas
-            List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
-                    .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
-            if (CollectionUtils.isEmpty(beIds)) {
-                return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                        + replicationNum
-                        + " different hosts to create table: " + name);
+        if (isColocate) {
+            try {
+                isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                                            .addTableToGroup(db, this, this.colocateGroup, false);
+            } catch (Exception e) {
+                return new Status(ErrCode.COMMON_ERROR,
+                    "check colocate restore failed, errmsg: " + e.getMessage() +
+                    ", you can disable colocate restore by turn off Config.enable_colocate_restore");
             }
-            for (Long beId : beIds) {
-                long newReplicaId = globalStateMgr.getNextId();
-                Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                        version, schemaHash);
-                newTablet.addReplica(replica, false/* update inverted index */);
+        }
+
+        if (isColocate) {
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
+    
+            if (chooseBackendsArbitrary) {
+                backendsPerBucketSeq = Lists.newArrayList();
+            }
+
+            for (int i = 0; i < tabletNum; ++i) {
+                long newTabletId = globalStateMgr.getNextId();
+                LocalTablet newTablet = new LocalTablet(newTabletId);
+                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+    
+                // replicas
+                List<Long> beIds;
+                if (chooseBackendsArbitrary) {
+                    // This is the first colocate table in the group, or just a normal table,
+                    // randomly choose backends
+                    beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
+                    backendsPerBucketSeq.add(beIds);
+                } else {
+                    // get backends from existing backend sequence
+                    beIds = backendsPerBucketSeq.get(i);
+                }
+
+                if (CollectionUtils.isEmpty(beIds)) {
+                    return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                            + replicationNum
+                            + " different hosts to create table: " + name);
+                }
+                for (Long beId : beIds) {
+                    long newReplicaId = globalStateMgr.getNextId();
+                    Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                            version, schemaHash);
+                    newTablet.addReplica(replica, false/* update inverted index */);
+                }
+                Preconditions.checkState(beIds.size() == replicationNum,
+                                         beIds.size() + " vs. " + replicationNum);
+            }
+
+            // first colocate table in CG
+            if (groupId != null && chooseBackendsArbitrary) {
+                colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            }
+        } else {
+            for (int i = 0; i < tabletNum; i++) {
+                long newTabletId = globalStateMgr.getNextId();
+                LocalTablet newTablet = new LocalTablet(newTabletId);
+                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+    
+                // replicas
+                List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
+                if (CollectionUtils.isEmpty(beIds)) {
+                    return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                            + replicationNum
+                            + " different hosts to create table: " + name);
+                }
+                for (Long beId : beIds) {
+                    long newReplicaId = globalStateMgr.getNextId();
+                    Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                            version, schemaHash);
+                    newTablet.addReplica(replica, false/* update inverted index */);
+                }
             }
         }
         return Status.OK;
@@ -1293,6 +1358,16 @@ public class OlapTable extends Table {
 
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         dropPartition(dbId, partitionName, isForceDrop, false);
+    }
+
+    // check input partition has temporary partition
+    public boolean inputHasTempPartition(List<Long> partitionIds) {
+        for (Long pid : partitionIds) {
+            if (tempPartitions.getPartition(pid) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /*

@@ -912,13 +912,9 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 
 void TabletUpdates::do_apply() {
-    if (config::enable_pk_strict_memcheck) {
-        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
-        SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
-                StorageEngine::instance()->update_manager()->mem_tracker());
-    } else {
-        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    }
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(config::enable_pk_strict_memcheck);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
+            config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {
@@ -5013,7 +5009,7 @@ void TabletUpdates::_clear_rowset_del_vec_cache(const Rowset& rowset) {
         std::vector<TabletSegmentId> tsids;
         tsids.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i});
+            tsids.emplace_back(_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i);
         }
         return tsids;
     }());
@@ -5024,7 +5020,7 @@ void TabletUpdates::_clear_rowset_delta_column_group_cache(const Rowset& rowset)
         std::vector<TabletSegmentId> tsids;
         tsids.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i});
+            tsids.emplace_back(_tablet.tablet_id(), rowset.rowset_meta()->get_rowset_seg_id() + i);
         }
         return tsids;
     }());

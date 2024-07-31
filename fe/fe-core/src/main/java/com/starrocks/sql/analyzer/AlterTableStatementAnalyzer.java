@@ -41,6 +41,7 @@ public class AlterTableStatementAnalyzer {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
         MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
+
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);

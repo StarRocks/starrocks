@@ -1,0 +1,7 @@
+# local mirrorlist for $releasever - $basearch
+https://vault.centos.org/altarch/$releasever/os/$basearch/
+https://archive.kernel.org/centos-vault/altarch/$releasever/os/$basearch/
+https://linuxsoft.cern.ch/centos-vault/altarch/$releasever/os/$basearch/
+https://mirror.nsc.liu.se/centos-store/altarch/$releasever/os/$basearch/
+https://mirrors.163.com/centos-vault/altarch/$releasever/os/$basearch/
+https://mirrors.aliyun.com/centos-vault/altarch/$releasever/os/$basearch/

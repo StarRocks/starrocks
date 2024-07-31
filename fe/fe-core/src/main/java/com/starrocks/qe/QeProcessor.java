@@ -26,6 +26,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
@@ -38,6 +40,7 @@ public interface QeProcessor {
     TReportAuditStatisticsResult reportAuditStatistics(TReportAuditStatisticsParams params, TNetworkAddress beAddr);
 
     TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params);
 
     void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException;
 

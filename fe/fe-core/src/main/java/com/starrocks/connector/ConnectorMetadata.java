@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -124,7 +125,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default TableVersionRange getTableVersionRange(Table table,
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
                                                    Optional<ConnectorTableVersion> startVersion,
                                                    Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();
@@ -180,10 +181,12 @@ public interface ConnectorMetadata {
      * @param tableName
      * @param snapshotId
      * @param serializedPredicate serialized predicate string of lake format expression
+     * @param metadataTableType metadata table type
+     *
      * @return table meta serialized specification
      */
-    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                                     long snapshotId, String serializedPredicate) {
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
+                                                     String serializedPredicate, MetadataTableType metadataTableType) {
         return null;
     }
 
@@ -286,7 +289,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(AlterTableStmt stmt) throws UserException {
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 

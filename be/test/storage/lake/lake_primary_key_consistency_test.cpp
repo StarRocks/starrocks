@@ -146,12 +146,15 @@ public:
         config::write_buffer_size = MaxN * (sizeof(int) * 2) / MaxUpsert;
         config::lake_publish_version_slow_log_ms = 0;
         config::enable_pindex_minor_compaction = false;
+        _old_enable_pk_strict_memcheck = config::enable_pk_strict_memcheck;
+        config::enable_pk_strict_memcheck = false;
     }
 
     void TearDown() override {
         (void)fs::remove_all(kTestGroupPath);
         config::l0_max_mem_usage = _old_l0_size;
         config::write_buffer_size = _old_memtable_size;
+        config::enable_pk_strict_memcheck = _old_enable_pk_strict_memcheck;
     }
 
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_upsert_data(bool is_upsert) {
@@ -317,6 +320,7 @@ protected:
 
     int64_t _old_l0_size = 0;
     int64_t _old_memtable_size = 0;
+    bool _old_enable_pk_strict_memcheck = false;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {

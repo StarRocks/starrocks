@@ -1,5 +1,6 @@
 set(EXEC_FILES
         ./agent/agent_task_test.cpp
+        ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -52,6 +53,7 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -149,6 +151,7 @@ set(EXEC_FILES
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
+        ./exprs/vectorized_literal_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -289,6 +292,7 @@ set(EXEC_FILES
         ./storage/rowset/cast_column_iterator_test.cpp
         ./storage/rowset/series_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
+        ./storage/rowset/metadata_cache_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
@@ -388,6 +392,7 @@ set(EXEC_FILES
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
         ./util/bitmap_test.cpp
+        ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
@@ -463,7 +468,7 @@ set(EXEC_FILES
         ./util/thrift_rpc_helper_test.cpp
         )
 
-if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
+if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)

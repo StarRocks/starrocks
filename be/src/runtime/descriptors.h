@@ -338,11 +338,13 @@ public:
     ~IcebergMetadataTableDescriptor() override = default;
     const std::string& get_hive_column_names() const;
     const std::string& get_hive_column_types() const;
+    const std::string& get_time_zone() const;
     bool has_partition() const override { return false; }
 
 private:
     std::string _hive_column_names;
     std::string _hive_column_types;
+    std::string _time_zone;
 };
 
 class KuduTableDescriptor : public HiveTableDescriptor {

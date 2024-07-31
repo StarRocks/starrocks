@@ -1956,10 +1956,6 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.message();
         param->use_datacache = true;
-#elif defined(WITH_CACHELIB)
-        status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.message();
-        param->use_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();

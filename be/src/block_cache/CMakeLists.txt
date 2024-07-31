@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 
@@ -31,10 +27,6 @@ set(CACHE_FILES
   block_cache_hit_rate_counter.hpp
 )
 
-if (${WITH_CACHELIB} STREQUAL "ON")
-    list(APPEND CACHE_FILES cachelib_wrapper.cpp)
-endif()
-
 if (${WITH_STARCACHE} STREQUAL "ON")
     list(APPEND CACHE_FILES starcache_wrapper.cpp)
 endif()
@@ -42,12 +34,3 @@ endif()
 add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
-
-if (${WITH_CACHELIB} STREQUAL "ON")
-    set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
-    link_directories(${CACHELIB_DIR}/deps/lib64)
-
-    include_directories(AFTER ${CACHELIB_DIR}/include)
-    include_directories(AFTER ${CACHELIB_DIR}/deps/include)
-endif()
-

@@ -28,6 +28,7 @@ import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
@@ -37,6 +38,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -427,6 +430,13 @@ public class MetadataMgrTest {
 
     @Test
     public void testGetMetadataTable() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);

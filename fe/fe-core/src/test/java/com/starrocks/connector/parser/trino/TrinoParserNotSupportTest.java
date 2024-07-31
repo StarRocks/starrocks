@@ -69,13 +69,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         getFragmentPlan(sql);
     }
 
-    // refer to https://trino.io/docs/current/language/types.html#row
-    @Test
-    public void testCastRowDataType() {
-        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
-        analyzeFail(sql, "does not support the type ROW(x BIGINT, y DOUBLE)");
-    }
-
     // refer to https://trino.io/docs/current/sql/select.html#tablesample
     @Test
     public void testSampleTable() {

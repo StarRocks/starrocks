@@ -176,6 +176,9 @@ if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
 
+read_var_from_conf meta_dir $STARROCKS_HOME/conf/fe.conf
+mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
+
 # add libs to CLASSPATH
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
@@ -185,8 +188,11 @@ export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${S
 pidfile=$PID_DIR/fe.pid
 
 if [ -f $pidfile ]; then
-  if kill -0 `cat $pidfile` > /dev/null 2>&1; then
-    echo Frontend running as process `cat $pidfile`.  Stop it first.
+  oldpid=$(cat $pidfile)
+  # get the full command
+  pscmd=$(ps -q $oldpid -o cmd=)
+  if echo "$pscmd" | grep -q -w StarRocksFE &>/dev/null ; then
+    echo Frontend running as process $oldpid. Stop it first.
     exit 1
   fi
 fi

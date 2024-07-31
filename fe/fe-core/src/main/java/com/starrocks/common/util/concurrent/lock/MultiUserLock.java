@@ -103,10 +103,12 @@ public class MultiUserLock extends Lock {
                      * The outer layer has already obtained the intention lock,
                      * and the inner layer code should not apply for read-write locks.
                      */
-                    if ((lockOwnerLockType == LockType.INTENTION_SHARED || lockOwnerLockType == LockType.INTENTION_EXCLUSIVE)
-                            && (lockRequestLockType == LockType.READ || lockRequestLockType == LockType.WRITE)) {
-                        throw new NotSupportLockException("Can't request " + lockRequestLockType
-                                + " in the scope of " + lockOwnerLockType + ", " + lockOwner.getLocker().getLockerStackTrace());
+
+                    if (lockOwnerLockType.isIntentionLock() && !lockRequestLockType.isIntentionLock()) {
+                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock ("
+                                + lockHolderRequest.getLocker().getLockerStackTrace() + ")"
+                                + " in the scope of Database " + lockOwnerLockType
+                                + " Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
                     }
 
                     /*

@@ -1,4 +1,5 @@
 # Build toolchains on centos7, dev-env image can be built based on this image for centos7
+# NOTE: build context MUST be set to `docker/dockerfiles/toolchains/`
 #  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-centos7.Dockerfile -t toolchains-centos7:latest docker/dockerfiles/toolchains/
 
 ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-10/root/usr
@@ -8,17 +9,25 @@ ARG MAVEN_VERSION=3.6.3
 ARG MAVEN_INSTALL_HOME=/opt/maven
 # Can't upgrade to a later version, due to incompatible changes between 2.31 and 2.32
 ARG BINUTILS_DOWNLOAD_URL=https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.bz2
+# install epel-release directly from the url link
+ARG EPEL_RPM_URL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-FROM centos:centos7 as base-builder
+FROM centos:centos7 AS fixed-centos7-image
+# Fix the centos mirrorlist, due to official list is gone after EOL
+ADD yum-mirrorlist /etc/yum-mirrorlist/
+RUN rm -f /etc/yum.repos.d/CentOS-*.repo && ln -s /etc/yum-mirrorlist/$(arch)/CentOS-Base-Local-List.repo /etc/yum.repos.d/CentOS-Base-Local-List.repo
+
+
+FROM fixed-centos7-image AS base-builder
 RUN yum install -y gcc gcc-c++ make automake curl wget gzip gunzip zip bzip2 file texinfo && yum clean metadata
 
 
-FROM base-builder as gcc-builder
+FROM base-builder AS gcc-builder
 ARG GCC_INSTALL_HOME
 ARG GCC_DOWNLOAD_URL
 RUN mkdir -p /workspace/gcc && \
     cd /workspace/gcc &&    \
-    wget --no-check-certificate $GCC_DOWNLOAD_URL -O ../gcc.tar.gz && \
+    wget --progress=dot:mega --no-check-certificate $GCC_DOWNLOAD_URL -O ../gcc.tar.gz && \
     tar -xzf ../gcc.tar.gz --strip-components=1 && \
     ./contrib/download_prerequisites && \
     ./configure --disable-multilib --enable-languages=c,c++ --prefix=${GCC_INSTALL_HOME}
@@ -27,29 +36,30 @@ RUN cd /workspace/gcc && mkdir -p /workspace/installed && make DESTDIR=/workspac
     strip /workspace/installed/${GCC_INSTALL_HOME}/bin/* /workspace/installed/${GCC_INSTALL_HOME}/libexec/gcc/*/*/{cc1,cc1plus,collect2,lto1}
 
 
-FROM base-builder as binutils-builder
+FROM base-builder AS binutils-builder
 ARG BINUTILS_DOWNLOAD_URL
 # build binutils and only install gnu as
 RUN mkdir -p /workspace/binutils && \
     cd /workspace/binutils && \
-    wget --no-check-certificate $BINUTILS_DOWNLOAD_URL -O ../binutils.tar.bz2 && \
+    wget --progress=dot:mega --no-check-certificate $BINUTILS_DOWNLOAD_URL -O ../binutils.tar.bz2 && \
     tar -xjf ../binutils.tar.bz2 --strip-components=1 && \
     ./configure --prefix=/usr   && \
     make -j `nproc` && \
     mkdir -p /workspace/installed  && cd gas && make DESTDIR=/workspace/installed install
 
-FROM centos:centos7
+FROM fixed-centos7-image
 
 ARG GCC_INSTALL_HOME
 ARG CMAKE_INSTALL_HOME
 ARG MAVEN_VERSION
 ARG MAVEN_INSTALL_HOME
+ARG EPEL_RPM_URL
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
 RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh
 
-RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
+RUN yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
         libtool which git ccache binutils-devel python3 file java-11-openjdk java-11-openjdk-devel java-11-openjdk-jmods less psmisc && \
         yum clean all && rm -rf /var/cache/yum
 

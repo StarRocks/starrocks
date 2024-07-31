@@ -335,7 +335,7 @@ public class AlterTest {
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             if (expectedException) {
                 Assert.fail();
             }
@@ -350,7 +350,7 @@ public class AlterTest {
     private static void alterTableWithNewParserAndExceptionMsg(String sql, String msg) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
         } catch (Exception e) {
             Assert.assertEquals(msg, e.getMessage());
         }
@@ -1863,7 +1863,7 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         String stmt = "alter table modify_bucket set (\"dynamic_partition.buckets\" = \"10\");\n";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test
@@ -2413,8 +2413,7 @@ public class AlterTest {
         AlterJobMgr alter = new AlterJobMgr(
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
-                new SystemHandler(),
-                new CompactionHandler());
+                new SystemHandler());
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
@@ -2425,7 +2424,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2433,7 +2432,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2442,7 +2441,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_time_slice\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2451,7 +2450,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_date_trunc\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 2 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test
@@ -2529,7 +2528,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t2 ADD PARTITIONS START (\"2021-01-04\") END (\"2021-01-06\") EVERY (INTERVAL 1 DAY);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
     }
 
     @Test

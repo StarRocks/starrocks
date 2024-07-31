@@ -30,6 +30,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -122,11 +123,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableVersionRange(table, startVersion, endVersion);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -173,9 +174,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                             long snapshotId, String serializedPredicate) {
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
-        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override

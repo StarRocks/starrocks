@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -34,20 +33,26 @@ import java.util.List;
  *      not only create the specified user, but also grant all privs of the specified role to the user.
  */
 public class CreateUserStmt extends BaseCreateAlterUserStmt {
-
     private final boolean ifNotExists;
+    protected SetRoleType setRoleType;
+    protected List<String> defaultRoles;
 
-    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
-        this(ifNotExists, userDesc, defaultRoles, NodePosition.ZERO);
-    }
-
-    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles, NodePosition pos) {
-        super(userDesc, SetRoleType.ROLE, defaultRoles, pos);
+    public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
+                          UserAuthOption authOption,
+                          List<String> defaultRoles,
+                          NodePosition pos) {
+        super(userIdentity, authOption, pos);
         this.ifNotExists = ifNotExists;
+        this.setRoleType = SetRoleType.ROLE;
+        this.defaultRoles = defaultRoles;
     }
 
     public boolean isIfNotExists() {
         return ifNotExists;
+    }
+
+    public List<String> getDefaultRoles() {
+        return defaultRoles;
     }
 
     @Override

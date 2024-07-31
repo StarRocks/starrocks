@@ -3063,4 +3063,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
+
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
+
+    // Whether restore tables into colocate group if the
+    // backuped table is colocated
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_restore = false;
+    
+    @ConfField
+    public static boolean enable_alter_struct_column = true;
 }

@@ -137,7 +137,6 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -278,6 +277,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TReportLakeCompactionRequest;
 import com.starrocks.thrift.TReportLakeCompactionResponse;
 import com.starrocks.thrift.TReportRequest;
@@ -2594,7 +2595,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }
-        MaterializedViewMgr.getInstance().onReportEpoch(request);
+        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onReportEpoch(request);
         return new TMVReportEpochResponse();
     }
 
@@ -2936,5 +2937,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
             throws TException {
         return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
+    }
+
+    @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
+        return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
     }
 }

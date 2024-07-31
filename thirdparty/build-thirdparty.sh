@@ -368,13 +368,8 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
-    # to generate config.guess and config.sub to support aarch64
-    rm -rf config.*
-    autoreconf -i
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
-    ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
     make -j$PARALLEL
     make install
 }
@@ -560,7 +555,7 @@ build_brpc() {
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
+    PATH=$PATH:$TP_INSTALL_DIR/bin/ ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift    
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
@@ -747,6 +742,7 @@ build_s2() {
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_CXX_STANDARD="17" \
     -DGFLAGS_ROOT_DIR="$TP_INSTALL_DIR/include" \
     -DWITH_GFLAGS=ON \
     -DGLOG_ROOT_DIR="$TP_INSTALL_DIR/include" \
@@ -1001,7 +997,7 @@ build_aws_cpp_sdk() {
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
-    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts;kms" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \

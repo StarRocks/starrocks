@@ -57,6 +57,8 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -373,7 +375,7 @@ public class MetadataMgr {
         }
     }
 
-    public void alterTable(AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -388,7 +390,7 @@ public class MetadataMgr {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
-            connectorMetadata.get().alterTable(stmt);
+            connectorMetadata.get().alterTable(context, stmt);
         } else {
             throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
@@ -497,9 +499,21 @@ public class MetadataMgr {
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
-        if (connectorTable != null) {
+        if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+
+        if (connectorTable != null && connectorTable.isMetadataTable()) {
+            MetadataTable metadataTable = (MetadataTable) connectorTable;
+            String originDbName = metadataTable.getOriginDb();
+            String originTableName = metadataTable.getOriginTable();
+            boolean originTableExist = connectorMetadata.map(metadata ->
+                    metadata.tableExists(originDbName, originTableName)).orElse(false);
+            if (!originTableExist) {
+                LOG.error("origin table not exists with {}.{}.{}", catalogName, dbName, tblName);
+                return null;
+            }
         }
         return connectorTable;
     }
@@ -512,11 +526,11 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table, startVersion, endVersion))
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
                 .orElse(TableVersionRange.empty().empty());
     }
 
@@ -819,12 +833,12 @@ public class MetadataMgr {
         return partitions.build();
     }
 
-    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName,
-                                                    long snapshotId, String serializedPredicate) {
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,
+                                                    String serializedPredicate, MetadataTableType type) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
             } catch (Exception e) {
                 LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
                 throw e;

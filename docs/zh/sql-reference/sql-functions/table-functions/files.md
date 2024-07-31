@@ -161,7 +161,12 @@ CSV 格式示例：
 
 - 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
 - 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个相对较小的通用数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。
+  - 所有整数列将被统一为更粗粗粒度上的整数类型。
+  - 整数列与 FLOAT 类型列将统一为 DECIMAL 类型。
+  - 其他类型统一为字符串类型用。
 - 一般情况下，STRING 类型可用于统一所有数据类型。
+
+您可以参考[示例六](#示例六)。
 
 如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
 
@@ -192,8 +197,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 - 如果您使用 IAM User 认证访问 AWS S3：
 
   ```SQL
-  "aws.s3.access_key" = "xxxxxxxxxx",
-  "aws.s3.secret_key" = "yyyyyyyyyy",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   "aws.s3.region" = "<s3_region>"
   ```
 
@@ -206,8 +211,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 - 如果您使用 IAM User 认证访问 GCS：
 
   ```SQL
-  "fs.s3a.access.key" = "xxxxxxxxxx",
-  "fs.s3a.secret.key" = "yyyyyyyyyy",
+  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
+  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   "fs.s3a.endpoint" = "<gcs_endpoint>"
   ```
 
@@ -259,20 +264,123 @@ unload_data_param::=
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 | target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
 
+## 返回
+
+当与 SELECT 语句一同使用时，FILES() 函数会以表的形式返回远端存储文件中的数据。
+
+- 当查询 CSV 文件时，您可以在 SELECT 语句使用 `$1`、`$2` ... 表示文件中不同的列，或使用 `*` 查询所有列。
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/csv/file1.csv",
+      "format" = "csv",
+      "csv.column_separator"=",",
+      "csv.row_delimiter"="\n",
+      "csv.enclose"='"',
+      "csv.skip_header"="1",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE $1 > 5;
+  +------+---------+------------+
+  | $1   | $2      | $3         |
+  +------+---------+------------+
+  |    6 | 0.34413 | 2017-11-25 |
+  |    7 | 0.40055 | 2017-11-26 |
+  |    8 | 0.42437 | 2017-11-27 |
+  |    9 | 0.67935 | 2017-11-27 |
+  |   10 | 0.22783 | 2017-11-29 |
+  +------+---------+------------+
+  5 rows in set (0.30 sec)
+
+  SELECT $1, $2 FROM FILES(
+      "path" = "s3://inserttest/csv/file1.csv",
+      "format" = "csv",
+      "csv.column_separator"=",",
+      "csv.row_delimiter"="\n",
+      "csv.enclose"='"',
+      "csv.skip_header"="1",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  );
+  +------+---------+
+  | $1   | $2      |
+  +------+---------+
+  |    1 | 0.71173 |
+  |    2 | 0.16145 |
+  |    3 | 0.80524 |
+  |    4 | 0.91852 |
+  |    5 | 0.37766 |
+  |    6 | 0.34413 |
+  |    7 | 0.40055 |
+  |    8 | 0.42437 |
+  |    9 | 0.67935 |
+  |   10 | 0.22783 |
+  +------+---------+
+  10 rows in set (0.38 sec)
+  ```
+
+- 当查询 Parquet 或 ORC 文件时，您可以在 SELECT 语句直接指定对应列名，或使用 `*` 查询所有列。
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE c1 IN (101,105);
+  +------+------+---------------------+
+  | c1   | c2   | c3                  |
+  +------+------+---------------------+
+  |  101 |    9 | 2018-05-15T18:30:00 |
+  |  105 |    6 | 2018-05-15T18:30:00 |
+  +------+------+---------------------+
+  2 rows in set (0.29 sec)
+
+  SELECT c1, c3 FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  );
+  +------+---------------------+
+  | c1   | c3                  |
+  +------+---------------------+
+  |  101 | 2018-05-15T18:30:00 |
+  |  102 | 2018-05-15T18:30:00 |
+  |  103 | 2018-05-15T18:30:00 |
+  |  104 | 2018-05-15T18:30:00 |
+  |  105 | 2018-05-15T18:30:00 |
+  |  106 | 2018-05-15T18:30:00 |
+  |  107 | 2018-05-15T18:30:00 |
+  |  108 | 2018-05-15T18:30:00 |
+  |  109 | 2018-05-15T18:30:00 |
+  |  110 | 2018-05-15T18:30:00 |
+  +------+---------------------+
+  10 rows in set (0.55 sec)
+  ```
+
 ## 注意事项
 
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
 
 ## 示例
 
-示例一：查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
+#### 示例一
+
+查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
 
 ```Plain
 MySQL > SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
-     "aws.s3.access_key" = "XXXXXXXXXX",
-     "aws.s3.secret_key" = "YYYYYYYYYY",
+     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
      "aws.s3.region" = "us-west-2"
 );
 +------+---------------------------------------------------------+
@@ -284,37 +392,43 @@ MySQL > SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-示例二：将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
+#### 示例二
+
+将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
 
 ```Plain
 MySQL > INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-示例三：基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
+#### 示例三
+
+基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
 
 ```Plain
 MySQL > CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-示例四：查询 HDFS 集群内 Parquet 文件 **/geo/country=US/city=LA/file1.parquet** 中的数据（其中仅包含两列 - `id` 和 `user`），并提取其路径中的 Key/Value 信息作为返回的列。
+#### 示例四
+
+查询 HDFS 集群内 Parquet 文件 **/geo/country=US/city=LA/file1.parquet** 中的数据（其中仅包含两列 - `id` 和 `user`），并提取其路径中的 Key/Value 信息作为返回的列。
 
 ```Plain
 SELECT * FROM FILES(
@@ -334,7 +448,9 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-示例五：将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
+#### 示例五
+
+将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
 
 ```SQL
 INSERT INTO 
@@ -348,4 +464,117 @@ FILES(
     "partition_by" = "sales_time"
 )
 SELECT * FROM sales_records;
+```
+
+#### 示例六
+
+自动 Schema 检测和 Union 操作
+
+以下示例基于 S3 桶中两个 Parquet 文件 File 1 和 File 2：
+
+- File 1 中包含三列数据 - INT 列 `c1`、FLOAT 列 `c2` 以及 DATE 列 `c3`。
+
+```Plain
+c1,c2,c3
+1,0.71173,2017-11-20
+2,0.16145,2017-11-21
+3,0.80524,2017-11-22
+4,0.91852,2017-11-23
+5,0.37766,2017-11-24
+6,0.34413,2017-11-25
+7,0.40055,2017-11-26
+8,0.42437,2017-11-27
+9,0.67935,2017-11-27
+10,0.22783,2017-11-29
+```
+
+- File 2 中包含三列数据 - INT 列 `c1`、INT 列 `c2` 以及 DATETIME 列 `c3`。
+
+```Plain
+c1,c2,c3
+101,9,2018-05-15T18:30:00
+102,3,2018-05-15T18:30:00
+103,2,2018-05-15T18:30:00
+104,3,2018-05-15T18:30:00
+105,6,2018-05-15T18:30:00
+106,1,2018-05-15T18:30:00
+107,8,2018-05-15T18:30:00
+108,5,2018-05-15T18:30:00
+109,6,2018-05-15T18:30:00
+110,8,2018-05-15T18:30:00
+```
+
+使用 CTAS 语句创建表 `test_ctas_parquet` 并将两个 Parquet 文件中的数据导入表中：
+
+```SQL
+CREATE TABLE test_ctas_parquet AS
+SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/*",
+        "format" = "parquet",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "aws.s3.region" = "us-west-2"
+);
+```
+
+查看 `test_ctas_parquet` 的表结构：
+
+```SQL
+SHOW CREATE TABLE test_ctas_parquet\G
+```
+
+```Plain
+*************************** 1. row ***************************
+       Table: test_ctas_parquet
+Create Table: CREATE TABLE `test_ctas_parquet` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+```
+
+由结果可知，`c2` 列因为包含 FLOAT 和 INT 数据，被合并为 DECIMAL 列，而 `c3` 列因为包含 DATE 和 DATETIME 数据，，被合并为 VARCHAR 列。
+
+将 Parquet 文件替换为含有同样数据的 CSV 文件，以上结果依然成立：
+
+```Plain
+mysql> CREATE TABLE test_ctas_csv AS
+    -> SELECT * FROM FILES(
+    ->     "path" = "s3://inserttest/csv/*",
+    ->     "format" = "csv",
+    ->     "csv.column_separator"=",",
+    ->     "csv.row_delimiter"="\n",
+    ->     "csv.enclose"='"',
+    ->     "csv.skip_header"="1",
+    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    ->     "aws.s3.region" = "us-west-2"
+    -> );
+Query OK, 0 rows affected (30.90 sec)
+
+mysql> SHOW CREATE TABLE test_ctas_csv\G
+*************************** 1. row ***************************
+       Table: test_ctas_csv
+Create Table: CREATE TABLE `test_ctas_csv` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` decimal(38, 9) NULL COMMENT "",
+  `c3` varchar(1048576) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"replication_num" = "3"
+);
+1 row in set (0.27 sec)
 ```
