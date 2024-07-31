@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneForSimpleAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -579,6 +580,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
+        ruleRewriteIterative(tree, rootTaskContext, new PartitionPruneForSimpleAggRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());

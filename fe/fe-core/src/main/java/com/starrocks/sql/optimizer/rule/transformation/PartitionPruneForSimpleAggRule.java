@@ -16,24 +16,21 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -57,9 +54,6 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        //        if (!context.getSessionVariable().isEnableRewriteSimpleAggToMetaScan()) {
-        //            return false;
-        //        }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
         OlapTable table = (OlapTable) scanOperator.getTable();
@@ -73,53 +67,53 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         // 7. no expr in arguments to agg functions
         // 8. all agg columns have zonemap index and are not null
         // 9. no deletion happens
-        if (table.getKeysType() != KeysType.DUP_KEYS) {
-            return false;
-        }
-        // no deletion
-        if (table.hasDelete()) {
-            return false;
-        }
-        // no limit
-        if (scanOperator.getLimit() != -1) {
-            return false;
-        }
-        // no filter
-        if (scanOperator.getPredicate() != null) {
-            return false;
-        }
-        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
-        if (groupingKeys != null && !groupingKeys.isEmpty()) {
-            return false;
-        }
-        if (aggregationOperator.getPredicate() != null) {
-            return false;
-        }
+        //        if (table.getKeysType() != KeysType.DUP_KEYS) {
+        //            return false;
+        //        }
+        //        // no deletion
+        //        if (table.hasDelete()) {
+        //            return false;
+        //        }
+        //        // no limit
+        //        if (scanOperator.getLimit() != -1) {
+        //            return false;
+        //        }
+        //        // no filter
+        //        if (scanOperator.getPredicate() != null) {
+        //            return false;
+        //        }
+        //        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
+        //        if (groupingKeys != null && !groupingKeys.isEmpty()) {
+        //            return false;
+        //        }
+        //        if (aggregationOperator.getPredicate() != null) {
+        //            return false;
+        //        }
 
-        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
-                aggregator -> {
-                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
-                    String functionName = aggregateFunction.functionName();
-                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
-                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
-                        if (usedColumns.size() != 1) {
-                            return false;
-                        }
-                        ColumnRefOperator usedColumn =
-                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
-                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-                        if (column == null || column.isAllowNull()) {
-                            // this is not a primitive column on table or it is nullable
-                            return false;
-                        }
-                        // min/max column should have zonemap index
-                        Type type = aggregator.getType();
-                        return !(type.isStringType() || type.isComplexType());
-                    }
-                    return false;
-                }
-        );
-        return allValid;
+        //        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
+        //                aggregator -> {
+        //                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+        //                    String functionName = aggregateFunction.functionName();
+        //                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
+        //                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
+        //                        if (usedColumns.size() != 1) {
+        //                            return false;
+        //                        }
+        //                        ColumnRefOperator usedColumn =
+        //                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
+        //                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+        //                        if (column == null || column.isAllowNull()) {
+        //                            // this is not a primitive column on table or it is nullable
+        //                            return false;
+        //                        }
+        //                        // min/max column should have zonemap index
+        //                        Type type = aggregator.getType();
+        //                        return !(type.isStringType() || type.isComplexType());
+        //                    }
+        //                    return false;
+        //                }
+        //        );
+        return true;
     }
 
     private Pair<Boolean, Boolean> checkMinMax(LogicalAggregationOperator operator) {
@@ -140,13 +134,24 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getInputs().get(0).getOp();
+        LogicalOlapScanOperator logicalOlapScanOperator =
+                (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
 
-        LogicalScanOperator scanOperator = optimizeWithPartitionPrune(logicalOlapScanOperator, table,
-                checkMinMax(aggregationOperator));
+        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+            LogicalOperator topNOperator = optimizeWithTop1(aggregationOperator, table, minMax);
+            return Lists.newArrayList(OptExpression.create(topNOperator, input.getInputs()));
+        } else if (partitionInfo.isListPartition()) {
+            LogicalOperator valueOperator = optimizeWithPartitionValues(aggregationOperator, table, minMax);
+            return Lists.newArrayList(OptExpression.create(valueOperator, input.getInputs()));
+        } else {
+            LogicalScanOperator scanOperator = optimizeWithPartitionPrune(logicalOlapScanOperator, table, minMax);
+            return Lists.newArrayList(OptExpression.create(scanOperator, input.getInputs()));
+        }
 
-        return Lists.newArrayList(OptExpression.create(scanOperator, input.getInputs()));
     }
 
     /**
@@ -185,7 +190,8 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
     /**
      * For List Partition, we can evaluate the MAX(pt) based on the partition values
      */
-    private LogicalOperator optimizeWithPartitionValues(OlapTable table,
+    private LogicalOperator optimizeWithPartitionValues(LogicalAggregationOperator aggregationOperator,
+                                                        OlapTable table,
                                                         Pair<Boolean, Boolean> hasMinMax) {
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         // Only support single-column partition
@@ -203,7 +209,10 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
             ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
             minValue = partitionValues.minValue().toConstant();
         }
-        LogicalValuesOperator.Builder
+        return new LogicalValuesOperator.Builder()
+                .setRows(List.of(List.of(minValue)))
+                .setColumnRefSet(Lists.newArrayList(aggregationOperator.getColumnRefMap().keySet()))
+                .build();
     }
 
     /**

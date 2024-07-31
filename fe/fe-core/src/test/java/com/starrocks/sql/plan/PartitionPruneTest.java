@@ -203,7 +203,6 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testGeneratedColumnPrune() throws Exception {
         // c2
         starRocksAssert.query("select count(*) from t_gen_col where c2 = 1 ")
