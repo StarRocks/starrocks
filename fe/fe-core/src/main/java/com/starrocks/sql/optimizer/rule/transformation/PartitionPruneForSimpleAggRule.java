@@ -143,10 +143,10 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
 
         if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
             LogicalOperator topNOperator = optimizeWithTop1(aggregationOperator, table, minMax);
-            return Lists.newArrayList(OptExpression.create(topNOperator, input.getInputs()));
+            return Lists.newArrayList(OptExpression.create(topNOperator, input.getInputs().get(0).getInputs()));
         } else if (partitionInfo.isListPartition()) {
             LogicalOperator valueOperator = optimizeWithPartitionValues(aggregationOperator, table, minMax);
-            return Lists.newArrayList(OptExpression.create(valueOperator, input.getInputs()));
+            return Lists.newArrayList(OptExpression.create(valueOperator));
         } else {
             LogicalScanOperator scanOperator = optimizeWithPartitionPrune(logicalOlapScanOperator, table, minMax);
             return Lists.newArrayList(OptExpression.create(scanOperator, input.getInputs()));
