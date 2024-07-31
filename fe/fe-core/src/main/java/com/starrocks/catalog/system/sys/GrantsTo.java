@@ -29,11 +29,13 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.authorization.DbUID;
+import com.starrocks.epack.authorization.FailoverGroupPEntryObject;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
 import com.starrocks.epack.authorization.WarehousePEntryObject;
+import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ActionSet;
@@ -340,6 +342,22 @@ public class GrantsTo {
                             continue;
                         }
                         objects.add(Lists.newArrayList(null, null, warehouse.getName()));
+                    }
+                } else if (ObjectTypeEPack.FAILOVER_GROUP.equals(privEntry.getKey())) {
+                    FailoverGroupPEntryObject failoverGroupPEntryObject = 
+                            (FailoverGroupPEntryObject) privilegeEntry.getObject();
+                    if (failoverGroupPEntryObject.getId() == PrivilegeBuiltinConstantsEPack.ALL_FAILOVER_GROUPS_ID) {
+                        for (FailoverGroup failoverGroup : GlobalStateMgr.getCurrentState().getFailoverGroupMgr()
+                                .getFailoverGroups()) {
+                            objects.add(Lists.newArrayList(null, null, failoverGroup.getName()));
+                        }
+                    } else {
+                        FailoverGroup failoverGroup = GlobalStateMgr.getCurrentState().getFailoverGroupMgr()
+                                .getFailoverGroup(failoverGroupPEntryObject.getId());
+                        if (failoverGroup == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, failoverGroup.getName()));
                     }
                 } else if (ObjectType.FUNCTION.equals(privEntry.getKey())) {
                     FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) privilegeEntry.getObject();

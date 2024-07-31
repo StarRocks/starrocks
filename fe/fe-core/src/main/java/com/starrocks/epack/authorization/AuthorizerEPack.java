@@ -47,4 +47,16 @@ public class AuthorizerEPack extends Authorizer {
                     .checkAnyActionOnWarehouse(currentUser, roleIds, name);
         }
     }
+
+    public static void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
+        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+                .checkFailoverGroupAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+                .checkAnyActionOnFailoverGroup(currentUser, roleIds, name);
+    }
 }

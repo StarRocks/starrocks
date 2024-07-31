@@ -46,8 +46,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.failover.FailoverGroup;
+import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.lake.StarOSAgent;
@@ -3509,6 +3512,64 @@ public class PrivilegeCheckerTest {
                 "grant drop on all warehouses to test",
                 "revoke drop on all warehouses from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) on WAREHOUSE waa for this operation");
+    }
+
+    @Test
+    public void testFailoverGroup() throws Exception {
+        verifyGrantRevoke(
+                "create failover group test_group as replica of \"127.0.0.1:9020\"",
+                "grant create failover group on system to test",
+                "revoke create failover group on system from test",
+                "Access denied; you need (at least one of) the CREATE FAILOVER GROUP privilege(s) on SYSTEM for this operation");
+
+        new MockUp<FailoverGroupMgr>() {
+                @Mock
+                public FailoverGroup getFailoverGroup(String name) {
+                    CreateSecondaryFailoverGroupStmt stmt = new CreateSecondaryFailoverGroupStmt(
+                            false, name, "127.0.0.1:9020", null);
+                    try {
+                        return new FailoverGroup(1, stmt);
+                    } catch (DdlException e) {
+                        return null;
+                    }
+                }
+        };
+
+        verifyGrantRevoke(
+                "desc failover group test_group",
+                "grant usage on failover group test_group to test",
+                "revoke usage on failover group test_group from test",
+                "Access denied; you need (at least one of) the USAGE privilege(s) " +
+                        "on FAILOVER GROUP test_group for this operation");
+
+        verifyGrantRevoke(
+                "alter failover group test_group suspend",
+                "grant alter on failover group test_group to test",
+                "revoke alter on failover group test_group from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) " +
+                        "on FAILOVER GROUP test_group for this operation");
+
+        verifyGrantRevoke(
+                "alter failover group test_group resume",
+                "grant alter on failover group test_group to test",
+                "revoke alter on failover group test_group from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) " +
+                        "on FAILOVER GROUP test_group for this operation");
+
+        verifyGrantRevoke(
+                "drop failover group test_group",
+                "grant drop on failover group test_group to test",
+                "revoke drop on failover group test_group from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) " +
+                        "on FAILOVER GROUP test_group for this operation");
+
+        // test all failover groups
+        verifyGrantRevoke(
+                "drop failover group test_group",
+                "grant drop on all failover groups to test",
+                "revoke drop on all failover groups from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) " +
+                        "on FAILOVER GROUP test_group for this operation");
     }
 
     @Test

@@ -83,10 +83,26 @@ public class AuthorizationMgrEpack extends AuthorizationMgr {
             List<PEntryObject> allWarehousePriv = new ArrayList<>();
             allWarehousePriv.add(provider.generateObject(ObjectTypeEPack.WAREHOUSE,
                     Lists.newArrayList("*"), globalStateMgr));
+            List<PEntryObject> allFailoverGroupPriv = new ArrayList<>();
+            allFailoverGroupPriv.add(provider.generateObject(ObjectTypeEPack.FAILOVER_GROUP,
+                    Lists.newArrayList("*"), globalStateMgr));
 
             RolePrivilegeCollectionV2 rootPrivCollection = getRolePrivilegeCollection(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
             rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
                     provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);
+            rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.FAILOVER_GROUP,
+                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP), allFailoverGroupPriv, false);
+
+            RolePrivilegeCollectionV2 dbAdminPrivCollection = getRolePrivilegeCollection(
+                    PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID);
+
+            dbAdminPrivCollection.grantWithoutAssertMutable(ObjectType.SYSTEM,
+                    List.of(PrivilegeTypeEPack.CREATE_FAILOVER_GROUP),
+                    Arrays.asList(new PEntryObject[] { null }),
+                    false);
+
+            dbAdminPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.FAILOVER_GROUP,
+                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP), allFailoverGroupPriv, false);
 
             RolePrivilegeCollectionV2 clusterAdminPrivCollection =
                     getRolePrivilegeCollection(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
@@ -97,7 +113,7 @@ public class AuthorizationMgrEpack extends AuthorizationMgr {
                     false);
 
             clusterAdminPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
-                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);
+                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);            
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("Fatal error when initializing built-in role and user", e);

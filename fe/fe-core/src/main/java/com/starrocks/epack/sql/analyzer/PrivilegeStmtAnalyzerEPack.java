@@ -55,6 +55,12 @@ public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
                                 "Invalid grant statement with error privilege object " + tokens);
                     }
                     objectTokenList.add(tokens);
+                } else if (ObjectTypeEPack.FAILOVER_GROUP.equals(objectType)) {
+                    if (tokens.size() != 1) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(tokens);
                 } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
                     objectTokenList.add(Lists.newArrayList("*", "*", "*"));
                 } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
@@ -64,6 +70,15 @@ public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
                 }
             } else {
                 if (ObjectTypeEPack.WAREHOUSE.equals(objectType)) {
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        if (tokens.size() != 1) {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+
+                        objectTokenList.add(tokens);
+                    }
+                } else if (ObjectTypeEPack.FAILOVER_GROUP.equals(objectType)) {
                     for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                         if (tokens.size() != 1) {
                             throw new SemanticException(

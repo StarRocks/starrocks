@@ -36,4 +36,14 @@ public interface AccessControllerEPack extends AccessController {
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
+
+    default void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
 }

@@ -341,7 +341,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
     @Override
     public ShowResultSet visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, ConnectContext context) {
         try {
-            return new ShowResultSet(statement.getMetaData(), statement.getRows());
+            return new ShowResultSet(statement.getMetaData(), statement.getRows(context));
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }

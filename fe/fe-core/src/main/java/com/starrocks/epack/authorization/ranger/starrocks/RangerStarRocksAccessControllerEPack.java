@@ -88,6 +88,18 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
         throw new AccessDeniedException();
     }
 
+    @Override
+    public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
     private void hasPermission(RangerStarRocksResourceEPack resource, UserIdentity user, PrivilegeType privilegeType)
             throws AccessDeniedException {
         String accessType;

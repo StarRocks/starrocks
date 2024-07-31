@@ -20,6 +20,8 @@ public class PrivilegeTypeEPack extends PrivilegeType {
     public static final PrivilegeTypeEPack CREATE_WAREHOUSE =
             new PrivilegeTypeEPack(20004, "CREATE WAREHOUSE");
     public static final PrivilegeTypeEPack SECURITY = new PrivilegeTypeEPack(20005, "SECURITY");
+    public static final PrivilegeTypeEPack CREATE_FAILOVER_GROUP =
+            new PrivilegeTypeEPack(20006, "CREATE FAILOVER GROUP");
 
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE =
             new ImmutableMap.Builder<String, PrivilegeType>()
@@ -29,6 +31,7 @@ public class PrivilegeTypeEPack extends PrivilegeType {
                     .put(APPLY.name(), APPLY)
                     .put(CREATE_WAREHOUSE.name(), CREATE_WAREHOUSE)
                     .put(SECURITY.name(), SECURITY)
+                    .put(CREATE_FAILOVER_GROUP.name(), CREATE_FAILOVER_GROUP)
                     .build();
 
     @Override
@@ -45,6 +48,8 @@ public class PrivilegeTypeEPack extends PrivilegeType {
             return CREATE_WAREHOUSE.name;
         } else if (id == SECURITY.id) {
             return SECURITY.name;
+        } else if (id == CREATE_FAILOVER_GROUP.id) {
+            return CREATE_FAILOVER_GROUP.name;
         } else {
             return "UNKNOWN";
         }

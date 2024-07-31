@@ -10,6 +10,7 @@ import java.util.Set;
 public class PrivilegeBuiltinConstantsEPack extends PrivilegeBuiltinConstants {
     public static final long ALL_POLICY_ID = -5;
     public static final long ALL_WAREHOUSES_ID = -1; // -1 represent all warehouses
+    public static final long ALL_FAILOVER_GROUPS_ID = -1; // -1 represent all failover groups
 
     public static final String SECURITY_ADMIN_ROLE_NAME = "security_admin";
     public static final long SECURITY_ADMIN_ROLE_ID = -106;

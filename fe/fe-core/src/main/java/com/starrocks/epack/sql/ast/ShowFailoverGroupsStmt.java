@@ -9,8 +9,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.epack.authorization.AuthorizerEPack;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.FailoverGroupProcNode;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -63,7 +66,7 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
         return META_DATA;
     }
 
-    public List<List<String>> getRows() throws AnalysisException {
+    public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
         Collection<FailoverGroup> failoverGroups = GlobalStateMgr.getCurrentState().getFailoverGroupMgr()
                 .getFailoverGroups();
         PatternMatcher matcher = null;
@@ -75,17 +78,16 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
         failoverGroups = failoverGroups.stream()
                 .filter(failoverGroup -> finalMatcher == null || finalMatcher.match(failoverGroup.getName()))
                 .filter(failoverGroup -> {
-                    /*
-                     * TODO: Authentication
-                     * try {
-                     * Authorizer.checkAnyActionOnFailoverGroup(connectContext.
-                     * getCurrentUserIdentity(),
-                     * connectContext.getCurrentRoleIds(), failoverGroup.getName());
-                     * } catch (AccessDeniedException e) {
-                     * return false;
-                     * }
-                     */
-                    return true;
+                    if (connectContext == null) {
+                        return true;
+                    }
+                    try {
+                        AuthorizerEPack.checkAnyActionOnFailoverGroup(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), failoverGroup.getName());
+                        return true;
+                    } catch (AccessDeniedException e) {
+                        return false;
+                    }
                 }).collect(Collectors.toList());
 
         List<List<String>> rows = Lists.newArrayList();

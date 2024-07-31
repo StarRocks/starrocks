@@ -63,6 +63,19 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     }
 
     @Override
+    public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.FAILOVER_GROUP,
+                Collections.singletonList(name));
+    }
+
+    @Override
+    public void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        checkAnyActionOnObject(currentUser, roleIds, ObjectTypeEPack.FAILOVER_GROUP, Collections.singletonList(name));
+    }
+
+    @Override
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         TableUID tableUID = TableUID.generate(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());

@@ -121,6 +121,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.authentication.SecurityIntegration;
+import com.starrocks.epack.authorization.FailoverGroupPEntryObject;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
 import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.RoleMapping;
@@ -339,6 +340,7 @@ public class GsonUtils {
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
                     .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
+                    .registerSubtype(FailoverGroupPEntryObject.class, "FailoverGroupPEntryObject")
                     .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject")
                     .registerSubtype(PipePEntryObject.class, "PipePEntryObject");
 

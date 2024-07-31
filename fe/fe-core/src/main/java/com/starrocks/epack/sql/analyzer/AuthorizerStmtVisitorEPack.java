@@ -488,74 +488,160 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement,
                                                          ConnectContext context) {
-        // TODO
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement,
                                                            ConnectContext context) {
-        // TODO
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 
     @Override
     public Void visitDropFailoverGroupStatement(DropFailoverGroupStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), ObjectTypeEPack.FAILOVER_GROUP.name(), statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, ConnectContext context) {
-        // TODO
+        // `show failover groups` only show failover groups that user has any privilege on,
+        // we will check it in the execution logic.
         return null;
     }
 
     @Override
     public Void visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
     @Override
     public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, ConnectContext context) {
-        // TODO
+        try {
+            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectTypeEPack.FAILOVER_GROUP.name(),
+                    statement.getFailoverGroupName());
+        }
         return null;
     }
 
