@@ -38,8 +38,8 @@ public class CompoundPredicateOperator extends PredicateOperator {
     //      AND         AND
     //     /   \       /  \
     // subT1   a+1  And  subT5
-    //               /   \
-    //             subT3  a+1
+    //             /   \
+    //          subT3  a+1
     private int compoundTreeLeafNodeNumber;
     private Set<ScalarOperator> compoundTreeUniqueLeaves;
 

@@ -118,4 +118,28 @@ public class NormalizePredicateRuleTest {
 
         assertTrue(result.isConstantTrue());
     }
+
+    @Test
+    public void testCompound1() {
+        NormalizePredicateRule rule = new NormalizePredicateRule();
+        ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
+
+        InPredicateOperator inOp = new InPredicateOperator(
+                true,
+                ConstantOperator.createInt(1),
+                new ColumnRefOperator(0, Type.INT, "col1", true),
+                new ColumnRefOperator(0, Type.INT, "col1", true)
+        );
+
+        CompoundPredicateOperator compoundPredicateOperator =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, inOp,
+                        new BinaryPredicateOperator(BinaryType.GE,
+                                ConstantOperator.createInt(1),
+                                new ColumnRefOperator(1, Type.INT, "test1", true))
+                );
+
+        ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res =
+                operatorRewriter.rewrite(compoundPredicateOperator, Lists.newArrayList(new NormalizePredicateRule()));
+    }
 }
