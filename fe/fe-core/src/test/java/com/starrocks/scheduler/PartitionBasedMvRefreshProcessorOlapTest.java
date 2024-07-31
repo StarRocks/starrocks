@@ -2531,7 +2531,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             "MVRefreshDoWholeRefresh",
                             "MVRefreshComputeCandidatePartitions",
                             "MVRefreshSyncAndCheckPartitions",
-                            "MVRefreshCheckMVToRefreshPartitions",
                             "MVRefreshExternalTable",
                             "MVRefreshSyncPartitions",
                             "MVRefreshCheckBaseTableChange",
