@@ -260,7 +260,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
         Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
         partitionBuilder.addAll(existingPartitions.values());
