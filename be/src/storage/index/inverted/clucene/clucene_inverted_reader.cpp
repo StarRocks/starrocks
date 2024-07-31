@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/inverted/clucene/clucene_inverted_reader.h"
+#include "storage/index/inverted/clucene/clucene_inverted_reader.h"
 
 #include <fmt/format.h>
 
@@ -20,7 +20,7 @@
 #include <memory>
 
 #include "match_operator.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"

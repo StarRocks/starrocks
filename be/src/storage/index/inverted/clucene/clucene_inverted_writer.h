@@ -22,8 +22,8 @@
 #include <roaring/roaring.hh>
 #include <utility>
 
-#include "storage/inverted/inverted_index_option.h"
-#include "storage/inverted/inverted_writer.h"
+#include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/inverted_writer.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/common.h"

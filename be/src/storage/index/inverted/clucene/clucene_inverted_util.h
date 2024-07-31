@@ -17,7 +17,7 @@
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
 
 #include "common/statusor.h"
-#include "storage/inverted/inverted_index_common.hpp"
+#include "storage/index/inverted/inverted_index_common.h"
 
 namespace starrocks {
 StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(InvertedIndexParserType parser_type) {

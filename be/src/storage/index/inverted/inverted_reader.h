@@ -18,9 +18,9 @@
 
 #include "fs/fs_util.h"
 #include "roaring/roaring.hh"
-#include "storage/inverted/inverted_index_common.hpp"
-#include "storage/inverted/inverted_index_iterator.h"
-#include "storage/inverted/inverted_index_option.h"
+#include "storage/index/inverted/inverted_index_common.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {

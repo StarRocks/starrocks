@@ -45,7 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
-#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"

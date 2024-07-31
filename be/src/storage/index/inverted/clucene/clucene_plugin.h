@@ -14,11 +14,11 @@
 
 #pragma once
 
-#include "clucene_inverted_reader.h"
-#include "clucene_inverted_writer.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "storage/inverted/inverted_plugin.h"
+#include "storage/index/inverted/clucene/clucene_inverted_reader.h"
+#include "storage/index/inverted/clucene/clucene_inverted_writer.h"
+#include "storage/index/inverted/inverted_plugin.h"
 
 namespace starrocks {
 

@@ -14,23 +14,14 @@
 
 #pragma once
 
-#include "common/status.h"
 #include "common/statusor.h"
-#include "storage/compaction.h"
-#include "storage/inverted/inverted_reader.h"
-#include "storage/inverted/inverted_writer.h"
-#include "storage/tablet_schema.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+#include "storage/index/inverted/inverted_plugin.h"
 
 namespace starrocks {
-class InvertedPlugin {
+class InvertedPluginFactory {
 public:
-    virtual ~InvertedPlugin() = default;
-
-    virtual Status create_inverted_index_writer(TypeInfoPtr typeinfo, std::string field_name, std::string path,
-                                                TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res) = 0;
-
-    virtual Status create_inverted_index_reader(std::string path, const std::shared_ptr<TabletIndex>& tablet_index,
-                                                LogicalType field_type, std::unique_ptr<InvertedReader>* res) = 0;
+    static StatusOr<InvertedPlugin*> get_plugin(InvertedImplementType imp_type);
 };
 
 } // namespace starrocks

@@ -18,7 +18,7 @@
 
 #include <utility>
 
-#include "storage/inverted/inverted_reader.h"
+#include "storage/index/inverted/inverted_reader.h"
 
 namespace starrocks {
 
