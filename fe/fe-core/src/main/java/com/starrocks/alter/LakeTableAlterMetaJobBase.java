@@ -540,10 +540,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 if (partition == null || table.isTempPartition(partitionId)) {
                     continue;
                 }
-                // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for n
+                // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
+                //  version.
+                // TODO: we may add last version time to check mv's version map with base table's version time.
                 PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),  partition.getName(),
-                        partitionVersion.getValue() - 1, -1,
-                        partitionVersion.getValue(), finishedTimeMs);
+                        partitionVersion.getValue() - 1, partitionVersion.getValue(), finishedTimeMs);
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {

@@ -55,8 +55,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
     private MVRepairHandler.PartitionRepairInfo toPartitionInfo(Partition partition, long version,
                                                                 long versionTime) {
         return new MVRepairHandler.PartitionRepairInfo(partition.getId(), partition.getName(),
-                partition.getVisibleVersion(), partition.getVisibleVersionTime(),
-                version, versionTime);
+                partition.getVisibleVersion(), version, versionTime);
     }
 
     @Test

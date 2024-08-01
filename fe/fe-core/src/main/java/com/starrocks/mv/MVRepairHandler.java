@@ -35,14 +35,12 @@ public interface MVRepairHandler {
         private final long partitionId; // partition id
         private final String partitionName; // partition name
         private final long lastVersion; // last commit partition visible version
-        private final long lastVersionTime; // last commit partition visible version time
         private final long newVersion; // new commit partition visible version
         private final long newVersionTime; // new commit partition visible version time
 
         public PartitionRepairInfo(long partitionId,
                                    String partitionName,
                                    long lastVersion,
-                                   long lastVersionTime,
                                    long newVersion,
                                    long newVersionTime) {
             this.partitionId = partitionId;
@@ -50,7 +48,6 @@ public interface MVRepairHandler {
             this.newVersion = newVersion;
             this.newVersionTime = newVersionTime;
             this.lastVersion = lastVersion;
-            this.lastVersionTime = lastVersionTime;
         }
 
         public long getPartitionId() {
@@ -71,10 +68,6 @@ public interface MVRepairHandler {
 
         public long getLastVersion() {
             return lastVersion;
-        }
-
-        public long getLastVersionTime() {
-            return lastVersionTime;
         }
     }
 
@@ -113,9 +106,11 @@ public interface MVRepairHandler {
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
                     }
-                    // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for n
+                    // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
+                    //  version.
+                    // TODO: we may add last version time to check mv's version map with base table's version time.
                     PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),
-                            partition.getName(), partitionCommitInfo.getVersion()  - 1, -1,
+                            partition.getName(), partitionCommitInfo.getVersion()  - 1,
                             partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
