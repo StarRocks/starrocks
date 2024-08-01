@@ -898,7 +898,7 @@ HyperJsonTransformer::HyperJsonTransformer(JsonPathDeriver& deriver)
 
 HyperJsonTransformer::HyperJsonTransformer(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                            bool has_remain)
-        : _dst_remain(has_remain), _dst_paths(paths), _dst_types(types) {
+        : _dst_remain(has_remain), _dst_paths(std::move(paths)), _dst_types(types) {
     for (size_t i = 0; i < _dst_paths.size(); i++) {
         _dst_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
     }
