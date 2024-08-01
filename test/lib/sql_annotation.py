@@ -24,10 +24,13 @@ sql_annotation
 from functools import wraps
 
 from nose.plugins.multiprocess import TimedOutException
+from cup import log
 
 
 def timeout():
-    """init"""
+    """
+    timeout exception
+    """
 
     def receive(func):
         """init decorator"""
@@ -40,7 +43,31 @@ def timeout():
                 res = func(*args, **kwargs)
                 return res
             except TimedOutException as e:
-                raise AssertionError("Exceed the --process-timeout limit!")
+                raise AssertionError("TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
+
+        return wrapper
+
+    return receive
+
+def ignore_timeout():
+    """
+    ignore timeout exception
+    """
+
+    def receive(func):
+        """init decorator"""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            """wrapper"""
+
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                log.warning("[Ignore] TimedOutException: exceed the process-timeout limit!")
             except Exception as e:
                 raise e
 

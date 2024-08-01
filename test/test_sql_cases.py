@@ -97,6 +97,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
             self.execute_sql(sql)
 
+    @sql_annotation.ignore_timeout()
     def tearDown(self):
         """tear down"""
         super().tearDown()
@@ -181,9 +182,9 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
 
-                actual_res = self.trino_execute_sql(sql)
                 self_print("[TRINO]: %s" % sql)
                 log.info("[%s] TRINO: %s" % (sql_id, sql))
+                actual_res = self.trino_execute_sql(sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
@@ -198,9 +199,9 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
 
-                actual_res = self.spark_execute_sql(sql)
                 self_print("[SPARK]: %s" % sql)
                 log.info("[%s] SPARK: %s" % (sql_id, sql))
+                actual_res = self.spark_execute_sql(sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
@@ -215,9 +216,9 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
 
-                actual_res = self.hive_execute_sql(sql)
                 self_print("[HIVE]: %s" % sql)
                 log.info("[%s] HIVE: %s" % (sql_id, sql))
+                actual_res = self.hive_execute_sql(sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)

@@ -75,7 +75,7 @@ if not os.path.exists(CRASH_DIR):
     os.mkdir(CRASH_DIR)
 
 LOG_LEVEL = logging.INFO
-QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 30))
+QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 
 class Filter(logging.Filter):
     """
