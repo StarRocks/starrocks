@@ -115,8 +115,9 @@ public class ViewAnalyzer {
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     Column col = viewColumns.get(i);
                     ColWithComment colWithComment = colWithComments.get(i);
-                    col.setName(colWithComment.getColName());
-                    col.setComment(colWithComment.getComment());
+                    Column newColumn = new Column(colWithComment.getColName(), col.getType(), col.isAllowNull());
+                    newColumn.setComment(colWithComment.getComment());
+                    viewColumns.set(i, newColumn);
                 }
             }
 
