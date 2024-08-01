@@ -240,7 +240,7 @@ DROP DICTIONARY test_dictionary_definition_7;
 
 DROP TABLE t_dictionary_definition;
 
--- name: test_dictionary_error
+-- name: test_dictionary_error @slow
 CREATE TABLE `t_dictionary_error` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",

@@ -1,4 +1,4 @@
--- name: test_basic_create_index
+-- name: test_basic_create_index @slow
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 -- result:
 -- !result
