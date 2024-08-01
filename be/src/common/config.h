@@ -1360,7 +1360,36 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
+<<<<<<< HEAD
 CONF_mBool(enable_pk_strict_memcheck, "false");
+=======
+// python envs config
+// create time worker timeout
+CONF_mInt32(create_child_worker_timeout_ms, "1000");
+// config ENV PYTHONPATH
+CONF_Strings(python_envs, "");
+// report python worker STDERR to client
+CONF_Bool(report_python_worker_error, "true");
+CONF_Bool(python_worker_reuse, "true");
+CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
+CONF_mBool(skip_lake_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
+// Current supported modules:
+// 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
+// 2. connector_scan_executor
+// 3. non_pipeline_scan_thread_pool
+// 4. pipeline_prepare_thread_pool
+// 5. pipeline_sink_io_thread_pool
+// 6. query_rpc_thread_pool
+// 7. publish_version_worker_pool
+// 8. olap_scan_executor
+// 9. wg_driver_executor
+// use commas to separate:
+// * means release all above
+CONF_mString(try_release_resource_before_core_dump, "data_cache");
+>>>>>>> 7ec4c65110 ([Enhancement] Support release block cache and some other thread pool before core dump (#49246))
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
