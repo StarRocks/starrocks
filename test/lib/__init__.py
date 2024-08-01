@@ -25,8 +25,9 @@ def close_conn(conn, conn_type):
     try:
         __close_conn(conn)
     except TimeoutError as e:
-        log.info("[ERROR] Close %s connection error: %s" % (conn_type, e))
+        log.warning("[WARN] Close %s connection timeout!" % conn_type)
 
+    log.info(f"Close {conn_type} connection success!")
 
 @timeout(10)
 def __close_conn(conn):
