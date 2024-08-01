@@ -626,13 +626,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
-                                                    String serializedPredicate, MetadataTableType metadataTableType) {
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
+                                                    MetadataTableType metadataTableType) {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         if (snapshotId == -1) {
-            snapshotId = nativeTable.currentSnapshot().snapshotId();
+            Snapshot currentSnapshot = nativeTable.currentSnapshot();
+            if (currentSnapshot == null) {
+                return IcebergMetaSpec.EMPTY;
+            } else {
+                snapshotId = nativeTable.currentSnapshot().snapshotId();
+            }
         }
         Snapshot snapshot = nativeTable.snapshot(snapshotId);
 
@@ -661,6 +666,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
         List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
+        if (metadataTableType == MetadataTableType.FILES) {
+            for (ManifestFile file : matchingDeleteManifests) {
+                remoteMetaSplits.add(IcebergMetaSplit.from(file));
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+        }
 
         boolean loadColumnStats = enableCollectColumnStatistics(ConnectContext.get()) ||
                 (!matchingDeleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
