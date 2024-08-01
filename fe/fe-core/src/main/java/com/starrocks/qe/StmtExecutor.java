@@ -490,6 +490,18 @@ public class StmtExecutor {
                 // reset the explain level to avoid the previous explain level affect the current query.
                 context.setExplainLevel(null);
             }
+          
+            // For follower: verify sql in BlackList before forward to leader
+            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+            if (isQuery && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+                OriginStatement origStmt = parsedStmt.getOrigStmt();
+                if (origStmt != null) {
+                    String originSql = origStmt.originStmt.trim()
+                            .toLowerCase().replaceAll(" +", " ");
+                    // If this sql is in blacklist, show message.
+                    SqlBlackList.verifying(originSql);
+                }
+            }
 
             // execPlan is the output of planner
             ExecPlan execPlan = null;
@@ -541,7 +553,22 @@ public class StmtExecutor {
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
                             context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
                         }
+
+                        LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
+                        // no need to execute http query dump request in BE
+                        if (context.isHTTPQueryDump) {
+                            return;
+                        }
                     }
+                } else {
+                    // no need to execute http query dump request in BE
+                    if (context.isHTTPQueryDump) {
+                        return;
+                    }
+
+                    context.setIsForward(true);
+                    forwardToLeader();
+                    return;
                 }
             } catch (SemanticException e) {
                 dumpException(e);
@@ -554,31 +581,6 @@ public class StmtExecutor {
                     LOG.warn("Planner error: " + originStmt.originStmt, e);
                     throw e;
                 }
-            }
-
-            // no need to execute http query dump request in BE
-            if (context.isHTTPQueryDump) {
-                return;
-            }
-
-            // For follower: verify sql in BlackList before forward to leader
-            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if (isQuery && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
-                OriginStatement origStmt = parsedStmt.getOrigStmt();
-                if (origStmt != null) {
-                    String originSql = origStmt.originStmt.trim()
-                            .toLowerCase().replaceAll(" +", " ");
-                    // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
-                }
-            }
-
-            if (isForwardToLeader()) {
-                context.setIsForward(true);
-                forwardToLeader();
-                return;
-            } else {
-                LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
             if (parsedStmt instanceof QueryStatement) {
