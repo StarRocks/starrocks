@@ -85,7 +85,6 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
 option(WITH_STARCACHE "Build binary with starcache library" ON)
-option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
@@ -435,9 +434,6 @@ if (${WITH_STARCACHE} STREQUAL "ON")
     set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
     include_directories(SYSTEM ${STARCACHE_DIR}/include)
     message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
-endif()
-if ("${WITH_BRPC_KEEPALIVE}" STREQUAL "ON")
-  set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BRPC_KEEPALIVE")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
