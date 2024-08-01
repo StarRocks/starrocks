@@ -439,7 +439,7 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database write lock timeout, database="
+            throw new UserException("get database write lock timeout, transactionId=" + transactionId + " database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
@@ -454,10 +454,14 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
         if (publishTimeoutMillis < 0) {
             // here commit transaction successfully cost too much time to cause publisTimeoutMillis is less than zero,
             // so we just return false to indicate publish timeout
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
         if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
     }
 
