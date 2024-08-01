@@ -151,7 +151,7 @@ static std::vector<LogicalType> JSON_BITS_TO_LOGICAL_TYPE(32, LogicalType::TYPE_
 
 static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS;
 
-static const FlatJsonHashMap<uint8_t, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
+static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
     {LogicalType::TYPE_TINYINT,         &extract_number<LogicalType::TYPE_TINYINT>},
     {LogicalType::TYPE_BIGINT,          &extract_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,        &extract_number<LogicalType::TYPE_LARGEINT>},
