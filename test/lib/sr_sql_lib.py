@@ -1868,6 +1868,27 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
 
+<<<<<<< HEAD
+=======
+    def assert_explain_verbose_contains(self, query, *expects):
+        """
+        assert explain verbose result contains expect string
+        """
+        sql = "explain verbose %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+>>>>>>> 16f784dd7e ([BugFix] Fix partition prune for delta lake when partition column type is tinyint/boolean (#49257))
     def assert_trace_values_contains(self, query, *expects):
         """
         assert trace values result contains expect string
