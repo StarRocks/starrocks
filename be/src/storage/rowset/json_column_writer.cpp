@@ -48,7 +48,7 @@ namespace starrocks {
 
 FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                                            std::unique_ptr<ScalarColumnWriter> json_writer)
-        : ColumnWriter(type_info, opts.meta->length(), opts.meta->is_nullable()),
+        : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _json_meta(opts.meta),
           _wfile(wfile),
           _json_writer(std::move(json_writer)) {}
@@ -272,9 +272,9 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWr
     // compaction
     if (opts.is_compaction) {
         if (opts.need_flat) {
-            return std::make_unique<FlatJsonColumnCompactor>(opts, type_info, wfile, std::move(json_writer));
+            return std::make_unique<FlatJsonColumnCompactor>(opts, std::move(type_info), wfile, std::move(json_writer));
         } else {
-            return std::make_unique<JsonColumnCompactor>(opts, type_info, wfile, std::move(json_writer));
+            return std::make_unique<JsonColumnCompactor>(opts, std::move(type_info), wfile, std::move(json_writer));
         }
     }
 
@@ -282,7 +282,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWr
     if (!opts.need_flat) {
         return std::move(json_writer);
     } else {
-        return std::make_unique<FlatJsonColumnWriter>(opts, type_info, wfile, std::move(json_writer));
+        return std::make_unique<FlatJsonColumnWriter>(opts, std::move(type_info), wfile, std::move(json_writer));
     }
 }
 } // namespace starrocks

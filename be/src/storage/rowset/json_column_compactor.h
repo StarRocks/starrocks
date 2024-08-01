@@ -24,7 +24,7 @@ class FlatJsonColumnCompactor final : public FlatJsonColumnWriter {
 public:
     FlatJsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                             std::unique_ptr<ScalarColumnWriter> json_writer)
-            : FlatJsonColumnWriter(opts, type_info, wfile, std::move(json_writer)) {}
+            : FlatJsonColumnWriter(opts, std::move(type_info), wfile, std::move(json_writer)) {}
 
     Status append(const Column& column) override;
     uint64_t estimate_buffer_size() override;
