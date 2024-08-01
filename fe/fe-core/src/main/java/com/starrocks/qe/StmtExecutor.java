@@ -561,8 +561,13 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+<<<<<<< HEAD
             if (parsedStmt instanceof QueryStatement && Config.enable_sql_blacklist && !parsedStmt.isExplain() &&
                     !isProxy) {
+=======
+            if ((isQuery || parsedStmt instanceof InsertStmt)
+                    && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+>>>>>>> 04019bc59a ([BugFix] fix blacklist not prevent insert sql (#48998))
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
                     String originSql = origStmt.originStmt.trim()
@@ -742,19 +747,6 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(context.getState().getErrorMessage());
-            }
-
-            if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
