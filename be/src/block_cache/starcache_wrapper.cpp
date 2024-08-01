@@ -169,6 +169,7 @@ void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
 }
 
 Status StarCacheWrapper::shutdown() {
+    // TODO: starcache implement shutdown to release memory
     return Status::OK();
 }
 

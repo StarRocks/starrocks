@@ -815,6 +815,10 @@ void ExecEnv::try_release_resource_before_core_dump() {
         _connector_scan_executor->close();
         LOG(INFO) << "close connector scan executor";
     }
+    if (_scan_executor != nullptr && need_release("olap_scan_executor")) {
+        _scan_executor->close();
+        LOG(INFO) << "close olap scan executor";
+    }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
         _thread_pool->shutdown();
         LOG(INFO) << "shutdown non-pipeline scan thread pool";
@@ -831,10 +835,24 @@ void ExecEnv::try_release_resource_before_core_dump() {
         _query_rpc_pool->shutdown();
         LOG(INFO) << "shutdown query rpc thread pool";
     }
+    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
+        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
+        LOG(INFO) << "stop task worker pool for publish version";
+    }
+    if (_wg_driver_executor != nullptr && need_release("wg_driver_executor")) {
+        _wg_driver_executor->close();
+        LOG(INFO) << "stop worker group driver executor";
+    }
     auto* storage_page_cache = StoragePageCache::instance();
-    if (storage_page_cache != nullptr && need_release("storage_page_cache")) {
+    if (storage_page_cache != nullptr && need_release("data_cache")) {
         storage_page_cache->set_capacity(0);
         LOG(INFO) << "release storage page cache memory";
+    }
+    if (_block_cache != nullptr && need_release("data_cache")) {
+        // TODO: Currently, block cache don't support shutdown now,
+        //  so here will temporary use update_mem_quota instead to release memory.
+        (void)_block_cache->update_mem_quota(0, false);
+        LOG(INFO) << "release block cache";
     }
 }
 

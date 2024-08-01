@@ -103,6 +103,8 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+    void stop_task_worker_pool(TaskWorkerType type) const;
+
     DISALLOW_COPY_AND_MOVE(Impl);
 
 private:
@@ -595,6 +597,43 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
+#define STOP_IF_NOT_NULL(worker_pool) \
+    if (worker_pool != nullptr) {     \
+        worker_pool->stop();          \
+    }
+
+void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
+    switch (type) {
+    case TaskWorkerType::PUSH:
+        STOP_IF_NOT_NULL(_push_workers);
+        break;
+    case TaskWorkerType::PUBLISH_VERSION:
+        STOP_IF_NOT_NULL(_publish_version_workers);
+        break;
+    case TaskWorkerType::DELETE:
+        STOP_IF_NOT_NULL(_delete_workers);
+        break;
+    case TaskWorkerType::REPORT_TASK:
+        STOP_IF_NOT_NULL(_report_task_workers);
+        break;
+    case TaskWorkerType::REPORT_DISK_STATE:
+        STOP_IF_NOT_NULL(_report_disk_state_workers);
+        break;
+    case TaskWorkerType::REPORT_OLAP_TABLE:
+        STOP_IF_NOT_NULL(_report_tablet_workers);
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        STOP_IF_NOT_NULL(_report_workgroup_workers);
+        STOP_IF_NOT_NULL(_report_resource_usage_workers);
+        break;
+    case TaskWorkerType::REPORT_DATACACHE_METRICS:
+        STOP_IF_NOT_NULL(_report_datacache_metrics_workers);
+        break;
+    default:
+        break;
+    }
+}
+
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     ThreadPool* ret = nullptr;
@@ -699,6 +738,10 @@ void AgentServer::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
+}
+
+void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
+    return _impl->stop_task_worker_pool(type);
 }
 
 void AgentServer::init_or_die() {
