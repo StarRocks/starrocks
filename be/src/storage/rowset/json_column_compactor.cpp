@@ -34,7 +34,7 @@
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {
-    // compection will reuse column, must copy in there.
+    // compaction will reuse column, must copy in there.
     _json_datas.emplace_back(column.clone());
 
     _estimate_size += column.byte_size();

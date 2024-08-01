@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -114,7 +113,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 2;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(2);
     }
 
     @After
@@ -125,7 +124,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 1;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
     }
 
     @Test
@@ -1136,7 +1135,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
     @Test
     public void testMultiLevelJson() throws Exception {
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 20;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
         String sql = "select " +
                 "get_json_int(j1, '$.a.b.c.d') " +
                 "from js0;";

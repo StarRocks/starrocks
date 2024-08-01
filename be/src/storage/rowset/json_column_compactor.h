@@ -22,7 +22,7 @@
 namespace starrocks {
 class FlatJsonColumnCompactor final : public FlatJsonColumnWriter {
 public:
-    FlatJsonColumnCompactor(const ColumnWriterOptions& opts, const TypeInfoPtr& type_info, WritableFile* wfile,
+    FlatJsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                             std::unique_ptr<ScalarColumnWriter> json_writer)
             : FlatJsonColumnWriter(opts, type_info, wfile, std::move(json_writer)) {}
 
@@ -41,13 +41,11 @@ private:
 
 class JsonColumnCompactor final : public ColumnWriter {
 public:
-    JsonColumnCompactor(const ColumnWriterOptions& opts, const TypeInfoPtr& type_info, WritableFile* wfile,
+    JsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                         std::unique_ptr<ScalarColumnWriter> json_writer)
-            : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
+            : ColumnWriter(type_info, opts.meta->length(), opts.meta->is_nullable()),
               _json_meta(opts.meta),
               _json_writer(std::move(json_writer)) {}
-
-    JsonColumnCompactor(const ColumnWriterOptions& opts, const TypeInfoPtr& type_info, WritableFile* wfile);
 
     ~JsonColumnCompactor() override = default;
 

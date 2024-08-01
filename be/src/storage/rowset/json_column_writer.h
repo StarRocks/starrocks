@@ -19,12 +19,12 @@
 namespace starrocks {
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
-                                                                  const TypeInfoPtr& type_info, WritableFile* wfile,
+                                                                  TypeInfoPtr type_info, WritableFile* wfile,
                                                                   std::unique_ptr<ScalarColumnWriter> json_writer);
 
 class FlatJsonColumnWriter : public ColumnWriter {
 public:
-    FlatJsonColumnWriter(const ColumnWriterOptions& opts, const TypeInfoPtr& type_info, WritableFile* wfile,
+    FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                          std::unique_ptr<ScalarColumnWriter> json_writer);
 
     ~FlatJsonColumnWriter() override = default;
