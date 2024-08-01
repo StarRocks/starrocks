@@ -663,7 +663,7 @@ PROPERTIES (
 PROPERTIES ("compression" = "zstd(<compression_level>)")
 ```
 
-`compression_level`：ZSTD 压缩格式的压缩级别。类型：Integer。范围：[1,22].
+`compression_level`：ZSTD 压缩格式的压缩级别。类型：Integer。范围：[1,22]。
 
 示例：
 
