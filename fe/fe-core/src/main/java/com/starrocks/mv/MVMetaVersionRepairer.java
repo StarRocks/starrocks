@@ -88,8 +88,13 @@ public class MVMetaVersionRepairer {
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVersionMap =
                 asyncRefreshContext.getBaseTableVisibleVersionMap();
+        List<MVRepairHandler.PartitionRepairInfo> needToUpdatePartitionInfos =
+                filterToRepairPartitionInfos(mv, table, baseTableVersionMap, partitionRepairInfos);
+        if (needToUpdatePartitionInfos.isEmpty()) {
+            return;
+        }
         // repair base table's version map directly
-        Map<String, MaterializedView.BasePartitionInfo> changedVersions = toBasePartitionInfoMap(partitionRepairInfos);
+        Map<String, MaterializedView.BasePartitionInfo> changedVersions = toBasePartitionInfoMap(needToUpdatePartitionInfos);
         baseTableVersionMap.computeIfAbsent(table.getId(), k -> Maps.newHashMap())
                 .putAll(changedVersions);
         LOG.info("repair base table {} version changes for mv {}, changed versions:{}",
@@ -100,13 +105,53 @@ public class MVMetaVersionRepairer {
         MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
     }
 
+    /**
+     * Only repair partition infos which version and version time are matched with base table's version map.
+     * @param mv mv to repair
+     * @param table base table that has been changed(schema change or compactions)
+     * @param baseTableVersionMap base table's version map in mv's version map
+     * @param partitionRepairInfos partition infos to repair
+     * @return partition infos that need to be updated
+     */
+    private static List<MVRepairHandler.PartitionRepairInfo> filterToRepairPartitionInfos(
+            MaterializedView mv,
+            Table table,
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVersionMap,
+            List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+        List<MVRepairHandler.PartitionRepairInfo> needToUpdatePartitionInfos = Lists.newArrayList();
+        for (MVRepairHandler.PartitionRepairInfo info : partitionRepairInfos) {
+            if (!baseTableVersionMap.containsKey(table.getId())) {
+                LOG.info("Base table {} not found in mv {}'s version map, skip to repair", table.getName(), mv.getName());
+                continue;
+            }
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = baseTableVersionMap.get(table.getId());
+            if (!partitionInfoMap.containsKey(info.getPartitionName())) {
+                LOG.info("Partition {} not found in base table {}'s version map, skip to repair", info.getPartitionName(),
+                        table.getName());
+                continue;
+            }
+            MaterializedView.BasePartitionInfo curBasePartitionInfo = partitionInfoMap.get(info.getPartitionName());
+            if (curBasePartitionInfo.getId() != info.getPartitionId()
+                    || curBasePartitionInfo.getVersion() != info.getLastVersion()) {
+                LOG.info("Base table {} partition {} version not match, id {}(mv)/{}(table), " +
+                                "version {}(mv)/{}(table), version time {}(mv), skip to repair",
+                        table.getName(), info.getPartitionName(), curBasePartitionInfo.getId(),
+                        info.getPartitionId(), curBasePartitionInfo.getVersion(), info.getLastVersion(),
+                        curBasePartitionInfo.getLastRefreshTime());
+                continue;
+            }
+            needToUpdatePartitionInfos.add(info);
+        }
+        return needToUpdatePartitionInfos;
+    }
+
     private static Map<String, MaterializedView.BasePartitionInfo> toBasePartitionInfoMap(
             List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = Maps.newHashMap();
         for (MVRepairHandler.PartitionRepairInfo partitionRepairInfo : partitionRepairInfos) {
             MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                    partitionRepairInfo.getPartitionId(), partitionRepairInfo.getVersion(),
-                    partitionRepairInfo.getVersionTime());
+                    partitionRepairInfo.getPartitionId(), partitionRepairInfo.getNewVersion(),
+                    partitionRepairInfo.getNewVersionTime());
             partitionInfoMap.put(partitionRepairInfo.getPartitionName(), basePartitionInfo);
         }
         return partitionInfoMap;
