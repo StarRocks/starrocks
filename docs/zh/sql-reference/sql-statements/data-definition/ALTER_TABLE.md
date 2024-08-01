@@ -788,7 +788,21 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
     ```
 
+<<<<<<< HEAD
 13. 修改表的 Colocate 属性。
+=======
+13. 批量修改字段数据类型。
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
+### Table property
+
+1. 修改表的 Colocate 属性。
+>>>>>>> fef3ef7ad1 ([Doc] Add example - modify column in batch (#49261))
 
     ```sql
     ALTER TABLE example_db.my_table
