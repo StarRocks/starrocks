@@ -215,13 +215,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalHashJoinOperator newShuffleJoinOpt = new PhysicalHashJoinOperator(
                     originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
                     originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), null,
+                    originalShuffleJoinOperator.getPredicate(), projectionOnJoin,
                     originalShuffleJoinOperator.getSkewColumn(), originalShuffleJoinOperator.getSkewValues());
 
             PhysicalHashJoinOperator newBroadcastJoinOpt = new PhysicalHashJoinOperator(
                     originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
                     originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), null,
+                    originalShuffleJoinOperator.getPredicate(), projectionOnJoin,
                     originalShuffleJoinOperator.getSkewColumn(), originalShuffleJoinOperator.getSkewValues());
             // we have to let them know each other for runtimr filter
             newBroadcastJoinOpt.setSkewJoinFriend(newShuffleJoinOpt);
@@ -232,8 +232,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalMergeOperator mergeOperator =
                     buildMergeOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
                             localExchangerType, originalShuffleJoinOperator.getLimit());
-            // original shuffle join's projection is set on union
-            mergeOperator.setProjection(projectionOnJoin);
 
 
             OptExpression leftSplitConsumerOptExpForShuffleJoin = OptExpression.builder()
