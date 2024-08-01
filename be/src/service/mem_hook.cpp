@@ -344,5 +344,4 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
-
 }

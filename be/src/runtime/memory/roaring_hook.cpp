@@ -19,8 +19,8 @@
 #include <cstdlib>
 
 #include "roaring/memory.h"
-#include "util/logging.h"
 #include "runtime/memory/roaring_allocator.h"
+#include "util/logging.h"
 
 namespace starrocks {
 
