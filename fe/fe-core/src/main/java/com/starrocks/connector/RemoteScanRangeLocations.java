@@ -26,6 +26,9 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
@@ -203,58 +206,6 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
-<<<<<<< HEAD
-=======
-    private Optional<List<DataCacheOptions>> generateDataCacheOptions(final QualifiedName qualifiedName,
-                                                                      final List<String> partitionColumnNames,
-                                                                      final List<PartitionKey> partitionKeys) {
-        if (!ConnectContext.get().getSessionVariable().isEnableScanDataCache()) {
-            return Optional.empty();
-        }
-
-        Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(qualifiedName);
-        if (!dataCacheRule.isPresent()) {
-            return Optional.empty();
-        }
-
-        List<DataCacheOptions> dataCacheOptions = new ArrayList<>(partitionKeys.size());
-        Expr predicates = dataCacheRule.get().getPredicates();
-        if (predicates == null) {
-            for (int i = 0; i < partitionKeys.size(); i++) {
-                dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
-            }
-        } else {
-            // evaluate partition predicates
-            for (PartitionKey partitionKey : partitionKeys) {
-                // key is ColumnName, value is Expr(Literal)
-                Map<String, Expr> mapping = new HashMap<>(partitionColumnNames.size());
-                Preconditions.checkArgument(partitionColumnNames.size() == partitionKey.getKeys().size(),
-                        "PartitionColumnName size must equal with PartitionKey keys' size.");
-                for (int i = 0; i < partitionKey.getKeys().size(); i++) {
-                    mapping.put(partitionColumnNames.get(i), partitionKey.getKeys().get(i));
-                }
-                // Must clone expr first, avoid change original expr
-                Expr clonedExpr = predicates.clone();
-                Expr rewritedExpr = DataCacheExprRewriter.rewrite(clonedExpr, mapping);
-                ScalarOperator op = SqlToScalarOperatorTranslator.translate(rewritedExpr);
-                ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-                op = scalarRewriter.rewrite(op, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                if (op.isConstantTrue()) {
-                    // matched partition predicates
-                    dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
-                } else {
-                    // not matched, add null DataCacheOption
-                    dataCacheOptions.add(null);
-                    if (!op.isConstantRef()) {
-                        LOG.warn(String.format("ConstFolding failed for expr: %s, rewrite scalarOperator is %s",
-                                rewritedExpr.toMySql(), op.debugString()));
-                    }
-                }
-            }
-        }
-        return Optional.of(dataCacheOptions);
-    }
-
     private void updateCanBackendSplitFile(List<RemoteFileInfo> partitions) {
         canBackendSplitFile = true;
         ConnectContext connectContext = ConnectContext.get();
@@ -286,7 +237,6 @@ public class RemoteScanRangeLocations {
         return splits;
     }
 
->>>>>>> acbb4f7ff9 ([Enhancement] backend do not split when splits is small (#44025))
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
