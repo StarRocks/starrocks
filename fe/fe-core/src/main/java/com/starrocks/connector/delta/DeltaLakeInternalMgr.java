@@ -40,17 +40,15 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 public class DeltaLakeInternalMgr {
     public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue", "dlf");
     protected final String catalogName;
-    protected final Map<String, String> properties;
+    protected final DeltaLakeCatalogProperties deltaLakeCatalogProperties;
     protected final HdfsEnvironment hdfsEnvironment;
-    private final boolean enableMetastoreCache;
     private final CachingHiveMetastoreConf hmsConf;
     private ExecutorService refreshHiveMetastoreExecutor;
     protected final MetastoreType metastoreType;
 
     public DeltaLakeInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
-        this.properties = properties;
-        this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
+        this.deltaLakeCatalogProperties = new DeltaLakeCatalogProperties(properties);
         this.hmsConf = new CachingHiveMetastoreConf(properties, "delta lake");
         this.hdfsEnvironment = hdfsEnvironment;
 
@@ -76,12 +74,13 @@ public class DeltaLakeInternalMgr {
     }
 
     public IMetastore createHMSBackedDeltaLakeMetastore() {
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment,
+                deltaLakeCatalogProperties.getProperties());
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore(catalogName, hiveMetastore,
-                hdfsEnvironment.getConfiguration());
+                hdfsEnvironment.getConfiguration(), deltaLakeCatalogProperties);
         IMetastore deltaLakeMetastore;
-        if (!enableMetastoreCache) {
+        if (!deltaLakeCatalogProperties.isEnableDeltaLakeTableCache()) {
             deltaLakeMetastore = hmsBackedDeltaMetastore;
         } else {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
@@ -95,7 +94,7 @@ public class DeltaLakeInternalMgr {
     }
 
     public void shutdown() {
-        if (enableMetastoreCache && refreshHiveMetastoreExecutor != null) {
+        if (deltaLakeCatalogProperties.isEnableDeltaLakeTableCache() && refreshHiveMetastoreExecutor != null) {
             refreshHiveMetastoreExecutor.shutdown();
         }
     }
