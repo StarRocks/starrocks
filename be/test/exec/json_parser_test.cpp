@@ -513,7 +513,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_array) {
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
-    auto st = parser->parse(input.data(), size, padded_size);
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
     ASSERT_TRUE(st.ok());
 
     simdjson::ondemand::object row;
@@ -533,7 +533,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_not_objec
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
-    auto st = parser->parse(input.data(), size, padded_size);
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
     ASSERT_TRUE(st.ok());
 
     simdjson::ondemand::object row;
@@ -556,7 +556,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_with_jsonroot_invalid_
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
-    auto st = parser->parse(input.data(), size, padded_size);
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
     ASSERT_TRUE(st.ok());
 
     simdjson::ondemand::object row;
@@ -580,7 +580,7 @@ PARALLEL_TEST(JsonParserTest, test_array_parser_with_jsonroot_invalid_type_array
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
-    auto st = parser->parse(input.data(), size, padded_size);
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
     ASSERT_TRUE(st.ok());
 
     simdjson::ondemand::object row;
