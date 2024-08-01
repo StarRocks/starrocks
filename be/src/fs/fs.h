@@ -233,6 +233,13 @@ public:
     // also returns some file statistics.
     virtual Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) = 0;
 
+    // `iterate_dir2_with_prefix` is similar to `iterate_dir2` but iterate the directory using file prefix
+    // dir should be a file prefix.
+    // Note: name in DirEntry become the suffix of the full file path.
+    virtual Status iterate_dir2_with_prefix(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+        return Status::NotSupported("iterate_dir2_with_prefix() does not supported");
+    }
+
     // Delete the named file.
     // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, depend on the implementation.
     virtual Status delete_file(const std::string& fname) = 0;

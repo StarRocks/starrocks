@@ -106,7 +106,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
         }
-        partitions = table.getPhysicalPartitions().stream().collect(Collectors.toList());
 
         for (PhysicalPartition partition : partitions) {
             if (vacuumingPartitions.add(partition.getId())) {
@@ -212,7 +211,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
-        if (hasError) {
+        if (hasError)
             // re-Vacuum if error happen
             partition.addAbortedTxnIds(abortTxnIds);
         }

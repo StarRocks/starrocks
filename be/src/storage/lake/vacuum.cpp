@@ -464,17 +464,18 @@ static Status vacuum_aborted_txn_file(std::string_view root_location, const std:
     }
 
     for (const auto& prefix_dir : prefix_dirs) {
-        auto iter_st = ignore_not_found(fs->iterate_dir2(prefix_dir, [&](DirEntry entry) {
-            if (!is_segment(entry.name) || !is_del(entry.name)) {
+        auto iter_st = ignore_not_found(fs->iterate_dir2_with_prefix(prefix_dir, [&](DirEntry entry) {
+            if (!is_segment(entry.name) && !is_del(entry.name)) {
                 return true;
             }
+            auto full_file_name = fmt::format("{}{}", prefix_dir, entry.name);
 
             *vacuumed_files += 1;
             *vacuumed_file_size += entry.size.value_or(0);
 
-            auto st = deleter.delete_file(join_path(data_dir, entry.name));
+            auto st = deleter.delete_file(full_file_name);
             if (!st.ok()) {
-                LOG(WARNING) << "Fail to delete " << join_path(data_dir, entry.name) << ": " << st;
+                LOG(WARNING) << "Fail to delete " << full_file_name << ": " << st;
                 ret.update(st);
             }
             return st.ok(); // Stop list if delete failed
