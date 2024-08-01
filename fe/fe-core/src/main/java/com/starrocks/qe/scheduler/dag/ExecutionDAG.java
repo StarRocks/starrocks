@@ -30,7 +30,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SplitCastDataSink;
 import com.starrocks.planner.SplitPlanFragment;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
