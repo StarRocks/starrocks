@@ -89,6 +89,7 @@ public class ShowStreamLoadStmt extends ShowStmt {
                     .add("ChannelState")
                     .add("Type")
                     .add("TrackingSQL")
+                    .add("Warehouse")
                     .build();
 
     private final LabelName labelName;

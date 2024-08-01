@@ -48,6 +48,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -64,6 +65,7 @@ import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1315,6 +1317,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return type == Type.ROUTINE_LOAD;
     }
 
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     // for sync stream load
     public void setCoordinator(Coordinator coord) {
         this.coord = coord;
@@ -1377,6 +1383,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             } else {
                 row.add("");
             }
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                row.add(warehouse.getName());
+            } else {
+                row.add("");
+            }
             return row;
         } finally {
             readUnlock();
@@ -1392,6 +1404,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             row.add(dbName);
             row.add(tableName);
             row.add(state.name());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                row.add(warehouse.getName());
+            } else {
+                row.add("");
+            }
             return row;
         } finally {
             readUnlock();
@@ -1474,6 +1492,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             info.setChannel_state(channelStateBuilder.toString());
             info.setType(getStringByType());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                info.setWarehouse(warehouse.getName());
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();

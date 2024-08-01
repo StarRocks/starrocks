@@ -439,6 +439,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                     throw new DdlException("Warehouse " + warehouseName + " not exists.");
                 }
                 warehouseId = warehouse.getId();
+            } else {
+                warehouseId = ConnectContext.get().getCurrentWarehouseId();
             }
 
             if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
@@ -452,6 +454,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
             }
+        } else {
+            // if no properties set, we should still set warehouse here
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
         }
     }
 
@@ -963,6 +968,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_unselected_rows(loadingStatus.getLoadStatistic().totalUnselectedRows());
             info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
             info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
+            // warehouse
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                info.setWarehouse(warehouse.getName());
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();

@@ -52,6 +52,7 @@ public class LoadsSystemTable {
                         .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_LOADS);
     }
 }

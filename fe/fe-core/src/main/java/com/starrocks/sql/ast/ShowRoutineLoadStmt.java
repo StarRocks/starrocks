@@ -25,7 +25,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -84,10 +83,8 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
                     .add("TrackingSQL")
-                    .add("OtherMsg");
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            builder.add("Warehouse");
-        }
+                    .add("OtherMsg")
+                    .add("Warehouse");
 
         builder.add("LatestSourcePosition");
         TITLE_NAMES = builder.build();

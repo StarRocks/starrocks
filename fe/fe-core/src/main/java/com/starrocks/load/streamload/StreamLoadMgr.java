@@ -39,7 +39,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -96,12 +95,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
         lock = new ReentrantReadWriteLock(true);
-    }
-
-    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp) throws UserException {
-        beginLoadTask(dbName, tableName, label, timeoutMillis, channelNum, channelId, resp,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,

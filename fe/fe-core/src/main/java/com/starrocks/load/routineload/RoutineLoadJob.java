@@ -1530,12 +1530,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(otherMsg);
 
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                try {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                    row.add(warehouse.getName());
-                } catch (Exception e) {
-                    row.add(e.getMessage());
-                }
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                row.add(warehouse.getName());
+            } else {
+                row.add("");
             }
             row.add(getSourceProgressString());
 
@@ -2018,6 +2016,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setOther_msg(otherMsg);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                info.setWarehouse(warehouse.getName());
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();
