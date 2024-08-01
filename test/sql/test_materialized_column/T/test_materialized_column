@@ -314,7 +314,7 @@ DROP TABLE t;
 
 DROP DATABASE test_schema_change_for_add_optimization;
 
--- name: test_schema_change_for_constant_expression
+-- name: test_schema_change_for_constant_expression @slow
 CREATE DATABASE test_schema_change_for_constant_expression;
 USE test_schema_change_for_constant_expression;
 

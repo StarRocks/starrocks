@@ -1,4 +1,8 @@
+<<<<<<< HEAD:test/sql/test_materialized_view/R/test_mv_partition_compensate_iceberg
 -- name: test_mv_iceberg_rewrite2
+=======
+-- name: test_mv_partition_union_rewrite_mode_iceberg @slow
+>>>>>>> caf94f3b83 ([Tool] SQL-Tester add timeout limit for single case (#48792)):test/sql/test_materialized_view/R/test_mv_partition_union_rewrite_mode_iceberg
 create external catalog mv_iceberg_${uuid0}
 properties
 (

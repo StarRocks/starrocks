@@ -15,44 +15,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###########################################################################
-"""
-mysql_lib.py
 
-@Time : 2022/11/03 10:34
-@Author : Brook.Ye
-"""
-
-import pymysql as _mysql
-from pymysql.constants import CLIENT
+import trino
 from cup import log
 
 from lib import close_conn
 
-class MysqlLib(object):
-    """MysqlLib class"""
+class TrinoLib(object):
+    """TrinoLib class"""
 
     def __init__(self):
-        self.connector = ""
+        self.connector = None
 
     def connect(self, query_dict):
-        if "database" not in query_dict:
-            self.connector = _mysql.connect(
+        if self.connector is None:
+            self.connector = trino.dbapi.connect(
                 host=query_dict["host"],
+                port=query_dict["port"],
                 user=query_dict["user"],
-                port=int(query_dict["port"]),
-                passwd=query_dict["password"],
-                client_flag=CLIENT.MULTI_STATEMENTS,
-            )
-        else:
-            self.connector = _mysql.connect(
-                host=query_dict["host"],
-                user=query_dict["user"],
-                passwd=query_dict["password"],
-                db=query_dict["database"],
-                client_flag=CLIENT.MULTI_STATEMENTS,
             )
 
     def close(self):
-        if self.connector != "":
-            close_conn(self.connector, "MySQL")
-            self.connector = ""
+        if self.connector is not None:
+            close_conn(self.connector, "trino")
+            self.connector = None

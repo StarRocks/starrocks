@@ -25,7 +25,6 @@ import json
 import os
 import re
 import sys
-import time
 import uuid
 from typing import List
 
@@ -84,10 +83,29 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """set up"""
         super().setUp()
         self.connect_starrocks()
+<<<<<<< HEAD
+=======
+        self._init_global_configs()
 
+    def _init_global_configs(self):
+        """
+        Configs that are not ready for production but it can be used for testing.
+        """
+        default_configs = [
+            "'enable_mv_refresh_insert_strict' = 'true'",
+        ]
+
+        for config in default_configs:
+            sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
+            self.execute_sql(sql)
+>>>>>>> caf94f3b83 ([Tool] SQL-Tester add timeout limit for single case (#48792))
+
+    @sql_annotation.ignore_timeout()
     def tearDown(self):
         """tear down"""
         super().tearDown()
+
+        log.info("[TeadDown begin]: %s" % self.case_info.name)
 
         for each_db in self.db:
             self.drop_database(each_db)
@@ -105,10 +123,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
+        log.info("[TeadDown end]: %s" % self.case_info.name)
+
     # -------------------------------------------
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
+    @sql_annotation.timeout()
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester
@@ -156,6 +177,60 @@ Start to run: %s
                 uncheck = True
                 sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
 
+<<<<<<< HEAD
+=======
+            if sql.startswith(sr_sql_lib.TRINO_FLAG):
+                sql = sql[len(sr_sql_lib.TRINO_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                self_print("[TRINO]: %s" % sql)
+                log.info("[%s] TRINO: %s" % (sql_id, sql))
+                actual_res = self.trino_execute_sql(sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.SPARK_FLAG):
+                sql = sql[len(sr_sql_lib.SPARK_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                self_print("[SPARK]: %s" % sql)
+                log.info("[%s] SPARK: %s" % (sql_id, sql))
+                actual_res = self.spark_execute_sql(sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.HIVE_FLAG):
+                sql = sql[len(sr_sql_lib.HIVE_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                self_print("[HIVE]: %s" % sql)
+                log.info("[%s] HIVE: %s" % (sql_id, sql))
+                actual_res = self.hive_execute_sql(sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+>>>>>>> caf94f3b83 ([Tool] SQL-Tester add timeout limit for single case (#48792))
             # execute command in files
             if sql.startswith(sr_sql_lib.SHELL_FLAG):
                 sql = sql[len(sr_sql_lib.SHELL_FLAG):]
@@ -163,7 +238,6 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
                 self_print("[SHELL]: %s" % sql)
-
                 log.info("[%s] SHELL: %s" % (sql_id, sql))
                 actual_res = self.execute_shell(sql)
 
@@ -177,7 +251,6 @@ Start to run: %s
                 # analyse var set
                 var, sql = self.analyse_var(sql)
                 self_print("[FUNCTION]: %s" % sql)
-
                 log.info("[%s] FUNCTION: %s" % (sql_id, sql))
                 actual_res = eval("self.%s" % sql)
 
@@ -254,7 +327,7 @@ Start to run: %s
             self.drop_resource(each_resource)
 
     def _create_and_use_db(self):
-        db_name = "test_db_%s" % uuid.uuid1().hex
+        db_name = "test_db_%s" % uuid.uuid4().hex
         self.db.append(db_name)
         self.execute_sql("CREATE DATABASE %s;" % db_name)
         self.execute_sql("USE %s;" % db_name)
