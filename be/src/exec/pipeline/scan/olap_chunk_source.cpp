@@ -550,11 +550,48 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
     } while (chunk->num_rows() == 0);
     _update_realtime_counter(chunk);
 
-    if (chunk->num_rows() > 0) {
+
+    if (chunk != nullptr) {
+        auto idx = 0;
+        for (auto& field : chunk->columns()) {
+            LOG(INFO) << "chunk field[" << idx << "]: " << field->get_name() << ", is struct: " << field->is_struct() << ", " << field->debug_string();
+            if (field->is_struct()) {
+                auto j = 0;
+                StructColumn* struct_col = down_cast<StructColumn*>(field.get());
+                for (auto& sub_field : struct_col->fields_column()) {
+                    LOG(INFO) << "chunk sub struct field[" << j << "]: " << sub_field->get_name() << ", " << sub_field->debug_string();
+                    j++;
+                }   
+            }
+            idx++;
+        }
         for (auto& col : chunk->columns()) {
             col->check_field_rows();
         }
     }
+
+    if (chunk->num_rows() > 0) {
+        for (auto& col : chunk->columns()) {
+            if (col->is_struct()) {
+                StructColumn* struct_col = down_cast<StructColumn*>(col.get());
+                struct_col->check_field_rows();
+            }
+        }
+    }
+
+    auto idx = 0;
+    for (auto& col : chunk->columns()) {
+        LOG(INFO) << "column: " << idx;
+        LOG(INFO) << "column byte_size: " << col->byte_size(0, col->size());
+        if (col->is_struct()) {
+            LOG(INFO) << "check field row of struct column";
+            StructColumn* struct_column = down_cast<StructColumn*>(col.get());
+            struct_column->check_field_rows();
+        }
+        col->check_field_rows();
+        idx++;
+    }
+
 
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {

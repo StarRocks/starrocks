@@ -822,6 +822,8 @@ public class PlanFragmentBuilder {
             scanNode.setGtid(node.getGtid());
             currentExecGroup.add(scanNode);
             // set tablet
+            List<Column> schema = Lists.newArrayList();
+            //LOG.info("column name: {}", schema.get(0).getName());
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
                         node.getSelectedTabletId(),
@@ -830,10 +832,14 @@ public class PlanFragmentBuilder {
                 long selectedIndexId = node.getSelectedIndexId();
                 MaterializedIndexMeta indexMeta = referenceTable.getIndexMetaByIndexId(selectedIndexId);
                 if (indexMeta != null) {
+                    schema = indexMeta.getSchema();
                     long schemaId = indexMeta.getSchemaId();
                     scanNode.setSchemaId(schemaId);
                     LOG.info("index meta: {}, schema id: {}, schema version: {}", selectedIndexId, schemaId,
-                             indexMeta.getSchemaVersion());
+                             indexMeta.getSchemaVersion());  
+                    for (Column col : schema) {
+                        LOG.info("column: {} type result: {}", col.getName(), col.getType().toSql());
+                    }
                 }
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
@@ -880,14 +886,32 @@ public class PlanFragmentBuilder {
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                if (slotDescriptor.getOriginType().isComplexType()) {
-                    slotDescriptor.setOriginType(entry.getKey().getType());
-                    slotDescriptor.setType(entry.getKey().getType());
+                LOG.info("slot value column: {}, type string: {}", 
+                                        entry.getValue().getName(), entry.getValue().getType().toSql());
+                LOG.info("slot key column: {}, type string: {}", 
+                                        entry.getKey().getName(), entry.getKey().getType().toSql());
+                Optional<Column> col = 
+                            schema.stream().filter(c -> c.getName().equalsIgnoreCase(entry.getValue().getName())).findFirst();
+                if (!col.isPresent()) {
+                    slotDescriptor.setColumn(entry.getValue());
+                    slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                    slotDescriptor.setIsMaterialized(true);
+                    if (slotDescriptor.getOriginType().isComplexType()) {
+                        slotDescriptor.setOriginType(entry.getKey().getType());
+                        slotDescriptor.setType(entry.getKey().getType());
+                    }
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                } else {
+                    Column updateColumn = col.get();
+                    slotDescriptor.setColumn(updateColumn);
+                    slotDescriptor.setIsNullable(updateColumn.isAllowNull());
+                    slotDescriptor.setIsMaterialized(true);
+                    if (slotDescriptor.getOriginType().isComplexType()) {
+                        slotDescriptor.setOriginType(updateColumn.getType());
+                        slotDescriptor.setType(updateColumn.getType());
+                    }
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
                 }
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
             // set column access path

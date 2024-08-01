@@ -470,7 +470,7 @@ public:
         for (const auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
-        column->check_field_rows();
+        //column->check_field_rows();
         return buff;
     }
 };

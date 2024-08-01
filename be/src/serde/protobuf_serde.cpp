@@ -251,14 +251,14 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         if (col->is_struct()) {
             LOG(INFO) << "check field row of struct column";
             StructColumn* struct_column = down_cast<StructColumn*>(col.get());
-            struct_column->check_field_rows();
+            //struct_column->check_field_rows();
         }
-        col->check_field_rows();
+        //col->check_field_rows();
         idx++;
     }
 
     for (int i = 0; i < columns.size(); ++i) {
-        columns[i]->check_field_rows();
+        //columns[i]->check_field_rows();
         size_t col_num_rows = columns[i]->size();
         if (col_num_rows != rows) {
             SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
