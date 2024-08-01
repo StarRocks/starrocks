@@ -75,8 +75,8 @@ public class MVRepairHandlerTest {
                 PartitionRepairInfo partitionRepairInfo = partitionRepairInfos.get(0);
                 Assert.assertEquals(partition.getId(), partitionRepairInfo.getPartitionId());
                 Assert.assertEquals(partition.getName(), partitionRepairInfo.getPartitionName());
-                Assert.assertEquals(100, partitionRepairInfo.getVersion());
-                Assert.assertEquals(100, partitionRepairInfo.getVersionTime());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersion());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersionTime());
             }
         };
 
