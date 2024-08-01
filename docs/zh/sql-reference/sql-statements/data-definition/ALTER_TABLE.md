@@ -822,6 +822,14 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
         );
     ```
 
+16. 批量修改字段数据类型。
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
 ### rename
 
 1. 将表 `table1` 的名称修改为 `table2`。

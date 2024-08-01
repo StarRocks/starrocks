@@ -819,6 +819,14 @@ The `be_compactions` table in the `information_schema` database records compacti
          );
      ```
 
+16. Modify the data type of multiple columns in a single statement.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
 ### Rename
 
 1. Rename `table1` to `table2`.
