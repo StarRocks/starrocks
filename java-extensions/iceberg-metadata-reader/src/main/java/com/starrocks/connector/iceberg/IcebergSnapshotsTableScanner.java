@@ -20,8 +20,6 @@ import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -33,7 +31,6 @@ import static com.google.common.collect.Streams.mapWithIndex;
 import static org.apache.iceberg.MetadataTableUtils.createMetadataTableInstance;
 
 public class IcebergSnapshotsTableScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergSnapshotsTableScanner.class);
 
     private CloseableIterator<StructLike> reader;
     private Map<String, Integer> columnNameToPosition = new HashMap<>();

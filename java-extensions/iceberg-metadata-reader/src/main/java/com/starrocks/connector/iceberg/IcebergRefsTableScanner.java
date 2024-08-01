@@ -16,14 +16,11 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.SnapshotRef;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.Map;
 
 public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergRefsTableScanner.class);
     private Iterator<Map.Entry<String, SnapshotRef>> reader;
 
     public IcebergRefsTableScanner(int fetchSize, Map<String, String> params) {
@@ -60,9 +57,7 @@ public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
 
     @Override
     public void doClose() {
-        if (reader != null) {
-            reader = null;
-        }
+        reader = null;
     }
 
 

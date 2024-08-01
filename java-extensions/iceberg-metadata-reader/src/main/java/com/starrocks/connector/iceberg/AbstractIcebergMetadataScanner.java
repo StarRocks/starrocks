@@ -16,6 +16,8 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
+import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.Table;
 import org.apache.logging.log4j.LogManager;
@@ -35,6 +37,7 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private final String[] metadataColumnNames;
     private final String[] metadataColumnTypes;
     private ColumnType[] requiredTypes;
+    private final String[] nestedFields;
     private final int fetchSize;
     protected final ClassLoader classLoader;
     protected Table table;
@@ -43,6 +46,7 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.metadataColumnNames = params.get("metadata_column_names").split(",");
         this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
@@ -105,6 +109,16 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         for (int i = 0; i < requiredFields.length; i++) {
             String type = columnNameToType.get(requiredFields[i]);
             requiredTypes[i] = new ColumnType(requiredFields[i], type);
+        }
+
+        SelectedFields ssf = new SelectedFields();
+        for (String nestField : nestedFields) {
+            ssf.addNestedPath(nestField);
+        }
+        for (int i = 0; i < requiredFields.length; i++) {
+            ColumnType type = requiredTypes[i];
+            String name = requiredFields[i];
+            type.pruneOnField(ssf, name);
         }
     }
 }

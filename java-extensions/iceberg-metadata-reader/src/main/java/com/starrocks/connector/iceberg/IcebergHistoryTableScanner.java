@@ -18,16 +18,12 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.util.SnapshotUtil;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
 public class IcebergHistoryTableScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergHistoryTableScanner.class);
-
     private Iterator<Snapshot> reader;
     private Set<Long> ancestorIds;
 
@@ -63,9 +59,7 @@ public class IcebergHistoryTableScanner extends AbstractIcebergMetadataScanner {
 
     @Override
     public void doClose() {
-        if (reader != null) {
-            reader = null;
-        }
+        reader = null;
     }
 
     @Override
