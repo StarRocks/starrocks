@@ -553,7 +553,7 @@ Syntax:
 PROPERTIES ("compression" = "zstd(<compression_level>)")
 ```
 
-`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22].
+`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22]. Default: `3` (Recommended). The greater the number, the higher the compression ratio. The higher the compression level, the more time consumption for compression and decompression.
 
 Example:
 
