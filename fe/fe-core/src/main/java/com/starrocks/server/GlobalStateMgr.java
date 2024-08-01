@@ -388,6 +388,7 @@ public class GlobalStateMgr {
     private RoutineLoadMgr routineLoadMgr;
     private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
+    private final MaterializedViewMgr materializedViewMgr;
 
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
@@ -704,6 +705,7 @@ public class GlobalStateMgr {
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
+        this.materializedViewMgr = new MaterializedViewMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
@@ -1566,6 +1568,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+    // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1613,7 +1617,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
                         .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
-                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
@@ -1721,7 +1725,7 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = loadStreamLoadManager(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
+                checksum = materializedViewMgr.reload(dis, checksum);
                 remoteChecksum = dis.readLong();
                 globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 loadRBACPrivilege(dis);
@@ -1965,6 +1969,8 @@ public class GlobalStateMgr {
         }
     }
 
+    // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
+    // since Checkpoint uses a separate memory.
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
@@ -2007,7 +2013,7 @@ public class GlobalStateMgr {
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
                     streamLoadMgr.save(dos);
-                    MaterializedViewMgr.getInstance().save(dos);
+                    materializedViewMgr.save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
                     replicationMgr.save(dos);
@@ -2066,7 +2072,7 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = streamLoadMgr.saveStreamLoadManager(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = MaterializedViewMgr.getInstance().store(dos, checksum);
+                checksum = materializedViewMgr.store(dos, checksum);
                 dos.writeLong(checksum);
                 globalFunctionMgr.saveGlobalFunctions(dos, checksum);
                 saveRBACPrivilege(dos);
@@ -3347,6 +3353,10 @@ public class GlobalStateMgr {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
+    }
+
+    public MaterializedViewMgr getMaterializedViewMgr() {
+        return this.materializedViewMgr;
     }
 
     public SmallFileMgr getSmallFileMgr() {
