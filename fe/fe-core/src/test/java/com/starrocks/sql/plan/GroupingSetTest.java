@@ -317,4 +317,20 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  <slot 6> : 6: array_agg\n" +
                 "  |  <slot 9> : array_join(7: array_agg, ',')");
     }
+
+    @Test
+    public void testPushDownGroupingSetNormal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setCboCteReuse(true);
+        }
+    }
 }
