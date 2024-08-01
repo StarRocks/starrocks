@@ -621,7 +621,11 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
-    @timeout(QUERY_TIMEOUT, exception_message=f"QUERY TIMEOUT: {QUERY_TIMEOUT}!")
+    @timeout(
+        QUERY_TIMEOUT,
+        timeout_exception=AssertionError,
+        exception_message=f"Query TimeoutException(TRINO/SPARK/HIVE): {QUERY_TIMEOUT}s!"
+    )
     def conn_execute_sql(self, conn, sql):
         try:
             cursor = conn.cursor()
