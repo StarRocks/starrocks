@@ -20,7 +20,8 @@ public enum MetadataTableType {
     HISTORY("history"),
     METADATA_LOG_ENTRIES("metadata_log_entries"),
     SNAPSHOTS("snapshots"),
-    MANIFESTS("manifests");
+    MANIFESTS("manifests"),
+    FILES("files");
 
     public final String typeString;
 
