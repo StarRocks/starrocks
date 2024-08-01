@@ -202,10 +202,10 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        GetRemoteFilesParams request =
+        GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setPartitionKeys(Lists.newArrayList(hivePartitionKey1, hivePartitionKey2))
                         .build();
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(hiveTable, request);
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(hiveTable, params);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -780,8 +780,8 @@ public class HiveMetadataTest {
             }
         };
 
-        GetRemoteFilesParams request = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, request);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, params);
         Assert.assertEquals(3, remoteFileInfos.size());
     }
 }

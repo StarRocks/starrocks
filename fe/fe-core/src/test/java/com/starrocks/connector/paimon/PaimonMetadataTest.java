@@ -408,7 +408,7 @@ public class PaimonMetadataTest {
     public void testPrunePaimonPartition() {
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams request) {
+            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
                         .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))

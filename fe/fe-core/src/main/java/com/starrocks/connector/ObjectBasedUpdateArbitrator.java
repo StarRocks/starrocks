@@ -33,10 +33,10 @@ public class ObjectBasedUpdateArbitrator extends TableUpdateArbitrator {
         if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
             partitionNameToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
         }
-        GetRemoteFilesParams request =
+        GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).setCheckPartitionExistence(false).build();
         List<RemoteFileInfo> remoteFileInfos =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, request);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
         for (int i = 0; i < partitionNameToFetch.size(); i++) {
             RemoteFileInfo remoteFileInfo = remoteFileInfos.get(i);
             List<RemoteFileDesc> remoteFileDescs = remoteFileInfo.getFiles();

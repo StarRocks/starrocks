@@ -781,11 +781,11 @@ public class MetadataMgr {
         return new ArrayList<>();
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().getRemoteFiles(table, request);
+                return connectorMetadata.get().getRemoteFiles(table, params);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
                 throw e;

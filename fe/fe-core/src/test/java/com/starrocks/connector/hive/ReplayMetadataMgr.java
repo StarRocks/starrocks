@@ -189,7 +189,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList(MOCKED_FILES);
     }
 
