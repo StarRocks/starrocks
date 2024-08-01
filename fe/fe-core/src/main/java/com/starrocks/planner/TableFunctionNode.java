@@ -96,4 +96,9 @@ public class TableFunctionNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.TABLE_FUNCTION_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
 }

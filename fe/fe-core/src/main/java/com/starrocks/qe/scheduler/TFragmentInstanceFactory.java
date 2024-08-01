@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
@@ -164,6 +165,10 @@ public class TFragmentInstanceFactory {
                 result.setPred_tree_params(new TPredicateTreeParams());
                 result.pred_tree_params.setEnable_or(sessionVariable.isEnablePushdownOrPredicate());
                 result.pred_tree_params.setEnable_show_in_profile(sessionVariable.isEnableShowPredicateTreeInProfile());
+
+                List<Integer> collectExecStatsNodeIds = Lists.newArrayList();
+                collectExecStatsNodeIds(fragment.getPlanRoot(), collectExecStatsNodeIds);
+                result.setExec_stats_node_ids(collectExecStatsNodeIds);
             }
         }
     }
@@ -220,6 +225,15 @@ public class TFragmentInstanceFactory {
             result.params.setPipeline_sink_dop(instance.getTableSinkDop());
         } else {
             result.params.setSender_id(instance.getIndexInFragment());
+        }
+    }
+
+    private void collectExecStatsNodeIds(PlanNode node, List<Integer> nodeIds) {
+        if (node.needCollectExecStats()) {
+            nodeIds.add(node.getId().asInt());
+        }
+        for (PlanNode child : node.getChildren()) {
+            collectExecStatsNodeIds(child, nodeIds);
         }
     }
 }

@@ -94,6 +94,22 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
+    if (state->query_ctx()) {
+        auto* ctx = _runtime_state->query_ctx();
+        int32_t node_id = _scan_op->get_plan_node_id();
+        ctx->update_index_filter_stats(node_id, _reader->stats().rows_bf_filtered);
+        ctx->update_index_filter_stats(node_id, _reader->stats().rows_bitmap_index_filtered);
+        ctx->update_index_filter_stats(node_id, _reader->stats().segment_stats_filtered);
+        ctx->update_index_filter_stats(node_id, _reader->stats().rows_key_range_filtered);
+        ctx->update_index_filter_stats(node_id, _reader->stats().rows_stats_filtered);
+
+        ctx->update_pred_filter_stats(node_id, _reader->stats().rows_vec_cond_filtered);
+        ctx->update_rf_filter_stats(node_id, _reader->stats().runtime_stats_filtered);
+        ctx->update_push_rows_stats(node_id, _reader->stats().raw_rows_read);
+    }
+}
+
 TCounterMinMaxType::type OlapChunkSource::_get_counter_min_max_type(const std::string& metric_name) {
     const auto& skip_min_max_metrics = _morsel->skip_min_max_metrics();
     if (skip_min_max_metrics.find(metric_name) != skip_min_max_metrics.end()) {

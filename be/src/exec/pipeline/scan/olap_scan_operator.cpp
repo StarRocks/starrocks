@@ -162,4 +162,13 @@ void OlapScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
+void OlapScanOperator::update_exec_stats(RuntimeState* state) {
+    for (auto& chunk_source : _chunk_sources) {
+        auto olap_chunk_source = std::dynamic_pointer_cast<OlapChunkSource>(chunk_source);
+        if (olap_chunk_source) {
+            olap_chunk_source->update_chunk_exec_stats(state);
+        }
+    }
+}
+
 } // namespace starrocks::pipeline

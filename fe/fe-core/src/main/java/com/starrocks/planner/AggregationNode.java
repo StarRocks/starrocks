@@ -466,4 +466,9 @@ public class AggregationNode extends PlanNode {
         return descriptorTable.getTupleDesc(tupleId).getSlots().subList(0, numGroupingExprs + numAggExprs)
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
     }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
 }
