@@ -39,6 +39,8 @@ public class QueryStatement extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
+    private int queryStartIndex = -1;
+
     public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
         super(queryRelation.getPos());
         this.queryRelation = queryRelation;
@@ -73,6 +75,14 @@ public class QueryStatement extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int idx) {
+        this.queryStartIndex = idx;
     }
 
     // only for prepare execute query

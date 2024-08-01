@@ -181,6 +181,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Controls whether group execution is used for plan fragment execution.
     private List<ExecGroup> colocateExecGroups = Lists.newArrayList();
 
+    private List<Integer> collectExecStatsIds;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -442,6 +444,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public int getParallelExecNum() {
         return parallelExecNum;
+    }
+
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
     }
 
     public TPlanFragment toThrift() {

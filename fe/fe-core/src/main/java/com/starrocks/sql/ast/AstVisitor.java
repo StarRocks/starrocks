@@ -54,6 +54,10 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -1421,7 +1425,25 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    // ------------------------------------------- AST ---------------------------------------==------------------------
+    // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
+    default R visitAddPlanAdvisorStatement(AddPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitClearPlanAdvisorStatement(ClearPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelPlanAdvisorStatement(DelPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowPlanAdvisorStatement(ShowPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+
+    // ------------------------------------------- AST -----------------------------------------------------------------
 
     default R visitLimitElement(LimitElement node, C context) {
         return null;
@@ -1450,4 +1472,6 @@ public interface AstVisitor<R, C> {
     default R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
+
+
 }

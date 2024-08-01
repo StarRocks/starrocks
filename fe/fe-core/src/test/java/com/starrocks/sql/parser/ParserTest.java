@@ -58,6 +58,15 @@ import static org.junit.Assert.fail;
 class ParserTest {
 
     @Test
+    void test() {
+        String sql = "add into plan advisor  " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
+
+    @Test
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -68,15 +77,6 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
                     "Statement exceeds maximum length limit");
         }
-    }
-
-    @Test
-    void test() {
-        String sql = "@`a` = 1";
-        SessionVariable sessionVariable = new SessionVariable();
-        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
-        System.out.println();
-
     }
 
     @Test
