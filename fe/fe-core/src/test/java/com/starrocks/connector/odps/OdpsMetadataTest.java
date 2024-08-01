@@ -151,7 +151,7 @@ public class OdpsMetadataTest extends MockedBase {
     }
 
     @Test
-    public void testGetRemoteFileInfos() throws AnalysisException, IOException {
+    public void testGetRemoteFiles() throws AnalysisException, IOException {
         Table odpsTable = odpsMetadata.getTable("project", "tableName");
         PartitionKey partitionKey =
                 PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
@@ -159,7 +159,7 @@ public class OdpsMetadataTest extends MockedBase {
         GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setFieldNames(odpsTable.getPartitionColumnNames())
                 .setPartitionKeys(ImmutableList.of(partitionKey)).build();
         List<RemoteFileInfo> remoteFileInfos =
-                odpsMetadata.getRemoteFileInfos(odpsTable, request, mockTableReadSessionBuilder);
+                odpsMetadata.getRemoteFiles(odpsTable, request, mockTableReadSessionBuilder);
         Assert.assertEquals(1, remoteFileInfos.size());
     }
 

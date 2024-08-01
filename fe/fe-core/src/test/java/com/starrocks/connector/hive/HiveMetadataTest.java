@@ -759,7 +759,7 @@ public class HiveMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(
+    public void testGetRemoteFiles(
             @Mocked HiveTable table,
             @Mocked HiveMetastoreOperations hmsOps) {
         List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");

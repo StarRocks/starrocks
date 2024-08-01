@@ -316,11 +316,11 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
         // add scanBuilder param for mock
-        return getRemoteFileInfos(table, request, new TableReadSessionBuilder());
+        return getRemoteFiles(table, request, new TableReadSessionBuilder());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, GetRemoteFilesRequest request,
-                                                   TableReadSessionBuilder scanBuilder) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request,
+                                               TableReadSessionBuilder scanBuilder) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         Set<String> set = new HashSet<>(request.getFieldNames());
@@ -364,7 +364,7 @@ public class OdpsMetadata implements ConnectorMetadata {
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
-            LOG.error("getRemoteFileInfos error", e);
+            LOG.error("getRemoteFiles error", e);
         }
         return Collections.emptyList();
     }

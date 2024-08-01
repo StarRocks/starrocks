@@ -185,7 +185,7 @@ public class MockedBase {
         fileInfo.setFiles(ImmutableList.of(OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
         when(metadataMgr.getRemoteFiles(any(), any())).thenReturn(
                 ImmutableList.of(fileInfo));
-        when(odpsMetadata.getRemoteFileInfos(any(), any(), any())).thenReturn(
+        when(odpsMetadata.getRemoteFiles(any(), any(), any())).thenReturn(
                 ImmutableList.of(fileInfo));
     }
 }

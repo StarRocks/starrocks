@@ -369,7 +369,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
         switch (version.getPointerType()) {
-            case TEMPORAL :
+            case TEMPORAL:
                 return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
             case VERSION:
                 return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
@@ -431,7 +431,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .snapshotId();
     }
 
-
     public Table getView(String dbName, String viewName) {
         try {
             View icebergView = icebergCatalog.getView(dbName, viewName);
@@ -483,11 +482,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
         TableVersionRange version = request.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return getRemoteFileInfos((IcebergTable) table, snapshotId, request.getPredicate(), request.getLimit());
+        return getRemoteFiles((IcebergTable) table, snapshotId, request.getPredicate(), request.getLimit());
     }
 
-    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId,
-                                                    ScalarOperator predicate, long limit) {
+    private List<RemoteFileInfo> getRemoteFiles(IcebergTable table, long snapshotId,
+                                                ScalarOperator predicate, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = table.getRemoteDbName();
         String tableName = table.getRemoteTableName();
@@ -780,7 +779,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode(connectContext), connectContext))
+                        catalogName, dbName, tableName, planMode(connectContext), connectContext))
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
@@ -871,7 +870,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Tracers.Module module = Tracers.Module.EXTERNAL;
         if (metrics.isPresent()) {
-            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
+            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "[" + icebergPredicate + "]";
             String value = metrics.get().scanMetrics().toString();
             if (tracers == null) {
                 Tracers.record(module, name, value);
@@ -883,7 +882,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         if (((StarRocksIcebergTableScan) scan).isRemotePlanFiles()) {
-            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "["  + icebergPredicate + "]";
+            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "[" + icebergPredicate + "]";
             if (tracers == null) {
                 Tracers.record(module, name, "true");
             } else {

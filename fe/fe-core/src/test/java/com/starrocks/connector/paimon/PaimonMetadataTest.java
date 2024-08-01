@@ -258,8 +258,8 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
-                                       @Mocked ReadBuilder readBuilder)
+    public void testGetRemoteFiles(@Mocked FileStoreTable paimonNativeTable,
+                                   @Mocked ReadBuilder readBuilder)
             throws Catalog.TableNotExistException {
         new MockUp<PaimonMetadata>() {
             @Mock

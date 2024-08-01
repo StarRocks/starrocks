@@ -127,7 +127,7 @@ public class KuduMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
+    public void testGetRemoteFiles(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
                 SCHEMA_EMULATION_PREFIX, Optional.empty());
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
