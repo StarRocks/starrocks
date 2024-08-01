@@ -89,7 +89,7 @@ public class LoadJobMVListener implements LoadJobListener {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
             }
-            if (!isTriggerIfBaseTableIsMV) {
+            if (!isTriggerIfBaseTableIsMV && table.isMaterializedView()) {
                 LOG.info("Skip to trigger refresh related materialized views in publish version phase because " +
                         "base table {} is a materialized view.", table.getName());
                 continue;
