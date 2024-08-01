@@ -260,13 +260,8 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     }
 
     for (const auto& [node_id, exec_stats] : _node_exec_stats) {
-        NodeExecStatsItemPB exec_stats_item;
-        exec_stats_item.set_node_id(node_id);
-        exec_stats_item.set_push_rows(exec_stats->push_rows);
-        exec_stats_item.set_pull_rows(exec_stats->pull_rows);
-        exec_stats_item.set_pred_filter_rows(exec_stats->pred_filter_rows);
-        exec_stats_item.set_index_filter_rows(exec_stats->index_filter_rows);
-        exec_stats_item.set_rf_filter_rows(exec_stats->rf_filter_rows);
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
     }
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());

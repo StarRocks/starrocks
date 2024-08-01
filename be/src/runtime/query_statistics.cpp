@@ -132,6 +132,11 @@ void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
     this->scan_bytes += stats_item.scan_bytes();
 }
 
+void QueryStatistics::add_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter,
+                                          int64_t index_filter, int64_t rf_filter) {
+    update_exec_stats_item(node_id, push, pull, pred_filter, index_filter, rf_filter);
+}
+
 void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
     this->scan_rows += scan_rows;
     this->scan_bytes += scan_bytes;

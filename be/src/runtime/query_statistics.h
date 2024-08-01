@@ -54,6 +54,8 @@ public:
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 
     void add_stats_item(QueryStatisticsItemPB& stats_item);
+    void add_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
+                             int64_t rf_filter);
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
