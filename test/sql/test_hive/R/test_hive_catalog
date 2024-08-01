@@ -26,6 +26,10 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc a inne
 2	Bob	bj	2
 2	Bob	bj	2
 -- !result
+select * from hive_sql_test_${uuid0}.test_oss.test_hive_view;
+-- result:
+1
+-- !result
 drop catalog hive_sql_test_${uuid0}
 -- result:
 -- !result

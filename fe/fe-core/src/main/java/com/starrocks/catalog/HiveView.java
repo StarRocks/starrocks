@@ -15,9 +15,11 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -27,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -104,7 +107,19 @@ public class HiveView extends Table {
         sessionVariable.setSqlDialect(sqlDialect);
 
         List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(queryStatement);
+        List<String> cteRelationNames = queryStatement.getQueryRelation().getCteRelations()
+                .stream().map(CTERelation::getName)
+                .collect(Collectors.toList());
+
         for (TableRelation tableRelation : tableRelations) {
+            TableName name = tableRelation.getName();
+
+            // do not fill catalog and database name to cte relation
+            if (Strings.isNullOrEmpty(name.getCatalog()) &&
+                    Strings.isNullOrEmpty(name.getDb()) &&
+                    cteRelationNames.contains(name.getTbl())) {
+                continue;
+            }
             tableRelation.getName().setCatalog(catalogName);
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
                 tableRelation.getName().setDb(dbName);
