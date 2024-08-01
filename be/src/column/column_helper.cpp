@@ -335,6 +335,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
+        LOG(INFO) << "create struct column";
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.field_names.size());
         Columns columns;

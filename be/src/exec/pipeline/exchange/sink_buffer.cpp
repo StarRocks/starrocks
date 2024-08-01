@@ -358,6 +358,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
+        
         request.params->set_sequence(++_request_seqs[instance_id.lo]);
 
         if (!request.attachment.empty()) {

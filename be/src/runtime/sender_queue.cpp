@@ -708,8 +708,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
-    //const bool use_pass_through = request.use_pass_through();
-    const bool use_pass_through = false;
+    const bool use_pass_through = request.use_pass_through();
+    //const bool use_pass_through = false;
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
@@ -719,6 +719,15 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     }
 
     RETURN_IF_ERROR(try_to_build_chunk_meta(request, metrics));
+
+    auto idx = 0;
+    for (auto& type : _chunk_meta.types) {
+        LOG(INFO) << "_chunk_meta[" << idx << "] type: " << type.debug_string();
+        for (int j = 0; j < type.children.size(); j++) {
+            LOG(INFO) << "_chunk_meta[" << idx << "], child[" << j << "] is struct: " << type.children[j].debug_string();
+        }
+        idx++;
+    }
 
     size_t total_chunk_bytes = 0;
     _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();

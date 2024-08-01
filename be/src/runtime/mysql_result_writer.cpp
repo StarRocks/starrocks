@@ -165,9 +165,12 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
+    auto idx = 0;
     for (auto& col : chunk->columns()) {
+        idx++;
         col->check_field_rows();
     }
+    LOG(INFO) << "chunk columns size: " << idx;
 
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));

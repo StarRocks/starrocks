@@ -184,6 +184,8 @@ public class OlapScanNode extends ScanNode {
 
     private Map<Long, Long> scanPartitionVersions = Maps.newHashMap();
 
+    public long schemaId = 0;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -314,6 +316,10 @@ public class OlapScanNode extends ScanNode {
 
     public OlapTable getOlapTable() {
         return olapTable;
+    }
+
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
     }
 
     @Override
@@ -913,6 +919,13 @@ public class OlapScanNode extends ScanNode {
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
+                long curSchemaId = indexMeta.getSchemaId();
+                LOG.info("index meta: {}, schema id: {}, cur schema id {}, schema version: {}", selectedIndexId,
+                         this.schemaId, curSchemaId, indexMeta.getSchemaVersion());
+                if (this.schemaId != 0 && this.schemaId != curSchemaId) {
+                    LOG.warn("different schema id, plan: {}, current: {}", this.schemaId, curSchemaId);
+                }
+
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
                     tColumn.setColumn_name(col.getColumnId().getId());
@@ -1037,6 +1050,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.isFinalized = true;
         olapScanNode.warehouseId = warehouseId;
         olapScanNode.result.addAll(locationsList);
+        LOG.info("create olap scan node");
 
         return olapScanNode;
     }

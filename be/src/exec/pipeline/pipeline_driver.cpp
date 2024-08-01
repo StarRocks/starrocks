@@ -321,9 +321,24 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
 
                 if (maybe_chunk.value()) {
+                    LOG(INFO) << "curr_op: " << curr_op->get_name() << ", id: " << curr_op->get_id() << ", next_op: " << next_op->get_name() << ", id: " << next_op->get_id();
+                    auto idx = 0;
+                    for (auto& field : maybe_chunk.value()->columns()) {
+                        LOG(INFO) << "chunk field[" << idx << "]: " << field->get_name() << ", " << field->debug_string();
+                        if (field->is_struct()) {
+                            auto j = 0;
+                            StructColumn* struct_col = down_cast<StructColumn*>(field.get());
+                            for (auto& sub_field : struct_col->fields_column()) {
+                                LOG(INFO) << "chunk sub struct field[" << j << "]: " << sub_field->get_name() << ", " << sub_field->debug_string();
+                                j++;
+                            }   
+                        }
+                        idx++;
+                    }
                     for (auto& col : maybe_chunk.value()->columns()) {
                         col->check_field_rows();
                     }
+                    LOG(INFO) << "curr_op: " << i << ", chunk_usage: " << maybe_chunk.value()->bytes_usage();
                 }
                 if (return_status.ok()) {
                     if (maybe_chunk.value() &&

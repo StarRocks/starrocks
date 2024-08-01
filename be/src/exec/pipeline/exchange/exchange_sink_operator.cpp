@@ -253,6 +253,23 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             _current_request_bytes += pchunk->data().size();
         }
     }
+    
+    auto idx = 0;
+    if (chunk != nullptr) {
+        for (auto& field : chunk->columns()) {
+            LOG(INFO) << "chunk field[" << idx << "]: " << field->get_name() << ", " << field->debug_string();
+            if (field->is_struct()) {
+                auto j = 0;
+                StructColumn* struct_col = down_cast<StructColumn*>(field.get());
+                for (auto& sub_field : struct_col->fields_column()) {
+                    LOG(INFO) << "chunk sub struct field[" << j << "]: " << sub_field->get_name() << ", " << sub_field->debug_string();
+                    j++;
+                }   
+            }
+            idx++;
+        }
+    }
+
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet

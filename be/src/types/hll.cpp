@@ -581,6 +581,8 @@ int64_t HyperLogLog::estimate_cardinality() const {
 }
 
 std::string HyperLogLog::to_string() const {
+    return "HyperLogLog";
+    /*
     switch (_type) {
     case HLL_DATA_EMPTY:
         return {};
@@ -589,11 +591,12 @@ std::string HyperLogLog::to_string() const {
                                    estimate_cardinality(), _type);
     case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
-        return strings::Substitute("cardinality:$1\ntype:$2", estimate_cardinality(), _type);
+        return strings::Substitute("cardinality:$0\ntype:$1", estimate_cardinality(), _type);
     }
     default:
         return {};
     }
+    */
 }
 
 void HyperLogLog::clear() {

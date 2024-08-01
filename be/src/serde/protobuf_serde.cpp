@@ -219,13 +219,20 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
+    for (int i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
+        LOG(INFO) << "meta[" << i << "] logic type; " << _meta.types[i];
+    }
+
     std::vector<ColumnPtr> columns;
     columns.resize(_meta.slot_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
+        if (columns[i]->is_struct()) {
+            LOG(INFO) << "create struct column: " << i;
+        }
     }
 
-    for (auto)
+    LOG(INFO) << "deserialize columns started";
 
     if (_encode_level.empty()) {
         for (auto& column : columns) {
@@ -236,6 +243,18 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         for (auto i = 0; i < columns.size(); ++i) {
             cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]);
         }
+    }
+    auto idx = 0;
+    for (auto& col : columns) {
+        LOG(INFO) << "column: " << idx;
+        LOG(INFO) << "column byte_size: " << col->byte_size(0, col->size());
+        if (col->is_struct()) {
+            LOG(INFO) << "check field row of struct column";
+            StructColumn* struct_column = down_cast<StructColumn*>(col.get());
+            struct_column->check_field_rows();
+        }
+        col->check_field_rows();
+        idx++;
     }
 
     for (int i = 0; i < columns.size(); ++i) {
@@ -249,6 +268,9 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
                                 slot_id, col_num_rows, rows));
         }
     }
+
+
+    LOG(INFO) << "deserialize columns finished";
 
     // deserialize extra data
     ChunkExtraDataPtr chunk_extra_data;

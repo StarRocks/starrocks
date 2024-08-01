@@ -828,6 +828,13 @@ public class PlanFragmentBuilder {
                         node.getHintsReplicaId(),
                         node.getSelectedIndexId());
                 long selectedIndexId = node.getSelectedIndexId();
+                MaterializedIndexMeta indexMeta = referenceTable.getIndexMetaByIndexId(selectedIndexId);
+                if (indexMeta != null) {
+                    long schemaId = indexMeta.getSchemaId();
+                    scanNode.setSchemaId(schemaId);
+                    LOG.info("index meta: {}, schema id: {}, schema version: {}", selectedIndexId, schemaId,
+                             indexMeta.getSchemaVersion());
+                }
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
