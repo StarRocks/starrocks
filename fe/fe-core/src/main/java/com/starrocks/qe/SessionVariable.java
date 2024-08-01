@@ -1448,7 +1448,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorAdaptiveIoTasks = true;
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SPLIT_IO_TASKS)
-    private boolean enableConnectorSplitIoTasks = false;
+    private boolean enableConnectorSplitIoTasks = true;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
@@ -1720,7 +1720,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long connectorMaxSplitSize = 64L * 1024L * 1024L;
 
     @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
-    private long connectorHugeFileSize = 1024L * 1024L * 1024L;
+    private long connectorHugeFileSize = 512L * 1024L * 1024L;
 
     private int exprChildrenLimit = -1;
 
@@ -3503,6 +3503,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public void setEnableConnectorSplitIoTasks(boolean v) {
+        enableConnectorSplitIoTasks = v;
     }
 
     // Serialize to thrift object
