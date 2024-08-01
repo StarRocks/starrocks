@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <butil/containers/doubly_buffered_data.h>
-
 #include <cstdlib>
 
 #include "common/compiler_util.h"
