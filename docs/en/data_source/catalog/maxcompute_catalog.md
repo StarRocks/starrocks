@@ -73,10 +73,11 @@ A set of parameters about how StarRocks accesses the files stored in the MaxComp
 
 The following table describes the parameter you need to configure in `ScanParams`.
 
-| Parameter            | Required  | Description                                       |
-|----------------------|-----------|---------------------------------------------------|
-| odps.split.policy    | No        | The shard policy used when for data scanning. <br />Valid values: `size` (shard by data size) and `row_offset` (shard by number of rows). Default value: `size`.<br /> |
-| odps.split.row.count | No        | The maximum number of rows per shard when `odps.split.policy` is set to `row_offset`. <br />Default value: `4 * 1024 * 1024 = 4194304`.<br />  |
+| Parameter             | Required | Description                                                                                                                                                                                                          |
+|-----------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.split.policy     | No       | The shard policy used when for data scanning. <br />Valid values: `size` (shard by data size) and `row_offset` (shard by number of rows). Default value: `size`.<br />                                               |
+| odps.split.row.count  | No       | The maximum number of rows per shard when `odps.split.policy` is set to `row_offset`. <br />Default value: `4 * 1024 * 1024 = 4194304`.<br />                                                                        |
+| odps.predicate.enable | No       | Specifies whether to push down the predicate to MaxCompute scan operator. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the feature, and the value `false` disables the feature. |
 
 #### CachingMetaParams
 
