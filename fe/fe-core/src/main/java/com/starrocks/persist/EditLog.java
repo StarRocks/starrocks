@@ -87,11 +87,6 @@ import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
-<<<<<<< HEAD
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
-=======
-import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
->>>>>>> 8ba3138b23 ([BugFix] Move MaterializedViewMgr into GlobalStateMgr (#48564))
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;

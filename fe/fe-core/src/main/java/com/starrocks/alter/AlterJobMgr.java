@@ -102,7 +102,6 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -337,7 +336,7 @@ public class AlterJobMgr {
                         + "Do not allow to do ALTER ops");
             }
 
-            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
 
             // rename materialized view
             if (newMvName != null) {
@@ -359,7 +358,7 @@ public class AlterJobMgr {
                 throw new DdlException("Unsupported modification for materialized view");
             }
 
-            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
         } finally {
             db.writeUnlock();
         }
