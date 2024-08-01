@@ -66,18 +66,47 @@ public class RemoteScanRangeLocations {
     private boolean forceScheduleLocal = false;
     private boolean canBackendSplitFile = false;
 
+    private List<RemoteFileInfo> partitions = new ArrayList<>();
+    private Optional<List<DataCacheOptions>> dataCacheOptionsList = Optional.empty();
+    private long fileNum = 0;
+    private long fileSizeBytes = 0;
+
     public void setup(DescriptorTable descTbl, Table table, HDFSScanNodePredicates scanNodePredicates) {
         Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
         if (selectedPartitionIds.isEmpty()) {
             return;
         }
 
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
         for (long partitionId : selectedPartitionIds) {
             PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
             DescriptorTable.ReferencedPartitionInfo partitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey);
             partitionInfos.add(partitionInfo);
+            partitionKeys.add(partitionKey);
             descTbl.addReferencedPartitions(table, partitionInfo);
+        }
+
+        HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+        String catalogName = hiveMetaStoreTable.getCatalogName();
+        try {
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    catalogName, table, partitionKeys);
+        } catch (Exception e) {
+            LOG.error("Failed to get remote files", e);
+            throw e;
+        }
+        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(catalogName,
+                hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName()));
+        dataCacheOptionsList = generateDataCacheOptions(qualifiedName,
+                hiveMetaStoreTable.getPartitionColumnNames(), partitionKeys);
+        for (int i = 0; i < partitions.size(); i++) {
+            for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
+                if (fileDesc.getLength() > 0) {
+                    fileNum++;
+                    fileSizeBytes += fileDesc.getLength();
+                }
+            }
         }
 
         forceScheduleLocal = false;
@@ -319,28 +348,7 @@ public class RemoteScanRangeLocations {
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
-        HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-
         long start = System.currentTimeMillis();
-        List<PartitionKey> partitionKeys = Lists.newArrayList();
-        for (long partitionId : scanNodePredicates.getSelectedPartitionIds()) {
-            PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
-            partitionKeys.add(partitionKey);
-        }
-        String catalogName = hiveMetaStoreTable.getCatalogName();
-        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(catalogName,
-                hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName()));
-        Optional<List<DataCacheOptions>> dataCacheOptionsList = generateDataCacheOptions(qualifiedName,
-                hiveMetaStoreTable.getPartitionColumnNames(), partitionKeys);
-
-        List<RemoteFileInfo> partitions;
-
-        try {
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(catalogName, table, partitionKeys);
-        } catch (Exception e) {
-            LOG.error("Failed to get remote files", e);
-            throw e;
-        }
 
         updateCanBackendSplitFile(partitions);
 
@@ -421,5 +429,13 @@ public class RemoteScanRangeLocations {
 
     public int getScanRangeLocationsSize() {
         return result.size();
+    }
+
+    public long getFileNum() {
+        return fileNum;
+    }
+
+    public long getFileSizeBytes() {
+        return fileSizeBytes;
     }
 }
