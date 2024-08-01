@@ -50,6 +50,13 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+for TP in ${TP_ARCHIVES[@]}
+do
+  MD5SUM="${TP}_MD5SUM"
+  NAME="${TP}_NAME"
+  export ${TP}_DOWNLOAD="https://olap-beijing.oss-cn-beijing.aliyuncs.com/starrocks-compile/${TP}/${!MD5SUM}/${!NAME}"
+done
+
 cd $TP_DIR
 
 # Download thirdparties.
