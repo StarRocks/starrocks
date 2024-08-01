@@ -33,7 +33,7 @@ public class IcebergView extends ConnectorView {
     }
 
     @Override
-    protected void formatRelations(List<TableRelation> tableRelations) {
+    protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
             // iceberg view query statement with external catalog which created by starrocks must have catalog name
             if (Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {

@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableName;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -59,8 +60,17 @@ public class HiveView extends ConnectorView {
         }
     }
 
-    public void formatRelations(List<TableRelation> tableRelations) {
+    public void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
+            TableName name = tableRelation.getName();
+
+            // do not fill catalog and database name to cte relation
+            if (Strings.isNullOrEmpty(name.getCatalog()) &&
+                    Strings.isNullOrEmpty(name.getDb()) &&
+                    cteRelationNames.contains(name.getTbl())) {
+                return;
+            }
+
             tableRelation.getName().setCatalog(catalogName);
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
                 tableRelation.getName().setDb(dbName);
