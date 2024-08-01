@@ -1103,6 +1103,8 @@ struct THdfsScanNode {
 
     // if load column statistics for metadata table scan
     20: optional bool load_column_stats;
+
+    22: optional DataCache.TDataCacheOptions datacache_options;
 }
 
 struct TProjectNode {
