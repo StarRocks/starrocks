@@ -545,6 +545,22 @@ The valid values of `compression` are:
 - `ZLIB`: the zlib algorithm.
 - `SNAPPY`: the Snappy algorithm.
 
+From v3.3.2 onwards, StarRocks supports specifying the compression level for zstd compression format during table creation.
+
+Syntax:
+
+```sql
+PROPERTIES ("compression" = "zstd(<compression_level>)")
+```
+
+`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22].
+
+Example:
+
+```sql
+PROPERTIES ("compression" = "zstd(3)")
+```
+
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
 #### Set write quorum for data loading
