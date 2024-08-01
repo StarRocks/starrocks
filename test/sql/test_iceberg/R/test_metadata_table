@@ -67,6 +67,12 @@ append
 append
 append
 -- !result
+select record_count,lower_bounds from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$files order by element_at(lower_bounds, 1);
+-- result:
+1	{1:"1"}
+1	{1:"2"}
+1	{1:"3"}
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result

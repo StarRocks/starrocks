@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.RemoteMetaSplit;
@@ -31,14 +32,27 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class IcebergMetadataScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
+
+    private static final Set<String> STATS_COLUMNS =
+            ImmutableSet.of(
+                    "column_sizes",
+                    "value_counts",
+                    "null_value_counts",
+                    "nan_value_counts",
+                    "lower_bounds",
+                    "upper_bounds");
+
     private final MetadataTable table;
     private String icebergPredicate = "";
 
@@ -77,6 +91,19 @@ public class IcebergMetadataScanNode extends ScanNode {
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr().getSerializedMetaSpec(
                 catalogName, originDbName, originTableName, snapshotId, icebergPredicate, metadataTableType).cast();
+
+        if (serializedMetaSpec == IcebergMetaSpec.EMPTY) {
+            return;
+        }
+
+        if (metadataTableType == MetadataTableType.FILES) {
+            for (SlotDescriptor slot : desc.getSlots()) {
+                if (STATS_COLUMNS.contains(slot.getColumn().getName())) {
+                    serializedMetaSpec.setLoadColumnStats(true);
+                    break;
+                }
+            }
+        }
 
         this.serializedTable = serializedMetaSpec.getTable();
         this.loadColumnStats = serializedMetaSpec.loadColumnStats();
