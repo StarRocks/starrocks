@@ -934,6 +934,14 @@ The `be_compactions` table in the `information_schema` database records compacti
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
+13. Modify the data type of multiple columns in a single statement.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
 ### Table property
 
 1. Alter the Colocate property of the table.
