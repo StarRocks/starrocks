@@ -271,6 +271,8 @@ public:
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
     // max buffer size for JSON format is 4GB.
     static constexpr int64_t kJSONMaxBufferSize = 4294967296;
+    // incremental expand size for JSON format buffer.
+    static constexpr int64_t kJSONIncrementalBufferSize = 1073741824;
     ByteBufferPtr buffer = nullptr;
 
     TStreamLoadPutRequest request;
