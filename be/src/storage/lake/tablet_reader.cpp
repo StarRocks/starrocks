@@ -106,7 +106,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         read_params.column_access_paths != nullptr && read_params.column_access_paths->empty()) {
         // init compaction flat json paths
         for (const auto& rowset : _rowsets) {
-            for (const auto& segment : rowset->segments()) {
+            for (const auto& segment : rowset->get_segments()) {
                 // only get one segment's paths
                 if (segment->get_all_flat_jsons(read_params.column_access_paths).ok()) {
                     break;

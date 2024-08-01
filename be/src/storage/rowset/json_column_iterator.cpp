@@ -139,7 +139,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         _is_direct = true;
         // update stats
         for (int i = 0; i < _source_paths.size(); i++) {
-            opts.stats->dynamic_json_hits[_source_paths[i]] += 1;
+            opts.stats->flat_json_hits[_source_paths[i]] += 1;
         }
         return Status::OK();
     }

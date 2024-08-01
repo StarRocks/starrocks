@@ -119,7 +119,8 @@ Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_da
     _is_flat = true;
     RETURN_IF_ERROR(_init_flat_writers());
     JsonFlattener flattener(_flat_paths, _flat_types, _has_remain);
-    std::unique_ptr<HyperJsonTransformer> transformer = std::make_unique<HyperJsonTransformer>(_flat_paths, _flat_types, _has_remain);
+    std::unique_ptr<HyperJsonTransformer> transformer =
+            std::make_unique<HyperJsonTransformer>(_flat_paths, _flat_types, _has_remain);
 
     JsonColumn* pre_col = nullptr;
     for (auto& col : json_datas) {

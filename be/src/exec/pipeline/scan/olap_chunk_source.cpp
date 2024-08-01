@@ -668,6 +668,14 @@ void OlapChunkSource::_update_counter() {
             total += v;
             COUNTER_UPDATE(path_counter, v);
         }
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[HitMerge]{}", k));
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
         COUNTER_UPDATE(_access_path_hits_counter, total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
