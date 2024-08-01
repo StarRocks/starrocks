@@ -413,7 +413,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 }
 
 void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params) {
-    auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
+    auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     DCHECK(params.is_partial());
