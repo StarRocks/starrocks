@@ -34,6 +34,8 @@ if not os.environ.get("version"):
 
 from lib import sr_sql_lib
 
+DEFAULT_TIMEOUT = 600
+
 
 def print_help():
     """help"""
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     record = False
     dirname = None
     concurrency = 8
-    timeout = 1200
+    timeout = DEFAULT_TIMEOUT
     file_filter = ".*"
     case_filter = ".*"
     collect = False
@@ -208,11 +210,12 @@ if __name__ == "__main__":
     argv += ["--processes=%s" % concurrency]
 
     # timeout setting of each case
-    if timeout <= 0:
-        print("-t|--timeout must > 0!")
+    if not 0 < timeout <= 10 * 60:
+        print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-restartworker"]
 
     # test xml
     if not record:

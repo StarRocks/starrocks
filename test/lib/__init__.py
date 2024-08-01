@@ -16,26 +16,20 @@
 # limitations under the License.
 ###########################################################################
 
-import trino
 from cup import log
+from timeout_decorator import timeout, TimeoutError
 
-from lib import close_conn
+def close_conn(conn, conn_type):
+    log.info(f"Try to close {conn_type} connection...")
 
-class TrinoLib(object):
-    """TrinoLib class"""
+    try:
+        __close_conn(conn)
+    except TimeoutError as e:
+        log.warning("[WARN] Close %s connection timeout!" % conn_type)
 
-    def __init__(self):
-        self.connector = None
+    log.info(f"Close {conn_type} connection success!")
 
-    def connect(self, query_dict):
-        if self.connector is None:
-            self.connector = trino.dbapi.connect(
-                host=query_dict["host"],
-                port=query_dict["port"],
-                user=query_dict["user"],
-            )
+@timeout(10)
+def __close_conn(conn):
+    conn.close()
 
-    def close(self):
-        if self.connector is not None:
-            close_conn(self.connector, "trino")
-            self.connector = None
