@@ -54,18 +54,18 @@ private:
 
 // Cast array<ANY> to string
 class CastArrayToString final : public Expr {
-    public:
-        CastArrayToString(Expr* cast_element_expr, const TExprNode& node)
-                : Expr(node), _cast_element_expr(cast_element_expr) {}
+public:
+    CastArrayToString(Expr* cast_element_expr, const TExprNode& node)
+            : Expr(node), _cast_element_expr(cast_element_expr) {}
 
-        ~CastArrayToString() override = default;
+    ~CastArrayToString() override = default;
 
-        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-        Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayToString(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayToString(*this)); }
 
-    private:
-        Expr* _cast_element_expr;
+private:
+    Expr* _cast_element_expr;
 };
 
 // Cast string to array<ANY>
