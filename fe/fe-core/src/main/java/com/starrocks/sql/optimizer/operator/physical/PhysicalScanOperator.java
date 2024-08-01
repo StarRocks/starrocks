@@ -20,6 +20,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.datacache.DataCacheOptions;
+>>>>>>> 6eea7aafee ([Enhancement] Introduce datacache adaptive populate (#48783))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -47,6 +52,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
+<<<<<<< HEAD
+=======
+    protected TableVersionRange tableVersionRange;
+    protected DataCacheOptions dataCacheOptions = null;
+>>>>>>> 6eea7aafee ([Enhancement] Introduce datacache adaptive populate (#48783))
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -139,6 +149,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public List<ColumnAccessPath> getColumnAccessPaths() {
         return columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public DataCacheOptions getDataCacheOptions() {
+        return dataCacheOptions;
     }
 
     @Override

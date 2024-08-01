@@ -1103,6 +1103,14 @@ struct THdfsScanNode {
 
     // if load column statistics for metadata table scan
     20: optional bool load_column_stats;
+<<<<<<< HEAD
+=======
+
+    // for jni scan factory selection scanner
+    21: optional string metadata_table_type
+
+    22: optional DataCache.TDataCacheOptions datacache_options;
+>>>>>>> 6eea7aafee ([Enhancement] Introduce datacache adaptive populate (#48783))
 }
 
 struct TProjectNode {
