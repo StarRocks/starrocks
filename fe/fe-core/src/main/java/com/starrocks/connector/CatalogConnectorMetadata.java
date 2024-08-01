@@ -169,19 +169,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
-        return normal.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFiles(table, params);
     }
 
     @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return normal.prepareMetadata(item, tracers, connectContext);
-    }
-
-    @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        return normal.getRemoteFileInfos(table, partitionNames);
     }
 
     @Override
