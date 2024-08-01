@@ -1010,7 +1010,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public void forceCollectExecStats() {
-        this.needCollectExecStats = false;
+        this.needCollectExecStats = true;
     }
 
     public boolean needCollectExecStats() {
