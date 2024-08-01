@@ -39,7 +39,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorViewDefinition;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -479,10 +479,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
-        TableVersionRange version = request.getTableVersionRange();
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        TableVersionRange version = params.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return getRemoteFiles((IcebergTable) table, snapshotId, request.getPredicate(), request.getLimit());
+        return getRemoteFiles((IcebergTable) table, snapshotId, params.getPredicate(), params.getLimit());
     }
 
     private List<RemoteFileInfo> getRemoteFiles(IcebergTable table, long snapshotId,

@@ -26,7 +26,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -240,9 +240,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
         List<RemoteFileInfo> hudiPartitions;
         try {
-            GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setPartitionKeys(partitionKeys).build();
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys).build();
             hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getRemoteFiles(this, request);
+                    .getRemoteFiles(this, params);
         } catch (StarRocksConnectorException e) {
             LOG.warn("Table {} gets partition info failed.", name, e);
             return null;

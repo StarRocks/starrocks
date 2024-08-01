@@ -26,7 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
@@ -115,20 +115,20 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
         PredicateSearchKey key =
-                PredicateSearchKey.of(dbName, tableName, request.getTableVersionRange().end().get(), request.getPredicate());
+                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
 
-        triggerDeltaLakePlanFilesIfNeeded(key, table, request.getPredicate(), request.getFieldNames());
+        triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
 
         List<FileScanTask> scanTasks = splitTasks.get(key);
         if (scanTasks == null) {
             throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
-                    dbName, tableName, request.getPredicate());
+                    dbName, tableName, params.getPredicate());
         }
 
         List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(

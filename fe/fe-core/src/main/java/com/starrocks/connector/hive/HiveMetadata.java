@@ -32,7 +32,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -218,7 +218,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -229,10 +229,10 @@ public class HiveMetadata implements ConnectorMetadata {
             // and handle partition names in following code.
             // in most cases, we use partition keys. but in some cases,  we use partition names.
             // so partition keys has higher priority than partition names.
-            List<String> partitionNames = request.getPartitionNames();
-            if (request.getPartitionKeys() != null) {
+            List<String> partitionNames = params.getPartitionNames();
+            if (params.getPartitionKeys() != null) {
                 partitionNames =
-                        request.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
                                 .collect(
                                         Collectors.toList());
             }
@@ -242,7 +242,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);
-                } else if (request.isCheckPartitionExistence()) {
+                } else if (params.isCheckPartitionExistence()) {
                     LOG.error("Partition {} doesn't exist", hivePartitionName);
                     throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
                 }
@@ -254,7 +254,7 @@ public class HiveMetadata implements ConnectorMetadata {
             useCache = ((HiveTable) table).isUseMetadataCache();
         }
         // if we disable cache explicitly
-        if (!request.isUseCache()) {
+        if (!params.isUseCache()) {
             useCache = false;
         }
 

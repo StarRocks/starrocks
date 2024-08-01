@@ -33,7 +33,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -210,9 +210,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table table, GetRemoteFilesRequest request) {
+    public List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table table, GetRemoteFilesParams params) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        int size = request.getPartitionKeys().size();
+        int size = params.getPartitionKeys().size();
         readLock();
         try {
             return MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).remoteFileInfos.subList(0, size);

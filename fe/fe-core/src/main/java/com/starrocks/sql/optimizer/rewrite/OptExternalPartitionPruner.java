@@ -34,7 +34,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
@@ -453,8 +453,8 @@ public class OptExternalPartitionPruner {
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
-            GetRemoteFilesRequest request =
-                    GetRemoteFilesRequest.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+            GetRemoteFilesParams request =
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, request);
             if (fileInfos.isEmpty()) {
                 return;

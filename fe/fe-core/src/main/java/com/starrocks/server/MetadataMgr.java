@@ -50,7 +50,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -781,7 +781,7 @@ public class MetadataMgr {
         return new ArrayList<>();
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams request) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
             try {

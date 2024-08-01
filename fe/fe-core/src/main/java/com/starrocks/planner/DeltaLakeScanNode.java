@@ -27,7 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -136,11 +136,11 @@ public class DeltaLakeScanNode extends ScanNode {
         String tableName = deltaLakeTable.getTableName();
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        GetRemoteFilesRequest request =
-                GetRemoteFilesRequest.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(fieldNames).build();
         List<RemoteFileInfo> splits =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, request);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params);
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
             return;

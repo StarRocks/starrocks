@@ -21,7 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
@@ -96,9 +96,9 @@ public class KuduScanNode extends ScanNode {
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        GetRemoteFilesRequest request =
-                GetRemoteFilesRequest.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(kuduTable, request);
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(kuduTable, params);
         KuduRemoteFileDesc remoteFileDesc = (KuduRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {

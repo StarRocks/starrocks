@@ -24,7 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -167,9 +167,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFiles(table, request);
+        return metadata.getRemoteFiles(table, params);
     }
 
     @Override

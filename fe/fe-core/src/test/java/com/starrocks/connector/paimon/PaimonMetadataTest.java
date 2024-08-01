@@ -20,7 +20,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -280,7 +280,7 @@ public class PaimonMetadataTest {
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
         List<RemoteFileInfo> result =
-                metadata.getRemoteFiles(paimonTable, GetRemoteFilesRequest.newBuilder().setFieldNames(requiredNames).build());
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
@@ -408,7 +408,7 @@ public class PaimonMetadataTest {
     public void testPrunePaimonPartition() {
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams request) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
                         .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))

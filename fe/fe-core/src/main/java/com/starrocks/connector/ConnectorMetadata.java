@@ -154,7 +154,7 @@ public interface ConnectorMetadata {
      *
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
+    default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList();
     }
 

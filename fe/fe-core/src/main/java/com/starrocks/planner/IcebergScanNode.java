@@ -33,7 +33,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -185,10 +185,10 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        GetRemoteFilesRequest request =
-                GetRemoteFilesRequest.newBuilder().setTableVersionRange(TableVersionRange.withEnd(snapshotId))
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(snapshotId))
                         .setPredicate(predicate).build();
-        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, request);
+        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
 
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",

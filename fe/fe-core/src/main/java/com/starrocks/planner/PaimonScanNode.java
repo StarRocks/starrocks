@@ -24,7 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -126,10 +126,10 @@ public class PaimonScanNode extends ScanNode {
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        GetRemoteFilesRequest request =
-                GetRemoteFilesRequest.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
         List<RemoteFileInfo> fileInfos =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, request);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());

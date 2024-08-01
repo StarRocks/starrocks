@@ -169,8 +169,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesRequest request) {
-        return normal.getRemoteFiles(table, request);
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFiles(table, params);
     }
 
     @Override

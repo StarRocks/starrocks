@@ -39,7 +39,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
@@ -752,7 +752,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
-                GetRemoteFilesRequest.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
         IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
         Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
@@ -765,7 +765,7 @@ public class IcebergMetadataTest extends TableTestBase {
         predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
         res = metadata.getRemoteFiles(icebergTable,
-                GetRemoteFilesRequest.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
         fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
         Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());

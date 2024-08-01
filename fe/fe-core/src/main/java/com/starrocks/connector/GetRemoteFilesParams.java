@@ -19,7 +19,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
-public class GetRemoteFilesRequest {
+public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
     private List<String> partitionNames;
     private TableVersionRange tableVersionRange;
@@ -29,7 +29,7 @@ public class GetRemoteFilesRequest {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
 
-    private GetRemoteFilesRequest(Builder builder) {
+    private GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
         this.tableVersionRange = builder.tableVersionRange;
@@ -123,8 +123,8 @@ public class GetRemoteFilesRequest {
             return this;
         }
 
-        public GetRemoteFilesRequest build() {
-            return new GetRemoteFilesRequest(this);
+        public GetRemoteFilesParams build() {
+            return new GetRemoteFilesParams(this);
         }
     }
 

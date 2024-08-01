@@ -31,7 +31,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.GetRemoteFilesRequest;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionInfo;
@@ -202,8 +202,8 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        GetRemoteFilesRequest request =
-                GetRemoteFilesRequest.newBuilder().setPartitionKeys(Lists.newArrayList(hivePartitionKey1, hivePartitionKey2))
+        GetRemoteFilesParams request =
+                GetRemoteFilesParams.newBuilder().setPartitionKeys(Lists.newArrayList(hivePartitionKey1, hivePartitionKey2))
                         .build();
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(hiveTable, request);
         Assert.assertEquals(2, remoteFileInfos.size());
@@ -780,7 +780,7 @@ public class HiveMetadataTest {
             }
         };
 
-        GetRemoteFilesRequest request = GetRemoteFilesRequest.newBuilder().setPartitionNames(partitionNames).build();
+        GetRemoteFilesParams request = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, request);
         Assert.assertEquals(3, remoteFileInfos.size());
     }
