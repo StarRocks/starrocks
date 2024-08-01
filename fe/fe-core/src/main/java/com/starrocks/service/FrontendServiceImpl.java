@@ -2303,10 +2303,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } else if (partitionDesc instanceof ListPartitionDesc) {
                 partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
             }
-            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_automatic_partition_number) {
-                throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
-                        Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
-                        " max_automatic_partition_number larger.");
+            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_partition_number_per_table) {
+                throw new AnalysisException("Table " + olapTable.getName() +
+                        " automatically created partitions exceeded the maximum limit: " +
+                        Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
+                        " max_partition_number_per_table larger.");
             }
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
@@ -2320,6 +2321,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (txnState == null) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
+                            "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
+                            olapTable.getName(), Config.max_partitions_in_one_batch)));
             result.setStatus(errorStatus);
             return result;
         }

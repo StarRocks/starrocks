@@ -255,15 +255,6 @@ public class AuthenticationMgr {
                 remotePasswd.getBytes(StandardCharsets.UTF_8), null);
     }
 
-    public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
-        if (Config.enable_password_reuse) {
-            return;
-        }
-        if (checkPlainPassword(user.getUser(), user.getHost(), plainPassword) != null) {
-            throw new DdlException("password should not be the same as the previous one!");
-        }
-    }
-
     public void createUser(CreateUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdentity();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();

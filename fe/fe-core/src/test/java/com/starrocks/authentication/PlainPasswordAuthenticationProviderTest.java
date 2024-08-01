@@ -34,7 +34,7 @@ public class PlainPasswordAuthenticationProviderTest {
 
         // too short
         try {
-            provider.validatePassword("aaa");
+            provider.validatePassword(new UserIdentity("u", "%"), "aaa");
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("password is too short"));
@@ -44,7 +44,7 @@ public class PlainPasswordAuthenticationProviderTest {
         String[] badPasswords = {"starrocks", "STARROCKS", "123456789", "STARROCKS123", "starrocks123", "STARROCKSstar"};
         for (String badPassword : badPasswords) {
             try {
-                provider.validatePassword(badPassword);
+                provider.validatePassword(new UserIdentity("u", "%"), badPassword);
                 Assert.fail();
             } catch (AuthenticationException e) {
                 Assert.assertTrue(e.getMessage().contains(
@@ -52,9 +52,9 @@ public class PlainPasswordAuthenticationProviderTest {
             }
         }
 
-        provider.validatePassword("aaaAAA123");
+        provider.validatePassword(new UserIdentity("u", "%"), "aaaAAA123");
         Config.enable_validate_password = false;
-        provider.validatePassword("aaa");
+        provider.validatePassword(new UserIdentity("u", "%"), "aaa");
     }
 
     @Test

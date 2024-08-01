@@ -18,6 +18,7 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -31,7 +32,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
      * <p>
      * The rules are hard-coded for temporary, will change to a plugin config later
      **/
-    protected void validatePassword(String password) throws AuthenticationException {
+    protected void validatePassword(UserIdentity userIdentity, String password) throws AuthenticationException {
         if (!Config.enable_validate_password) {
             return;
         }
@@ -59,6 +60,11 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             throw new AuthenticationException(
                     "password should contains at least one digit, one lowercase letter and one uppercase letter!");
         }
+
+        if (!Config.enable_password_reuse) {
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(
+                    userIdentity.getUser(), userIdentity.getHost(), password);
+        }
     }
 
     @Override
@@ -70,7 +76,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String password = userAuthOption.getAuthPlugin() == null ?
                     userAuthOption.getPassword() : userAuthOption.getAuthString();
             if (isPasswordPlain) {
-                validatePassword(password);
+                validatePassword(userIdentity, password);
             }
             passwordScrambled = scramblePassword(password, isPasswordPlain);
         }

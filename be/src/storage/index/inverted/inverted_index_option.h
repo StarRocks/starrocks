@@ -12,19 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/inverted/inverted_plugin_factory.h"
+#pragma once
 
-#include "clucene/clucene_plugin.h"
+#include <boost/algorithm/string.hpp>
+#include <map>
+#include <string>
+
+#include "common/status.h"
 #include "common/statusor.h"
+#include "storage/index/inverted/inverted_index_common.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
-StatusOr<InvertedPlugin*> InvertedPluginFactory::get_plugin(InvertedImplementType imp_type) {
-    switch (imp_type) {
-    case InvertedImplementType::CLUCENE:
-        return &CLucenePlugin::get_instance();
-    default:
-        return Status::InternalError("Invalid implement of inverted type");
-    }
-}
+
+StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
+
+std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);
+
+InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::string& parser_str);
+
+std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties);
+
+bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 
 } // namespace starrocks

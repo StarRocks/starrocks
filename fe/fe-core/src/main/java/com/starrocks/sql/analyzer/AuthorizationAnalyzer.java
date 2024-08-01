@@ -18,17 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.AuthenticationProviderFactory;
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -38,23 +33,16 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
-import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
-import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
-import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaUtils;
@@ -64,12 +52,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-public class PrivilegeStmtAnalyzer {
+public class AuthorizationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
-        new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
+        new AuthorizationAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class PrivilegeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AuthorizationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private AuthenticationMgr authenticationManager = null;
         private AuthorizationMgr authorizationManager = null;
 
@@ -101,89 +89,6 @@ public class PrivilegeStmtAnalyzer {
             if (checkExist && !authorizationManager.checkRoleExists(roleName)) {
                 throw new SemanticException(errMsg + ": cannot find role " + roleName + "!");
             }
-        }
-
-        @Override
-        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            stmt.getUserIdentity().analyze();
-            if (stmt instanceof CreateUserStmt) {
-                CreateUserStmt createUserStmt = (CreateUserStmt) stmt;
-                if (authenticationManager.doesUserExist(createUserStmt.getUserIdentity()) &&
-                        !createUserStmt.isIfNotExists()) {
-                    throw new SemanticException("Operation CREATE USER failed for " + createUserStmt.getUserIdentity()
-                            + " : user already exists");
-                }
-                if (!createUserStmt.getDefaultRoles().isEmpty()) {
-                    createUserStmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
-                }
-            } else {
-                AlterUserStmt alterUserStmt = (AlterUserStmt) stmt;
-                if (!authenticationManager.doesUserExist(stmt.getUserIdentity()) && !alterUserStmt.isIfExists()) {
-                    throw new SemanticException("Operation ALTER USER failed for " + alterUserStmt.getUserIdentity()
-                            + " : user not exists");
-                }
-            }
-            String authPluginUsing;
-            UserAuthOption userAuthOption = stmt.getAuthOption();
-            if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
-                authPluginUsing = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
-            } else {
-                authPluginUsing = userAuthOption.getAuthPlugin();
-            }
-
-            try {
-                AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
-                UserIdentity userIdentity = stmt.getUserIdentity();
-                stmt.setAuthenticationInfo(provider.analyzeAuthOption(userIdentity, userAuthOption));
-                if (stmt instanceof AlterUserStmt) {
-                    session.getGlobalStateMgr().getAuthenticationMgr().checkPasswordReuse(
-                            userIdentity, userAuthOption == null ? null : userAuthOption.getPassword());
-                }
-            } catch (AuthenticationException | DdlException e) {
-                SemanticException exception = new SemanticException("invalidate authentication: " + e.getMessage());
-                exception.initCause(e);
-                throw exception;
-            }
-
-            return null;
-        }
-
-        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
-            return Config.authorization_enable_admin_user_protection &&
-                    userIdentity.getUser().equalsIgnoreCase("admin") &&
-                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
-        }
-
-        @Override
-        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            UserIdentity userIdentity = stmt.getUserIdentity();
-            userIdentity.analyze();
-
-            if (needProtectAdminUser(userIdentity, session)) {
-                throw new SemanticException("'admin' user cannot be dropped because of " +
-                        "'authorization_enable_admin_user_protection' configuration is enabled");
-            }
-
-            if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
-                throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
-            }
-
-            if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
-                throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
-                        " : cannot drop user " + UserIdentity.ROOT);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdent();
-            if (user != null) {
-                analyseUser(user, true);
-            } else if (!statement.isAll()) {
-                statement.setUserIdent(context.getCurrentUserIdentity());
-            }
-            return null;
         }
 
         @Override
@@ -583,15 +488,6 @@ public class PrivilegeStmtAnalyzer {
         }
 
         @Override
-        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
-            if (stmt.isAllowRevert()) {
-                throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
-            }
-            analyseUser(stmt.getToUser(), true);
-            return null;
-        }
-
-        @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getUserIdent() != null) {
                 analyseUser(stmt.getUserIdent(), true);
@@ -602,6 +498,12 @@ public class PrivilegeStmtAnalyzer {
             }
 
             return null;
+        }
+
+        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
+            return Config.authorization_enable_admin_user_protection &&
+                    userIdentity.getUser().equalsIgnoreCase("admin") &&
+                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
         }
     }
 }

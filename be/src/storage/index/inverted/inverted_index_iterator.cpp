@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 
 namespace starrocks {
 

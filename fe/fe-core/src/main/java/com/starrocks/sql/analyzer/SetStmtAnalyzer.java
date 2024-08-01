@@ -34,6 +34,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
@@ -309,6 +310,11 @@ public class SetStmtAnalyzer {
         // check plan mode
         if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
             PlanMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check populate datacache mode
+        if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
+            DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
         }
 
         var.setResolvedExpression(resolvedExpression);

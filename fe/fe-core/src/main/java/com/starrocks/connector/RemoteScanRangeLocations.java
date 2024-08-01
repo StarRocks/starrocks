@@ -164,7 +164,7 @@ public class RemoteScanRangeLocations {
 
         if (dataCacheOptions != null) {
             TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
-            dataCacheOptions.toThrift(tDataCacheOptions);
+            tDataCacheOptions.setPriority(dataCacheOptions.getPriority());
             hdfsScanRange.setDatacache_options(tDataCacheOptions);
         }
 
@@ -218,7 +218,7 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setUse_hudi_jni_reader(useJNIReader);
         if (dataCacheOptions != null) {
             TDataCacheOptions tDataCacheOptions = new TDataCacheOptions();
-            dataCacheOptions.toThrift(tDataCacheOptions);
+            tDataCacheOptions.setPriority(dataCacheOptions.getPriority());
             hdfsScanRange.setDatacache_options(tDataCacheOptions);
         }
 
@@ -249,7 +249,8 @@ public class RemoteScanRangeLocations {
         Expr predicates = dataCacheRule.get().getPredicates();
         if (predicates == null) {
             for (int i = 0; i < partitionKeys.size(); i++) {
-                dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
+                dataCacheOptions.add(DataCacheOptions.DataCacheOptionsBuilder.builder()
+                        .setPriority(dataCacheRule.get().getPriority()).build());
             }
         } else {
             // evaluate partition predicates
@@ -269,7 +270,8 @@ public class RemoteScanRangeLocations {
                 op = scalarRewriter.rewrite(op, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
                 if (op.isConstantTrue()) {
                     // matched partition predicates
-                    dataCacheOptions.add(new DataCacheOptions(dataCacheRule.get().getPriority()));
+                    dataCacheOptions.add(DataCacheOptions.DataCacheOptionsBuilder.builder()
+                            .setPriority(dataCacheRule.get().getPriority()).build());
                 } else {
                     // not matched, add null DataCacheOption
                     dataCacheOptions.add(null);
