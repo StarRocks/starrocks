@@ -1,4 +1,4 @@
--- name: test_transparent_mv_olap
+-- name: test_transparent_mv_olap @slow
 create database db_${uuid0};
 -- result:
 -- !result

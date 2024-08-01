@@ -49,6 +49,7 @@ from cup import shell
 from nose import tools
 from cup import log
 from requests.auth import HTTPBasicAuth
+from timeout_decorator import timeout, TimeoutError
 
 from lib import skip
 from lib import data_delete_lib
@@ -74,7 +75,7 @@ if not os.path.exists(CRASH_DIR):
     os.mkdir(CRASH_DIR)
 
 LOG_LEVEL = logging.INFO
-
+QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 
 class Filter(logging.Filter):
     """
@@ -448,7 +449,7 @@ class StarrocksSQLApiLib(object):
         spark_dict = {
             "host": self.spark_host,
             "port": self.spark_port,
-            "user": self.spark_user,
+            "user": self.spark_user
         }
         self.spark_lib.connect(spark_dict)
 
@@ -456,7 +457,7 @@ class StarrocksSQLApiLib(object):
         hive_dict = {
             "host": self.hive_host,
             "port": self.hive_port,
-            "user": self.hive_user,
+            "user": self.hive_user
         }
         self.hive_lib.connect(hive_dict)
 
@@ -620,6 +621,11 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
+    @timeout(
+        QUERY_TIMEOUT,
+        timeout_exception=AssertionError,
+        exception_message=f"Query TimeoutException(TRINO/SPARK/HIVE): {QUERY_TIMEOUT}s!"
+    )
     def conn_execute_sql(self, conn, sql):
         try:
             cursor = conn.cursor()
@@ -1818,7 +1824,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
-        res = self.execute_sql(sql, "dml")
+        res = self.execute_sql(sql, True)
         tools.assert_true(res["status"], res["msg"])
         url = res["result"][0][20]
 
@@ -1846,9 +1852,9 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
     def wait_analyze_finish(self, database_name, table_name, sql):
         timeout = 300
         analyze_sql = "show analyze status where `Database` = 'default_catalog.%s'" % database_name
-        res = self.execute_sql(analyze_sql, "dml")
+        res = self.execute_sql(analyze_sql, True)
         while timeout > 0:
-            res = self.execute_sql(analyze_sql, "dml")
+            res = self.execute_sql(analyze_sql, True)
             if len(res["result"]) > 0:
                 for table in res["result"]:
                     if table[2] == table_name and table[4] == "FULL" and table[6] == "SUCCESS":
@@ -1863,7 +1869,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         finished = False
         counter = 0
         while True:
-            res = self.execute_sql(sql, "dml")
+            res = self.execute_sql(sql, True)
             tools.assert_true(res["status"], res["msg"])
             if str(res["result"]).find("Decode") > 0:
                 finished = True
@@ -1955,7 +1961,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             )
 
             status = res["result"][0][7]
-            if status != ("REFRESHING") and status != ("COMMITTING"):
+            if status != "REFRESHING" and status != "COMMITTING":
                 break
             time.sleep(0.5)
         tools.assert_equal(check_status, status, "wait refresh dictionary finish error")
@@ -1989,11 +1995,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 time.sleep(0.5)
             else:
                 break
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
         """
-        sql = "explain %s" % (query)
+        sql = "explain %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
@@ -2002,7 +2009,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         assert explain result contains expect string
         """
-        sql = "explain %s" % (query)
+        sql = "explain %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
@@ -2020,7 +2027,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         assert explain costs result contains expect string
         """
-        sql = "explain costs %s" % (query)
+        sql = "explain costs %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
@@ -2029,7 +2036,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         assert trace values result contains expect string
         """
-        sql = "trace values %s" % (query)
+        sql = "trace values %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
@@ -2061,7 +2068,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         assert trace times result contains expect string
         """
-        sql = "trace times %s" % (query)
+        sql = "trace times %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
