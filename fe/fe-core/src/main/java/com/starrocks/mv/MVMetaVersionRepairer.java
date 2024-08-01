@@ -134,10 +134,10 @@ public class MVMetaVersionRepairer {
             if (curBasePartitionInfo.getId() != info.getPartitionId()
                     || curBasePartitionInfo.getVersion() != info.getLastVersion()) {
                 LOG.info("Base table {} partition {} version not match, id {}(mv)/{}(table), " +
-                                "version {}(mv)/{}(table), version time {}(mv)/{}(table), skip to repair",
+                                "version {}(mv)/{}(table), version time {}(mv), skip to repair",
                         table.getName(), info.getPartitionName(), curBasePartitionInfo.getId(),
                         info.getPartitionId(), curBasePartitionInfo.getVersion(), info.getLastVersion(),
-                        curBasePartitionInfo.getLastRefreshTime(), info.getLastVersionTime());
+                        curBasePartitionInfo.getLastRefreshTime());
                 continue;
             }
             needToUpdatePartitionInfos.add(info);
