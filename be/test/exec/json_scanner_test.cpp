@@ -1363,50 +1363,6 @@ TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(JsonScannerTest, file_stream) {
-    // 1. create StreamLoadPipe
-    auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
-    DeferOp remove_pipe([&]() { _state->exec_env()->load_stream_mgr()->remove(load_id); });
-    ASSERT_OK(_state->exec_env()->load_stream_mgr()->put(load_id, pipe));
-
-    std::vector<TypeDescriptor> types;
-    types.emplace_back(TYPE_INT);
-    types.emplace_back(TYPE_INT);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.format_type = TFileFormatType::FORMAT_JSON;
-    range.file_type = TFileType::FILE_STREAM;
-    range.strip_outer_array = false;
-    range.__isset.strip_outer_array = false;
-    range.__isset.jsonpaths = false;
-    range.__isset.json_root = false;
-    range.__set_load_id(load_id.to_thrift());
-    ranges.emplace_back(range);
-
-    std::string data = R"({"key1": 1, "key2": 2 }{"key1": 3, "key2": 4 })";
-    EXPECT_OK(pipe->append(data.c_str(), data.size()));
-    EXPECT_OK(pipe->finish());
-
-    auto scanner = create_json_scanner(types, ranges, {"key1", "key2"});
-    Status st;
-    st = scanner->open();
-    EXPECT_OK(st);
-
-    auto res = scanner->get_next();
-    EXPECT_OK(res.status());
-
-    ChunkPtr chunk = res.value();
-    EXPECT_EQ(2, chunk->num_columns());
-    EXPECT_EQ(2, chunk->num_rows());
-
-    EXPECT_EQ("[1, 2]", chunk->debug_row(0));
-    EXPECT_EQ("[3, 4]", chunk->debug_row(1));
-}
-
 TEST_F(JsonScannerTest, test_duplicate_key) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
@@ -1435,5 +1391,4 @@ TEST_F(JsonScannerTest, test_duplicate_key) {
     EXPECT_EQ("[2, 2]", chunk->debug_row(1));
 }
 
->>>>>>> 6097201251 ([BugFix] Skip duplicated json keys in json scanner (#49307))
 } // namespace starrocks
