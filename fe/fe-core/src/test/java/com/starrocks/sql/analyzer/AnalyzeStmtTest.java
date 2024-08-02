@@ -122,7 +122,7 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testSetUserProperty() {
-        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
+        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = '100'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) analyzeSuccess(sql);
         Assert.assertEquals("tom", setUserPropertyStmt.getUser());
     }

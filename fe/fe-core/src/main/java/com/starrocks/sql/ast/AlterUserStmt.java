@@ -16,11 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Map;
+
 public class AlterUserStmt extends BaseCreateAlterUserStmt {
     private final boolean ifExists;
 
-    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists, UserAuthOption userAuthOption, NodePosition pos) {
-        super(userIdentity, userAuthOption, pos);
+    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists, UserAuthOption userAuthOption,
+                         Map<String, String> properties, NodePosition pos) {
+        super(userIdentity, userAuthOption, properties, pos);
         this.ifExists = ifExists;
     }
 

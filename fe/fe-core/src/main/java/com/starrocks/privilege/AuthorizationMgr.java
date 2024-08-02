@@ -1844,4 +1844,9 @@ public class AuthorizationMgr {
             throw new IOException("failed to save AuthenticationManager!", e);
         }
     }
+
+    // get all role ids of the user, including the default roles and the inactivated roles
+    public Set<Long> getAllRoleIds(UserIdentity user) throws PrivilegeException {
+        return getRoleIdsByUser(user);
+    }
 }
