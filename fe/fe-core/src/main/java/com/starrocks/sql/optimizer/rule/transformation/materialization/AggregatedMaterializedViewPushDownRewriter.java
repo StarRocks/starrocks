@@ -355,7 +355,10 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 int foundIndex = 0;
 
                 CallOperator newAggCall = ctx.aggColRefToPushDownAggMap.get(origAggColRef);
-                Preconditions.checkState(newAggCall != null, "newAggCall is null");
+                if (newAggCall == null) {
+                    logMVRewrite(mvRewriteContext, "newAggCall is null");
+                    return AggRewriteInfo.NOT_REWRITE;
+                }
                 if (ctx.isRewrittenByEquivalent(newAggCall)) {
                     newAggregate = ctx.aggToFinalAggMap.get(newAggCall);
                     if (newAggregate == null) {
@@ -377,8 +380,11 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                                 }
                             }
                         }
-                        Preconditions.checkState(foundIndex != -1,
-                                "no aggregate functions found: " + newAggregate.getChildren());
+                        if (foundIndex == -1) {
+                            logMVRewrite(mvRewriteContext,
+                                    "no aggregate functions found: " + newAggregate.getChildren());
+                            return AggRewriteInfo.NOT_REWRITE;
+                        }
                     }
                 } else {
                     ScalarOperator newArg0 = remapping.get(origAggColRef);
@@ -398,14 +404,19 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                     Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                     Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                    Preconditions.checkState(newFunc != null,
-                            "Get rollup function is null, rollupFuncName:", rollupFuncName);
+                    if (newFunc == null) {
+                        logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
+                        return AggRewriteInfo.NOT_REWRITE;
+                    }
                     newAggregate = new CallOperator(rollupFuncName, newFunc.getReturnType(), newArgs, newFunc);
                     realAggregate = newAggregate;
                 }
 
                 // rewrite it with remapping and final aggregate should use the new input as its argument.
-                Preconditions.checkState(realAggregate != null, "realAggregate is null");
+                if (realAggregate == null) {
+                    logMVRewrite(mvRewriteContext, "realAggregate is null");
+                    return AggRewriteInfo.NOT_REWRITE;
+                }
                 realAggregate = replaceAggFuncArgument(remapping, origAggColRef, realAggregate, foundIndex);
 
                 ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
