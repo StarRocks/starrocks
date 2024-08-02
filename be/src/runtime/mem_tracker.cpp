@@ -33,6 +33,7 @@
 // under the License.
 
 #include "runtime/mem_tracker.h"
+#include "service/backend_options.h"
 
 #include <utility>
 
@@ -134,6 +135,7 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
 std::string MemTracker::err_msg(const std::string& msg) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
+    str << "Backend: " << BackendOptions::get_localhost() << ", ";
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
     case MemTracker::NO_SET:
