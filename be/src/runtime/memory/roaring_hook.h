@@ -14,8 +14,19 @@
 
 #pragma once
 
+#include "runtime/memory/allocator.h"
+
 namespace starrocks {
+
+class ThreadLocalRoaringAllocatorSetter {
+public:
+    ThreadLocalRoaringAllocatorSetter(Allocator* allocator);
+    ~ThreadLocalRoaringAllocatorSetter();
+
+private:
+    Allocator* _prev = nullptr;
+};
 
 void init_roaring_hook();
 
-}
+} // namespace starrocks
