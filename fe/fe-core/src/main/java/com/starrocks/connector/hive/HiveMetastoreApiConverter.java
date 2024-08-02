@@ -67,6 +67,7 @@ import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -314,7 +315,8 @@ public class HiveMetastoreApiConverter {
         }
 
         HoodieTableMetaClient metaClient =
-                HoodieTableMetaClient.builder().setConf(configuration).setBasePath(hudiBasePath).build();
+                HoodieTableMetaClient.builder().setConf(new HadoopStorageConfiguration(configuration))
+                        .setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiSchema;
