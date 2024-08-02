@@ -3,6 +3,7 @@
 package com.starrocks.epack.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
@@ -17,14 +18,14 @@ public class ApplyOrRevokeMaskingPolicyLog implements Writable {
     @SerializedName(value = "t")
     public TableUID table;
     @SerializedName(value = "c")
-    public String columnName;
+    public ColumnId columnId;
     @SerializedName(value = "m")
     private MaskingPolicyContext columnMaskingPolicyContext;
 
-    public ApplyOrRevokeMaskingPolicyLog(TableUID table, String columnName,
+    public ApplyOrRevokeMaskingPolicyLog(TableUID table, ColumnId columnId,
                                          MaskingPolicyContext columnMaskingPolicyContext) {
         this.table = table;
-        this.columnName = columnName;
+        this.columnId = columnId;
         this.columnMaskingPolicyContext = columnMaskingPolicyContext;
     }
 
@@ -32,8 +33,8 @@ public class ApplyOrRevokeMaskingPolicyLog implements Writable {
         return table;
     }
 
-    public String getColumnName() {
-        return columnName;
+    public ColumnId getColumnId() {
+        return columnId;
     }
 
     public MaskingPolicyContext getColumnMaskingPolicyContext() {

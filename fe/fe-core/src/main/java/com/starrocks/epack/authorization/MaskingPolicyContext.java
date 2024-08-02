@@ -3,6 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 
 import java.util.List;
 
@@ -11,9 +12,9 @@ public class MaskingPolicyContext {
     Long policyId;
 
     @SerializedName(value = "c")
-    List<String> usingColumns;
+    List<ColumnId> usingColumns;
 
-    public MaskingPolicyContext(Long policyId, List<String> usingColumns) {
+    public MaskingPolicyContext(Long policyId, List<ColumnId> usingColumns) {
         this.policyId = policyId;
         this.usingColumns = usingColumns;
     }
@@ -22,7 +23,7 @@ public class MaskingPolicyContext {
         return policyId;
     }
 
-    public List<String> getUsingColumns() {
+    public List<ColumnId> getUsingColumns() {
         return usingColumns;
     }
 }

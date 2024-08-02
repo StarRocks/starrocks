@@ -15,6 +15,7 @@
 package com.starrocks.epack.catalog.system.starrocks;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
@@ -26,6 +27,7 @@ import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
@@ -70,9 +72,10 @@ public class PolicyReferences {
             if (tableName == null) {
                 continue;
             }
-            
+            Table table = MetaUtils.getTable(tableName);
+
             PolicyAppliedContext policyContext = entry.getValue();
-            for (Map.Entry<String, MaskingPolicyContext> maskingPolicyContextEntry
+            for (Map.Entry<ColumnId, MaskingPolicyContext> maskingPolicyContextEntry
                     : policyContext.getMaskingPolicyApply().entrySet()) {
 
                 MaskingPolicyContext withColumnMaskingPolicy = maskingPolicyContextEntry.getValue();
@@ -85,7 +88,7 @@ public class PolicyReferences {
                 policyReferenceItem.setRef_catalog(tableName.getCatalog());
                 policyReferenceItem.setRef_database(tableName.getDb());
                 policyReferenceItem.setRef_object_name(tableName.getTbl());
-                policyReferenceItem.setRef_column(maskingPolicyContextEntry.getKey());
+                policyReferenceItem.setRef_column(table.getColumn(maskingPolicyContextEntry.getKey()).getName());
                 response.addToPolicy_reference(policyReferenceItem);
             }
 

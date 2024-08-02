@@ -3,6 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 
 import java.util.List;
 
@@ -11,9 +12,9 @@ public class RowAccessPolicyContext {
     Long policyId;
 
     @SerializedName(value = "c")
-    List<String> onColumns;
+    List<ColumnId> onColumns;
 
-    public RowAccessPolicyContext(Long policyId, List<String> onColumns) {
+    public RowAccessPolicyContext(Long policyId, List<ColumnId> onColumns) {
         this.policyId = policyId;
         this.onColumns = onColumns;
     }
@@ -22,7 +23,7 @@ public class RowAccessPolicyContext {
         return policyId;
     }
 
-    public List<String> getOnColumns() {
+    public List<ColumnId> getOnColumns() {
         return onColumns;
     }
 }

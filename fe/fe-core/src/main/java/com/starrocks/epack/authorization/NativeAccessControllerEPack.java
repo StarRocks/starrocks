@@ -8,6 +8,8 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Table;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
@@ -17,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstRewriter;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 
 import java.util.Collections;
@@ -84,16 +87,19 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         }
 
         PolicyAppliedContext tableAppliedPolicyInfo = policyManager.getTableAppliedPolicyInfo(tableUID);
-        Map<String, MaskingPolicyContext> maskingPolicyApply = tableAppliedPolicyInfo.getMaskingPolicyApply();
+        Map<ColumnId, MaskingPolicyContext> maskingPolicyApply = tableAppliedPolicyInfo.getMaskingPolicyApply();
+
+        Map<ColumnId, Column> columnIdMap = MetaUtils.buildIdToColumn(columns);
 
         Map<String, Expr> maskingExprMap = new HashMap<>();
         for (Column column : columns) {
-            MaskingPolicyContext maskingPolicyContext = maskingPolicyApply.get(column.getName());
+            MaskingPolicyContext maskingPolicyContext = maskingPolicyApply.get(column.getColumnId());
 
             if (maskingPolicyContext != null) {
                 Policy maskingPolicy = policyManager.getPolicyById(maskingPolicyContext.getPolicyId());
                 Map<SlotRef, SlotRef> onColumnsMap = new HashMap<>();
-                List<String> usingColumns = maskingPolicyContext.getUsingColumns();
+                List<String> usingColumns = MetaUtils.getColumnNamesByColumnIds(columnIdMap,
+                        maskingPolicyContext.getUsingColumns());
                 List<String> argNames = maskingPolicy.getArgNames();
 
                 for (int i = 0; i < maskingPolicyContext.getUsingColumns().size(); ++i) {
@@ -121,6 +127,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         PolicyAppliedContext tableAppliedPolicyInfo = policyManager.getTableAppliedPolicyInfo(tableUID);
 
         Expr rewriteExpr = null;
+        Table table = MetaUtils.getTable(tableName);
         for (RowAccessPolicyContext rowAccessPolicyInfo : tableAppliedPolicyInfo.getRowAccessPolicyApply()) {
             Policy rowAccessPolicy = policyManager.getPolicyById(rowAccessPolicyInfo.getPolicyId());
             Expr policyExpr = SqlParser.parseSqlToExpr(rowAccessPolicy.getPolicyExpressionSQL(),
@@ -128,10 +135,10 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
 
             if (!rowAccessPolicyInfo.getOnColumns().isEmpty()) {
                 Map<SlotRef, SlotRef> onColumnsMap = new HashMap<>();
-                List<String> onColumns = rowAccessPolicyInfo.getOnColumns();
+                List<String> onColumns = MetaUtils.getColumnNamesByColumnIds(table, rowAccessPolicyInfo.getOnColumns());
                 List<String> argNames = rowAccessPolicy.getArgNames();
 
-                for (int i = 0; i < rowAccessPolicyInfo.getOnColumns().size(); ++i) {
+                for (int i = 0; i < onColumns.size(); ++i) {
                     onColumnsMap.put(new SlotRef(null, argNames.get(i), argNames.get(i)),
                             new SlotRef(tableName, onColumns.get(i)));
                 }

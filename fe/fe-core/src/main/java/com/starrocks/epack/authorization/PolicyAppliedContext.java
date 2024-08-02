@@ -3,6 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.epack.sql.ast.PolicyType;
 
 import java.util.ArrayList;
@@ -14,7 +15,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class PolicyAppliedContext {
     @SerializedName(value = "m")
-    private final Map<String, MaskingPolicyContext> maskingPolicyApply;
+    private final Map<ColumnId, MaskingPolicyContext> maskingPolicyApply;
 
     @SerializedName(value = "r")
     private final List<RowAccessPolicyContext> rowAccessPolicyApply;
@@ -27,7 +28,7 @@ public class PolicyAppliedContext {
         contextLock = new ReentrantReadWriteLock();
     }
 
-    public void applyMaskingPolicy(String maskingColumn, MaskingPolicyContext columnMaskingPolicyContext) {
+    public void applyMaskingPolicy(ColumnId maskingColumn, MaskingPolicyContext columnMaskingPolicyContext) {
         contextLock.writeLock().lock();
         try {
             maskingPolicyApply.put(maskingColumn, columnMaskingPolicyContext);
@@ -36,7 +37,7 @@ public class PolicyAppliedContext {
         }
     }
 
-    public void revokeMaskingPolicy(String maskingColumn) {
+    public void revokeMaskingPolicy(ColumnId maskingColumn) {
         contextLock.writeLock().lock();
         try {
             maskingPolicyApply.remove(maskingColumn);
@@ -45,7 +46,7 @@ public class PolicyAppliedContext {
         }
     }
 
-    public Map<String, MaskingPolicyContext> getMaskingPolicyApply() {
+    public Map<ColumnId, MaskingPolicyContext> getMaskingPolicyApply() {
         contextLock.readLock().lock();
         try {
             return maskingPolicyApply;
@@ -67,10 +68,10 @@ public class PolicyAppliedContext {
         contextLock.writeLock().lock();
 
         try {
-            Iterator<Map.Entry<String, MaskingPolicyContext>> maskingPolicyContextIterator
+            Iterator<Map.Entry<ColumnId, MaskingPolicyContext>> maskingPolicyContextIterator
                     = maskingPolicyApply.entrySet().iterator();
             while (maskingPolicyContextIterator.hasNext()) {
-                Map.Entry<String, MaskingPolicyContext> entry = maskingPolicyContextIterator.next();
+                Map.Entry<ColumnId, MaskingPolicyContext> entry = maskingPolicyContextIterator.next();
                 MaskingPolicyContext withColumnMaskingPolicy = entry.getValue();
                 if (withColumnMaskingPolicy.getPolicyId().equals(policyId)) {
                     maskingPolicyContextIterator.remove();

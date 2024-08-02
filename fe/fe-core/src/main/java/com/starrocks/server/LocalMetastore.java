@@ -2268,13 +2268,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             if (columnMaskingPolicyMap != null) {
                 for (Map.Entry<String, WithColumnMaskingPolicy> withColumnMaskingPolicy : columnMaskingPolicyMap.entrySet()) {
                     securityManager.registerMaskingPolicyContext(context, new TableName(db.getFullName(), table.getName()),
-                            withColumnMaskingPolicy.getKey(), withColumnMaskingPolicy.getValue());
+                            table, withColumnMaskingPolicy.getKey(), withColumnMaskingPolicy.getValue());
                 }
             }
 
             if (rowAccessPolicies != null) {
                 for (WithRowAccessPolicy withRowAccessPolicy : rowAccessPolicies) {
-                    securityManager.registerRowAccessPolicyContext(context, new TableName(db.getFullName(), table.getName()),
+                    securityManager.registerRowAccessPolicyContext(context,
+                            new TableName(db.getFullName(), table.getName()),
+                            table,
                             withRowAccessPolicy);
                 }
             }

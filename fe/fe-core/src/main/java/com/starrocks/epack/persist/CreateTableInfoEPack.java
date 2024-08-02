@@ -14,6 +14,7 @@ import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,8 +44,9 @@ public class CreateTableInfoEPack extends CreateTableInfo {
             for (Map.Entry<String, WithColumnMaskingPolicy> m : maskingPolicyContextMap.entrySet()) {
                 applyOrRevokeMaskingPolicyLogs.add(new ApplyOrRevokeMaskingPolicyLog(
                         TableUID.generate(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
-                        m.getKey(),
-                        new MaskingPolicyContext(m.getValue().getPolicyId(), m.getValue().getUsingColumns()))
+                        table.getColumn(m.getKey()).getColumnId(),
+                        new MaskingPolicyContext(m.getValue().getPolicyId(),
+                                MetaUtils.getColumnIdsByColumnNames(table, m.getValue().getUsingColumns())))
                 );
             }
         }
@@ -54,7 +56,8 @@ public class CreateTableInfoEPack extends CreateTableInfo {
             for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
                 applyOrRevokeRowAccessPolicyLogs.add(new ApplyOrRevokeRowAccessPolicyLog(
                         TableUID.generate(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
-                        new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(), withRowAccessPolicy.getOnColumns())));
+                        new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(),
+                                MetaUtils.getColumnIdsByColumnNames(table, withRowAccessPolicy.getOnColumns()))));
             }
         }
     }
