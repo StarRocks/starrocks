@@ -128,8 +128,6 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
-    Status _prepare_cur_row_group();
-
     // get min/max value from row group stats
     Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
                               const ParquetField* field, std::vector<std::string>& min_values,
