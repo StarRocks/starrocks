@@ -620,6 +620,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "18.0.0")
+        # ignore warning from apache-orc
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
+    endif ()
 else ()
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
 endif()

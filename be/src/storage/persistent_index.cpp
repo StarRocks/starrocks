@@ -3778,7 +3778,7 @@ void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIn
 
                     auto iter = usage_and_size_stat.find(key_size);
                     if (iter == usage_and_size_stat.end()) {
-                        usage_and_size_stat.insert({key_size, {usage, size}});
+                        usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
                     } else {
                         iter->second.first += usage;
                         iter->second.second += size;

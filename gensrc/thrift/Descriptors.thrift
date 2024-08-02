@@ -467,10 +467,6 @@ struct TTableFunctionTable {
     10: optional bool parquet_use_legacy_encoding
 }
 
-struct TIcebergSchema {
-    1: optional list<TIcebergSchemaField> fields
-}
-
 struct TIcebergSchemaField {
     // Refer to field id in iceberg schema
     1: optional i32 field_id
@@ -483,6 +479,10 @@ struct TIcebergSchemaField {
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
+}
+
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
 }
 
 struct TPartitionMap {
