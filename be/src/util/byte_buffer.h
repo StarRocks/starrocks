@@ -66,7 +66,7 @@ struct ByteBuffer {
     static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size) {
         auto tracker = CurrentThread::mem_tracker();
         if (tracker == nullptr) {
-            return Status::InternalError("process memory tracker Not Found when allocate ByteBuffer");
+            return Status::InternalError("current thread memory tracker Not Found when allocate ByteBuffer");
         }
         // check limit before allocation
         TRY_CATCH_BAD_ALLOC(ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker)); return ptr;);
