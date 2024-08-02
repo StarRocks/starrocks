@@ -164,7 +164,9 @@ void OlapScanOperator::set_buffer_finished() {
 
 void OlapScanOperator::update_exec_stats(RuntimeState* state) {
     for (auto& chunk_source : _chunk_sources) {
-        chunk_source->update_chunk_exec_stats(state);
+        if (chunk_source != nullptr) {
+            chunk_source->update_chunk_exec_stats(state);
+        }
     }
 }
 
