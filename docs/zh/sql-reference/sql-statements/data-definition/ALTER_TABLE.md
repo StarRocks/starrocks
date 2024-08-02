@@ -542,23 +542,16 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
 
-#### STRUCT 类型增删字段
+#### STRUCT 类型列增删字段（MODIFY COLUMN ADD/DROP FIELD）
 
-自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型增删字段。其中包括：
-
-- 向 STRUCT 类型列增删字段，包括嵌套 STRUCT 类型
-- 向 ARRAY 类型列中的 STRUCT 字段增删字段，包括嵌套 STRUCT 类型
+自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型列增删字段。该字段可以为嵌套 STRUCT 类型或存在于 ARRAY 类型中。
 
 语法：
 
 ```sql
 -- 增加字段
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> field_desc
-...
-
-field_desc ::=
-    field_type [AFTER <prior_field_name> |FIRST]
+MODIFY COLUMN <column_name> ADD FIELD <field_name>  <field_type> [AFTER <prior_field_name> |FIRST]
 
 -- 删除字段
 ALTER TABLE [<db_name>.]<tbl_name>
@@ -567,7 +560,7 @@ MODIFY COLUMN <column_name> DROP FIELD <field_name>
 
 参数：
 
-- `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
+- `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
 - `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_name` 决定，无需手动指定。
 
 有关示例，参考 [示例 - Column -14](#column)。
@@ -992,7 +985,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 14. STRUCT 类型增删字段。
 
-    建表并导入数据：
+    **准备工作**：建表并导入数据
 
     ```sql
     CREATE TABLE struct_test(
@@ -1010,6 +1003,14 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
         ROW(1, ROW(2, 3), 4), 
         ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
     );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
     ```
 
     - 向 STRUCT 类型列添加新字段。
