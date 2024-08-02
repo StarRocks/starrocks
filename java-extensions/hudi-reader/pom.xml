@@ -17,10 +17,9 @@
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.36</slf4j.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
-        <parquet-hadoop.version>1.12.3</parquet-hadoop.version>
-        <hadoop.version>3.4.0</hadoop.version>
-        <hudi.version>0.14.1</hudi.version>
-        <airlift.version>0.25</airlift.version>
+        <parquet-hadoop.version>1.14.1</parquet-hadoop.version>
+        <hudi.version>0.15.0</hudi.version>
+        <airlift.version>0.27</airlift.version>
         <avro.version>1.11.3</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
@@ -46,7 +45,22 @@
                     <groupId>org.apache.hbase</groupId>
                     <artifactId>hbase-server</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.thrift</groupId>
+                    <artifactId>libthrift</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-io</artifactId>
+            <version>${hudi.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
@@ -60,6 +74,20 @@
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
             <version>${hive-apache.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.thrift</groupId>
+                    <artifactId>libthrift</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
@@ -81,8 +109,13 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
             <version>${avro.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
-
 
         <!-- https://mvnrepository.com/artifact/io.airlift/aircompressor -->
         <dependency>
@@ -103,6 +136,12 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
             <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
