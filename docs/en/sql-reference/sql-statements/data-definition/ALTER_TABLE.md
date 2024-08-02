@@ -550,23 +550,16 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
-#### ADD or drop fields of STRUCT data
+#### Modify a STRUCT column to add or drop a field
 
-From v3.2.10 and v3.3.2 onwards, StarRocks supports adding and dropping fields of STRUCT-type data, including:
-
-- Adding and dropping fields of the STRUCT-type columns (Nested STRUCT is also supported)
-- Adding and dropping fields of the STRUCT type data within an ARRAY type (Nested STRUCT is also supported)
+From v3.2.10 and v3.3.2 onwards, StarRocks supports modifying a STRUCT column to add or drop a field, which can be nested or within an ARRAY type.
 
 Syntax:
 
 ```sql
 -- Add a field
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> field_desc
-...
-
-field_desc ::=
-    field_type [AFTER <prior_field_name> |FIRST]
+MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
 
 -- Drop a field
 ALTER TABLE [<db_name>.]<tbl_name>
@@ -575,7 +568,7 @@ MODIFY COLUMN <column_name> DROP FIELD <field_name>
 
 Parameters:
 
-- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
+- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
 - `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
 
 For more usage instructions, see [Example - Column -14](#column).
@@ -1006,7 +999,7 @@ The `be_compactions` table in the `information_schema` database records compacti
 
 14. Add and drop fields in STRUCT-type data.
 
-    Create a table and insert a row of data.
+    **Prerequisites**: Create a table and insert a row of data.
 
     ```sql
     CREATE TABLE struct_test(
@@ -1024,6 +1017,14 @@ The `be_compactions` table in the `information_schema` database records compacti
         ROW(1, ROW(2, 3), 4), 
         ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
     );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
     ```
 
     - Add a new field to a STRUCT-type column.
