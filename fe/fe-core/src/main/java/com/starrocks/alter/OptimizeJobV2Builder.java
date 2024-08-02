@@ -45,11 +45,13 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
                 || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null
                 || table.isCloudNativeTableOrMaterializedView()) {
             OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            optimizeJob.setWarehouseId(warehouseId);
             return optimizeJob;
         } else {
             LOG.info("Online optimize job is created, table: {}", table.getName());
             OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
                     jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            onlineOptimizeJob.setWarehouseId(warehouseId);
             return onlineOptimizeJob;
         }
     }

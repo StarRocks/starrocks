@@ -276,7 +276,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
                     + tmpPartitionName + ") select " + Joiner.on(", ").join(tableColumnNames)
                     + " from " + dbName + "." + tableName + " partition (" + partitionName + ")";
             String taskName = getName() + "_" + tmpPartitionName;
-            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
+            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTasks.add(rewriteTask);
