@@ -341,9 +341,11 @@ public class GroupingSetsTest extends PlanTestBase {
             String plan = getCostExplain(sql);
             assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
-                    "  |  aggregate: sum[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+                    "  |  aggregate: sum[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
             assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  aggregate: sum[([11: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+                    "  |  aggregate: sum[([11: sum, DECIMAL128(38,2), true]); args: DECIMAL64; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
