@@ -299,6 +299,83 @@ public class TaskRunStatus implements Writable {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
+=======
+    public Constants.TaskRunState getLastRefreshState() {
+        if (isRefreshFinished()) {
+            Preconditions.checkArgument(state.isFinishState(), String.format("state %s must be finish state", state));
+            return state;
+        } else {
+            // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
+            // TODO: how to distinguish TaskRunStatus per partition.
+            return processStartTime == 0 ? state : Constants.TaskRunState.RUNNING;
+        }
+    }
+
+    public boolean isRefreshFinished() {
+        if (state.equals(Constants.TaskRunState.FAILED)) {
+            return true;
+        }
+        if (!state.isFinishState()) {
+            return false;
+        }
+        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
+                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
+            return false;
+        }
+        return true;
+    }
+
+    public long calculateRefreshProcessDuration() {
+        if (finishTime > processStartTime) {
+            // NOTE:
+            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
+            // In this case to avoid return a weird duration we choose the createTime as startTime
+            if (processStartTime > 0) {
+                return finishTime - processStartTime;
+            } else {
+                return finishTime - createTime;
+            }
+        } else {
+            return 0L;
+        }
+    }
+
+    public boolean matchByTaskName(String dbName, Set<String> taskNames) {
+        if (dbName != null && !dbName.equals(getDbName())) {
+            return false;
+        }
+        if (CollectionUtils.isNotEmpty(taskNames) && !taskNames.contains(getTaskName())) {
+            return false;
+        }
+        return true;
+    }
+
+    public boolean match(TGetTasksParams params) {
+        if (params == null) {
+            return true;
+        }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(getTaskName())) {
+            return false;
+        }
+        String queryId = params.query_id;
+        if (queryId != null && !queryId.equalsIgnoreCase(getQueryId())) {
+            return false;
+        }
+        String state = params.state;
+        if (state != null && !state.equalsIgnoreCase(getState().name())) {
+            return false;
+        }
+        return true;
+    }
+
+
+>>>>>>> 4e28ddb656 ([BugFix] fix last_refresh status of mv task (#49130))
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);

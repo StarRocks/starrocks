@@ -47,6 +47,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TGetTasksParams;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
+>>>>>>> 4e28ddb656 ([BugFix] fix last_refresh status of mv task (#49130))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
@@ -68,6 +74,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -666,13 +674,44 @@ public class TaskManager implements MemoryTrackable {
         return taskRunList;
     }
 
+<<<<<<< HEAD
     public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
         Map<String, TaskRunStatus> mvNameRunStatusMap = Maps.newHashMap();
+=======
+    /**
+     * Return the last refresh TaskRunStatus for the task which the source type is MV.
+     * The iteration order is by the task refresh time:
+     * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
+     * TODO: Maybe only return needed MVs rather than all MVs.
+     */
+    public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName,
+                                                                         Set<String> taskNames) {
+        Map<String, List<TaskRunStatus>> mvNameRunStatusMap = Maps.newHashMap();
+        Predicate<TaskRunStatus> taskRunFilter = (task) ->
+                Objects.nonNull(task)
+                        && task.getSource() == Constants.TaskSource.MV
+                        && task.getState() != Constants.TaskRunState.MERGED
+                        && (dbName == null || task.getDbName().equals(dbName))
+                        && (CollectionUtils.isEmpty(taskNames) || taskNames.contains(task.getTaskName()));
+        Consumer<TaskRunStatus> addResult = task -> {
+            // Keep only the first one of duplicated task runs
+            if (isSameTaskRunJob(task, mvNameRunStatusMap)) {
+                mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task);
+            }
+        };
+
+        // running
+        taskRunScheduler.getCopiedRunningTaskRuns().stream()
+                .map(TaskRun::getStatus)
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
+>>>>>>> 4e28ddb656 ([BugFix] fix last_refresh status of mv task (#49130))
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
-                .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
+<<<<<<< HEAD
                 .filter(t -> isShowTaskRunStatus(t, dbName))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
 
@@ -683,6 +722,19 @@ public class TaskManager implements MemoryTrackable {
                 .map(TaskRun::getStatus)
                 .filter(t -> isShowTaskRunStatus(t, dbName))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+=======
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
+        // history
+        taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
+                .stream()
+                .filter(taskRunFilter)
+                .forEach(addResult);
+
+        return mvNameRunStatusMap;
+    }
+>>>>>>> 4e28ddb656 ([BugFix] fix last_refresh status of mv task (#49130))
 
         // history task runs
         List<TaskRunStatus> historyTaskRuns = taskRunManager.getTaskRunHistory().getAllHistory();
