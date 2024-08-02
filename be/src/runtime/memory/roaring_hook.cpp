@@ -19,10 +19,21 @@
 #include <cstdlib>
 
 #include "roaring/memory.h"
-#include "runtime/memory/roaring_allocator.h"
-#include "util/logging.h"
+#include "runtime/memory/mem_hook_allocator.h"
 
 namespace starrocks {
+
+static MemHookAllocator kDefaultRoaringAllocator = MemHookAllocator{};
+inline thread_local Allocator* tls_roaring_allocator = &kDefaultRoaringAllocator;
+
+ThreadLocalRoaringAllocatorSetter::ThreadLocalRoaringAllocatorSetter(Allocator* allocator) {
+    _prev = tls_roaring_allocator;
+    tls_roaring_allocator = allocator;
+}
+
+ThreadLocalRoaringAllocatorSetter::~ThreadLocalRoaringAllocatorSetter() {
+    tls_roaring_allocator = _prev;
+}
 
 void* my_roaring_malloc(size_t bytes) {
     return tls_roaring_allocator->alloc(bytes);

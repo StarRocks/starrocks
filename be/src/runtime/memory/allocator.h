@@ -20,9 +20,9 @@
 
 namespace starrocks {
 
-// Allocater provides interfaces related to memory management,
+// Allocator provides interfaces related to memory management,
 // and their semantics are the same as the standard libc interface.
-// In the future, we can use Allocater to replace mem_hook and achieve more precise memory management.
+// In the future, we can use Allocator to replace mem_hook and achieve more precise memory management.
 class Allocator {
 public:
     virtual ~Allocator() = default;
