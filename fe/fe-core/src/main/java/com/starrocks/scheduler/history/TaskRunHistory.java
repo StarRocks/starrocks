@@ -211,10 +211,8 @@ public class TaskRunHistory {
 
         // Now remove outside of iteration
         idsToRemove.forEach(this::removeTaskByQueryId);
-        synchronized (this) {
-            LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "size before GC:{}, size after GC:{}.", beforeSize, historyTaskRunMap.size());
-        }
+        LOG.warn("Too much task metadata triggers forced task_run GC, " +
+                "size before GC:{}, size after GC:{}.", beforeSize, getTaskRunCount());
     }
 
 }
