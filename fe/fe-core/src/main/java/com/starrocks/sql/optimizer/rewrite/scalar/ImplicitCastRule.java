@@ -23,6 +23,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.common.ErrorType;
@@ -79,7 +80,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (fn.functionName().equals(FunctionSet.ARRAY_MAP) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
-                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
+                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY) ||
+                    fn instanceof AggStateCombinator) {
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {

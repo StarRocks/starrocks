@@ -29,6 +29,7 @@
 namespace starrocks {
 
 class Datum;
+class AggStateDesc;
 
 class Field {
 public:
@@ -71,7 +72,8 @@ public:
               _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
-              _uid(rhs._uid) {}
+              _uid(rhs._uid),
+              _agg_state_desc(rhs._agg_state_desc) {}
 
     Field(Field&& rhs) noexcept
             : _id(rhs._id),
@@ -81,7 +83,8 @@ public:
               _sub_fields(rhs._sub_fields),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
-              _uid(rhs._uid) {
+              _uid(rhs._uid),
+              _agg_state_desc(rhs._agg_state_desc) {
         rhs._sub_fields = nullptr;
     }
 
@@ -96,6 +99,7 @@ public:
             _flags = rhs._flags;
             _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
             _uid = rhs._uid;
+            _agg_state_desc = rhs._agg_state_desc;
         }
         return *this;
     }
@@ -110,6 +114,7 @@ public:
             _flags = rhs._flags;
             _uid = rhs._uid;
             std::swap(_sub_fields, rhs._sub_fields);
+            _agg_state_desc = rhs._agg_state_desc;
         }
         return *this;
     }
@@ -171,6 +176,9 @@ public:
     void set_uid(ColumnUID uid) { _uid = uid; }
     const ColumnUID& uid() const { return _uid; }
 
+    void set_agg_state_desc(AggStateDesc* agg_state_desc) { _agg_state_desc = agg_state_desc; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
     static FieldPtr convert_to_dict_field(const Field& field);
 
 private:
@@ -186,6 +194,7 @@ private:
     uint8_t _short_key_length;
     uint8_t _flags;
     ColumnUID _uid = -1;
+    AggStateDesc* _agg_state_desc;
 };
 
 inline bool Field::is_nullable() const {

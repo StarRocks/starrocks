@@ -341,6 +341,10 @@ public class Function implements Writable {
         return argTypes[argTypes.length - 1];
     }
 
+    public void setPolymorphic(boolean isPolymorphic) {
+        this.isPolymorphic = isPolymorphic;
+    }
+
     public boolean isPolymorphic() {
         return isPolymorphic;
     }

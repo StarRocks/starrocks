@@ -139,9 +139,9 @@ public class AggregateFunction extends Function {
         this.intermediateType =
                 (intermediateType != null && intermediateType.equals(retType)) ? null : intermediateType;
         this.isAnalyticFn = isAnalyticFn;
-        ignoresDistinct = false;
-        isAggregateFn = true;
-        returnsNonNullOnEmpty = false;
+        this.ignoresDistinct = false;
+        this.isAggregateFn = true;
+        this.returnsNonNullOnEmpty = false;
     }
 
     public static AggregateFunction createBuiltin(String name,
@@ -313,6 +313,10 @@ public class AggregateFunction extends Function {
 
     public void setIntermediateType(Type t) {
         intermediateType = t;
+    }
+
+    public Type getIntermediateTypeOrReturnType() {
+        return intermediateType == null ? getReturnType() : intermediateType;
     }
 
     @Override

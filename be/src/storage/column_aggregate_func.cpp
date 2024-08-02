@@ -18,6 +18,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "storage/column_aggregator.h"
@@ -246,6 +247,12 @@ public:
         _agg_func->create(nullptr, _state);
     }
 
+    AggFuncBasedValueAggregator(std::unique_ptr<AggregateFunction> agg_state_unoin) : _agg_func(agg_state_unoin.get()) {
+        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+        _agg_func->create(nullptr, _state);
+        _agg_state_unoin = std::move(agg_state_unoin);
+    }
+
     ~AggFuncBasedValueAggregator() override {
         if (_state != nullptr) {
             _agg_func->destroy(nullptr, _state);
@@ -304,6 +311,7 @@ public:
 
 private:
     const AggregateFunction* _agg_func;
+    std::unique_ptr<AggregateFunction> _agg_state_unoin = nullptr;
     AggDataPtr _state{nullptr};
 };
 
@@ -414,6 +422,21 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         } else {
             return p;
         }
+    } else if (method == STORAGE_AGGREGATE_AGG_STATE_UNION) {
+        if (field->get_agg_state_desc() == nullptr) {
+            CHECK(false) << "Bad agg state union method for column: " << field->name()
+                         << " for its agg state type is null";
+            return nullptr;
+        }
+        auto* agg_state_desc = field->get_agg_state_desc();
+        auto func_name = agg_state_desc->get_func_name();
+        // TODO: how to use is_result_nullable?
+        auto* agg_func = AggStateDesc::get_agg_state_func(agg_state_desc, field->is_nullable());
+        CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
+                                   << ", is_nullable=" << field->is_nullable()
+                                   << ", agg_state_desc=" << agg_state_desc->debug_string();
+        auto agg_state_union = std::make_unique<AggStateUnion>(agg_func);
+        return std::make_unique<AggFuncBasedValueAggregator>(std::move(agg_state_union));
     } else {
         auto func_name = get_string_by_aggregation_type(method);
         // TODO(alvin): To keep compatible with old code, when type must not be the legacy type,
