@@ -857,14 +857,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns() {
-        if (!taskRunManager.tryTaskRunLock()) {
-            return;
-        }
-        try {
-            taskRunManager.getTaskRunHistory().vacuum();
-        } finally {
-            taskRunManager.taskRunUnlock();
-        }
+        taskRunManager.getTaskRunHistory().vacuum();
     }
 
     @Override
