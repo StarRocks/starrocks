@@ -81,6 +81,10 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     }
     _accumulator.set_desired_size(state->chunk_size());
 
+    return {};
+}
+
+Status SchemaChunkSource::start(RuntimeState* state) {
     return _schema_scanner->start(state);
 }
 

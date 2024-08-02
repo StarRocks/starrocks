@@ -411,6 +411,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            RETURN_IF_ERROR(chunk_source->start(state));
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
             [[maybe_unused]] std::string category;
