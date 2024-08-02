@@ -94,13 +94,13 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
 
     @Override
     public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-        PrivilegeStmtAnalyzerEPack.analyze(stmt, session);
+        AuthorizationAnalyzerEPack.analyze(stmt, session);
         return null;
     }
 
     @Override
     public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-        PrivilegeStmtAnalyzerEPack.analyze(stmt, session);
+        AuthorizationAnalyzerEPack.analyze(stmt, session);
         return null;
     }
 

@@ -25,7 +25,7 @@ import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
@@ -38,12 +38,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
+public class AuthorizationAnalyzerEPack extends AuthorizationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
         new PrivilegeStatementAnalyzerVisitorEPack().analyze(statement, session);
     }
 
-    static class PrivilegeStatementAnalyzerVisitorEPack extends PrivilegeStatementAnalyzerVisitor {
+    static class PrivilegeStatementAnalyzerVisitorEPack extends AuthorizationAnalyzerVisitor {
         /**
          * When 'authorization_enable_admin_user_protection' is set to true,
          * these privileges cannot be granted to any user or role except by root.
