@@ -88,4 +88,30 @@ void SchemaTestHelper::add_column_pb_to_tablet_schema(TabletSchemaPB* tablet_sch
     column->set_aggregation(agg);
 }
 
+ColumnPB SchemaTestHelper::gen_column_pb(int32_t id, const std::string& name, bool nullable,
+                                         LogicalType type, bool is_key) {
+    ColumnPB col;
+
+    col.set_unique_id(id);
+    col.set_name(name);
+    col.set_is_key(is_key);
+    col.set_is_nullable(nullable);
+
+    if (type == TYPE_INT) {
+        col.set_type("INT");
+        col.set_length(4);
+        col.set_index_length(4);
+    } else if (type == TYPE_VARCHAR) {
+        col.set_type("VARCHAR");
+        col.set_length(128);
+        col.set_index_length(16);
+    }
+
+    col.set_default_value("0");
+    col.set_aggregation("NONE");
+    col.set_is_bf_column(false);
+    col.set_has_bitmap_index(false);
+    return col;
+}
+
 } // namespace starrocks

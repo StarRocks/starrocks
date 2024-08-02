@@ -20,15 +20,56 @@
 
 namespace starrocks {
 
-inline std::string to_bitmap_string(const uint8_t* bitmap, size_t n) {
-    std::string s;
-    for (size_t i = 0; i < n; i++) {
-        s.push_back(bitmap[i] ? '1' : '0');
-    }
-    return s;
+class SparseRangeTest : public testing::Test {};
+
+TEST_F(SparseRangeTest, remove_for_sorted_range) {
+    SparseRange<> l1({{10, 20}, {30, 40}});
+    SparseRange<> r1;
+    SparseRange<> res1 = l1.remove_for_sorted_range(r1);
+    ASSERT_EQ(res1.to_string(), "([10,20), [30,40))");
+
+    SparseRange<> l2({{10, 20}, {30, 40}});
+    SparseRange<> r2({{25, 28}, {50, 80}});
+    SparseRange<> res2 = l2.remove_for_sorted_range(r2);
+    ASSERT_EQ(res2.to_string(), "([10,20), [30,40))");
+
+    SparseRange<> l3({{10, 20}, {30, 40}});
+    SparseRange<> r3{{15, 27}, {29, 35}, {38, 50}};
+    SparseRange<> res3 = l3.remove_for_sorted_range(r3);
+    ASSERT_EQ(res3.to_string(), "([10,15), [35,38))");
+
+    SparseRange<> l4({{10, 40}, {50, 80}});
+    SparseRange<> r4({{15, 27}, {30, 35}, {38, 54}, {60, 90}});
+    SparseRange<> res4 = l4.remove_for_sorted_range(r4);
+    ASSERT_EQ(res4.to_string(), "([10,15), [27,30), [35,38), [54,60))");
+
+    SparseRange<> l5({{10, 40}, {50, 80}, {90, 100}});
+    SparseRange<> r5{{{15, 40}, {45, 58}, {60, 80}, {95, 97}}};
+    SparseRange<> res5 = l5.remove_for_sorted_range(r5);
+    ASSERT_EQ(res5.to_string(), "([10,15), [58,60), [90,95), [97,100))");
+
+    SparseRange<> l6({{10, 40}, {50, 80}, {90, 100}});
+    SparseRange<> r6({{5, 15}, {55, 80}, {92, 95}});
+    SparseRange<> res6 = l6.remove_for_sorted_range(r6);
+    ASSERT_EQ(res6.to_string(), "([15,40), [50,55), [90,92), [95,100))");
+
+    SparseRange<> l7({{10, 40}, {50, 80}, {90, 100}});
+    SparseRange<> r7({{5, 45}, {47, 80}, {85, 110}});
+    SparseRange<> res7 = l7.remove_for_sorted_range(r7);
+    ASSERT_EQ(res7.to_string(), "()");
+
+    SparseRange<> l8;
+    SparseRange<> r8({{5, 45}, {47, 80}, {85, 110}});
+    SparseRange<> res8 = l8.remove_for_sorted_range(r8);
+    ASSERT_EQ(res8.to_string(), "()");
+
+    SparseRange<> l9({{10, 40}, {50, 80}, {90, 100}});
+    SparseRange<> r9({{10, 30}, {50, 90}, {90, 100}});
+    SparseRange<> res9 = l9.remove_for_sorted_range(r9);
+    ASSERT_EQ(res9.to_string(), "([30,40))");
 }
 
-TEST(SparseRangeTest, range_union) {
+TEST_F(SparseRangeTest, range_union) {
     SparseRange<> range;
     ASSERT_TRUE(range.empty());
     EXPECT_EQ(0, range.span_size());
@@ -78,7 +119,7 @@ TEST(SparseRangeTest, range_union) {
     EXPECT_EQ("([6,70))", range.to_string());
 }
 
-TEST(SparseRangeTest, range_intersection) {
+TEST_F(SparseRangeTest, range_intersection) {
     SparseRange<> r1({{1, 10}, {20, 40}, {50, 70}});
     SparseRange<> r2{{0, 100}};
     SparseRange<> r3{};

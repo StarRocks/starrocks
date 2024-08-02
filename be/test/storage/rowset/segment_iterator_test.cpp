@@ -33,6 +33,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "testutil/schema_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -52,42 +53,9 @@ public:
 
 namespace test {
 struct TabletSchemaBuilder {
-private:
-    std::vector<ColumnPB> _column_pbs;
-    ColumnPB _create_pb(int32_t id, std::string name, bool nullable, LogicalType type, bool key) {
-        ColumnPB col;
-
-        col.set_unique_id(id);
-        col.set_name(name);
-        col.set_is_key(key);
-        col.set_is_nullable(nullable);
-
-        if (type == TYPE_INT) {
-            col.set_type("INT");
-            col.set_length(4);
-            col.set_index_length(4);
-        } else if (type == TYPE_VARCHAR) {
-            col.set_type("VARCHAR");
-            col.set_length(128);
-            col.set_index_length(16);
-        }
-
-        col.set_default_value("0");
-        col.set_aggregation("NONE");
-        col.set_is_bf_column(false);
-        col.set_has_bitmap_index(false);
-        return col;
-    }
-
 public:
     TabletSchemaBuilder& create(int32_t id, bool nullable, LogicalType type, bool key = false) {
-        if (type == TYPE_INT) {
-            _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
-        } else if (type == TYPE_VARCHAR) {
-            _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
-        } else {
-            __builtin_unreachable();
-        }
+        _column_pbs.emplace_back(SchemaTestHelper::gen_column_pb(id, std::to_string(id), nullable, type, key));
         return *this;
     }
     TabletSchemaBuilder& set_length(size_t length) {
@@ -96,6 +64,9 @@ public:
     }
 
     std::unique_ptr<TabletSchema> build() { return TabletSchemaHelper::create_tablet_schema(_column_pbs); }
+
+private:
+    std::vector<ColumnPB> _column_pbs;
 };
 
 struct TabletDataBuilder {

@@ -1853,12 +1853,21 @@ Status SegmentIterator::_apply_bitmap_index() {
 Status SegmentIterator::_apply_del_vector() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
-        Roaring row_bitmap = range2roaring(_scan_range);
-        size_t input_rows = row_bitmap.cardinality();
-        row_bitmap -= *(_del_vec->roaring());
-        _scan_range = roaring2range(row_bitmap);
-        size_t filtered_rows = row_bitmap.cardinality();
-        _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+        size_t total_span_size = _scan_range.span_size();
+        size_t range_gap = _scan_range.end() - _scan_range.begin();
+        size_t range_count = _scan_range.size();
+        size_t del_row_count = _del_vec->roaring()->cardinality();
+
+        if (_segment->num_rows() * config::apply_del_vector_using_sparse_range_ratio >= del_row_count &&
+            range_gap * config::apply_del_vector_using_sparse_range_ratio >= range_count && _scan_range.is_sorted()) {
+            auto del_range = roaring2range(*_del_vec->roaring());
+            _scan_range = _scan_range.remove_for_sorted_range(del_range);
+        } else {
+            Roaring row_bitmap = range2roaring(_scan_range);
+            row_bitmap -= *(_del_vec->roaring());
+            _scan_range = roaring2range(row_bitmap);
+        }
+        _opts.stats->rows_del_vec_filtered += total_span_size - _scan_range.span_size();
     }
     return Status::OK();
 }
