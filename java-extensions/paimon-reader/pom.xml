@@ -18,7 +18,6 @@
         <paimon.version>0.8.1</paimon.version>
         <slf4j.version>1.7.32</slf4j.version>
         <hive.version>2.3.9</hive.version>
-        <hadoop.version>3.4.0</hadoop.version>
         <zstd.version>1.5.5-5</zstd.version>
     </properties>
 
@@ -106,6 +105,14 @@
                     <groupId>jdk.tools</groupId>
                     <artifactId>jdk.tools</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -130,6 +137,17 @@
                     <groupId>jdk.tools</groupId>
                     <artifactId>jdk.tools</artifactId>
                 </exclusion>
+<<<<<<< HEAD
+=======
+                <exclusion>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+>>>>>>> 6b01a165c4 ([Enhancement] Fix some hudi cve problems (#49157))
             </exclusions>
         </dependency>
 
@@ -191,6 +209,13 @@
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-oss</artifactId>
             <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.1</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
