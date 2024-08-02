@@ -4908,9 +4908,8 @@ Status PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input
     }
     // Check all input l2 has been removed. If not, that means index has been rebuilt.
     if (new_l2_versions.size() + input_l2_versions.size() != index_meta.l2_versions_size() + 1) {
-        return Status::Aborted(
-                fmt::format("PersistentIndex has been rebuilt, abort this compaction task. path : {} meta : {}", _path,
-                            index_meta.ShortDebugString()));
+        return Status::Aborted(fmt::format("PersistentIndex has been rebuilt, abort this compaction task. meta : {}",
+                                           index_meta.ShortDebugString()));
     }
     // rebuild l2 versions in meta
     index_meta.clear_l2_versions();
