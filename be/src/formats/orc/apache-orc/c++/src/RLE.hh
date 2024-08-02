@@ -76,6 +76,13 @@ public:
 
     virtual void write(int64_t val) = 0;
 
+    /**
+     * Finalize the encoding process. This function should be called after all data required for
+     * encoding has been added. It ensures that any remaining data is processed and the final state
+     * of the encoder is set.
+     */
+    virtual void finishEncode();
+
 protected:
     std::unique_ptr<BufferedOutputStream> outputStream;
     size_t bufferPosition;
