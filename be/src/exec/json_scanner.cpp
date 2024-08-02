@@ -556,7 +556,15 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             }
 
             DCHECK(column_index >= 0);
-            _parsed_columns[column_index] = true;
+            if (_parsed_columns[column_index]) {
+                // {'a': 1, 'b': 1, 'b': 1}
+                // there may be duplicated keys in single json, this will cause inconsistent column rows,
+                // so skip the duplicated key
+                key_index++;
+                continue;
+            } else {
+                _parsed_columns[column_index] = true;
+            }
             auto& column = chunk->get_column_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
