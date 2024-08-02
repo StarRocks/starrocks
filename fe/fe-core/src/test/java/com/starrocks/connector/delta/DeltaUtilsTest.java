@@ -84,7 +84,7 @@ public class DeltaUtilsTest {
         };
 
         DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                new Configuration(), 0);
+                DeltaLakeEngine.create(new Configuration()), 0);
     }
 
     @Test
@@ -136,6 +136,6 @@ public class DeltaUtilsTest {
         };
 
         DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
-                new Configuration(), 0);
+                DeltaLakeEngine.create(new Configuration()), 0);
     }
 }

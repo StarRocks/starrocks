@@ -44,6 +44,7 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
     }
 
     public IMetastore createUnityBackedDeltaLakeMetastore() {
+        Map<String, String> properties = deltaLakeCatalogProperties.getProperties();
         if (!properties.containsKey(DATABRICKS_HOST) || !properties.containsKey(DATABRICKS_TOKEN)) {
             throw new IllegalArgumentException("Databricks host and token must be set");
         }
@@ -58,10 +59,11 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore(catalogName,
                 dataBricksCatalogName, client, hdfsEnvironment);
         UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore =
-                new UnityBackedDeltaLakeMetastore(catalogName, databricksUnityMetastore, hdfsEnvironment.getConfiguration());
+                new UnityBackedDeltaLakeMetastore(catalogName, databricksUnityMetastore, hdfsEnvironment.getConfiguration(),
+                        deltaLakeCatalogProperties);
 
         IMetastore deltaLakeMetastore;
-        if (!enableMetastoreCache) {
+        if (!deltaLakeCatalogProperties.isEnableDeltaLakeTableCache()) {
             deltaLakeMetastore = unityBackedDeltaLakeMetastore;
         } else {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(

@@ -2,14 +2,16 @@
 
 package com.starrocks.epack.connector.delta;
 
+import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.delta.DeltaLakeMetastore;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import org.apache.hadoop.conf.Configuration;
 
 public class UnityBackedDeltaLakeMetastore extends DeltaLakeMetastore {
-    public UnityBackedDeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration) {
-        super(catalogName, metastore, hdfsConfiguration);
+    public UnityBackedDeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
+                                         DeltaLakeCatalogProperties deltaLakeCatalogProperties) {
+        super(catalogName, metastore, hdfsConfiguration, deltaLakeCatalogProperties);
     }
 
     @Override

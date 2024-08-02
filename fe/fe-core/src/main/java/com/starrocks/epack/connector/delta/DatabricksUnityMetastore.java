@@ -15,7 +15,6 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
@@ -120,23 +119,8 @@ public class DatabricksUnityMetastore implements IMetastore {
     }
 
     public DeltaLakeTable getTable(String dbName, String tblName) {
-        try {
-            String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tblName);
-            TableInfo tableInfo = workspaceClient.tables().get(fullName);
-            if (tableInfo == null) {
-                return null;
-            }
-            if (!tableInfo.getTableType().equals(TableType.MANAGED)) {
-                return null;
-            }
-            String path = tableInfo.getStorageLocation();
-            long createTime = tableInfo.getCreatedAt();
-            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path,
-                    hdfsEnvironment.getConfiguration(), createTime);
-        } catch (Exception e) {
-            LOG.error("Failed to get table {}.{}.{}", catalogName, dbName, tblName, e);
-            return null;
-        }
+        // remove this method later
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     public boolean tableExists(String dbName, String tblName) {

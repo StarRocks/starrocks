@@ -12,6 +12,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.CachingDeltaLakeMetastore;
+import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -57,7 +58,8 @@ public class DeltaUnityMetadataTest {
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment);
         UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore = new UnityBackedDeltaLakeMetastore("databricks0",
-                databricksUnityMetastore, hdfsEnvironment.getConfiguration());
+                databricksUnityMetastore, hdfsEnvironment.getConfiguration(), 
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(
                 CachingDeltaLakeMetastore.createQueryLevelInstance(unityBackedDeltaLakeMetastore, 10000),
@@ -101,8 +103,7 @@ public class DeltaUnityMetadataTest {
         new MockUp<DeltaUtils>() {
             @Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList(), null, "s3://bucket/path/to/table", null,
                         0);
@@ -126,8 +127,7 @@ public class DeltaUnityMetadataTest {
         new MockUp<DeltaUtils>() {
             @Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "databricks0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
                         "s3://bucket/path/to/table", null, 0);

@@ -174,4 +174,11 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
         lastAccessTimeMap.keySet().retainAll(cachedTableName);
         LOG.info("Refresh table {}.{} in background", dbName, tblName);
     }
+
+    public void invalidateAll() {
+        super.invalidateAll();
+        if (delegate instanceof DeltaLakeMetastore) {
+            ((DeltaLakeMetastore) delegate).invalidateAll();
+        }
+    }
 }
