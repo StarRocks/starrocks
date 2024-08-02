@@ -639,6 +639,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     /**
      * Rewrite aggregation by using MV.
+     * @param aggregates aggregation column ref -> scalar op to be rewritten
+     * @param equationRewriter equivalence class rewriter
+     * @param mapping output mapping for rewrite: column ref -> column ref
+     * @param queryColumnSet column set of query
+     * @param aggColRefToAggMap aggregate query column ref -> new scalar op which is used for rewrite mapping
+     * @param newProjection new projection mapping: col ref -> scalar op which is used for projection of new rewritten aggregate
+     * @param hasGroupByKeys whether query has group by keys or not
+     * @param context rewrite context
+     * @return
      */
     private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, ScalarOperator> aggregates,
                                                                    EquationRewriter equationRewriter,
@@ -664,7 +673,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
             ColumnRefOperator oldColRef = (ColumnRefOperator) aggregateMapping.get(entry.getKey());
-
+            ColumnRefOperator origColRef = entry.getKey();
             if (!(newAggregate.isAggregate())) {
                 // If rewritten function is not an aggregation function, it could be like ScalarFunc(AggregateFunc(...))
                 // We need to decompose it into Projection function and Aggregation function
@@ -696,10 +705,21 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 newProjection.put(outerProject, copyProject);
                 newAggregations.put(innerAgg, realAggregate);
                 // replace original projection
-                aggregateMapping.put(entry.getKey(), copyProject);
+                aggregateMapping.put(origColRef, copyProject);
             } else {
-                newAggregations.put(oldColRef, newAggregate);
-                newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef, hasGroupByKeys));
+                ColumnRefOperator newAggColRef = context.getQueryRefFactory().create(
+                        origColRef, newAggregate.getType(), newAggregate.isNullable());
+                newAggregations.put(newAggColRef, newAggregate);
+                // No needs to set `newProjections` since it will use aggColRefToAggMap to construct new projections,
+                // otherwise it will cause duplicate projections(or wrong projections).
+                // eg:
+                // query: oldCol1 -> count()
+                // newAggregations: newCol1 -> sum(oldCol1)
+                // aggColRefToAggMap:  oldCol1 -> coalesce(newCol1, 0)
+                // It will generate new projections as below:
+                // newProjections: oldCol1 -> coalesce(newCol1, 0)
+                ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+                aggregateMapping.put(origColRef, newProjectOp);
             }
         }
 
