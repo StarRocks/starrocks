@@ -919,7 +919,17 @@ public class DatabaseTransactionMgr {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getAllReplicas()) {
+                                // Using getAllReplicas() instead of getImmutableReplicas
+                                // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
+                                // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
+                                //    The tablet's repliace are replicaA, replicaB.
+                                // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
+                                //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
+                                // 3. The machine where beB is located hangs and is not recoverable.
+                                //   Therefore PublishVersionTaskA is finished,PublishVersionTaskB is unfinished.
+                                // 4. FE clone replicaC from replicaA, BE report replicaC info.
+                                //    However, the update of immutableReplicas must wait for the checkpoint
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
