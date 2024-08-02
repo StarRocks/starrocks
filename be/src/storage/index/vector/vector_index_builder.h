@@ -14,9 +14,6 @@
 
 #pragma once
 
-#include <memory>
-
-#include "fs/fs.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -74,7 +71,10 @@ public:
 
     Status write(const Column& data, const Column& null_map) override { return Status::OK(); }
 
-    Status flush() override { return Status::OK(); }
+    Status flush() override {
+        VectorIndexBuilder::flush_empty(_index_path);
+        return Status::OK();
+    }
 };
 
 } // namespace starrocks
