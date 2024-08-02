@@ -339,12 +339,13 @@ public class GroupingSetsTest extends PlanTestBase {
             String sql = "select t1b, t1c, t1d, sum(id_decimal) " +
                     "   from test_all_type group by rollup(t1b, t1c, t1d)";
             String plan = getCostExplain(sql);
-            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+            System.out.println(plan);
+            assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
-                    "  |  aggregate: sum[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; " +
+                    "  |  aggregate: sum[([13: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
                     "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
-            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  aggregate: sum[([11: sum, DECIMAL128(38,2), true]); args: DECIMAL64; " +
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  aggregate: sum[([17: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
                     "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
