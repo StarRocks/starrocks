@@ -33,9 +33,10 @@
 // under the License.
 
 #include "runtime/mem_tracker.h"
-#include "service/backend_options.h"
 
 #include <utility>
+
+#include "service/backend_options.h"
 
 namespace starrocks {
 
