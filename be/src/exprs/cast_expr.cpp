@@ -1707,10 +1707,6 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
         TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
 
-        while (from_type.is_array_type() && to_type.is_string_type()) {
-            array_field_type_cast_from = array_field_type_cast_from.children[0];
-        }
-
         TExprNode cast;
         cast.type = array_field_type_cast_to.to_thrift();
         cast.child_type = to_thrift(array_field_type_cast_from.type);
@@ -1730,7 +1726,7 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
             pool->add(child);
         }
 
-        return std::make_unique<CastArrayToString>(cast_element_expr, node);
+        return std::make_unique<CastArrayToString>(node);
     }
     if (from_type.is_array_type() && to_type.is_array_type()) {
         ASSIGN_OR_RETURN(auto child_cast,
