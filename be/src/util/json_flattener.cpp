@@ -44,6 +44,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
+#include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_converter.h"
@@ -332,6 +333,38 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _finalize();
 }
 
+void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_readers) {
+    DCHECK(_paths.empty());
+    DCHECK(_types.empty());
+    DCHECK(_derived_maps.empty());
+    DCHECK(_path_root == nullptr);
+
+    if (json_readers.empty()) {
+        return;
+    }
+
+    _path_root = std::make_shared<JsonFlatPath>();
+    _total_rows = 0;
+
+    // extract flat paths
+    for (const auto& reader : json_readers) {
+        DCHECK_EQ(LogicalType::TYPE_JSON, reader->column_type());
+        DCHECK(!reader->sub_readers()->empty());
+        _total_rows += reader->num_rows();
+
+        int start = reader->is_nullable() ? 1 : 0;
+        int end = reader->has_remain_json() ? reader->sub_readers()->size() - 1 : reader->sub_readers()->size();
+        _has_remain |= reader->has_remain_json();
+        for (size_t i = start; i < end; i++) {
+            const auto& sub = (*reader->sub_readers())[i];
+            auto leaf = JsonFlatPath::normalize_from_path(sub->name(), _path_root.get());
+            _derived_maps[leaf].type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
+            _derived_maps[leaf].hits += reader->num_rows();
+        }
+    }
+    _finalize();
+}
+
 void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& json_datas) {
     // extract flat paths
     for (size_t k = 0; k < json_datas.size(); k++) {
@@ -477,7 +510,7 @@ void JsonPathDeriver::_finalize() {
     for (auto& [node, path] : hit_leaf) {
         if (_paths.size() >= limit) {
             node->remain = true;
-            _has_remain = true;
+            _has_remain |= true;
             continue;
         }
         node->index = _paths.size();

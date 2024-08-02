@@ -33,6 +33,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
@@ -91,6 +92,8 @@ public:
 
     // dervie paths
     void derived(const std::vector<const Column*>& json_datas);
+
+    void derived(const std::vector<const ColumnReader*>& json_readers);
 
     bool has_remain_json() const { return _has_remain; }
 

@@ -220,7 +220,6 @@ public:
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
 
     const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
-    Status get_all_flat_jsons(std::vector<std::unique_ptr<ColumnAccessPath>>* paths) const;
 
     DISALLOW_COPY_AND_MOVE(Segment);
 

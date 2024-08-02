@@ -38,6 +38,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "util/json_flattener.h"
 
 namespace starrocks::lake {
 
@@ -101,25 +102,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
-
-    if (is_compaction(read_params.reader_type) && _tablet_schema->keys_type() == DUP_KEYS &&
-        read_params.column_access_paths != nullptr && read_params.column_access_paths->empty()) {
-        // init compaction flat json paths
-        for (const auto& rowset : _rowsets) {
-            for (const auto& segment : rowset->get_segments()) {
-                // only get one segment's paths
-                if (segment->get_all_flat_jsons(read_params.column_access_paths).ok()) {
-                    break;
-                } else {
-                    read_params.column_access_paths->clear();
-                }
-            }
-        }
-
-        for (auto& p : *read_params.column_access_paths) {
-            p->set_from_compaction(true);
-        }
-    }
+    RETURN_IF_ERROR(init_compaction_column_paths(read_params));
 
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
@@ -189,6 +172,51 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return init_collector(read_params);
     }
 
+    return Status::OK();
+}
+
+Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read_params) {
+    if (is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
+        read_params.column_access_paths->empty()) {
+        return Status::OK();
+    }
+
+    int num_readers = 0;
+    for (const auto& rowset : _rowsets) {
+        num_readers += rowset->num_segments();
+    }
+
+    std::vector<const ColumnReader*> readers;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        if (col.type() != LogicalType::TYPE_JSON) {
+            continue;
+        }
+        readers.clear();
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->get_segments()) {
+                auto reader = segment->column_with_uid(col.unique_id());
+                if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
+                    nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
+                    readers.emplace_back(reader);
+                }
+            }
+        }
+        if (readers.size() == num_readers) {
+            // must all be flat json type
+            JsonPathDeriver deriver;
+            deriver.derived(readers);
+            auto paths = deriver.flat_paths();
+            auto types = deriver.flat_types();
+
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
+            for (size_t j = 0; j < paths.size(); j++) {
+                ColumnAccessPath::insert_json_path(res.get(), types[j], paths[j]);
+            }
+            res->set_from_compaction(true);
+            read_params.column_access_paths->emplace_back(std::move(res));
+        }
+    }
     return Status::OK();
 }
 
