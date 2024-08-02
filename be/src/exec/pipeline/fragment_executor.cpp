@@ -22,6 +22,7 @@
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
+#include "exec/hash_join_node.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"

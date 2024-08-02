@@ -21,8 +21,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_node.h"
-#include "exec/join_hash_map.h"
+#include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
@@ -222,6 +223,14 @@ void SpillableHashJoinBuildOperator::set_execute_mode(int performance_level) {
     if (!_is_finished) {
         _join_builder->set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }
+}
+
+void SpillableHashJoinBuildOperator::set_spill_strategy(spill::SpillStrategy strategy) {
+    _join_builder->set_spill_strategy(strategy);
+}
+
+spill::SpillStrategy SpillableHashJoinBuildOperator::spill_strategy() const {
+    return _join_builder->spill_strategy();
 }
 
 std::function<StatusOr<ChunkPtr>()> SpillableHashJoinBuildOperator::_convert_hash_map_to_chunk() {
