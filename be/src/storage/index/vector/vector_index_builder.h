@@ -72,7 +72,7 @@ public:
     Status write(const Column& data, const Column& null_map) override { return Status::OK(); }
 
     Status flush() override {
-        VectorIndexBuilder::flush_empty(_index_path);
+        RETURN_IF_ERROR(VectorIndexBuilder::flush_empty(_index_path));
         return Status::OK();
     }
 };

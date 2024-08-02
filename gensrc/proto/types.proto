@@ -108,12 +108,20 @@ enum TxnTypePB {
      TXN_REPLICATION = 1;
 }
 
- enum ReplicationTxnStatePB {
-     TXN_PREPARED = 0;
-     TXN_SNAPSHOTED = 1;
-     TXN_REPLICATED = 2;
-     TXN_PUBLISHED = 3;
- }
+enum ReplicationTxnStatePB {
+ TXN_PREPARED = 0;
+ TXN_SNAPSHOTED = 1;
+ TXN_REPLICATED = 2;
+ TXN_PUBLISHED = 3;
+}
+
+enum IndexType {
+    BITMAP = 0;
+    GIN = 1;
+    INDEX_UNKNOWN = 2;
+    NGRAMBF = 3;
+    VECTOR = 4;
+}
 
  message ReplicationTxnMetaPB {
      optional int64 txn_id = 1;

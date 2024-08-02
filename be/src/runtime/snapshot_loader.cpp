@@ -1009,7 +1009,7 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
                _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt") ||
-               _end_with(file_name, VECTOR_INDEX_SUFFIX)) {
+               _end_with(file_name, ".vi")) {
         *new_file_name = file_name;
         return Status::OK();
     } else if (CLucenePlugin::is_index_files(file_name)) {

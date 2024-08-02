@@ -256,4 +256,5 @@ add_library(Storage STATIC
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
-    index/vector/tenann/tenann_index_builder.cpp)
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp)
