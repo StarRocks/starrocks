@@ -3064,14 +3064,14 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     // without db name
                     Assert.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
                     Assert.assertFalse(tm.filterTasks(null).isEmpty());
-                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null).isEmpty());
 
                     // specific db
                     TGetTasksParams getTasksParams = new TGetTasksParams();
                     getTasksParams.setDb(TEST_DB_NAME);
                     Assert.assertFalse(tm.getMatchedTaskRunStatus(getTasksParams).isEmpty());
                     Assert.assertFalse(tm.filterTasks(getTasksParams).isEmpty());
-                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME).isEmpty());
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
                     TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();

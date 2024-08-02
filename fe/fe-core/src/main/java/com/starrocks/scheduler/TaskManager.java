@@ -703,22 +703,24 @@ public class TaskManager implements MemoryTrackable {
         Map<String, TaskRunStatus> mvNameRunStatusMap = Maps.newHashMap();
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+        TGetTasksParams params = new TGetTasksParams();
+        params.setDb(dbName);
         pendingTaskRuns.stream()
                 .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
                 .filter(Objects::nonNull)
-                .filter(u -> isShowTaskRunStatus(u, dbName))
+                .filter(u -> isTaskRunStatusMatched(u, params))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
 
         // Add a batch of task runs with the same job id
         taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                .filter(u -> isShowTaskRunStatus(u, dbName))
+                .filter(u -> isTaskRunStatusMatched(u, params))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
 
         taskRunScheduler.getCopiedRunningTaskRuns().stream()
                 .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
-                .filter(u -> isShowTaskRunStatus(u, dbName))
+                .filter(u -> isTaskRunStatusMatched(u, params))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
         return mvNameRunStatusMap;
     }
