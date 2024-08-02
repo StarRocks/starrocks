@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # routines
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `routines` contains all stored routines (stored procedures and stored functions).
 
 The following fields are provided in `routine`:
