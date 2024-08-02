@@ -18,6 +18,7 @@ import com.starrocks.analysis.UserDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 /*
  * We support the following create user stmts:
@@ -35,6 +36,7 @@ import java.util.List;
  */
 public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
+<<<<<<< HEAD
     private final boolean ifNotExists;
 
     public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
@@ -43,6 +45,14 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles, NodePosition pos) {
         super(userDesc, SetRoleType.ROLE, defaultRoles, pos);
+=======
+    public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
+                          UserAuthOption authOption,
+                          List<String> defaultRoles,
+                          Map<String, String> properties,
+                          NodePosition pos) {
+        super(userIdentity, authOption, properties, pos);
+>>>>>>> 17d191495d ([Feature] Support setting session vars in user property (#48477))
         this.ifNotExists = ifNotExists;
     }
 

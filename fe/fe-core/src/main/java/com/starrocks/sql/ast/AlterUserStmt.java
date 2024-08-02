@@ -17,17 +17,27 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+import java.util.Map;
+>>>>>>> 17d191495d ([Feature] Support setting session vars in user property (#48477))
 
 public class AlterUserStmt extends BaseCreateAlterUserStmt {
     private final boolean ifExists;
 
+<<<<<<< HEAD
     public AlterUserStmt(UserDesc userDesc, boolean ifExists) {
         this(userDesc, ifExists, NodePosition.ZERO);
     }
 
     public AlterUserStmt(UserDesc userDesc, boolean ifExists, NodePosition pos) {
         super(userDesc, null, Collections.emptyList(), pos);
+=======
+    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists, UserAuthOption userAuthOption,
+                         Map<String, String> properties, NodePosition pos) {
+        super(userIdentity, userAuthOption, properties, pos);
+>>>>>>> 17d191495d ([Feature] Support setting session vars in user property (#48477))
         this.ifExists = ifExists;
     }
 

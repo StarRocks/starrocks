@@ -82,6 +82,7 @@ import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
@@ -3580,6 +3581,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Property> propertyList = visit(context.userPropertyList().property(), Property.class);
             for (Property property : propertyList) {
                 SetUserPropertyVar setVar = new SetUserPropertyVar(property.getKey(), property.getValue());
+                if (!property.getKey().equalsIgnoreCase(UserProperty.PROP_MAX_USER_CONNECTIONS)) {
+                    throw new ParsingException("Please use ALTER USER syntax to set user properties.");
+                }
                 list.add(setVar);
             }
         }
@@ -5255,8 +5259,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
+<<<<<<< HEAD
 
         return new CreateUserStmt(ifNotExists, userDesc, roles, createPos(context));
+=======
+        
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateUserStmt(user, ifNotExists, authOption, roles, properties, createPos(context));
+>>>>>>> 17d191495d ([Feature] Support setting session vars in user property (#48477))
     }
 
     @Override
@@ -5290,6 +5306,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SetDefaultRoleStmt(user, setRoleType, roles, createPos(context));
         }
 
+<<<<<<< HEAD
         stop = context.authOption().stop;
         UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
         if (authOption.getAuthPlugin() == null) {
@@ -5300,6 +5317,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     authOption.isPasswordPlain(), createPos(start, stop));
         }
         return new AlterUserStmt(userDesc, context.EXISTS() != null, createPos(context));
+=======
+        if (context.authOption() != null) {
+            UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
+            Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            if (context.properties() != null) {
+                List<Property> propertyList = visit(context.properties().property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+            }
+            return new AlterUserStmt(user, context.EXISTS() != null, authOption, properties, createPos(context));
+        }
+
+        // handle alter user xxx set properties
+        List<SetUserPropertyVar> list = new ArrayList<>();
+        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        for (Property property : propertyList) {
+            list.add(new SetUserPropertyVar(property.getKey(), property.getValue()));
+        }
+        return new SetUserPropertyStmt(user.getUser(), list, createPos(context)); 
+>>>>>>> 17d191495d ([Feature] Support setting session vars in user property (#48477))
     }
 
     @Override

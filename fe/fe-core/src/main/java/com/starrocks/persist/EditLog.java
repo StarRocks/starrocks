@@ -1070,7 +1070,7 @@ public class EditLog {
                 case OperationType.OP_ALTER_USER_V2: {
                     AlterUserInfo info = (AlterUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayAlterUser(
-                            info.getUserIdentity(), info.getAuthenticationInfo());
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getProperties());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROP_V2:
@@ -1872,8 +1872,9 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
-    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
-        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
+                             Map<String, String> properties) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 
