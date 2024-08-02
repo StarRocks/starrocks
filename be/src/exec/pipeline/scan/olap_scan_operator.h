@@ -76,7 +76,6 @@ protected:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
-    void update_exec_stats(RuntimeState* state) override;
 
 private:
     OlapScanContextPtr _ctx;

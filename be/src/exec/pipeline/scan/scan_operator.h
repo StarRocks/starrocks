@@ -110,7 +110,6 @@ protected:
     virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
     virtual bool is_buffer_full() const = 0;
     virtual void set_buffer_finished() = 0;
-    virtual void update_exec_stats(RuntimeState* state) {};
 
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -122,6 +121,7 @@ protected:
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
                                            int64_t scan_rows, int64_t scan_bytes);
     void _detach_chunk_sources();
+    void update_exec_stats(RuntimeState* state);
 
     void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
