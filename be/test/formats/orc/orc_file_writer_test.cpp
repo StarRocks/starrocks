@@ -1046,4 +1046,35 @@ TEST_F(OrcFileWriterTest, TestFactory) {
     ASSERT_OK(maybe_writer.status());
 }
 
+TEST_F(OrcFileWriterTest, TestOrcPatchedBaseWrongBaseWidth) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto intColumn = Int64Column::create();
+        std::vector<int64_t> intValues = {12, -5400, -5400, 12,    -5400, 12, 12,    -5400, -5400, 24363720,  -2654,
+                                          12, -5400, 12,    -5400, -5400, 12, -5400, 12,    12,    -14000000, 4};
+        intColumn->append_numbers(intValues.data(), intValues.size() * sizeof(int64_t));
+        chunk->append_column(intColumn, chunk->num_columns());
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 22);
+
+    ChunkPtr read_chunk;
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 } // namespace starrocks::formats
