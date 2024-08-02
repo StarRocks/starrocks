@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -32,6 +33,8 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Set;
+
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
@@ -228,5 +231,24 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
         //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
         Assert.assertFalse(replayPair.second, replayPair.second.contains("mv_tbl_mock_001"));
+    }
+
+    @Test
+    public void testMV_CountStarRewrite() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        assertContains(replayPair.second, "tbl_mock_067");
+        // NOTE: OUTPUT EXPRS must refer to coalesce column ref
+        assertContains(replayPair.second, " OUTPUT EXPRS:59: count\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 59> : coalesce(80: count, 0)");
     }
 }
