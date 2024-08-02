@@ -635,7 +635,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
     _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;
-    _group_reader_param.sb_stream = nullptr;
+    _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
@@ -694,36 +694,10 @@ Status FileReader::_init_group_readers() {
 
     if (!_row_group_readers.empty()) {
         // prepare first row group
-        RETURN_IF_ERROR(_prepare_cur_row_group());
+        RETURN_IF_ERROR(_row_group_readers[_cur_row_group_idx]->prepare());
     }
 
     return Status::OK();
-}
-
-Status FileReader::_prepare_cur_row_group() {
-    auto& r = _row_group_readers[_cur_row_group_idx];
-    // if coalesce read enabled, we have to
-    // 0. clear last group memory
-    // 1. allocate shared buffered input stream and
-    // 2. collect io ranges of every row group reader.
-    // 3. set io ranges to the stream.
-    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
-        int64_t end_offset = 0;
-        r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
-        int32_t counter = _scanner_ctx->lazy_column_coalesce_counter->load(std::memory_order_relaxed);
-        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
-            _scanner_ctx->stats->group_active_lazy_coalesce_together += 1;
-        } else {
-            _scanner_ctx->stats->group_active_lazy_coalesce_seperately += 1;
-        }
-        r->set_end_offset(end_offset);
-        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges, counter >= 0));
-        _group_reader_param.sb_stream = _sb_stream;
-    }
-
-    // prepare row group
-    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
@@ -749,7 +723,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                 _cur_row_group_idx++;
                 if (_cur_row_group_idx < _row_group_size) {
                     // prepare new group
-                    RETURN_IF_ERROR(_prepare_cur_row_group());
+                    RETURN_IF_ERROR(_row_group_readers[_cur_row_group_idx]->prepare());
                 }
 
                 return Status::OK();

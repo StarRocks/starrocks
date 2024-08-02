@@ -98,6 +98,7 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
+<<<<<<< HEAD
     Status _prepare_cur_row_group();
 
     // decode min/max value from row group stats
@@ -105,6 +106,12 @@ private:
                                   const tparquet::ColumnMetaData& column_meta,
                                   const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
                                   ColumnPtr* max_column, bool* decode_ok) const;
+=======
+    // get min/max value from row group stats
+    Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
+                              const ParquetField* field, std::vector<std::string>& min_values,
+                              std::vector<std::string>& max_values) const;
+>>>>>>> a242dde978 ([BugFix]deal with pageindex before collect_io_range of data page (#49066))
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
