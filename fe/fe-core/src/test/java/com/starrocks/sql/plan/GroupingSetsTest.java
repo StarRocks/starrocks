@@ -333,7 +333,7 @@ public class GroupingSetsTest extends PlanTestBase {
     }
 
     @Test
-    public void testPushDownGroupingSetNormal2() throws Exception {
+    public void testPushDownGroupingSetDecimal() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
         try {
             String sql = "select t1b, t1c, t1d, sum(id_decimal) " +
