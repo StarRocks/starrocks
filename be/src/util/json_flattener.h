@@ -75,9 +75,6 @@ public:
     // set new root, other path will set to exclude, the node must include the root path
     static void set_root(const std::string_view& new_root_path, JsonFlatPath* node);
 
-public:
-    static void init_vpack_types_info();
-
 private:
     static std::pair<std::string_view, std::string_view> _split_path(const std::string_view& path);
 };

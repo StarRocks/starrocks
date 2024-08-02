@@ -145,12 +145,34 @@ static const uint8_t JSON_BIGINT_TYPE_BITS = 3; // 00000011, 3, bigint compatibl
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
-static std::vector<uint8_t> JSON_TYPE_BITS((int)vpack::ValueType::Tagged + 1, 0);
+static const FlatJsonHashMap<vpack::ValueType, uint8_t> JSON_TYPE_BITS {
+        {vpack::ValueType::None, 31},      //  00011111, 31
+        {vpack::ValueType::SmallInt, 15},  //  00001111, 15
+        {vpack::ValueType::Int, 7},        //  00000111, 7
+        {vpack::ValueType::UInt, 3},       //  00000011, 3
+        {vpack::ValueType::Double, 1},     //  00000001, 1
+        {vpack::ValueType::String, 16},    //  00010000, 16
+};
 
 // starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
-static std::vector<LogicalType> JSON_BITS_TO_LOGICAL_TYPE(32, LogicalType::TYPE_JSON);
+static const FlatJsonHashMap<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
+    {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_TINYINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_BIGINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        LogicalType::TYPE_LARGEINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Double),      LogicalType::TYPE_DOUBLE},
+    {JSON_TYPE_BITS.at(vpack::ValueType::String),      LogicalType::TYPE_VARCHAR},
+    {JSON_BASE_TYPE_BITS,                                LogicalType::TYPE_JSON},
+};
 
-static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS;
+static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
+    {LogicalType::TYPE_TINYINT,         JSON_TYPE_BITS.at(vpack::ValueType::None)},
+    {LogicalType::TYPE_BIGINT,          JSON_TYPE_BITS.at(vpack::ValueType::Int)},
+    {LogicalType::TYPE_LARGEINT,        JSON_TYPE_BITS.at(vpack::ValueType::UInt)},
+    {LogicalType::TYPE_DOUBLE,          JSON_TYPE_BITS.at(vpack::ValueType::Double)},
+    {LogicalType::TYPE_VARCHAR,         JSON_TYPE_BITS.at(vpack::ValueType::String)},
+    {LogicalType::TYPE_JSON,            JSON_BASE_TYPE_BITS},
+};
 
 static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
     {LogicalType::TYPE_TINYINT,         &extract_number<LogicalType::TYPE_TINYINT>},
@@ -174,38 +196,11 @@ static const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
 // clang-format on
 
 inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
-    DCHECK(JSON_TYPE_BITS.size() > (int)type1);
-    return JSON_TYPE_BITS[(int)type1] & type2;
+    auto iter = JSON_TYPE_BITS.find(type1);
+    return iter != JSON_TYPE_BITS.end() ? type2 &= iter->second : JSON_BASE_TYPE_BITS;
 }
 
 } // namespace flat_json
-
-void JsonFlatPath::init_vpack_types_info() {
-    using namespace flat_json;
-    // clang-format off
-    JSON_TYPE_BITS[(int) vpack::ValueType::None] = 31;       // 00011111, 31
-    JSON_TYPE_BITS[(int) vpack::ValueType::SmallInt] = 15;   // 00001111, 15
-    JSON_TYPE_BITS[(int) vpack::ValueType::Int] = 7;         // 00000111, 7
-    JSON_TYPE_BITS[(int) vpack::ValueType::UInt] = 3;        // 00000011, 3
-    JSON_TYPE_BITS[(int) vpack::ValueType::Double] = 1;      // 00000001, 1
-    JSON_TYPE_BITS[(int) vpack::ValueType::String] = 16;     // 00010000, 8
-    // clang-format on
-
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::None]] = LogicalType::TYPE_TINYINT;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::SmallInt]] = LogicalType::TYPE_BIGINT;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::Int]] = LogicalType::TYPE_BIGINT;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::UInt]] = LogicalType::TYPE_LARGEINT;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::Double]] = LogicalType::TYPE_DOUBLE;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_TYPE_BITS[(int)vpack::ValueType::String]] = LogicalType::TYPE_VARCHAR;
-    JSON_BITS_TO_LOGICAL_TYPE[JSON_BASE_TYPE_BITS] = LogicalType::TYPE_JSON;
-
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_TINYINT] = JSON_TYPE_BITS[(int)vpack::ValueType::None];
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_BIGINT] = JSON_TYPE_BITS[(int)vpack::ValueType::Int];
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_LARGEINT] = JSON_TYPE_BITS[(int)vpack::ValueType::UInt];
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_DOUBLE] = JSON_TYPE_BITS[(int)vpack::ValueType::Double];
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_VARCHAR] = JSON_TYPE_BITS[(int)vpack::ValueType::String];
-    LOGICAL_TYPE_TO_JSON_BITS[LogicalType::TYPE_JSON] = JSON_BASE_TYPE_BITS;
-}
 
 std::pair<std::string_view, std::string_view> JsonFlatPath::_split_path(const std::string_view& path) {
     size_t pos = 0;
@@ -469,7 +464,7 @@ void JsonPathDeriver::_finalize() {
     // try downgrade json-uint to bigint
     int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
     for (auto& [name, desc] : _derived_maps) {
-        if (desc.type == flat_json::JSON_TYPE_BITS[(int)vpack::ValueType::UInt] && desc.max <= max) {
+        if (desc.type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && desc.max <= max) {
             desc.type = flat_json::JSON_BIGINT_TYPE_BITS;
         }
     }
