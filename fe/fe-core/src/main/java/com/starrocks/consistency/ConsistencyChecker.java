@@ -96,7 +96,9 @@ public class ConsistencyChecker extends FrontendDaemon {
     private int endTime;
     private long lastTabletMetaCheckTime = 0;
 
-    private final Map<Long, Integer> creatingTableIds = new ConcurrentHashMap<>();
+    // Record the id of the table being created and ignore the check of the tablet of the table being created
+    // to avoid deleting its tablets from TabletInvertedIndex by mistake.
+    private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
         super("consistency checker");
@@ -140,7 +142,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private void checkTabletMetaConsistency() {
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableIds);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableCounters);
     }
 
     @Override
@@ -464,11 +466,11 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     public void addCreatingTableId(long tableId) {
-        creatingTableIds.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
+        creatingTableCounters.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
     }
 
-    public void deleteCreatingTableId(long tabletId) {
-        creatingTableIds.compute(tabletId, (k, v) -> {
+    public void deleteCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> {
             if (v == null || v <= 1) {
                 return null;
             } else {
