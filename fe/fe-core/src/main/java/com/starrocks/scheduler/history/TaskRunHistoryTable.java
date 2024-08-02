@@ -131,7 +131,6 @@ public class TaskRunHistoryTable {
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
-            System.err.println(sql);
             RepoExecutor.getInstance().executeDML(sql);
         }
     }
