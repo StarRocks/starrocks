@@ -634,6 +634,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     /**
      * Rewrite aggregation by using MV.
+     * @param aggregates aggregation column ref -> scalar op to be rewritten
+     * @param equationRewriter equivalence class rewriter
+     * @param mapping output mapping for rewrite: column ref -> column ref
+     * @param queryColumnSet column set of query
+     * @param aggColRefToAggMap aggregate query column ref -> new scalar op which is used for rewrite mapping
+     * @param newProjection new projection mapping: col ref -> scalar op which is used for projection of new rewritten aggregate
+     * @param hasGroupByKeys whether query has group by keys or not
+     * @param context rewrite context
+     * @return
      */
     private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, ScalarOperator> aggregates,
                                                                    EquationRewriter equationRewriter,
@@ -697,10 +706,16 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 ColumnRefOperator newAggColRef = context.getQueryRefFactory().create(
                         origColRef, newAggregate.getType(), newAggregate.isNullable());
                 newAggregations.put(newAggColRef, newAggregate);
-                newProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
-
-                // replace by using new column ref
-                aggColRefToAggMap.put(entry.getKey(), newAggColRef);
+                // No needs to set `newProjections` since it will use aggColRefToAggMap to construct new projections,
+                // otherwise it will cause duplicate projections(or wrong projections).
+                // eg:
+                // query: oldCol1 -> count()
+                // newAggregations: newCol1 -> sum(oldCol1)
+                // aggColRefToAggMap:  oldCol1 -> coalesce(newCol1, 0)
+                // It will generate new projections as below:
+                // newProjections: oldCol1 -> coalesce(newCol1, 0)
+                ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+                aggColRefToAggMap.put(origColRef, newProjectOp);
             }
         }
 
