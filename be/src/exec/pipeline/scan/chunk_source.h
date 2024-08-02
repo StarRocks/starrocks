@@ -70,9 +70,11 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+    virtual void update_chunk_exec_stats(RuntimeState* state) {}
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }
+
 
 protected:
     // MUST be implemented by different ChunkSource
