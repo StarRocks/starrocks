@@ -53,10 +53,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+    private final int queryStartIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
+    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
     protected String inlineViewDef;
-
+    // simple view definition of the mv which has been rewritten by AstToSQLBuilder#buildSimple
     private String simpleViewDef;
     private List<BaseTableInfo> baseTableInfos;
 
@@ -87,7 +89,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
-                                           QueryStatement queryStatement, NodePosition pos) {
+                                           QueryStatement queryStatement,
+                                           int queryStartIndex,
+                                           NodePosition pos) {
         super(pos);
         this.tableName = tableName;
         this.colWithComments = colWithComments;
@@ -99,6 +103,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
+        this.queryStartIndex = queryStartIndex;
         this.queryStatement = queryStatement;
     }
 
@@ -192,6 +197,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setSimpleViewDef(String simpleViewDef) {
         this.simpleViewDef = simpleViewDef;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
     }
 
     public QueryStatement getQueryStatement() {

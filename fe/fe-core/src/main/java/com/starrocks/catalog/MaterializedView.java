@@ -442,7 +442,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;
 
-    // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
@@ -1965,17 +1964,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Used for text based materialized view rewrite.
-     */
-    public synchronized void initDefineQueryParseNode() {
-        // cache by ast
-        defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql);
-    }
-
-    /**
      * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
      */
     public synchronized ParseNode getDefineQueryParseNode() {
-        return defineQueryParseNode;
+        if (this.defineQueryParseNode == null) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                return null;
+            }
+            ConnectContext connectContext = new ConnectContext();
+            connectContext.setDatabase(db.getOriginName());
+            this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+        }
+        return this.defineQueryParseNode;
     }
 }
