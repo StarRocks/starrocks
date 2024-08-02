@@ -59,7 +59,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [days_diff](./date-time-functions/days_diff.md)|  计算开始时间和结束时间相差几天。 |
 | [days_sub](./date-time-functions/days_sub.md)| 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。  |
 | [from_days](./date-time-functions/from_days.md)|  通过计算当前时间距离 0000-01-01 的天数，计算出当前是时间哪一天。 |
-| [from_unixtime](./date-time-functions/from_unixtime.md)|  将 UNIX 时间戳转化为对应的时间格式。 |
+| [from_unixtime](./date-time-functions/from_unixtime.md)|  将以秒为单位的 UNIX 时间戳转化为对应的时间格式。 |
+| [from_unixtime_ms](./date-time-functions/from_unixtime_ms.md) | 将以毫秒为单位的 UNIX 时间戳转化为对应的时间格式。 |
+| [from_unixtime_milliseconds](./date-time-functions/from_unixtime_milliseconds.md) | 将以毫秒为单位的 UNIX 时间戳转化为对应的时间格式，支持浮点数输入。 |
 | [hour](./date-time-functions/hour.md)| 获得指定日期中的小时信息。  |
 | [hours_add](./date-time-functions/hours_add.md)| 给指定的日期时间增加指定的小时数。  |
 | [hours_diff](./date-time-functions/hours_diff.md)|  计算开始时间和结束时间相差多少个小时。 |
@@ -79,7 +81,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [months_add](./date-time-functions/months_add.md)| 给日期添加指定的月数。  |
 | [months_diff](./date-time-functions/months_diff.md)| 计算开始时间和结束时间相差几个月。  |
 | [months_sub](./date-time-functions/months_sub.md)|  从日期中减去指定的月数。 |
-|[next_day](./date-time-functions/next_day.md)|根据输入的日期值，返回它之后的那个星期几所对应的日期。 |
+| [next_day](./date-time-functions/next_day.md)|根据输入的日期值，返回它之后的那个星期几所对应的日期。 |
 | [now](./date-time-functions/now.md)| 获取当前的时间，以 DATETIME 类型返回。  |
 | [previous_day](./date-time-functions/previous_day.md) | 根据输入的日期值，返回它之前的那个星期几所对应的日期。 |
 | [quarter](./date-time-functions/quarter.md)| 返回给定的日期值对应的季度，范围 1~4。  |
@@ -101,6 +103,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [to_iso8601](./date-time-functions/to_iso8601.md)| 将某一个日期转换为 ISO 8601 标准格式的字符串。  |
 | [to_tera_date](./date-time-functions/to_tera_date.md)| 将某一个 VARCHAR 类型的值转换成指定格式的日期。  |
 | [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
+| [to_unixtime_milliseconds](./date-time-functions/to_unixtime_milliseconds.md) | 将 DATE 或 DATETIME 转为 UNIX 时间戳。 |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |

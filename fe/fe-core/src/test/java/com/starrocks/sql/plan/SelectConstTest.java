@@ -91,6 +91,32 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select from_unixtime(32678)", "'1970-01-01 17:04:38'");
         assertPlanContains("select from_unixtime(102400000)", "'1973-03-31 12:26:40'");
         assertPlanContains("select from_unixtime(253402243100)", "'9999-12-31 15:58:20'");
+        assertPlanContains("select from_unixtime(253402243100, '%Y')", "'9999'");
+
+        assertPlanContains("select from_unixtime_ms(10000)", "'1970-01-01 08:00:10'");
+        assertPlanContains("select from_unixtime_ms(1024000)", "'1970-01-01 08:17:04'");
+        assertPlanContains("select from_unixtime_ms(32678000)", "'1970-01-01 17:04:38'");
+        assertPlanContains("select from_unixtime_ms(102400000000)", "'1973-03-31 12:26:40'");
+        assertPlanContains("select from_unixtime_ms(253402243100000)", "'9999-12-31 15:58:20'");
+
+        assertPlanContains("select from_unixtime_milliseconds(10000)", "'1970-01-01 08:00:10'");
+        assertPlanContains("select from_unixtime_milliseconds(1024000)", "'1970-01-01 08:17:04'");
+        assertPlanContains("select from_unixtime_milliseconds(32678000)", "'1970-01-01 17:04:38'");
+        assertPlanContains("select from_unixtime_milliseconds(102400000000)", "'1973-03-31 12:26:40'");
+        assertPlanContains("select from_unixtime_milliseconds(1196440219123)", "'2007-12-01 00:30:19.123000'");
+        assertPlanContains("select from_unixtime_milliseconds(253402243100000)", "'9999-12-31 15:58:20'");
+        assertPlanContains("select from_unixtime_milliseconds(253402243100000, '%Y')", "'9999'");
+
+        assertPlanContains("select from_unixtime_milliseconds(37.123 * 1000)", "'1970-01-01 08:00:37.123000'");
+        assertPlanContains("select from_unixtime_milliseconds(10.000 * 1000)", "'1970-01-01 08:00:10'");
+        assertPlanContains("select from_unixtime_milliseconds(1024.000 * 1000)", "'1970-01-01 08:17:04'");
+        assertPlanContains("select from_unixtime_milliseconds(32678.000 * 1000)", "'1970-01-01 17:04:38'");
+        assertPlanContains("select from_unixtime_milliseconds(102400000.000 * 1000)", "'1973-03-31 12:26:40'");
+        assertPlanContains("select from_unixtime_milliseconds(1196440219.123 * 1000)", "'2007-12-01 00:30:19.123000'");
+        // microsecond part is discard.
+        assertPlanContains("select from_unixtime_milliseconds(1196440219.123888 * 1000)", "'2007-12-01 00:30:19.123000'");
+        assertPlanContains("select from_unixtime_milliseconds(253402243100.000 * 1000)", "'9999-12-31 15:58:20'");
+        assertPlanContains("select from_unixtime_milliseconds(253402243100.000 * 1000, '%Y')", "'9999'");
     }
 
     @Test

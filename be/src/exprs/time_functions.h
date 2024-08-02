@@ -701,9 +701,18 @@ public:
      * @paramType columns: [IntColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
+    DEFINE_VECTORIZED_FN(from_unix_bigint_to_datetime);
+    DEFINE_VECTORIZED_FN(from_unix_int_to_datetime);
+    DEFINE_VECTORIZED_FN(from_unix_bigint_to_datetime_ms);
+    DEFINE_VECTORIZED_FN(from_unix_bigint_to_datetime_milliseconds);
+
+    /**
+     * @param: [timestmap]
+     * @paramType columns: [DoubleColumn]
+     * @return BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(from_unix_float_to_datetime_ms);
+    DEFINE_VECTORIZED_FN(from_unix_double_to_datetime_ms);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -715,8 +724,38 @@ public:
      * @paramType columns: [IntColumn, BinaryColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
+    DEFINE_VECTORIZED_FN(from_unix_bigint_to_datetime_with_format);
+    DEFINE_VECTORIZED_FN(from_unix_int_to_datetime_with_format);
+    DEFINE_VECTORIZED_FN(from_unix_bigint_to_datetime_ms_with_format);
+
+    /**
+     * @param: [timestmap, formatstr]
+     * @paramType columns: [DoubleColumn]
+     * @return BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(from_unix_float_to_datetime_ms_with_format);
+    DEFINE_VECTORIZED_FN(from_unix_double_to_datetime_ms_with_format);
+
+    /**
+     * @param: [datetime]
+     * @paramType columns: [DateTimeColumn]
+     * @return BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(to_unixtime_milliseconds_datetime);
+
+    /**
+     * @param: [date]
+     * @paramType columns: [DateColumn]
+     * @return BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(to_unixtime_milliseconds_date);
+
+    /**
+     * @param: [formatstr]
+     * @paramType columns: [BinaryColumn]
+     * @return BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(to_unixtime_milliseconds_format);
 
     /**
      * return number of seconds in this day.
@@ -802,13 +841,19 @@ public:
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
 
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime_ms);
+    template <LogicalType TIMESTAMP_TYPE, bool DATETIME_KEEP_MILLISECOND>
+    static StatusOr<ColumnPtr> _t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns);
 
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime);
+    enum class TimeUnitType { Second, MilliSecond };
 
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_date);
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
+    static StatusOr<ColumnPtr> _t_to_unix_from_datetime(FunctionContext* context, const Columns& columns);
 
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime_with_format);
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
+    static StatusOr<ColumnPtr> _t_to_unix_from_date(FunctionContext* context, const Columns& columns);
+
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
+    static StatusOr<ColumnPtr> _t_to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns);
 
     // internal approach to process string content, based on any string format.
     static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
@@ -816,10 +861,13 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
-    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format(FunctionContext* context, const Columns& columns);
 
-    template <LogicalType TIMESTAMP_TYPE>
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_general(FunctionContext* context, const Columns& columns);
+
+    template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
     static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                               const starrocks::Columns& columns);
 
