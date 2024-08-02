@@ -163,7 +163,7 @@ public class HiveMetastoreApiConverterTest {
                 properties.put(HIVE_METASTORE_URIS, "thrift://127.0.0.1:9083");
                 Connector connector = new HudiConnector(new ConnectorContext(catalogName, "hive", properties));
                 result = new CatalogConnector(connector, new InformationSchemaConnector(catalogName),
-                        new TableMetaConnector(catalogName, "hive"));
+                        new TableMetaConnector(catalogName));
             }
         };
         HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
