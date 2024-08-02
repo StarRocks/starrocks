@@ -13,6 +13,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -65,7 +66,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
 
             OlapTable localOlapTable = (OlapTable) localTable;
             OlapTable remoteOlapTable = remoteTable;
-            if (!checkTableConsistency(localDatabase, localOlapTable, remoteOlapTable)) {
+            if (!checkTableConsistency(localOlapTable)) {
                 DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, objectMeta, remoteDatabase,
                         remoteTable, localDatabase, localTable, isReplicatedObject, true);
                 job.start();
@@ -82,8 +83,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                 if (remotePartition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                     continue;
                 }
-                Partition localPartition = checkPartition(localDatabase, localOlapTable, remoteOlapTable,
-                        remotePartition);
+                Partition localPartition = checkPartition(localOlapTable, remotePartition);
                 if (localPartition == null) {
                     return;
                 }
@@ -117,8 +117,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         }
     }
 
-    private Partition checkPartition(Database localDatabase, OlapTable localTable,
-            OlapTable remoteTable, Partition remotePartition) {
+    private Partition checkPartition(OlapTable localTable, Partition remotePartition) {
         Partition localPartition = localTable.getPartition(remotePartition.getName(), false);
         if (localPartition == null) {
             CreateReplicatedPartitionJob job = new CreateReplicatedPartitionJob(failoverGroup, objectMeta,
@@ -127,18 +126,39 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return null;
         }
 
-        if (!checkPartitionConsistency(localDatabase, localTable, localPartition, remoteTable, remotePartition)) {
+        if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
             DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup, objectMeta, remoteDatabase,
                     remoteTable, localDatabase, localTable, localPartition.getName(), isReplicatedObject);
             job.start();
             return null;
         }
 
-        // TODO: Check sub partitions
+        for (PhysicalPartition remotePhysicalPartition : remotePartition.getSubPartitions()) {
+            PhysicalPartition locaPhysicalPartition = checkPhysicalPartition(localTable, localPartition,
+                    remotePhysicalPartition);
+            if (locaPhysicalPartition == null) {
+                return null;
+            }
+        }
+
         return localPartition;
     }
 
-    private boolean checkTableConsistency(Database localDatabase, OlapTable localTable, OlapTable remoteTable) {
+    private PhysicalPartition checkPhysicalPartition(OlapTable localTable, Partition localPartition,
+            PhysicalPartition remotePhysicalPartition) {
+        PhysicalPartition localPhysicalPartition = localPartition.getSubPartition(remotePhysicalPartition.getName());
+        if (localPhysicalPartition == null) {
+            CreateReplicatedPhysicalPartitionJob job = new CreateReplicatedPhysicalPartitionJob(failoverGroup,
+                    objectMeta, remoteDatabase, remoteTable, remotePhysicalPartition, localDatabase, localTable,
+                    localPartition, isReplicatedObject);
+            job.start();
+            return null;
+        }
+
+        return localPhysicalPartition;
+    }
+
+    private boolean checkTableConsistency(OlapTable localTable) {
         if (localTable.getType() != remoteTable.getType()) {
             LOG.warn("Local table {}.{} has different type {} with remote table type {}",
                     localDatabase.getFullName(), localTable.getName(), localTable.getType(), remoteTable.getType());
@@ -197,8 +217,8 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         return true;
     }
 
-    private boolean checkPartitionConsistency(Database localDatabase, OlapTable localTable, Partition localPartition,
-            OlapTable remoteTable, Partition remotePartition) {
+    private boolean checkPartitionConsistency(OlapTable localTable, Partition localPartition,
+            Partition remotePartition) {
         DistributionInfo localDistributionInfo = localPartition.getDistributionInfo();
         DistributionInfo remoteDistributionInfo = remotePartition.getDistributionInfo();
         if (localDistributionInfo.getType() != remoteDistributionInfo.getType()) {
