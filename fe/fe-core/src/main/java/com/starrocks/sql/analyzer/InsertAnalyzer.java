@@ -211,7 +211,7 @@ public class InsertAnalyzer {
                 requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
             }
-            if (table.isOlapTable()) {
+            if (table.isNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)) {
                     if (!requiredKeyColumns.isEmpty()) {
