@@ -47,10 +47,12 @@ public:
     virtual Status prepare(RuntimeState* state);
 
     virtual void close(RuntimeState* state) = 0;
-    
+
     // Start the ChunkSource for some heavy operations like RPC calls
     // The difference between prepare() is, the start() is executed in IO-ThreadPool instead of Exec-ThreadPool,
     // which is more suitable for blocking network operations.
+    // The start() itself should use std::once to make sure it's idempotent and called once, since the io-thread would
+    // call it multiple times
     virtual Status start(RuntimeState* state) { return {}; }
 
     // Return true if eos is not reached
