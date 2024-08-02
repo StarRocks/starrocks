@@ -195,11 +195,20 @@ private:
     NullColumn* _null_result;
 };
 
-// use for read json column and compaction
+// use read or compaction flat json
 //
-// handle:
-// flatten json (A, B, C, remain) column to flat json column to (A, B, C, D, remain)
-// some flat, some merge, some extract...
+// to handle input flat json, and output different schema flat json
+// e.g:
+// COMPACTION: INPUT (A, B(int), C, F, REMAIN), OUTPUT (A, B(JSON), C, D, E, REMAIN)
+// - D/E need extract from REMAIN
+// - B need cast to JSON type
+// - REMAIN need remove D/E, and merge F into REMAIN
+//
+// READ: STORAGE (A.A1, A.A2, B(int), C(JSON), REMAIN), READ (A, B(string), C.C1, D)
+// - A need merge A.A1, A.A2, and other A.subfiled which from remain
+// - B need cast to string type
+// - C.C1 need extract from C
+// - D need extract from remain
 class HyperJsonTransformer {
 public:
     HyperJsonTransformer(JsonPathDeriver& deriver);
