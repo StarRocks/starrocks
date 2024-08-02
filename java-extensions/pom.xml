@@ -34,6 +34,7 @@
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
         <aws-v2-sdk.version>2.23.19</aws-v2-sdk.version>
+        <hadoop.version>3.4.0</hadoop.version>
     </properties>
     <build>
         <plugins>

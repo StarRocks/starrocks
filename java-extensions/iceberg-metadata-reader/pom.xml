@@ -17,7 +17,6 @@
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <iceberg.version>1.5.0</iceberg.version>
         <slf4j.version>1.7.32</slf4j.version>
-        <hadoop.version>3.4.0</hadoop.version>
     </properties>
 
     <dependencies>
@@ -126,6 +125,12 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
             <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
