@@ -109,10 +109,10 @@ enum TxnTypePB {
 }
 
 enum ReplicationTxnStatePB {
- TXN_PREPARED = 0;
- TXN_SNAPSHOTED = 1;
- TXN_REPLICATED = 2;
- TXN_PUBLISHED = 3;
+    TXN_PREPARED = 0;
+    TXN_SNAPSHOTED = 1;
+    TXN_REPLICATED = 2;
+    TXN_PUBLISHED = 3;
 }
 
 enum IndexType {
@@ -133,7 +133,7 @@ enum IndexType {
      optional string src_snapshot_path = 7;
      optional int64 snapshot_version = 8;
      optional bool incremental_snapshot = 9;
- } 
+ }
 
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState

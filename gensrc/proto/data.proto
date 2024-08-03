@@ -38,7 +38,6 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
-import "tablet_schema.proto";
 
 message PQueryStatistics {
     optional int64 scan_rows = 1;

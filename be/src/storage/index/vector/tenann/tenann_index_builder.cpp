@@ -34,7 +34,9 @@ Status TenAnnIndexBuilderProxy::init() {
                         return Status::OK();
                     }).status());
 
-    CHECK(meta.common_params().contains("dim")) << "Dim is a critical common param";
+    if (!meta.common_params().contains("dim")) {
+        return Status::InvalidArgument("Dim is needed because it's a critical common param");
+    }
     _dim = meta.common_params()["dim"];
 
     auto meta_copy = meta;
