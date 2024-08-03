@@ -83,6 +83,8 @@ TBC
 
 1. For FE development environment, see [The development configuration setup for StarRocks on IDEA](https://github.com/StarRocks/community/blob/main/Contributors/guide/IDEA.md).
 2. For BE development environment, see [The development configuration setup for StarRocks on Clion](https://github.com/StarRocks/community/blob/main/Contributors/guide/Clion.md).
+3. To compile StarRocks with Docker, see [Compile StarRocks with Docker](https://docs.starrocks.io/docs/developers/build-starrocks/Build_in_docker/).
+4. To deploy StarRocks manually, see [Deploy StarRocks manually](https://docs.starrocks.io/docs/deployment/deploy_manually/).
 
 #### Coding style
 
