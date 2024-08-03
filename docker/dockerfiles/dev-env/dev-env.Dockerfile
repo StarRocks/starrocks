@@ -91,7 +91,6 @@ LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
 ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
-ENV LANG=en_US.utf8
 
 # Copy third-party dependencies
 COPY --from=build_stage2 $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
