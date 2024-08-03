@@ -128,7 +128,7 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
           _array_size_writer(std::move(offset_writer)),
           _element_writer(std::move(element_writer)) {
     if (_opts.need_vector_index) {
-        CHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
+        DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
         auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
         std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
         VectorIndexWriter::create(tablet_index, index_path, is_nullable(), &_vector_index_writer);
@@ -236,7 +236,6 @@ Status ArrayColumnWriter::write_vector_index(uint64_t* index_size) {
     if (_vector_index_writer.get()) {
         RETURN_IF_ERROR(_vector_index_writer->finish(index_size));
     }
-    LOG(INFO) << "Write vector index for column " << _opts.meta->unique_id();
     return Status::OK();
 }
 
