@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
@@ -78,6 +79,7 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -129,8 +131,14 @@ public class StatementPlanner {
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
                 } else {
+                    Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
+                    ArrayList<Long> tablesLastSchemaUpdateTime = new ArrayList<>();
+                    for (OlapTable tbl : olapTables) {
+                        tablesLastSchemaUpdateTime.add(tbl.lastSchemaUpdateTime.get());
+                    }
                     unLock(plannerMetaLocker);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker,
+                                                    olapTables, tablesLastSchemaUpdateTime);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
@@ -274,7 +282,9 @@ public class StatementPlanner {
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
                                                     TResultSinkType resultSinkType,
-                                                    PlannerMetaLocker plannerMetaLocker) {
+                                                    PlannerMetaLocker plannerMetaLocker,
+                                                    Set<OlapTable> olapTables,
+                                                    ArrayList<Long> tablesLastSchemaUpdateTime) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -285,13 +295,16 @@ public class StatementPlanner {
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
         // the original olapTable in queryStmt had been replaced with the copied olapTable
-        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
-        long planStartTime = 0;
+        List<String> updatedTables = Lists.newArrayList();
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
+                tablesLastSchemaUpdateTime.clear();
+                for (OlapTable tbl : olapTables) {
+                    tablesLastSchemaUpdateTime.add(tbl.lastSchemaUpdateTime.get());
+                }
                 reAnalyzeStmt(queryStmt, session, plannerMetaLocker);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
+                isSchemaValid = true;
             }
 
             LogicalPlan logicalPlan;
@@ -332,21 +345,21 @@ public class StatementPlanner {
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                final long finalPlanStartTime = planStartTime;
-                isSchemaValid = olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t,
-                        finalPlanStartTime));
+                updatedTables.clear();
+                int idx = 0;
+                for (OlapTable tbl : olapTables) {
+                    if (tablesLastSchemaUpdateTime.get(idx) != tbl.lastSchemaUpdateTime.get() ||
+                            tbl.getState() == OlapTableState.UPDATING_META) {
+                        isSchemaValid = false;
+                        updatedTables.add(tbl.getName());
+                        break;
+                    }
+                }
                 if (isSchemaValid) {
                     plan.setLogicalPlan(logicalPlan);
                     plan.setColumnRefFactory(columnRefFactory);
                     return plan;
                 }
-            }
-        }
-
-        List<String> updatedTables = Lists.newArrayList();
-        for (OlapTable olapTable : olapTables) {
-            if (!OptimisticVersion.validateTableUpdate(olapTable, planStartTime)) {
-                updatedTables.add(olapTable.getName());
             }
         }
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,

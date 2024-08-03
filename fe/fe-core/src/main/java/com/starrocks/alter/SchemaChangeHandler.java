@@ -2768,6 +2768,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            olapTable.setState(OlapTableState.UPDATING_META);
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
@@ -2845,6 +2846,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
+            olapTable.setState(OlapTableState.NORMAL);
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
