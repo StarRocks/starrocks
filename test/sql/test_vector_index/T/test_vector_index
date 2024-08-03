@@ -38,7 +38,6 @@ PROPERTIES (
 );
 
 insert into t_test_vector_table values(1, [1,2,3,4,5]);
-insert into t_test_vector_table values(2, [-1,-2,-3,-4,-5]);
-insert into t_test_vector_table values(3, [0,0,0,0,0]);
+insert into t_test_vector_table values(2, [0,0]);
 
 DROP TABLE t_test_vector_table;
