@@ -137,7 +137,7 @@ public class QueryMaterializationContext {
             return null;
         }
 
-        return (ScalarOperator) mvQueryContextCache.get(predicate, x -> {
+        return (ScalarOperator) getMvQueryContextCache().get(predicate, x -> {
             ScalarOperator rewritten = new ScalarOperatorRewriter()
                     .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
             return rewritten;

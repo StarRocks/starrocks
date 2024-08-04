@@ -264,15 +264,14 @@ public class MaterializedViewAnalyzer {
             }
 
             // convert queryStatement to sql and set
+            statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
-            if (statement.getOrigStmt() != null) {
-                String originalViewDef = statement.getOrigStmt().originStmt;
-                Preconditions.checkArgument(originalViewDef != null,
-                        "MV's original view definition is null");
-                statement.setInlineViewDef(originalViewDef.substring(statement.getQueryStartIndex()));
-            } else {
-                statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
-            }
+            Preconditions.checkArgument(statement.getOrigStmt() != null, "MV's original statement is null");
+            String originalViewDef = statement.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null,
+                    "MV's original view definition is null");
+            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex()));
+
             // collect table from query statement
 
             if (!InternalCatalog.isFromDefault(statement.getTableName())) {

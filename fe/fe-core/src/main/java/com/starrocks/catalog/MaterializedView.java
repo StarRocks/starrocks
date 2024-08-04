@@ -442,12 +442,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;
 
-    // for show create mv, constructing refresh job(insert into select)
+    // This is a normalized view define SQL by AstToSQLBuilder#toSQL, which is used for show create mv, constructing a refresh job
+    // (insert into select)
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
-
+    // This is a normalized view define SQL by AstToSQLBuilder#buildSimple.
     @SerializedName(value = "simpleDefineSql")
     private String simpleDefineSql;
+    // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
+    @SerializedName(value = "originalViewDefineSql")
+    private String originalViewDefineSql;
 
     // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
     @Deprecated
@@ -613,6 +617,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setSimpleDefineSql(String simple) {
         this.simpleDefineSql = simple;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
     }
 
     public String getTaskDefinition() {

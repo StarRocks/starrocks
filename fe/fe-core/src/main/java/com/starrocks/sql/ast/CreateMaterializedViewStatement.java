@@ -56,10 +56,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private final int queryStartIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
-    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
+    // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
     // simple view definition of the mv which has been rewritten by AstToSQLBuilder#buildSimple
     private String simpleViewDef;
+    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
+    private String originalViewDefineSql;
     private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
@@ -197,6 +199,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setSimpleViewDef(String simpleViewDef) {
         this.simpleViewDef = simpleViewDef;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
     }
 
     public int getQueryStartIndex() {
