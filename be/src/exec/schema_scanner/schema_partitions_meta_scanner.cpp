@@ -79,13 +79,9 @@ Status SchemaPartitionsMetaScanner::start(RuntimeState* state) {
     TGetPartitionsMetaRequest partitions_meta_req;
     partitions_meta_req.__set_auth_info(auth_info);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        int timeout_ms = state->query_options().query_timeout * 1000;
-        RETURN_IF_ERROR(SchemaHelper::get_partitions_meta(*(_param->ip), _param->port, partitions_meta_req,
-                                                          &_partitions_meta_response, timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_partitions_meta(_ss_state, partitions_meta_req, &_partitions_meta_response));
     _ctz = state->timezone_obj();
     _partitions_meta_index = 0;
     return Status::OK();

@@ -48,7 +48,7 @@ Status SysFeLocks::start(RuntimeState* state) {
     TFeLocksReq request;
     request.__set_auth_info(auth);
 
-    return (SchemaHelper::list_fe_locks(*(_param->ip), _param->port, request, &_result));
+    return (SchemaHelper::list_fe_locks(_ss_state, request, &_result));
 }
 
 Status SysFeLocks::_fill_chunk(ChunkPtr* chunk) {

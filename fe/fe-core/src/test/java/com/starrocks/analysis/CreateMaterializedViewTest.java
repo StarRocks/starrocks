@@ -353,7 +353,7 @@ public class CreateMaterializedViewTest {
 
     private List<TaskRunStatus> waitingTaskFinish() {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(null);
         int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);

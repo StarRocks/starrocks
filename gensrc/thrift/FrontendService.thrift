@@ -354,6 +354,7 @@ struct TGetTablesParams {
 
   // If not set, match default_catalog
   22: optional string catalog_name
+  23: optional string table_name
 }
 
 struct TTableStatus {
@@ -473,6 +474,12 @@ struct TListMaterializedViewStatusResult {
 struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
+    // task's name
+    3: optional string task_name
+    // task run's query_id
+    4: optional string query_id
+    // task's state
+    5: optional string state
 }
 
 struct TTaskInfo {

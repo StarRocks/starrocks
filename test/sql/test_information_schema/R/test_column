@@ -31,3 +31,7 @@ server_ip	varchar	None			varchar(150)
 id	int	0	None		int(11)
 device_type	tinyint	0	None		tinyint(4)
 -- !result
+select if(count(*) > 1, "OK", "FAILED") from INFORMATION_SCHEMA.COLUMNS;
+-- result:
+OK
+-- !result

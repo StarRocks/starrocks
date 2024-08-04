@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_temp_tables_scanner.h"
 
-#include "column/nullable_column.h"
+#include <protocol/TDebugProtocol.h>
+
 #include "exec/schema_scanner/schema_helper.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 
@@ -23,7 +25,7 @@ namespace starrocks {
 
 const int32_t DEF_NULL_NUM = -1;
 
-SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
+SchemaScanner::ColumnDesc SchemaTempTablesScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -46,14 +48,15 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         {"CHECKSUM", TYPE_BIGINT, sizeof(int64_t), true},
         {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
-};
+        {"SESSION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), true}};
 
-SchemaTablesScanner::SchemaTablesScanner()
+SchemaTempTablesScanner::SchemaTempTablesScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaTablesScanner::~SchemaTablesScanner() = default;
+SchemaTempTablesScanner::~SchemaTempTablesScanner() = default;
 
-Status SchemaTablesScanner::start(RuntimeState* state) {
+Status SchemaTempTablesScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
     TAuthInfo auth_info;
     if (nullptr != _param->catalog) {
@@ -73,27 +76,22 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
         }
     }
 
-    TGetTablesInfoRequest get_tables_info_request;
-    get_tables_info_request.__set_auth_info(auth_info);
-
-    if (nullptr != _param->table) {
-        get_tables_info_request.__set_table_name(*(_param->table));
+    TGetTemporaryTablesInfoRequest request;
+    request.__set_auth_info(auth_info);
+    if (_param->limit > 0) {
+        request.__set_limit(_param->limit);
     }
-
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
-    RETURN_IF_ERROR(SchemaHelper::get_tables_info(_ss_state, get_tables_info_request, &_tabls_info_response));
+    RETURN_IF_ERROR(SchemaHelper::get_temporary_tables_info(_ss_state, request, &_temp_tables_info_response));
     return Status::OK();
 }
 
-Status SchemaTablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
-    if (!_is_init) {
-        return Status::InternalError("Used before initialized.");
-    }
-    if (nullptr == chunk || nullptr == eos) {
-        return Status::InternalError("input pointer is nullptr.");
-    }
-    if (_tables_info_index >= _tabls_info_response.tables_infos.size()) {
+Status SchemaTempTablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
+    DCHECK(_is_init) << "call init() before get_next()";
+    DCHECK(chunk != nullptr && eos != nullptr) << "input should not be nullptr";
+
+    if (_temp_tables_info_index >= _temp_tables_info_response.tables_infos.size()) {
         *eos = true;
         return Status::OK();
     }
@@ -101,8 +99,8 @@ Status SchemaTablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
-    const TTableInfo& table_info = _tabls_info_response.tables_infos[_tables_info_index];
+Status SchemaTempTablesScanner::fill_chunk(ChunkPtr* chunk) {
+    const TTableInfo& table_info = _temp_tables_info_response.tables_infos[_temp_tables_info_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
@@ -364,12 +362,28 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+        case 22: {
+            // fill session id
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
+                const std::string* str = &table_info.session_id;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 23: {
+            // fill table id
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(23);
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.table_id);
+            }
+        }
         default:
             break;
         }
     }
-
-    _tables_info_index++;
+    _temp_tables_info_index++;
     return Status::OK();
 }
 
