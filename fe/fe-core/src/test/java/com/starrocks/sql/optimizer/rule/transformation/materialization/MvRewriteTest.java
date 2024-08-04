@@ -743,7 +743,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  |  <slot 18> : 18: t1d\n" +
                 "  |  <slot 19> : 19: total_sum\n" +
                 "  |  <slot 20> : 20: total_num\n" +
-                "  |  <slot 23> : 17: v1 + 1");
+                "  |  <slot 25> : 17: v1 + 1");
 
         MaterializedView mv1 = getMv("test", "agg_join_mv_1");
         dropMv("test", "agg_join_mv_1");
