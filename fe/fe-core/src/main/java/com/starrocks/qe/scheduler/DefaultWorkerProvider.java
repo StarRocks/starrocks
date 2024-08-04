@@ -94,12 +94,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                      boolean preferComputeNode, int numUsedComputeNodes,
                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                      long warehouseId) {
+            Set<String> locations = getLabelsLocation();
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, warehouseId);
+                                         computationFragmentSchedulingPolicy, locations, warehouseId);
 
-            ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+            ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend(locations));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToBackend size={}", idToBackend.size());
@@ -322,15 +323,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                   int numUsedComputeNodes,
                                   ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                  long warehouseId) {
+                                  Set<String> locations, long warehouseId) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
         //get CN and BE from systemInfoService
         ImmutableMap<Long, ComputeNode> idToComputeNode
-                = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
+                = ImmutableMap.copyOf(systemInfoService.getIdComputeNode(locations));
         ImmutableMap<Long, ComputeNode> idToBackend
-                = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+                = ImmutableMap.copyOf(systemInfoService.getIdToBackend(locations));
 
         //add CN and BE to Node Pool
         if (numUsedComputeNodes <= 0) {
@@ -385,5 +386,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
                         .filter(entry -> isWorkerAvailable(entry.getValue()))
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
         );
+    }
+
+    private static Set<String> getLabelsLocation() {
+        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
+        return locations;
     }
 }
