@@ -163,7 +163,6 @@ public class DefaultWorkerProviderTest {
 
     @After
     public void after() throws Exception {
-        System.out.println("after");
         UtFrameUtils.tearDownForPersisTest();
     }
 
