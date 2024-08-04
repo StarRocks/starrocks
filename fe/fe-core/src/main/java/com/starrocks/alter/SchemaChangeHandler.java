@@ -2775,7 +2775,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // for now table's state can only be NORMAL
-            Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+            Preconditions.checkState(olapTable.getState() == OlapTableState.UPDATING_META, olapTable.getState().name());
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), 1000);
             // update base index schema
