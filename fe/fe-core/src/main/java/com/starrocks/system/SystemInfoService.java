@@ -90,10 +90,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -938,29 +936,8 @@ public class SystemInfoService implements GsonPostProcessable {
         return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
-    public Set<String> getLabelsLocation() {
-        String user = null;
-        try {
-            user = ConnectContext.get().getCurrentUserIdentity().getUser();
-        } catch (Exception e) {
-            if (user == null) {
-                return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
-            } else {
-                LOG.info("fail to get user info, msg: {}", e.getMessage());
-            }
-        }
-        Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
-        return locations;
-    }
-
     public ImmutableMap<Long, Backend> getIdToBackend() {
-        if (RunMode.isSharedDataMode()) {
-            return ImmutableMap.copyOf(idToBackendRef);
-        }
-
-        Set<String> locations = getLabelsLocation();
-        ImmutableMap<Long, Backend> backends = getIdToBackend(locations);
-        return backends;
+        return ImmutableMap.copyOf(idToBackendRef);
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend(Set<String> locations) {
@@ -990,13 +967,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-        if (RunMode.isSharedDataMode()) {
-            return ImmutableMap.copyOf(idToComputeNodeRef);
-        }
-
-        Set<String> locations = getLabelsLocation();
-        ImmutableMap<Long, ComputeNode> computeNodes = getIdComputeNode(locations);
-        return computeNodes;
+        return ImmutableMap.copyOf(idToComputeNodeRef);
     }
 
     public ImmutableMap<Long, ComputeNode> getIdComputeNode(Set<String> locations) {
