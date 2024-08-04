@@ -348,8 +348,8 @@ public class StatementPlanner {
                 updatedTables.clear();
                 int idx = 0;
                 for (OlapTable tbl : olapTables) {
-                    if (tablesLastSchemaUpdateTime.get(idx) != tbl.lastSchemaUpdateTime.get() ||
-                            tbl.getState() == OlapTableState.UPDATING_META) {
+                    if (tbl.getState() == OlapTableState.UPDATING_META || 
+                            tablesLastSchemaUpdateTime.get(idx) != tbl.lastSchemaUpdateTime.get()) {
                         isSchemaValid = false;
                         updatedTables.add(tbl.getName());
                         break;
