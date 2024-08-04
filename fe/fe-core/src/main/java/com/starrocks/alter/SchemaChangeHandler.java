@@ -2768,14 +2768,14 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            olapTable.setState(OlapTableState.UPDATING_META);
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
             }
 
             // for now table's state can only be NORMAL
-            Preconditions.checkState(olapTable.getState() == OlapTableState.UPDATING_META, olapTable.getState().name());
+            Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+            olapTable.setState(OlapTableState.UPDATING_META);
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), 1000);
             // update base index schema
