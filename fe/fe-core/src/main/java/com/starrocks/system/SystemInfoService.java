@@ -67,7 +67,6 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
