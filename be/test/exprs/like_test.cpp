@@ -664,7 +664,7 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     // pattern contains special characters
     std::string pattern = "abc%_abccc\\%e\\\\\\\\";
     std::vector<std::string> ngram_set;
-    NgramBloomFilterReaderOptions options(4, false);
+    NgramBloomFilterReaderOptions options{4, false};
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(6, ngram_set.size());
     ASSERT_EQ("abcc", ngram_set[0]);

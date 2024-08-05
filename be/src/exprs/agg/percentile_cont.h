@@ -433,8 +433,8 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
             goal = 0;
         }
 
-        InputCppType junior_elm;
-        InputCppType senior_elm;
+        InputCppType junior_elm{};
+        InputCppType senior_elm{};
 
         if (reverse) {
             kWayMergeSort<LT, InputCppType, true>(grid, b, ls, mp, goal, k, junior_elm, senior_elm);
