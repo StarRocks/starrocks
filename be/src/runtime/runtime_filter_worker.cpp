@@ -18,6 +18,7 @@
 #include <random>
 #include <utility>
 
+#include "column/bytes.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -34,6 +35,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
+#include "util/metrics.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -552,10 +554,8 @@ void RuntimeFilterWorker::close() {
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
-    auto queue_size = _queue.get_size();
-    if (config::runtime_filter_queue_limit > 0 && _queue.get_size() > config::runtime_filter_queue_limit) {
-        LOG(WARNING) << "runtime filter worker queue is too large(" << queue_size
-                     << "), drop open query_id = " << query_id;
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop open query_id = " << query_id;
         return;
     }
     RuntimeFilterWorkerEvent ev;
@@ -577,13 +577,30 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     _queue.put(std::move(ev));
 }
 
+bool RuntimeFilterWorker::_reach_queue_limit() {
+    if (config::runtime_filter_queue_limit > 0) {
+        if (_queue.get_size() > config::runtime_filter_queue_limit) {
+            LOG(WARNING) << "runtime filter worker queue size is too large(" << _queue.get_size()
+                         << "), queue limit = " << config::runtime_filter_queue_limit;
+            return true;
+        }
+    } else if (config::runtime_filter_queue_limit == 0) {
+        int64_t mem_usage = _metrics->total_rf_bytes();
+        auto tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+        if (tracker->limit_exceeded_precheck(mem_usage)) {
+            LOG(WARNING) << "runtime filter worker queue mem-useage is too large(" << mem_usage
+                         << "), query pool consum(" << tracker->consumption() << "), limit(" << tracker->limit() << ")";
+            return true;
+        }
+    }
+    return false;
+}
+
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size) {
-    auto queue_size = _queue.get_size();
-    if (config::runtime_filter_queue_limit > 0 && _queue.get_size() > config::runtime_filter_queue_limit) {
-        LOG(WARNING) << "runtime filter worker queue is too large(" << queue_size
-                     << "), drop part runtime filter, query_id = " << params.query_id()
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id = " << params.query_id()
                      << ", filter_id = " << params.filter_id();
         return;
     }
@@ -602,10 +619,8 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms, int64_t rpc_http_min_size) {
-    auto queue_size = _queue.get_size();
-    if (config::runtime_filter_queue_limit > 0 && _queue.get_size() > config::runtime_filter_queue_limit) {
-        LOG(WARNING) << "runtime filter worker queue is too large(" << queue_size
-                     << "), drop broadcast runtime filter, query_id = " << params.query_id()
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id = " << params.query_id()
                      << ", filter_id = " << params.filter_id();
         return;
     }
@@ -627,10 +642,8 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
               << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
               << ", is_pipeline = " << params.is_pipeline();
 
-    auto queue_size = _queue.get_size();
-    if (config::runtime_filter_queue_limit > 0 && _queue.get_size() > config::runtime_filter_queue_limit) {
-        LOG(WARNING) << "runtime filter worker queue is too large(" << queue_size
-                     << "), drop receive runtime filter, query_id = " << params.query_id()
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id = " << params.query_id()
                      << ", filter_id = " << params.filter_id();
         return;
     }
@@ -924,11 +937,6 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
-
-        size_t queue_limit =
-                config::runtime_filter_queue_limit < 0 ? CpuInfo::num_cores() * 10 : config::runtime_filter_queue_limit;
-        LOG_IF_EVERY_N(INFO, _queue.get_size() > queue_limit * 0.9, 5)
-                << "runtime filter worker queue may be too large, size: " << _queue.get_size();
 
         _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {
