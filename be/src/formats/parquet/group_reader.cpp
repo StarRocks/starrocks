@@ -219,7 +219,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
                                                          ChunkPtr* chunk) {
     const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
     size_t round_cost = 0;
-    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost); });
+    double first_selectivity = -1;
+    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost, first_selectivity); });
     size_t hit_count = 0;
     for (int col_idx : read_order) {
         auto& column = _param.read_cols[col_idx];
@@ -253,6 +254,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
                 break;
             }
         }
+        first_selectivity = first_selectivity < 0 ? hit_count * 1.0 / filter->size() : first_selectivity;
     }
 
     return hit_count;
