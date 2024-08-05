@@ -16,20 +16,22 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
@@ -47,6 +49,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Optimization rule for MIN/MAX PARTITION_COLUMN:
+ * 1. Partition Prune: only choose the largest partition for MAX(col)
+ * 2. Partition Values: evaluate the MAX(col) in optimizer for LIST-PARTITION
+ * 3. TopN: transform the MAX(col) into TopN query
+ */
 public class PartitionPruneForSimpleAggRule extends TransformationRule {
 
     public PartitionPruneForSimpleAggRule() {
@@ -55,67 +63,33 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
     }
 
     @Override
-    public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        OlapTable table = (OlapTable) scanOperator.getTable();
-        // we can only apply this rule to the queries met all the following conditions:
-        // 1. query on DUPLICATE_KEY table
-        // 2. no group by key
-        // 3. no `having` condition or other filters
-        // 4. no limit
-        // 5. only contain MIN/MAX/COUNT agg functions, no distinct
-        // 6. all arguments to agg functions are primitive columns
-        // 7. no expr in arguments to agg functions
-        // 8. all agg columns have zonemap index and are not null
-        // 9. no deletion happens
-        //        if (table.getKeysType() != KeysType.DUP_KEYS) {
-        //            return false;
-        //        }
-        //        // no deletion
-        //        if (table.hasDelete()) {
-        //            return false;
-        //        }
-        //        // no limit
-        //        if (scanOperator.getLimit() != -1) {
-        //            return false;
-        //        }
-        //        // no filter
-        //        if (scanOperator.getPredicate() != null) {
-        //            return false;
-        //        }
-        //        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
-        //        if (groupingKeys != null && !groupingKeys.isEmpty()) {
-        //            return false;
-        //        }
-        //        if (aggregationOperator.getPredicate() != null) {
-        //            return false;
-        //        }
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator aggregationOperator = input.getOp().cast();
+        LogicalOlapScanOperator scanOperator = input.getInputs().get(0).getInputs().get(0).getOp().cast();
+        Table table = scanOperator.getTable();
+        return table.isNativeTableOrMaterializedView()
+                && checkMinMaxAggregation(aggregationOperator, scanOperator, context);
+    }
 
-        //        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
-        //                aggregator -> {
-        //                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
-        //                    String functionName = aggregateFunction.functionName();
-        //                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
-        //                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
-        //                        if (usedColumns.size() != 1) {
-        //                            return false;
-        //                        }
-        //                        ColumnRefOperator usedColumn =
-        //                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
-        //                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-        //                        if (column == null || column.isAllowNull()) {
-        //                            // this is not a primitive column on table or it is nullable
-        //                            return false;
-        //                        }
-        //                        // min/max column should have zonemap index
-        //                        Type type = aggregator.getType();
-        //                        return !(type.isStringType() || type.isComplexType());
-        //                    }
-        //                    return false;
-        //                }
-        //        );
-        return true;
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator aggregationOperator = input.getOp().cast();
+        LogicalOlapScanOperator scanOperator = input.getInputs().get(0).getInputs().get(0).getOp().cast();
+        OlapTable table = (OlapTable) scanOperator.getTable();
+        Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
+
+        if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
+            return Lists.newArrayList(optimizeWithPartitionValues(aggregationOperator, table, minMax));
+        }
+        if (checkRewriteTopN(scanOperator, table)) {
+            return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, scanOperator, table,
+                    minMax));
+        }
+        if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
+            return Lists.newArrayList(optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table,
+                    minMax));
+        }
+        return Lists.newArrayList();
     }
 
     private Pair<Boolean, Boolean> checkMinMax(LogicalAggregationOperator operator) {
@@ -133,26 +107,63 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         return Pair.create(hasMin, hasMax);
     }
 
-    @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getInputs().get(0).getOp();
-        LogicalOlapScanOperator logicalOlapScanOperator =
-                (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
-        PartitionInfo partitionInfo = table.getPartitionInfo();
-        Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
-
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-            return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, table, minMax));
-        } else if (partitionInfo.isListPartition()) {
-            LogicalOperator valueOperator = optimizeWithPartitionValues(aggregationOperator, table, minMax);
-            return Lists.newArrayList(OptExpression.create(valueOperator));
-        } else {
-            LogicalScanOperator scanOperator = optimizeWithPartitionPrune(logicalOlapScanOperator, table, minMax);
-            return Lists.newArrayList(OptExpression.create(scanOperator, input.getInputs()));
+    /**
+     * Check simple aggregation functions like MIN/MAX
+     * 1. No GROUP-BY
+     * 2. No HAVING
+     * 3. Only MAX or MAX
+     */
+    private boolean checkMinMaxAggregation(LogicalAggregationOperator aggregationOperator,
+                                           LogicalScanOperator scanOperator,
+                                           OptimizerContext context) {
+        boolean simpleAgg = aggregationOperator.getAggregations().values().stream().allMatch(
+                aggregator -> {
+                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+                    String functionName = aggregateFunction.functionName();
+                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
+                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
+                        return usedColumns.size() == 1;
+                    } else {
+                        return false;
+                    }
+                }
+        );
+        if (!simpleAgg) {
+            return false;
         }
+        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
+        if (groupingKeys != null && !groupingKeys.isEmpty()) {
+            return false;
+        }
+        if (aggregationOperator.getPredicate() != null) {
+            return false;
+        }
+        return true;
+    }
 
+    /**
+     * Apply this optimization if:
+     * 1. query on DUPLICATE_KEY table
+     * 2. no limit
+     * 3. no deletion happens
+     * 4. no filter
+     */
+    private boolean checkPartitionPrune(LogicalAggregationOperator aggregationOperator,
+                                        LogicalScanOperator scanOperator,
+                                        OlapTable table) {
+        if (table.getKeysType() != KeysType.DUP_KEYS) {
+            return false;
+        }
+        if (table.hasDelete()) {
+            return false;
+        }
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
+        if (scanOperator.getPredicate() != null) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -160,40 +171,65 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
      * 1. choose MAX partition for max(ds) function
      * 2. choose MIN partition for min(ds) function
      */
-    private LogicalScanOperator optimizeWithPartitionPrune(LogicalOlapScanOperator scanOperator,
-                                                           OlapTable table,
-                                                           Pair<Boolean, Boolean> hasMinMax) {
+    private OptExpression optimizeWithPartitionPrune(OptExpression optExpression,
+                                                     LogicalAggregationOperator aggregationOperator,
+                                                     LogicalOlapScanOperator scanOperator,
+                                                     OlapTable table,
+                                                     Pair<Boolean, Boolean> hasMinMax) {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
-
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        List<Long> sorted = partitionInfo.getSortedPartitions();
-        sorted.retainAll(nonEmptyPartitionIds);
 
         List<Long> pruned = Lists.newArrayList();
-        if (CollectionUtils.isEmpty(sorted)) {
-            return null;
-        }
-
         if (hasMinMax.first) {
+            List<Long> sorted = partitionInfo.getSortedPartitions(true);
+            sorted.retainAll(nonEmptyPartitionIds);
+            if (CollectionUtils.isEmpty(sorted)) {
+                return null;
+            }
             pruned.add(sorted.get(0));
         }
+
         if (hasMinMax.second) {
+            List<Long> sorted = partitionInfo.getSortedPartitions(false);
+            sorted.retainAll(nonEmptyPartitionIds);
+            if (CollectionUtils.isEmpty(sorted)) {
+                return null;
+            }
             pruned.add(sorted.get(sorted.size() - 1));
         }
 
-        return new LogicalOlapScanOperator.Builder()
+        LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
                 .withOperator(scanOperator)
                 .setSelectedPartitionId(pruned)
                 .build();
+
+        return OptExpression.create(aggregationOperator, OptExpression.create(scan));
+    }
+
+    /**
+     * Apply this optimization if:
+     * 1. LIST-PARTITIONED table
+     * 2. DUPLICATED TABLE, no delete and no filter
+     */
+    private boolean checkRewritePartitionValues(LogicalAggregationOperator aggregationOperator,
+                                                LogicalScanOperator scanOperator,
+                                                OlapTable olapTable) {
+        if (!checkPartitionPrune(aggregationOperator, scanOperator, olapTable)) {
+            return false;
+        }
+        if (!olapTable.getPartitionInfo().isListPartition()) {
+            return false;
+        }
+        return true;
     }
 
     /**
      * For List Partition, we can evaluate the MAX(pt) based on the partition values
      */
-    private LogicalOperator optimizeWithPartitionValues(LogicalAggregationOperator aggregationOperator,
-                                                        OlapTable table,
-                                                        Pair<Boolean, Boolean> hasMinMax) {
+    private OptExpression optimizeWithPartitionValues(LogicalAggregationOperator aggregationOperator,
+                                                      OlapTable table,
+                                                      Pair<Boolean, Boolean> hasMinMax) {
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         // Only support single-column partition
         if (partitionInfo.getPartitionColumnsSize() > 1) {
@@ -201,19 +237,41 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         }
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
-        List<Long> sorted = partitionInfo.getSortedPartitions();
-        sorted.retainAll(nonEmptyPartitionIds);
 
         ConstantOperator minValue = null;
         if (hasMinMax.first) {
+            List<Long> sorted = partitionInfo.getSortedPartitions(true);
+            sorted.retainAll(nonEmptyPartitionIds);
             long minPartition = sorted.get(0);
             ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
             minValue = partitionValues.minValue().toConstant();
         }
-        return new LogicalValuesOperator.Builder()
+        if (hasMinMax.second) {
+            List<Long> sorted = partitionInfo.getSortedPartitions(false);
+            sorted.retainAll(nonEmptyPartitionIds);
+            long maxPartition = sorted.get(0);
+            ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
+            minValue = partitionValues.minValue().toConstant();
+        }
+        LogicalValuesOperator values = new LogicalValuesOperator.Builder()
                 .setRows(List.of(List.of(minValue)))
                 .setColumnRefSet(Lists.newArrayList(aggregationOperator.getColumnRefMap().keySet()))
                 .build();
+
+        return OptExpression.create(values);
+    }
+
+    /**
+     * Apply this optimization if:
+     * 1. Any table type, but prefer PRIMARY-KEY
+     * 2. No LIMIT
+     */
+    private boolean checkRewriteTopN(LogicalScanOperator scanOperator,
+                                     OlapTable olapTable) {
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -222,6 +280,7 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
      */
     private OptExpression optimizeWithTop1(OptExpression optExpression,
                                            LogicalAggregationOperator aggregation,
+                                           LogicalScanOperator scanOperator,
                                            OlapTable table,
                                            Pair<Boolean, Boolean> hasMinMax) {
         if (hasMinMax.first && hasMinMax.second) {

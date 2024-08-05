@@ -246,7 +246,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
      * 2. LIST: sorted by the list value
      * 3. EXPR: sorted by the expression value
      */
-    public List<Long> getSortedPartitions() {
+    public List<Long> getSortedPartitions(boolean asc) {
         throw new NotImplementedException("not reachable");
     }
 
