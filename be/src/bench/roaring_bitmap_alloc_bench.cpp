@@ -23,7 +23,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_hook_allocator.h"
-#include "runtime/memory/roaring_allocator.h"
 #include "runtime/memory/roaring_hook.h"
 #include "runtime/runtime_state.h"
 #include "types/bitmap_value.h"

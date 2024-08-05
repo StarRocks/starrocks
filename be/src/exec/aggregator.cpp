@@ -34,7 +34,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/memory/roaring_allocator.h"
+#include "runtime/memory/roaring_hook.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/runtime_profile.h"
