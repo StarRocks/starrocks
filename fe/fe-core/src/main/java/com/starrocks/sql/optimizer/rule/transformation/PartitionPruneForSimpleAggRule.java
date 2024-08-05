@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -38,10 +38,12 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -142,8 +144,7 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
 
         if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-            LogicalOperator topNOperator = optimizeWithTop1(aggregationOperator, table, minMax);
-            return Lists.newArrayList(OptExpression.create(topNOperator, input.getInputs().get(0).getInputs()));
+            return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, table, minMax));
         } else if (partitionInfo.isListPartition()) {
             LogicalOperator valueOperator = optimizeWithPartitionValues(aggregationOperator, table, minMax);
             return Lists.newArrayList(OptExpression.create(valueOperator));
@@ -219,20 +220,28 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
      * For PRIMARY-KEY Table and RANGE PARTITION, we cannot apply the PartitionPrune && PartitionValues, so transform
      * it into a TopN query
      */
-    private LogicalTopNOperator optimizeWithTop1(LogicalAggregationOperator aggregation,
-                                  OlapTable table,
-                                  Pair<Boolean, Boolean> hasMinMax) {
+    private OptExpression optimizeWithTop1(OptExpression optExpression,
+                                           LogicalAggregationOperator aggregation,
+                                           OlapTable table,
+                                           Pair<Boolean, Boolean> hasMinMax) {
         if (hasMinMax.first && hasMinMax.second) {
             return null;
         }
         final long limit = 1;
         final long offset = 0;
-        List<CallOperator> aggregations = Lists.newArrayList(aggregation.getAggregations().values());
-        Preconditions.checkState(aggregations.size() == 1, "must have 1 aggregations but " + aggregations.size());
-        CallOperator agg = aggregations.get(0);
+
+        List<Map.Entry<ColumnRefOperator, CallOperator>> entries =
+                Lists.newArrayList(aggregation.getAggregations().entrySet());
+        CallOperator agg = entries.get(0).getValue();
         ColumnRefOperator columnRefOperator = agg.getColumnRefs().get(0);
 
         List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, hasMinMax.first, false));
-        return new LogicalTopNOperator(ordering, limit, offset);
+        LogicalTopNOperator topn = new LogicalTopNOperator(ordering, limit, offset);
+
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        columnRefMap.put(entries.get(0).getKey(), columnRefOperator);
+        LogicalProjectOperator project = new LogicalProjectOperator(columnRefMap);
+
+        return OptExpression.create(project, OptExpression.create(topn, optExpression.getInputs().get(0).getInputs()));
     }
 }
