@@ -170,6 +170,11 @@ displayed_sidebar: "Chinese"
 > **说明**
 >
 > 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
+> 如果您只想部署一个 BE 节点，您必须在 FE 配置文件 **fe/conf/fe.conf** 中设置 `default_replication_num` 为 `1`。
+
+      ```YAML
+      default_replication_num = 1
+      ```
 
 ## 第三步：（可选）启动 CN 服务
 
