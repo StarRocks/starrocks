@@ -310,18 +310,18 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     }
 
     if (_tablet_schema == nullptr) {
-        auto tablet_schema_ptr = _tablet->tablet_schema();
-        _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
+        std::shared_ptr<TabletSchema> tmp_tablet_schema = TabletSchema::copy(_tablet->tablet_schema());
         // if column_desc come from fe, reset tablet schema
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            _tablet_schema->clear_columns();
+            tmp_tablet_schema->clear_columns();
             for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
-                _tablet_schema->append_column(TabletColumn(column_desc));
+                tmp_tablet_schema->append_column(TabletColumn(column_desc));
             }
-            _tablet_schema->generate_sort_key_idxes();
+            tmp_tablet_schema->generate_sort_key_idxes();
         }
+        _tablet_schema = std::move(tmp_tablet_schema);
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
