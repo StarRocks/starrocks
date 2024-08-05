@@ -38,6 +38,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.max_flying_memory_mb = options.max_flying_memory_mb;
     _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
     opt.cache_adaptor = _cache_adaptor.get();
+    if (options.enable_datacache_persistence) {
+        opt.durability_type = starcache::DurabilityType::ROCKSDB;
+    }
     opt.instance_name = "dla_cache";
     _enable_tiered_cache = options.enable_tiered_cache;
     _cache = std::make_unique<starcache::StarCache>();
