@@ -804,7 +804,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        tbl.setState(OlapTableState.UPDATING_META);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
         // 
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
