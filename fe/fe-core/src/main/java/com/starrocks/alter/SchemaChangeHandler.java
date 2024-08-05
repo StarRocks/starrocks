@@ -2677,12 +2677,8 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
-<<<<<<< HEAD
-            db.writeUnlock();
-=======
             olapTable.setState(OlapTableState.NORMAL);
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
->>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
+            db.writeUnlock();
         }
     }
 

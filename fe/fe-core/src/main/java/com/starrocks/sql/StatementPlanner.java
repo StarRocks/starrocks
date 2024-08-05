@@ -133,15 +133,9 @@ public class StatementPlanner {
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
                 } else {
-<<<<<<< HEAD
-                    unLock(dbs);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
-=======
                     long planStartTime = OptimisticVersion.generate();
-                    unLock(plannerMetaLocker);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker,
-                                                    planStartTime);
->>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
+                    unLock(dbs);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, planStartTime);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
@@ -282,13 +276,8 @@ public class StatementPlanner {
 
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
-<<<<<<< HEAD
-                                                    TResultSinkType resultSinkType) {
-=======
                                                     TResultSinkType resultSinkType,
-                                                    PlannerMetaLocker plannerMetaLocker,
                                                     long planStartTime) {
->>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -301,20 +290,11 @@ public class StatementPlanner {
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
         // the original olapTable in queryStmt had been replaced with the copied olapTable
-<<<<<<< HEAD
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
-        long planStartTime = 0;
-=======
-        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
->>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             if (!isSchemaValid) {
-<<<<<<< HEAD
-                reAnalyzeStmt(queryStmt, dbs, session);
-=======
                 planStartTime = OptimisticVersion.generate();
-                reAnalyzeStmt(queryStmt, session, plannerMetaLocker);
->>>>>>> 1f7ff46c04 ([BugFix] Fix plan and alter concurrent issue (#49355))
+                reAnalyzeStmt(queryStmt, dbs, session);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
                 isSchemaValid = true;
             }
