@@ -61,6 +61,7 @@
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
+#include "roaring/roaring.h"
 
 namespace starrocks {
 
@@ -1856,11 +1857,12 @@ Status SegmentIterator::_apply_del_vector() {
         size_t total_span_size = _scan_range.span_size();
         size_t range_gap = _scan_range.end() - _scan_range.begin();
         size_t range_count = _scan_range.size();
-        size_t del_row_count = _del_vec->roaring()->cardinality();
+        size_t del_row_count = roaring::api::roaring_bitmap_range_cardinality(&_del_vec->roaring()->roaring,
+                                                                              _scan_range.begin(), _scan_range.end());
 
-        if (_segment->num_rows() * config::apply_del_vector_using_sparse_range_ratio >= del_row_count &&
-            range_gap * config::apply_del_vector_using_sparse_range_ratio >= range_count && _scan_range.is_sorted()) {
-            auto del_range = roaring2range(*_del_vec->roaring());
+        if (total_span_size * config::apply_del_vector_using_sparse_range_ratio >= del_row_count
+            && _scan_range.is_sorted()) {
+            auto del_range = roaring2range_with_start_end(*_del_vec->roaring(), _scan_range.begin(), _scan_range.end());
             _scan_range = _scan_range.remove_for_sorted_range(del_range);
         } else {
             Roaring row_bitmap = range2roaring(_scan_range);
