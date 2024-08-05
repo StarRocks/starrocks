@@ -15,12 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.util.Map;
 
 // Alter clause.
 public abstract class AlterClause implements ParseNode {
@@ -32,10 +29,6 @@ public abstract class AlterClause implements ParseNode {
     protected AlterClause(AlterOpType opType, NodePosition pos) {
         this.pos = pos;
         this.opType = opType;
-    }
-
-    public Map<String, String> getProperties() {
-        return Maps.newHashMap();
     }
 
     public AlterOpType getOpType() {

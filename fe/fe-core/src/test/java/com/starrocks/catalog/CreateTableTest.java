@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -636,7 +637,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type JSON",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
@@ -1225,7 +1226,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
@@ -1283,7 +1284,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser("ALTER TABLE test.t_binary_bf set (\"bloom_filter_columns\"= \"k3\");"));
 

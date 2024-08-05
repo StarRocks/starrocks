@@ -22,7 +22,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -659,7 +658,7 @@ public class MaterializedViewTest {
         String bitmapSql = "create index index1 ON test.index_view_to_check (k2) USING BITMAP COMMENT 'balabala'";
         AlterTableStmt alterViewStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
         Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
-                DdlException.class,
+                SemanticException.class,
                 () -> DDLStmtExecutor.execute(alterViewStmt, connectContext));
     }
 

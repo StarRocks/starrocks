@@ -48,7 +48,6 @@ public abstract class AlterTableColumnClause extends AlterTableClause {
         this.rollupName = rollupName;
     }
 
-    @Override
     public Map<String, String> getProperties() {
         return this.properties;
     }
