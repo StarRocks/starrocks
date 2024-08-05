@@ -507,6 +507,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     "insert-load-" + NEXT_INDEX.getAndIncrement(),
                     DB_NAME,
                     TEST_TABLE_ID,
+                    0,
                     EtlJobType.INSERT,
                     System.currentTimeMillis(),
                     0L,

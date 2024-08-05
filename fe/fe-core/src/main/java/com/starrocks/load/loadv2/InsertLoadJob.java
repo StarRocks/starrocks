@@ -277,4 +277,8 @@ public class InsertLoadJob extends LoadJob {
         super.readFields(in);
         tableId = in.readLong();
     }
+
+    public void setTransactionId(long txnId) {
+        this.transactionId = txnId;
+    }
 }

@@ -236,7 +236,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
+    public long registerLoadJob(String label, String dbName, long tableId, long txnId, EtlJobType jobType,
                                 long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
                                 String warehouse, boolean isStatisticsJob, Coordinator coordinator)
             throws UserException {
@@ -247,11 +247,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
 
-        LoadJob loadJob;
+        InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(
                     label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout, warehouse,
                     isStatisticsJob, coordinator);
+            loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
