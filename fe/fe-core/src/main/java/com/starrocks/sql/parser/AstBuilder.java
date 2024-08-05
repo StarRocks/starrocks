@@ -3691,7 +3691,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (Property property : propertyList) {
                 SetUserPropertyVar setVar = new SetUserPropertyVar(property.getKey(), property.getValue());
                 if (!property.getKey().equalsIgnoreCase(UserProperty.PROP_MAX_USER_CONNECTIONS) & 
-                             !property.getKey().equalsIgnoreCase(UserProperty.PROP_LABELS_LOCATION) {
+                             !property.getKey().equalsIgnoreCase(UserProperty.PROP_LABELS_LOCATION)) {
                     throw new ParsingException("Please use ALTER USER syntax to set user properties.");
                 }
                 list.add(setVar);
