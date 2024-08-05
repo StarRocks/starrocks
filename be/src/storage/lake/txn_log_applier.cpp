@@ -110,7 +110,14 @@ public:
         if (st.ok()) {
             _has_finalized = true;
         }
+<<<<<<< HEAD
         return st;
+=======
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+        RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
+        _has_finalized = true;
+        return Status::OK();
+>>>>>>> 8725ea7362 ([BugFix] Fix lake table upgrade downgrade (#49388))
     }
 
 private:
@@ -335,6 +342,7 @@ public:
     }
 
     Status finish() override {
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
