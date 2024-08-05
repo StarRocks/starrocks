@@ -331,7 +331,7 @@ public class UserProperty {
         maxConn = value;
     }
     
-    private Set<String> checkLabelsLocation(Set<String> value) throws DdlException {
+    private Set<String> checkLabelsLocation(String value) throws DdlException {
         if (value.equalsIgnoreCase(EMPTY_VALUE)) {
             return LABELS_LOCATION_DEFAULT_VALUE;
         }
@@ -341,7 +341,7 @@ public class UserProperty {
             throw new DdlException("invalid location format: " + value +
                       ", should be like: 'key:val' or 'key1:val1,key2:val2'");
         }
-        newLabelsLocation = Sets.newHashSet(Arrays.asList(value.split(",")));
+        Set<String> newLabelsLocation = Sets.newHashSet(Arrays.asList(value.split(",")));
         return newLabelsLocation;
     }
     
