@@ -16,22 +16,26 @@ package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.iceberg.PartitionField;
 
 import java.util.List;
 
 import static com.starrocks.catalog.ScalarType.createType;
-import static com.starrocks.catalog.ScalarType.createVarcharType;
-import static com.starrocks.catalog.Type.ARRAY_BIGINT;
-import static com.starrocks.catalog.Type.ARRAY_INT;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
 public class IcebergPartitionsTable extends MetadataTable {
@@ -44,28 +48,35 @@ public class IcebergPartitionsTable extends MetadataTable {
     }
 
     public static IcebergPartitionsTable create(String catalogName, String originDb, String originTable) {
+        Table icebergTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, originDb, originTable);
+        if (icebergTable == null) {
+            throw new StarRocksConnectorException("table [%s.%s.%s] does not exist", catalogName, originDb, originTable);
+        }
+        if (!icebergTable.isIcebergTable()) {
+            throw new StarRocksConnectorException("table [%s.%s.%s] isn't an iceberg table", catalogName, originDb, originTable);
+        }
+        org.apache.iceberg.Table table = ((IcebergTable) icebergTable).getNativeTable();
+        Builder builder = builder();
+        if (table.spec().isPartitioned()) {
+            List<PartitionField> partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
+            List<StructField> partitionStructFields = IcebergApiConverter.getPartitionColumns(partitionFields, table.schema());
+            StructType partitionType = new StructType(partitionStructFields, true);
+            builder.column("partition_value", partitionType);
+            builder.column("spec_id", createType(PrimitiveType.INT));
+        }
+
         return new IcebergPartitionsTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
-                builder()
-                        .column("content", createType(PrimitiveType.INT))
-                        .column("file_path", createVarcharType())
-                        .column("file_format", createVarcharType())
-                        .column("spec_id", createType(PrimitiveType.INT))
-                        .column("record_count", createType(PrimitiveType.BIGINT))
-                        .column("file_size_in_bytes", createType(PrimitiveType.BIGINT))
-                        .column("column_sizes", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("value_counts", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("null_value_counts", new MapType(
-                                createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("nan_value_counts", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("lower_bounds", new MapType(createType(PrimitiveType.INT), createVarcharType()))
-                        .column("upper_bounds", new MapType(createType(PrimitiveType.INT), createVarcharType()))
-                        .column("split_offsets", ARRAY_BIGINT)
-                        .column("sort_id", createType(PrimitiveType.INT))
-                        .column("equality_ids", ARRAY_INT)
-                        .column("key_metadata", createType(PrimitiveType.VARBINARY))
+                builder.column("record_count", createType(PrimitiveType.BIGINT))
+                        .column("file_count", createType(PrimitiveType.BIGINT))
+                        .column("total_data_file_size_in_bytes", createType(PrimitiveType.BIGINT))
+                        .column("position_delete_record_count", createType(PrimitiveType.BIGINT))
+                        .column("position_delete_file_count", createType(PrimitiveType.BIGINT))
+                        .column("equality_delete_record_count", createType(PrimitiveType.BIGINT))
+                        .column("equality_delete_file_count", createType(PrimitiveType.BIGINT))
+                        .column("last_updated_at", createType(PrimitiveType.DATETIME))
                         .build(),
                 originDb,
                 originTable,
@@ -79,6 +90,11 @@ public class IcebergPartitionsTable extends MetadataTable {
         THdfsTable hdfsTable = buildThriftTable(fullSchema);
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
+    }
+
+    @Override
+    public boolean isPartitioned() {
+        return getColumn("partition") != null;
     }
 
     @Override
