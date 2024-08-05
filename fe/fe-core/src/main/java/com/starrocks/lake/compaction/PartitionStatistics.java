@@ -115,8 +115,13 @@ public class PartitionStatistics {
     }
 
     public void setCompactionScore(@Nullable Quantiles compactionScore) {
-        adjustPunishFactor(compactionScore);
         this.compactionScore = compactionScore;
+    }
+
+    // should only called by compaction
+    public void setCompactionScoreAndAdjustPunishFactor(@Nullable Quantiles compactionScore) {
+        adjustPunishFactor(compactionScore);
+        setCompactionScore(compactionScore);
     }
 
     @Nullable
