@@ -25,7 +25,6 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
-import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -69,17 +68,17 @@ public class DeltaLakeInternalMgr {
         return SUPPORTED_METASTORE_TYPE.contains(metastoreType);
     }
 
-    public IMetastore createDeltaLakeMetastore() {
+    public IDeltaLakeMetastore createDeltaLakeMetastore() {
         return createHMSBackedDeltaLakeMetastore();
     }
 
-    public IMetastore createHMSBackedDeltaLakeMetastore() {
+    public IDeltaLakeMetastore createHMSBackedDeltaLakeMetastore() {
         HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment,
                 deltaLakeCatalogProperties.getProperties());
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName, metastoreType);
         HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore(catalogName, hiveMetastore,
                 hdfsEnvironment.getConfiguration(), deltaLakeCatalogProperties);
-        IMetastore deltaLakeMetastore;
+        IDeltaLakeMetastore deltaLakeMetastore;
         if (!deltaLakeCatalogProperties.isEnableDeltaLakeTableCache()) {
             deltaLakeMetastore = hmsBackedDeltaMetastore;
         } else {
