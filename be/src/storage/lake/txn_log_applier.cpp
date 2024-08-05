@@ -106,6 +106,7 @@ public:
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         Status st = _builder.finalize(_max_txn_id);
         if (st.ok()) {
             _has_finalized = true;
@@ -335,6 +336,7 @@ public:
     }
 
     Status finish() override {
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
