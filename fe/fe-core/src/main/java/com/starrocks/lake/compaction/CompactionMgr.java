@@ -116,7 +116,7 @@ public class CompactionMgr {
             }
             v.setCurrentVersion(compactionVersion);
             v.setCompactionVersion(compactionVersion);
-            v.setCompactionScore(compactionScore);
+            v.setCompactionScoreAndAdjustPunishFactor(compactionScore);
             return v;
         });
         if (LOG.isDebugEnabled()) {
