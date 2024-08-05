@@ -277,7 +277,7 @@ public class DefaultWorkerProviderTest {
                             false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
+            Assert.assertEquals(id2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
                         id2Backend.containsKey(selectedWorkerId));
