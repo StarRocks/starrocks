@@ -36,6 +36,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
@@ -161,6 +162,10 @@ public class ListPartitionInfo extends PartitionInfo {
             ListPartitionCell res = new ListPartitionCell();
             res.multiColumnValues = multi;
             return res;
+        }
+
+        public boolean isEmpty() {
+            return CollectionUtils.isEmpty(singleColumnValues) && CollectionUtils.isEmpty(multiColumnValues);
         }
 
         public ListPartitionValue minValue() {

@@ -310,10 +310,10 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.getCtx().executeSql("insert into t1_list values(1, 1), (2, 2), (3, 3), (4, 4)");
 
         // LIST-PARTITION: MIN(partition_column)
-        starRocksAssert.query("select min(c1) from t1_list")
-                .explainContains("     constant exprs: \n         1\n");
         starRocksAssert.query("select max(c1) from t1_list")
                 .explainContains("     constant exprs: \n         4\n");
+        starRocksAssert.query("select min(c1) from t1_list")
+                .explainContains("     constant exprs: \n         1\n");
         starRocksAssert.query("select min(c1), max(c1) from t1_list")
                 .explainContains("     constant exprs: \n         1 | 4\n");
         starRocksAssert.query("select min(c1)+1, max(c1)-1 from t1_list")

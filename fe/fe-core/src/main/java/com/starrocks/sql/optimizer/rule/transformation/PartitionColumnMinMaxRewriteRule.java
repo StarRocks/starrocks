@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -60,7 +61,7 @@ import java.util.stream.Collectors;
 public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
 
     public PartitionColumnMinMaxRewriteRule() {
-        super(RuleType.TF_PRUNE_PARTITION_FOR_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
+        super(RuleType.TF_PARTITION_COLUMN_MINMAX, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.LOGICAL_OLAP_SCAN)));
     }
 
@@ -270,16 +271,24 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (isMin(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(true);
                 sorted.retainAll(nonEmptyPartitionIds);
+                if (CollectionUtils.isEmpty(sorted)) {
+                    return null;
+                }
                 long minPartition = sorted.get(0);
                 ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
+                Preconditions.checkState(!partitionValues.isEmpty());
                 ConstantOperator minValue = partitionValues.minValue().toConstant();
                 valueRow.add(minValue);
                 columns.add(entry.getKey());
             } else if (isMax(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(false);
                 sorted.retainAll(nonEmptyPartitionIds);
+                if (CollectionUtils.isEmpty(sorted)) {
+                    return null;
+                }
                 long maxPartition = sorted.get(0);
                 ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
+                Preconditions.checkState(!partitionValues.isEmpty());
                 ConstantOperator maxValue = partitionValues.maxValue().toConstant();
                 valueRow.add(maxValue);
                 columns.add(entry.getKey());
