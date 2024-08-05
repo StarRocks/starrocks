@@ -121,6 +121,9 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
         return true;
     }
 
@@ -137,8 +140,8 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 result = optimizeWithPartitionValues(aggregationOperator, table, minMax);
             } else if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
                 result = optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table, minMax);
-            } else if (checkRewriteTopN(scanOperator, table)) {
-                result = optimizeWithTop1(input, aggregationOperator, scanOperator, table, minMax);
+            } else if (checkRewriteTopN(aggregationOperator, scanOperator, table, minMax)) {
+                result = optimizeWithTopN(input, aggregationOperator, scanOperator, table, minMax);
             }
             if (result != null) {
                 return Lists.newArrayList(result);
@@ -163,7 +166,6 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         }
         return Pair.create(hasMin, hasMax);
     }
-
 
     /**
      * Apply this optimization if:
@@ -245,6 +247,10 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         if (!olapTable.getPartitionInfo().isListPartition()) {
             return false;
         }
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
+        if (partitionInfo.getPartitionColumnsSize() > 1) {
+            return false;
+        }
         return true;
     }
 
@@ -255,10 +261,6 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                                                       OlapTable table,
                                                       Pair<Boolean, Boolean> hasMinMax) {
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
-        // Only support single-column partition
-        if (partitionInfo.getPartitionColumnsSize() > 1) {
-            return null;
-        }
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
 
@@ -300,12 +302,21 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
 
     /**
      * Apply this optimization if:
-     * 1. Any table type, but prefer PRIMARY-KEY
-     * 2. No LIMIT
+     * 1. Any table type
+     * 2. Either MIN or MAX
+     * 3. The column has ZONEMAP index, which is translated into PRIMITIVE TYPE
      */
-    private boolean checkRewriteTopN(LogicalScanOperator scanOperator,
-                                     OlapTable olapTable) {
-        if (scanOperator.getLimit() != -1) {
+    private boolean checkRewriteTopN(LogicalAggregationOperator aggregationOperator,
+                                     LogicalScanOperator scanOperator,
+                                     OlapTable olapTable,
+                                     Pair<Boolean, Boolean> minMax) {
+        if (minMax.first && minMax.second) {
+            return false;
+        }
+        boolean lackZoneMap = aggregationOperator.getAggregations().values().stream().anyMatch(x ->
+                x.getType().isComplexType() || x.getType().isJsonType()
+        );
+        if (lackZoneMap) {
             return false;
         }
         return true;
@@ -315,14 +326,11 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
      * For PRIMARY-KEY Table and RANGE PARTITION, we cannot apply the PartitionPrune && PartitionValues, so transform
      * it into a TopN query
      */
-    private OptExpression optimizeWithTop1(OptExpression optExpression,
+    private OptExpression optimizeWithTopN(OptExpression optExpression,
                                            LogicalAggregationOperator aggregation,
                                            LogicalScanOperator scanOperator,
                                            OlapTable table,
                                            Pair<Boolean, Boolean> hasMinMax) {
-        if (hasMinMax.first && hasMinMax.second) {
-            return null;
-        }
         final long limit = 1;
         final long offset = 0;
 
@@ -331,7 +339,8 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         CallOperator agg = entries.get(0).getValue();
         ColumnRefOperator columnRefOperator = agg.getColumnRefs().get(0);
 
-        List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, hasMinMax.first, false));
+        boolean asc = hasMinMax.first;
+        List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, asc, false));
         LogicalTopNOperator topn = new LogicalTopNOperator(ordering, limit, offset);
 
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();

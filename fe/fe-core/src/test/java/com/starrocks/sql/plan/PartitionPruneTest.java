@@ -411,6 +411,7 @@ public class PartitionPruneTest extends PlanTestBase {
                 .explainContains("TOP-N", "order by: <slot 1> 1: c1");
         starRocksAssert.query("select max(c1)+1 from t3_pri")
                 .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+
         // NOT SUPPORTED
         starRocksAssert.query("select max(c1-1)+1 from t3_pri").explainContains("OlapScanNode");
         starRocksAssert.query("select max(c1), min(c1) from t3_pri").explainContains("OlapScanNode");
