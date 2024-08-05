@@ -835,6 +835,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
+        tbl.setState(OlapTableState.UPDATING_META);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // 
         // partition visible version won't update in schema change, so we need make global

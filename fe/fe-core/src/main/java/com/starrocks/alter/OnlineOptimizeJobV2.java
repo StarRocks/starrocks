@@ -431,6 +431,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
         try {
+            targetTable.setState(OlapTableState.UPDATING_META);
             if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
                 this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
                 targetTable.setDefaultDistributionInfo(distributionInfo);
@@ -657,6 +658,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
         this.allPartitionOptimized = replayedJob.allPartitionOptimized;
         this.optimizeOperation = replayedJob.optimizeOperation;
 
+        targetTable.setState(OlapTableState.UPDATING_META);
         Set<Tablet> sourceTablets = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
