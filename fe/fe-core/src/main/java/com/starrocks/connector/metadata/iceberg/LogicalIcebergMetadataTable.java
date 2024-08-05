@@ -71,10 +71,6 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 MetadataTableType.LOGICAL_ICEBERG_METADATA);
     }
 
-    public List<Column> getPlaceHolderColumns() {
-        return PLACEHOLDER_COLUMNS;
-    }
-
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.LOGICAL_ICEBERG_METADATA_TABLE,
@@ -96,13 +92,17 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
                 .collect(Collectors.toList()));
         hdfsTable.setHive_column_types(columnTypes);
-
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
 
     @Override
     public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
+    public boolean supportBuildPlan() {
         return true;
     }
 }

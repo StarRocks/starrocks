@@ -389,6 +389,7 @@ struct THdfsScanRange {
 
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
+
 }
 
 struct TBinlogScanRange {
@@ -1105,6 +1106,9 @@ struct THdfsScanNode {
 
     // if load column statistics for metadata table scan
     20: optional bool load_column_stats;
+
+    // for jni scan factory selection scanner
+    21: optional string metadata_table_type
 }
 
 struct TProjectNode {

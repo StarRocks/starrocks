@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class CatalogConnectorMetadataTest {
 
     private final InformationSchemaMetadata informationSchemaMetadata = new InformationSchemaMetadata("test_catalog");
-    private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog");
+    private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog", "test");
 
     @Test
     void testListDbNames(@Mocked ConnectorMetadata connectorMetadata) {
