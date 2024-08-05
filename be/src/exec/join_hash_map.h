@@ -855,7 +855,7 @@ private:
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
-    [[nodiscard]] Status _upgrade_key_columns_if_overflow();
+    Status _upgrade_key_columns_if_overflow();
 
     void _remove_duplicate_index_for_left_outer_join(Filter* filter);
     void _remove_duplicate_index_for_left_semi_join(Filter* filter);

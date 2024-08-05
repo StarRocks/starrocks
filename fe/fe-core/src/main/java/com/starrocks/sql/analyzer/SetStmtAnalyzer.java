@@ -34,6 +34,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
@@ -311,6 +312,11 @@ public class SetStmtAnalyzer {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
+        // check populate datacache mode
+        if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
+            DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
         var.setResolvedExpression(resolvedExpression);
     }
 
@@ -355,43 +361,6 @@ public class SetStmtAnalyzer {
     public static void analyzeUserVariable(UserVariable var) {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
-        }
-
-        Expr expression = var.getUnevaluatedExpression();
-        if (expression instanceof NullLiteral) {
-            var.setEvaluatedExpression(NullLiteral.create(Type.STRING));
-        } else {
-            Expr foldedExpression = Expr.analyzeAndCastFold(expression);
-            if (foldedExpression.isLiteral()) {
-                var.setEvaluatedExpression(foldedExpression);
-            } else {
-                SelectList selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(var.getUnevaluatedExpression(), null)), false);
-
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
-                List<List<Expr>> rows = new ArrayList<>();
-                rows.add(row);
-                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
-                valuesRelation.setNullValues(true);
-
-                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
-                QueryStatement queryStatement = new QueryStatement(selectRelation);
-                Analyzer.analyze(queryStatement, ConnectContext.get());
-
-                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
-
-                Type type = variableResult.getType();
-                //can not apply to metric types or complex type except array type
-                if (!checkUserVariableType(type)) {
-                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
-                }
-
-                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
-                        .set(0, new SelectListItem(variableResult, null));
-                Subquery subquery = new Subquery(queryStatement);
-                subquery.setType(variableResult.getType());
-                var.setUnevaluatedExpression(subquery);
-            }
         }
     }
 
@@ -462,5 +431,46 @@ public class SetStmtAnalyzer {
         }
 
         return false;
+    }
+
+    public static void calcuteUserVariable(UserVariable userVariable) {
+        Expr expression = userVariable.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+        } else {
+            Expr foldedExpression;
+            foldedExpression = Expr.analyzeAndCastFold(expression);
+
+            if (foldedExpression.isLiteral()) {
+                userVariable.setEvaluatedExpression(foldedExpression);
+            } else {
+                SelectList selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
+
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<List<Expr>> rows = new ArrayList<>();
+                rows.add(row);
+                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
+                valuesRelation.setNullValues(true);
+
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
+                QueryStatement queryStatement = new QueryStatement(selectRelation);
+                Analyzer.analyze(queryStatement, ConnectContext.get());
+
+                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
+
+                Type type = variableResult.getType();
+                // can not apply to metric types or complex type except array type
+                if (!checkUserVariableType(type)) {
+                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                }
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
+                Subquery subquery = new Subquery(queryStatement);
+                subquery.setType(variableResult.getType());
+                userVariable.setUnevaluatedExpression(subquery);
+            }
+        }
     }
 }

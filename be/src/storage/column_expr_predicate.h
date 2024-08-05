@@ -38,9 +38,9 @@ public:
 
     ~ColumnExprPredicate() override;
 
-    [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
@@ -49,8 +49,8 @@ public:
     PredicateType type() const override { return PredicateType::kExpr; }
     bool can_vectorized() const override { return true; }
 
-    [[nodiscard]] Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
-                                    ObjectPool* obj_pool) const override;
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override;
     std::string debug_string() const override;
     RuntimeState* runtime_state() const { return _state; }
     const SlotDescriptor* slot_desc() const { return _slot_desc; }
@@ -90,15 +90,15 @@ class ColumnTruePredicate : public ColumnPredicate {
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
     ~ColumnTruePredicate() override = default;
-    [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
     bool support_original_bloom_filter() const override { return false; }
     PredicateType type() const override { return PredicateType::kTrue; }
     bool can_vectorized() const override { return true; }
-    [[nodiscard]] Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
-                                    ObjectPool* obj_pool) const override;
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override;
     std::string debug_string() const override;
 };
 

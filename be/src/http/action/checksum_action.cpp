@@ -52,7 +52,6 @@ const std::string TABLET_ID = "tablet_id";
 // do not use name "VERSION",
 // or will be conflict with "VERSION" in thrift/config.h
 const std::string TABLET_VERSION = "version";
-const std::string SCHEMA_HASH = "schema_hash";
 
 void ChecksumAction::handle(HttpRequest* req) {
     LOG(INFO) << "accept one request " << req->debug_string();

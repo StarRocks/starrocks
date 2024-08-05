@@ -285,8 +285,7 @@ public class QueryPlannerTest {
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
     }
-
-    //@Test
+    @Test
     public void testSqlBlackListWithInsert() throws Exception {
         String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
         StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,

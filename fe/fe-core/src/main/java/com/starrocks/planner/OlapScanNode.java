@@ -227,6 +227,10 @@ public class OlapScanNode extends ScanNode {
         this.withoutColocateRequirement = withoutColocateRequirement;
     }
 
+    public boolean isLocalNativeTable() {
+        return olapTable.isOlapTable();
+    }
+
     public boolean getWithoutColocateRequirement() {
         return this.withoutColocateRequirement;
     }
@@ -904,7 +908,7 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
         Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
-        long schemaId = -1;
+        long schemaId = 0;
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);

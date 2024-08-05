@@ -247,7 +247,13 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -289,6 +295,14 @@ fi
 cd -
 echo "Finished patching $LZ4_SOURCE"
 
+cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $ROCKSDB_SOURCE"
+
 # brpc patch to disable shared library
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
@@ -305,6 +319,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
+    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
 
@@ -314,6 +332,7 @@ if [ ! -f $PATCHED_MARK ]; then
     patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0.patch
     # replace uint64 with uint64_t to make compiler happy
     patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
+    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -406,6 +425,7 @@ cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
+    patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
     touch $PATCHED_MARK
 fi
 cd -

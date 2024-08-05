@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,7 +53,7 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IMetastore metastore = internalMgr.createDeltaLakeMetastore();
+        IDeltaLakeMetastore metastore = internalMgr.createDeltaLakeMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
@@ -73,7 +71,7 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
-        metadataFactory.getCacheUpdateProcessor().ifPresent(DeltaLakeCacheUpdateProcessor::invalidateAll);
+        metadataFactory.metastoreCacheInvalidateCache();
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 

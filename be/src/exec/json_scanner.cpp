@@ -153,6 +153,7 @@ static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
     case TYPE_INT:
     case TYPE_SMALLINT:
     case TYPE_TINYINT:
+    case TYPE_BOOLEAN:
     case TYPE_CHAR:
     case TYPE_VARCHAR:
     case TYPE_JSON: {
@@ -314,7 +315,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(type_descs),
+          _type_descs(std::move(std::move(type_descs))),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;
@@ -555,7 +556,15 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             }
 
             DCHECK(column_index >= 0);
-            _parsed_columns[column_index] = true;
+            if (_parsed_columns[column_index]) {
+                // {'a': 1, 'b': 1, 'b': 1}
+                // there may be duplicated keys in single json, this will cause inconsistent column rows,
+                // so skip the duplicated key
+                key_index++;
+                continue;
+            } else {
+                _parsed_columns[column_index] = true;
+            }
             auto& column = chunk->get_column_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 

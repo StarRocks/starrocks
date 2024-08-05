@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -91,8 +92,8 @@ public interface ConnectorMetadata {
     /**
      * Return all partition names of the table.
      *
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
+     * @param databaseName      the name of the database
+     * @param tableName         the name of the table
      * @param tableVersionRange table version range in the query
      * @return a list of partition names
      */
@@ -103,8 +104,8 @@ public interface ConnectorMetadata {
     /**
      * Return partial partition names of the table using partitionValues to filter.
      *
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
+     * @param databaseName    the name of the database
+     * @param tableName       the name of the table
      * @param partitionValues the partition value to filter
      * @return a list of partition names
      */
@@ -116,7 +117,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
-     * @param dbName - the string represents the database name
+     * @param dbName  - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -124,7 +125,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default TableVersionRange getTableVersionRange(Table table,
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
                                                    Optional<ConnectorTableVersion> startVersion,
                                                    Optional<ConnectorTableVersion> endVersion) {
         return TableVersionRange.empty();
@@ -137,7 +138,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
-     * @param dbName - the string represents the database name
+     * @param dbName  - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -149,44 +150,33 @@ public interface ConnectorMetadata {
      * It is mainly used to generate ScanRange for scheduling.
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
-     * 2. Get file scan tasks for iceberg metadata by query predicate.
-     *
-     * @param table
-     * @param partitionKeys selected partition columns
-     * @param tableVersionRange table version range in the query
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param fieldNames all selected columns (including partition columns)
-     * @param limit scan limit nums if needed
+     * 2. Get file scan tasks for iceberg/deltalake metadata by query predicate.
      *
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                    TableVersionRange tableVersionRange, ScalarOperator predicate,
-                                                    List<String> fieldNames, long limit) {
+    default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList();
     }
 
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        return Lists.newArrayList();
-    }
-
-    default List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
 
     /**
      * Get table meta serialized specification
+     *
      * @param dbName
      * @param tableName
      * @param snapshotId
      * @param serializedPredicate serialized predicate string of lake format expression
+     * @param metadataTableType metadata table type
+     *
      * @return table meta serialized specification
      */
-    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                                     long snapshotId, String serializedPredicate) {
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
+                                                     String serializedPredicate, MetadataTableType metadataTableType) {
         return null;
     }
-
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
@@ -195,14 +185,13 @@ public interface ConnectorMetadata {
     /**
      * Get statistics for the table.
      *
-     * @param session optimizer context
+     * @param session           optimizer context
      * @param table
-     * @param columns selected columns
-     * @param partitionKeys selected partition keys
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param limit scan limit if needed, default value is -1
+     * @param columns           selected columns
+     * @param partitionKeys     selected partition keys
+     * @param predicate         used to filter metadata for iceberg, etc
+     * @param limit             scan limit if needed, default value is -1
      * @param tableVersionRange table version range in the query
-     *
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,

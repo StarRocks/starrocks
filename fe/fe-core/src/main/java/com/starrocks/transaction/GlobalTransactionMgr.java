@@ -309,8 +309,9 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         Locker locker = new Locker();
         if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE,
                 timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database write lock timeout, database="
-                    + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
+            String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
+                    transactionId, db.getFullName(), timeoutMillis);
+            throw new UserException(errMsg);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
@@ -324,10 +325,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         if (publishTimeoutMillis < 0) {
             // here commit transaction successfully cost too much time to cause publisTimeoutMillis is less than zero,
             // so we just return false to indicate publish timeout
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
         if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new UserException("publish timeout: " + timeoutMillis);
+            String errMsg = String.format("publish timeout: %d, transactionId=%d",
+                    timeoutMillis, transactionId);
+            throw new UserException(errMsg);
         }
     }
 
@@ -407,6 +412,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             } catch (LockTimeoutException e) {
                 throw e;
             } catch (Exception e) {
+                LOG.warn("fail to commit", e);
                 throw new UserException("fail to execute commit task: " + e.getMessage(), e);
             }
         }

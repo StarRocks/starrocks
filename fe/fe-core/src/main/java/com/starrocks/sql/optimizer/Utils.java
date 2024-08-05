@@ -149,29 +149,15 @@ public class Utils {
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return new LinkedList<>();
         }
 
-        LinkedList<ColumnRefOperator> list = new LinkedList<>();
-        if (OperatorType.VARIABLE.equals(root.getOpType())) {
-            list.add((ColumnRefOperator) root);
-            return list;
-        }
-
-        for (ScalarOperator child : root.getChildren()) {
-            list.addAll(extractColumnRef(child));
-        }
-
-        return list;
+        return root.getColumnRefs();
     }
 
     public static int countColumnRef(ScalarOperator root) {
-        return countColumnRef(root, 0);
-    }
-
-    private static int countColumnRef(ScalarOperator root, int count) {
-        if (null == root || !root.isVariable()) {
+        if (null == root) {
             return 0;
         }
 
@@ -179,8 +165,9 @@ public class Utils {
             return 1;
         }
 
+        int count = 0;
         for (ScalarOperator child : root.getChildren()) {
-            count += countColumnRef(child, count);
+            count += countColumnRef(child);
         }
 
         return count;
@@ -920,5 +907,26 @@ public class Utils {
     public static <T, S extends T> S mustCast(T obj, Class<S> klass) {
         return downcast(obj, klass)
                 .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
+    }
+
+    // this method is useful when map is small, but key is very complex  like compound predicate with 1000 OR
+    // in which case key's hashCode() can be super slow because of bad time complexity
+    // so we can use equals' short-circuit logic to help us find whether key is in map quickly
+    // which means key's type is not same as map's key's types
+    public static <K, V> V getValueIfExists(Map<K, V> map, K key) {
+        V value = null;
+
+        if (map.size() < 4) {
+            for (Map.Entry<K, V> entry : map.entrySet()) {
+                if (entry.getKey().equals(key)) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            value = map.get(key);
+        }
+
+        return value;
     }
 }

@@ -17,7 +17,6 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -29,6 +28,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -89,6 +90,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return null;
     }
 
+    private ConnectorMetadata metadataOfTable(Table table) {
+        if (table instanceof MetadataTable) {
+            return tableMetadata;
+        }
+
+        return null;
+    }
+
     private ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
@@ -137,15 +146,15 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
-        // TODO: refactor this in next patch
-        if (table instanceof IcebergTable) {
-            return normal.getTableVersionRange(table, startVersion, endVersion);
-        } else {
-            return TableVersionRange.empty();
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
         }
+
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -160,9 +169,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
-        return normal.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFiles(table, params);
     }
 
     @Override
@@ -171,19 +179,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        return normal.getRemoteFileInfos(table, partitionNames);
-    }
-
-    @Override
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         return normal.getRemotePartitions(table, partitionNames);
     }
 
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                                    long snapshotId, String serializedPredicate) {
-        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override

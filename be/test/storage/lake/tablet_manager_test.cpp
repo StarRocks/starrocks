@@ -31,6 +31,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/bthreads/util.h"
@@ -722,14 +723,9 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
     _tablet_manager->add_in_writing_data_size(1, 100);
 
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
-    _tablet_manager->remove_in_writing_data_size(1);
-
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
-
     _tablet_manager->add_in_writing_data_size(1, 100);
     _tablet_manager->clean_in_writing_data_size();
-    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;
@@ -738,6 +734,76 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
+TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
+    std::shared_ptr<TabletMetadata> tablet_metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    for (int i = 0; i < 5; i++) {
+        auto rs = tablet_metadata->add_rowsets();
+        rs->set_id(next_id());
+    }
+
+    // set historical schema
+    auto schema_id1 = next_id();
+    auto& schema_pb1 = (*tablet_metadata->mutable_historical_schemas())[schema_id1];
+    schema_pb1.set_id(schema_id1);
+
+    auto schema_id2 = next_id();
+    auto& schema_pb2 = (*tablet_metadata->mutable_historical_schemas())[schema_id2];
+    schema_pb2.set_id(schema_id2);
+
+    auto schema_id3 = tablet_metadata->schema().id();
+    auto& schema_pb3 = (*tablet_metadata->mutable_historical_schemas())[schema_id3];
+    schema_pb3.set_id(schema_id3);
+
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(2).id()] = schema_id3;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(3).id()] = schema_id2;
+    (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(4).id()] = schema_id3;
+    lake::VersionedTablet tablet(_tablet_manager, tablet_metadata);
+
+    {
+        for (int i = 0; i < 5; i++) {
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+            ASSERT_TRUE(res.ok());
+            auto schema_id = tablet_metadata->rowset_to_schema().at(tablet_metadata->rowsets(i).id());
+            ASSERT_EQ(res.value()->id(), schema_id);
+        }
+    }
+
+    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0);
+    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1);
+    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2);
+    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3);
+    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4);
+
+    {
+        std::vector<uint32_t> input_rowsets;
+        input_rowsets.emplace_back(tablet_metadata->rowsets(0).id());
+        input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
+        auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), schema_id1);
+
+        input_rowsets.emplace_back(tablet_metadata->rowsets(2).id());
+        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+    }
+
+    {
+        tablet_metadata->mutable_rowset_to_schema()->clear();
+        for (int i = 0; i < 5; i++) {
+            std::vector<uint32_t> input_rowsets;
+            input_rowsets.emplace_back(tablet_metadata->rowsets(i).id());
+            auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+            ASSERT_TRUE(res.ok());
+            ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+        }
+    }
 }
 
 #endif // USE_STAROS

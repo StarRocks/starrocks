@@ -48,9 +48,10 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -76,6 +77,13 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
 }
 
 Rowset::~Rowset() {
+#ifndef BE_TEST
+    if (_keys_type != PRIMARY_KEYS) {
+        // ONLY support non-pk table now.
+        // evict rowset before destroy, in case this rowset no close yet.
+        StorageEngine::instance()->tablet_manager()->metadata_cache()->evict_rowset(this);
+    }
+#endif
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -176,6 +184,13 @@ Status Rowset::do_load() {
         }
         _segments.push_back(std::move(res).value());
     }
+#ifndef BE_TEST
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+        // Add rowset to lru metadata cache for memory control.
+        // ONLY support non-pk table now.
+        StorageEngine::instance()->tablet_manager()->metadata_cache()->cache_rowset(this);
+    }
+#endif
     return Status::OK();
 }
 
@@ -609,6 +624,14 @@ void Rowset::do_close() {
     _segments.clear();
 }
 
+size_t Rowset::segment_memory_usage() {
+    size_t total = 0;
+    for (const auto& segment : _segments) {
+        total += segment->mem_usage();
+    }
+    return total;
+}
+
 class SegmentIteratorWrapper : public ChunkIterator {
 public:
     SegmentIteratorWrapper(std::shared_ptr<Rowset> rowset, ChunkIteratorPtr iter)
@@ -619,12 +642,12 @@ public:
         _iter.reset();
     }
 
-    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);
     }
 
-    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         return _iter->init_output_schema(unused_output_column_ids);
     }

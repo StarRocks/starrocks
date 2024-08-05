@@ -34,7 +34,7 @@ const Connector* ConnectorManager::get(const std::string& name) {
 }
 
 void ConnectorManager::put(const std::string& name, std::unique_ptr<Connector> connector) {
-    _connectors.emplace(std::make_pair(name, std::move(connector)));
+    _connectors.emplace(name, std::move(connector));
 }
 
 ConnectorManager* ConnectorManager::default_instance() {
@@ -110,7 +110,7 @@ void DataSource::update_profile(const Profile& profile) {
 StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges, size_t scan_dop) {
+        size_t num_total_scan_ranges, size_t scan_parallelism) {
     peek_scan_ranges(scan_ranges);
 
     pipeline::Morsels morsels;
@@ -144,8 +144,8 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
     }
 
     auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
-    if (scan_dop > 0) {
-        morsel_queue->set_max_degree_of_parallelism(scan_dop);
+    if (scan_parallelism > 0) {
+        morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
     }
     return morsel_queue;
 }

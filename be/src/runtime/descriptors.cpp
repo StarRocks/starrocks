@@ -34,6 +34,8 @@
 
 #include "runtime/descriptors.h"
 
+#include <util/timezone_utils.h>
+
 #include <boost/algorithm/string/join.hpp>
 #include <ios>
 #include <sstream>
@@ -406,6 +408,7 @@ IcebergMetadataTableDescriptor::IcebergMetadataTableDescriptor(const TTableDescr
         : HiveTableDescriptor(tdesc, pool) {
     _hive_column_names = tdesc.hdfsTable.hive_column_names;
     _hive_column_types = tdesc.hdfsTable.hive_column_types;
+    _time_zone = tdesc.hdfsTable.__isset.time_zone ? tdesc.hdfsTable.time_zone : TimezoneUtils::default_time_zone;
 }
 
 const std::string& IcebergMetadataTableDescriptor::get_hive_column_names() const {
@@ -414,6 +417,10 @@ const std::string& IcebergMetadataTableDescriptor::get_hive_column_names() const
 
 const std::string& IcebergMetadataTableDescriptor::get_hive_column_types() const {
     return _hive_column_types;
+}
+
+const std::string& IcebergMetadataTableDescriptor::get_time_zone() const {
+    return _time_zone;
 }
 
 StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
@@ -728,7 +735,13 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
-        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE: {
+        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
+        case TTableType::ICEBERG_REFS_TABLE:
+        case TTableType::ICEBERG_HISTORY_TABLE:
+        case TTableType::ICEBERG_METADATA_LOG_ENTRIES_TABLE:
+        case TTableType::ICEBERG_SNAPSHOTS_TABLE:
+        case TTableType::ICEBERG_MANIFESTS_TABLE:
+        case TTableType::ICEBERG_FILES_TABLE: {
             desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
             break;
         }

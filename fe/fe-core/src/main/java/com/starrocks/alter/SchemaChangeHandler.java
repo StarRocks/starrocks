@@ -1456,6 +1456,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
+        Map<Integer, Column> columnUniqueIdToColumn = Maps.newHashMap();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1577,6 +1578,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
                 dataBuilder.withNewIndexShortKeyCount(alterIndexId,
                         newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+            }
+
+            // 6. check the uniqueness of column unique id
+            if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                for (Column alterColumn : alterSchema) {
+                    Column existedColumn = columnUniqueIdToColumn.putIfAbsent(alterColumn.getUniqueId(), alterColumn);
+                    if (existedColumn != null && !existedColumn.getName().equals(alterColumn.getName())) {
+                        LOG.warn(
+                                "Table {} column {} has same unique id {} with column {}, table max column unique id: {}",
+                                olapTable.getName(), alterColumn.getName(), alterColumn.getUniqueId(),
+                                existedColumn.getName(), olapTable.getMaxColUniqueId());
+                        throw new DdlException("Column " + alterColumn.getName() + " has same unique id "
+                                + alterColumn.getUniqueId() + " with column " + existedColumn.getName());
+                    }
+                }
             }
         } // end for indices
 
@@ -1896,7 +1912,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
                 }
                 if (!fastSchemaEvolution) {
@@ -1905,11 +1921,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Drop field for struct column not support shared-data mode so far");
                 }
                 if (!fastSchemaEvolution) {
@@ -2760,6 +2775,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // for now table's state can only be NORMAL
             Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+            olapTable.setState(OlapTableState.UPDATING_META);
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), 1000);
             // update base index schema
@@ -2830,6 +2846,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
+            olapTable.setState(OlapTableState.NORMAL);
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }

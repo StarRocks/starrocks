@@ -16,10 +16,16 @@ package com.starrocks.clone;
 
 public class ColocateMatchResult {
     long lockTotalTime;
-    boolean isGroupStable;
+    Status status;
 
-    public ColocateMatchResult(long lockTotalTime, boolean isGroupStable) {
+    public ColocateMatchResult(long lockTotalTime, Status status) {
         this.lockTotalTime = lockTotalTime;
-        this.isGroupStable = isGroupStable;
+        this.status = status;
+    }
+
+    public enum Status {
+        STABLE,
+        UNSTABLE,
+        UNKNOWN
     }
 }

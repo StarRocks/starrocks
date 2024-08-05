@@ -15,5 +15,5 @@
 package com.starrocks.jni.connector;
 
 public interface ScannerFactory {
-    Class getScannerClass() throws ClassNotFoundException;
+    Class getScannerClass(String scannerType) throws ClassNotFoundException;
 }

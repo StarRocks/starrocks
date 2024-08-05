@@ -483,7 +483,7 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[[[NULL,20],[30,40]]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level1) {
@@ -516,7 +516,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[[NULL,NULL,NULL,NULL]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
@@ -1459,6 +1459,34 @@ TEST_F(JsonScannerTest, file_stream) {
 
     EXPECT_EQ("[1, 2]", chunk->debug_row(0));
     EXPECT_EQ("[3, 4]", chunk->debug_row(1));
+}
+
+TEST_F(JsonScannerTest, test_duplicate_key) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_duplicate_key.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "k2"});
+
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[1, 1]", chunk->debug_row(0));
+    EXPECT_EQ("[2, 2]", chunk->debug_row(1));
 }
 
 } // namespace starrocks

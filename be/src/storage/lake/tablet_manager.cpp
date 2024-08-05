@@ -579,17 +579,59 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
 }
 
+// If one rowset has much segments, we may use a lot of memory if we compaction all segments once a time.
+// So we will support a part of segments in one rowset to do compaction in the future.
+// To keep the consistence of all segments in one rowset, we will use the last rowset tablet schema as the
+// output rowset schema. This is because the last rowset may only have part of the segment merged.
+StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
+                                                                  const TabletMetadata* metadata) {
+    if (metadata->rowset_to_schema().empty() || input_rowset.size() <= 0) {
+        return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    }
+    TabletSchemaPtr tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    struct Finder {
+        uint32_t id;
+        bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
+    };
+
+    auto input_id = input_rowset[input_rowset.size() - 1];
+    auto iter = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
+    if (UNLIKELY(iter == metadata->rowsets().end())) {
+        return Status::InternalError(fmt::format("input rowset {} not found", input_id));
+    }
+
+    auto rowset_it = metadata->rowset_to_schema().find(input_id);
+    if (rowset_it != metadata->rowset_to_schema().end()) {
+        auto schema_it = metadata->historical_schemas().find(rowset_it->second);
+        if (schema_it != metadata->historical_schemas().end()) {
+            tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(schema_it->second).first;
+        } else {
+            return Status::InternalError(fmt::format("can not find output rowset schema, id {}", rowset_it->second));
+        }
+    } else {
+        return Status::InternalError(fmt::format("input rowset {} not exist in rowset_to_schema", input_id));
+    }
+    return tablet_schema;
+}
+
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+    std::vector<uint32_t> input_rowsets_id;
+    for (auto& rowset : input_rowsets) {
+        input_rowsets_id.emplace_back(rowset->id());
+    }
+    ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(input_rowsets_id, tablet_metadata.get()));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                        std::move(tablet_schema));
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                          std::move(tablet_schema));
     }
 }
 
@@ -627,27 +669,37 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 }
 
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
-    int64_t size = 0;
-    std::shared_lock rdlock(_meta_lock);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        const auto& it = _tablet_in_writing_size.find(tablet_id);
+        if (it != _tablet_in_writing_size.end()) {
+            VLOG(1) << "tablet " << tablet_id << " in writing data size: " << it->second;
+            return it->second;
+        }
+    }
+    return add_in_writing_data_size(tablet_id, 0);
+}
+
+int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
+    {
+        std::unique_lock wrlock(_meta_lock);
+        const auto& it = _tablet_in_writing_size.find(tablet_id);
+        if (it != _tablet_in_writing_size.end()) {
+            it->second += size;
+            return it->second;
+        }
+    }
+
+    int64_t base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+
+    std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
     if (it != _tablet_in_writing_size.end()) {
-        size = it->second;
+        it->second += size;
+    } else {
+        _tablet_in_writing_size[tablet_id] = base_size + size;
     }
-    VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
-    return size;
-}
-
-void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
-    std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_size[tablet_id] += size;
-    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_size[tablet_id]
-            << " size: " << size;
-}
-
-void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
-    std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id << " in writing data size: " << _tablet_in_writing_size[tablet_id];
-    _tablet_in_writing_size.erase(tablet_id);
+    return _tablet_in_writing_size[tablet_id];
 }
 
 void TabletManager::clean_in_writing_data_size() {

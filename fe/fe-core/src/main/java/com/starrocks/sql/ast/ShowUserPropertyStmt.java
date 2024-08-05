@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.CaseSensibility;
@@ -29,6 +30,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 // Show Property Stmt
@@ -71,11 +73,13 @@ public class ShowUserPropertyStmt extends ShowStmt {
         List<List<String>> rows = new ArrayList<>();
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
-        // Currently only "max_user_connections" and "labels.location" is supported
-        long maxConn = authenticationManager.getMaxConn(user);
-        rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
-        Set<String> labelsLocation = authenticationManager.getLabelsLocation(user);
-        rows.add(Lists.newArrayList("labels.location", String.valueOf(labelsLocation)));
+        UserProperty userProperty = authenticationManager.getUserProperty(user);
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(userProperty.getMaxConn())));
+        rows.add(Lists.newArrayList(UserProperty.PROP_DATABASE, userProperty.getDatabase()));
+        for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {
+            rows.add(Lists.newArrayList(String.format("%s.%s", "session", entry.getKey()), entry.getValue()));
+        }
+        rows.add(Lists.newArrayList(UserProperty.PROP_LABELS_LOCATION, String.valueOf(userProperty.getLabelsLocation())));
 
         if (pattern == null) {
             return rows;

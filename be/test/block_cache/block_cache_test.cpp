@@ -408,40 +408,4 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 
 #endif
 
-#ifdef WITH_CACHELIB
-TEST_F(BlockCacheTest, custom_lru_insertion_point) {
-    std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
-
-    CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    options.block_size = block_size;
-    options.max_concurrent_inserts = 100000;
-    options.max_flying_memory_mb = 100;
-    options.engine = "cachelib";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
-
-    const size_t rounds = 20;
-    const size_t batch_size = block_size;
-    const std::string cache_key = "test_file";
-    // write cache
-    // only 12 blocks can be cached
-    for (size_t i = 0; i < rounds; ++i) {
-        char ch = 'a' + i % 26;
-        std::string value(batch_size, ch);
-        Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-        ASSERT_TRUE(st.ok());
-    }
-
-    // read cache
-    // with the 1/2 lru insertion point, the test_file1 items will not be evicted
-    char value[batch_size] = {0};
-    auto res = cache->read_buffer(cache_key + std::to_string(1), 0, batch_size, value);
-    ASSERT_TRUE(res.status().ok());
-
-    cache->shutdown();
-}
-#endif
-
 } // namespace starrocks

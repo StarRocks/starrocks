@@ -538,6 +538,9 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+// Metadata cache limit for shared-nothing mode. Not working for PK table now.
+// Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
+CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
 // if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
 // the failed apply task will retry after `retry_apply_interval_second`
@@ -792,6 +795,8 @@ CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
+
+CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -851,6 +856,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
@@ -1067,6 +1073,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
+CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1122,9 +1129,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
 CONF_Bool(datacache_tiered_cache_enable, "true");
-// DataCache engines, alternatives: cachelib, starcache.
+// DataCache engines, alternatives: starcache.
+// `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manully configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+// If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
@@ -1372,5 +1380,23 @@ CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
+// Current supported modules:
+// 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
+// 2. connector_scan_executor
+// 3. non_pipeline_scan_thread_pool
+// 4. pipeline_prepare_thread_pool
+// 5. pipeline_sink_io_thread_pool
+// 6. query_rpc_thread_pool
+// 7. publish_version_worker_pool
+// 8. olap_scan_executor
+// 9. wg_driver_executor
+// use commas to separate:
+// * means release all above
+CONF_mString(try_release_resource_before_core_dump, "data_cache");
+
+// Experimental feature, this configuration will be removed after testing is complete.
+CONF_mBool(lake_enable_alter_struct, "true");
 
 } // namespace starrocks::config

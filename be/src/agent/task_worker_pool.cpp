@@ -112,6 +112,11 @@ TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
 template <class AgentTaskRequest>
 TaskWorkerPool<AgentTaskRequest>::~TaskWorkerPool() {
     stop();
+    for (uint32_t i = 0; i < _worker_count; ++i) {
+        if (_worker_threads[i].joinable()) {
+            _worker_threads[i].join();
+        }
+    }
     delete _worker_thread_condition_variable;
 }
 
@@ -124,16 +129,8 @@ void TaskWorkerPool<AgentTaskRequest>::start() {
 
 template <class AgentTaskRequest>
 void TaskWorkerPool<AgentTaskRequest>::stop() {
-    if (_stopped) {
-        return;
-    }
     _stopped = true;
     _worker_thread_condition_variable->notify_all();
-    for (uint32_t i = 0; i < _worker_count; ++i) {
-        if (_worker_threads[i].joinable()) {
-            _worker_threads[i].join();
-        }
-    }
 }
 
 template <class AgentTaskRequest>

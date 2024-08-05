@@ -17,10 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
@@ -121,6 +117,7 @@ add_library(Storage STATIC
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
+    rowset/metadata_cache.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
@@ -249,15 +246,11 @@ add_library(Storage STATIC
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
-    inverted/index_descriptor.hpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_option.cpp
-    inverted/inverted_index_common.hpp
-    inverted/inverted_plugin_factory.cpp
-    inverted/clucene/clucene_plugin.cpp
-    inverted/clucene/clucene_roaring_hit_collector.hpp
-    inverted/clucene/clucene_inverted_writer.cpp
-    inverted/clucene/clucene_inverted_reader.cpp
-    inverted/clucene/clucene_inverted_util.hpp
-    inverted/clucene/match_operator.cpp)
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_option.cpp
+    index/inverted/inverted_plugin_factory.cpp
+    index/inverted/clucene/clucene_plugin.cpp
+    index/inverted/clucene/clucene_inverted_writer.cpp
+    index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/match_operator.cpp)

@@ -63,6 +63,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -1569,8 +1570,7 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         std::vector<DeltaColumnGroupKey> dcg_keys;
         dcg_keys.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            dcg_keys.emplace_back(
-                    DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+            dcg_keys.emplace_back(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i);
         }
         return dcg_keys;
     }());
@@ -1614,7 +1614,7 @@ void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::stea
     LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
     {
         std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
-        _schedule_apply_tasks.emplace(std::make_pair(time_point, tablet_id));
+        _schedule_apply_tasks.emplace(time_point, tablet_id);
     }
     _apply_tablet_changed_cv.notify_one();
 }

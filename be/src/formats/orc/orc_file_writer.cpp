@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -107,21 +109,19 @@ void AsyncOrcOutputStream::close() {
     }
 }
 
-ORCFileWriter::ORCFileWriter(const std::string& location, std::shared_ptr<orc::OutputStream> output_stream,
-                             const std::vector<std::string>& column_names,
-                             const std::vector<TypeDescriptor>& type_descs,
+ORCFileWriter::ORCFileWriter(std::string location, std::shared_ptr<orc::OutputStream> output_stream,
+                             std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             TCompressionType::type compression_type,
-                             const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()>& rollback_action)
-        : _location(location),
+                             TCompressionType::type compression_type, std::shared_ptr<ORCWriterOptions> writer_options,
+                             std::function<void()> rollback_action)
+        : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
-          _column_names(column_names),
-          _type_descs(type_descs),
+          _column_names(std::move(column_names)),
+          _type_descs(std::move(type_descs)),
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
-          _writer_options(writer_options),
-          _rollback_action(rollback_action) {}
+          _writer_options(std::move(writer_options)),
+          _rollback_action(std::move(rollback_action)) {}
 
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
@@ -477,14 +477,14 @@ void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, ui
 }
 
 ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
-                                           const std::map<std::string, std::string>& options,
-                                           const std::vector<std::string>& column_names,
+                                           std::map<std::string, std::string> options,
+                                           std::vector<std::string> column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
-          _options(options),
-          _column_names(column_names),
+          _options(std::move(options)),
+          _column_names(std::move(column_names)),
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
           _runtime_state(runtime_state) {}

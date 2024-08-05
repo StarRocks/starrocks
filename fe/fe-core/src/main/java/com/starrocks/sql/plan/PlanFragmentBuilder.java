@@ -63,7 +63,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -116,7 +116,6 @@ import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -269,8 +268,8 @@ public class PlanFragmentBuilder {
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getDb(createStmt.getTableName().getDb()).getId();
-        MaterializedView view =
-                MaterializedViewMgr.getInstance().createSinkTable(createStmt, partitionInfo, mvId, dbId);
+        MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                .createSinkTable(createStmt, partitionInfo, mvId, dbId);
         TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
@@ -1091,6 +1090,7 @@ public class PlanFragmentBuilder {
             }
 
             hudiScanNode.setLimit(node.getLimit());
+            hudiScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hudiScanNode);
@@ -1133,6 +1133,7 @@ public class PlanFragmentBuilder {
             }
 
             hdfsScanNode.setLimit(node.getLimit());
+            hdfsScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
@@ -1173,6 +1174,7 @@ public class PlanFragmentBuilder {
             }
 
             fileTableScanNode.setLimit(node.getLimit());
+            fileTableScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(fileTableScanNode);
@@ -1227,6 +1229,7 @@ public class PlanFragmentBuilder {
             }
 
             deltaLakeScanNode.setLimit(node.getLimit());
+            deltaLakeScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(deltaLakeScanNode);
@@ -1271,6 +1274,7 @@ public class PlanFragmentBuilder {
             }
 
             paimonScanNode.setLimit(node.getLimit());
+            paimonScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(paimonScanNode);
@@ -1415,6 +1419,7 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setLimit(node.getLimit());
+            icebergScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(icebergScanNode);
@@ -1429,7 +1434,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
 
-            LogicalIcebergMetadataTable table = (LogicalIcebergMetadataTable) node.getTable();
+            MetadataTable table = (MetadataTable) node.getTable();
             context.getDescTbl().addReferencedTable(table);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(table);
@@ -1454,7 +1459,7 @@ public class PlanFragmentBuilder {
 
             IcebergMetadataScanNode metadataScanNode =
                     new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
-                            "IcebergMetadataScanNode", node.getTemporalClause());
+                            "IcebergMetadataScanNode", node.getTableVersionRange());
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
@@ -1601,6 +1606,12 @@ public class PlanFragmentBuilder {
                                 break;
                             case "JOB_ID":
                                 scanNode.setJobId(constantOperator.getBigint());
+                                break;
+                            case "ID":
+                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "TYPE":
                                 scanNode.setType(constantOperator.getVarchar());
@@ -3036,6 +3047,7 @@ public class PlanFragmentBuilder {
 
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            List<PlanFragment> childFragments = Lists.newArrayList();
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 ExecGroup setExecGroup = this.currentExecGroup;
@@ -3063,9 +3075,16 @@ public class PlanFragmentBuilder {
                         new ExchangeNode(context.getNextNodeId(), fragment.getPlanRoot(), fragment.getDataPartition());
                 this.currentExecGroup.add(exchangeNode, true);
 
+                childFragments.add(fragment);
                 exchangeNode.setFragment(setOperationFragment);
-                fragment.setDestination(exchangeNode);
                 setOperationNode.addChild(exchangeNode);
+            }
+
+            // keep the fragment child order with execution order
+            // for intersect and except. child(0) is build node.
+            for (int i = setOperationNode.getChildren().size() - 1; i >= 0; i--) {
+                final PlanFragment planFragment = childFragments.get(i);
+                planFragment.setDestination((ExchangeNode) setOperationNode.getChild(i));
             }
 
             // reset column is nullable, for handle union select xx join select xxx...

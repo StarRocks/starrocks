@@ -29,7 +29,7 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import io.delta.kernel.Table;
-import io.delta.kernel.defaults.engine.DefaultEngine;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
@@ -38,7 +38,6 @@ import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,9 +65,7 @@ public class DeltaUtils {
     }
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                       Configuration configuration, long createTime) {
-        DefaultEngine deltaEngine = DefaultEngine.create(configuration);
-
+                                                       Engine deltaEngine, long createTime) {
         SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {

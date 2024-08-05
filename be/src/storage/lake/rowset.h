@@ -50,9 +50,9 @@ public:
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
 
-    [[nodiscard]] StatusOr<size_t> get_read_iterator_num();
+    StatusOr<size_t> get_read_iterator_num();
 
     // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
     // simply get iterators to iterate all rows without complex options like predicates
@@ -60,9 +60,8 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
-                                                                                    bool file_data_cache,
-                                                                                    OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
+                                                                      OlapReaderStatistics* stats);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -71,8 +70,9 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
+                                                                                  const MetaFileBuilder* builder,
+                                                                                  OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
@@ -94,16 +94,15 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
+    StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
-                                                             bool fill_metadata_cache);
+    StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache);
 
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+    Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                                       bool fill_metadata_cache);
+    Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
+                         bool fill_metadata_cache);
 
     int64_t tablet_id() const { return _tablet_id; }
 

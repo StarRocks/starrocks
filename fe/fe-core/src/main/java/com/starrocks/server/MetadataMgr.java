@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -51,12 +50,15 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -94,7 +96,8 @@ public class MetadataMgr {
     public class QueryMetadatas {
         private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
 
-        public QueryMetadatas() {}
+        public QueryMetadatas() {
+        }
 
         public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
             if (metadatas.containsKey(catalogName)) {
@@ -497,9 +500,21 @@ public class MetadataMgr {
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
-        if (connectorTable != null) {
+        if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+
+        if (connectorTable != null && connectorTable.isMetadataTable()) {
+            MetadataTable metadataTable = (MetadataTable) connectorTable;
+            String originDbName = metadataTable.getOriginDb();
+            String originTableName = metadataTable.getOriginTable();
+            boolean originTableExist = connectorMetadata.map(metadata ->
+                    metadata.tableExists(originDbName, originTableName)).orElse(false);
+            if (!originTableExist) {
+                LOG.error("origin table not exists with {}.{}.{}", catalogName, dbName, tblName);
+                return null;
+            }
         }
         return connectorTable;
     }
@@ -512,11 +527,11 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(table, startVersion, endVersion))
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
                 .orElse(TableVersionRange.empty().empty());
     }
 
@@ -752,79 +767,52 @@ public class MetadataMgr {
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1, TableVersionRange.empty());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionNames)
-                        .forEach(files::add);
-            } catch (Exception e) {
-                LOG.error("Failed to list partition file's metadata on catalog [{}], table [{}]",
-                        table.getCatalogName(), table, e);
-                throw e;
-            }
-        }
-        return ImmutableList.copyOf(files.build());
-    }
-
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
-        if (connectorMetadata.isPresent()) {
-            try {
-                connectorMetadata.get().getRemotePartitions(table, partitionNames)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
                         table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, TableVersionRange.empty(), null, null, -1);
-    }
-
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange version, ScalarOperator predicate, List<String> fieldNames,
-                                                   long limit) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemoteFiles(table, params);
             } catch (Exception e) {
-                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+                return connectorMetadata.get().getPartitions(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;
             }
         }
-        return partitions.build();
+        return new ArrayList<>();
     }
 
-    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName,
-                                                    long snapshotId, String serializedPredicate) {
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,
+                                                    String serializedPredicate, MetadataTableType type) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
             } catch (Exception e) {
                 LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
                 throw e;

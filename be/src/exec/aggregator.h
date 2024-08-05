@@ -32,6 +32,7 @@
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -265,8 +266,8 @@ public:
         }
     }
 
-    [[nodiscard]] virtual Status open(RuntimeState* state);
-    [[nodiscard]] Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    virtual Status open(RuntimeState* state);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -329,32 +330,32 @@ public:
                                           int64_t ht_rows) const;
 
     // For aggregate without group by
-    [[nodiscard]] Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
+    Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
     // For aggregate with group by
-    [[nodiscard]] Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
-    [[nodiscard]] Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
+    Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
+    Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
     // Convert one row agg states to chunk
-    [[nodiscard]] Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
     void process_limit(ChunkPtr* chunk);
 
-    [[nodiscard]] Status evaluate_groupby_exprs(Chunk* chunk);
-    [[nodiscard]] Status evaluate_agg_fn_exprs(Chunk* chunk);
-    [[nodiscard]] Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
-    [[nodiscard]] Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
+    Status evaluate_groupby_exprs(Chunk* chunk);
+    Status evaluate_agg_fn_exprs(Chunk* chunk);
+    Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
+    Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
 
     // convert input chunk to spill format
-    [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
+    Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    [[nodiscard]] Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -362,7 +363,7 @@ public:
     void try_convert_to_two_level_map();
     void try_convert_to_two_level_set();
 
-    [[nodiscard]] Status check_has_error();
+    Status check_has_error();
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
     // reset_state is used to clear the internal state of the Aggregator, then it can process new tablet, in
@@ -372,8 +373,8 @@ public:
     // refill_chunk: partial-hit result of stale version.
     // refill_op: pre-cache agg operator, Aggregator's holder.
     // reset_sink_complete: reset sink_complete state. sometimes if operator sink has complete we don't have to reset sink state
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
-                                     pipeline::Operator* refill_op, bool reset_sink_complete = true);
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op,
+                       bool reset_sink_complete = true);
 
     const AggregatorParamsPtr& params() const { return _params; }
 
@@ -419,9 +420,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::queue<ChunkPtr> _buffer;
-    std::unique_ptr<pipeline::ChunkBufferMemoryManager> _buffer_mem_manager;
-    std::mutex _buffer_mutex;
+    std::unique_ptr<LimitedPipelineChunkBuffer<AggStatistics>> _limited_buffer;
 
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate
@@ -509,8 +508,8 @@ public:
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    [[nodiscard]] Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
-                                                   bool force_use_intermediate_as_output = false);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
@@ -537,10 +536,10 @@ protected:
         return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
     }
 
-    [[nodiscard]] Status _reset_state(RuntimeState* state, bool reset_sink_complete);
+    Status _reset_state(RuntimeState* state, bool reset_sink_complete);
 
     // initial const columns for i'th FunctionContext.
-    [[nodiscard]] Status _evaluate_const_columns(int i);
+    Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
     Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
@@ -561,7 +560,7 @@ protected:
     bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
-    [[nodiscard]] Status _evaluate_group_by_exprs(Chunk* chunk);
+    Status _evaluate_group_by_exprs(Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>

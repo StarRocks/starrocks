@@ -63,7 +63,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
-    [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
+    Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
@@ -113,6 +113,9 @@ public:
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
+
+    StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
+                                                       const TabletMetadata* metadata);
 
 #ifdef USE_STAROS
     bool is_tablet_in_worker(int64_t tablet_id);
@@ -168,9 +171,7 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
-
-    void remove_in_writing_data_size(int64_t tablet_id);
+    int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
     void clean_in_writing_data_size();
 

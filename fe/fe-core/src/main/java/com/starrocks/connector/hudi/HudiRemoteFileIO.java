@@ -36,6 +36,8 @@ import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.storage.StoragePath;
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,10 +51,10 @@ import static org.apache.hudi.common.table.view.FileSystemViewManager.createInMe
 
 public class HudiRemoteFileIO implements RemoteFileIO {
     private static final Logger LOG = LogManager.getLogger(HudiRemoteFileIO.class);
-    private final Configuration configuration;
+    private final HadoopStorageConfiguration configuration;
 
     public HudiRemoteFileIO(Configuration configuration) {
-        this.configuration = configuration;
+        this.configuration = new HadoopStorageConfiguration(configuration);
     }
 
     private void createHudiContext(RemoteFileScanContext ctx) {
@@ -91,7 +93,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
         }
 
         String partitionPath = pathKey.getPath();
-        String partitionName = FSUtils.getRelativePartitionPath(new Path(tableLocation), new Path(partitionPath));
+        String partitionName = FSUtils.getRelativePartitionPath(new StoragePath(tableLocation), new StoragePath(partitionPath));
 
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();

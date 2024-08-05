@@ -50,6 +50,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -88,6 +89,13 @@ TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
           _last_update_stat_ms(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
+#ifndef BE_TEST
+    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int32_t lru_cache_limit = process_limit * config::metadata_cache_memory_limit_percent / 100;
+    _metadata_cache = std::make_unique<MetadataCache>(lru_cache_limit);
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
+                                    [this]() { return _metadata_cache->get_memory_usage(); });
+#endif
 }
 
 Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bool update_meta, bool force) {
@@ -394,8 +402,11 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
 
         LOG(INFO) << "Start to drop tablet " << tablet_id;
         dropped_tablet = it->second;
-        tablet_map.erase(it);
-        _remove_tablet_from_partition(*dropped_tablet);
+        dropped_tablet->set_is_dropping(true);
+        // we can not erase tablet from tablet map here.
+        // if tablet is a primary key table, deleting it may wait for apply
+        // to complete, which can take a while. If a clone occurs in the meantime, a new tablet will be created, and
+        // the new tablet and the old tablet may apply at the same time, modifying the primary key index at the same time.
     }
     if (config::enable_event_based_compaction_framework) {
         dropped_tablet->stop_compaction();
@@ -435,6 +446,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
+    }
+    // erase tablet from tablet map
+    {
+        std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+        TabletMap& tablet_map = _get_tablet_map(tablet_id);
+        auto it = tablet_map.find(tablet_id);
+        if (it != tablet_map.end()) {
+            tablet_map.erase(it);
+        }
+        _remove_tablet_from_partition(*dropped_tablet);
     }
     dropped_tablet->deregister_tablet_from_dir();
     LOG(INFO) << "Succeed to drop tablet " << tablet_id;

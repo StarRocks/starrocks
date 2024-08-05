@@ -72,11 +72,6 @@ enum TTabletType {
     TABLET_TYPE_LAKE = 2
 }
 
-enum TTxnType {
-    TXN_NORMAL = 0,
-    TXN_REPLICATION = 1
-}
-
 struct TBinlogConfig {
     // Version of the configuration, and FE should deliver it to
     // the BE when executing 'ALTER TABLE'. The configuration with
@@ -149,6 +144,11 @@ enum TAlterJobType {
     DECOMMISSION_BACKEND = 2
 }
 
+struct TAlterMaterializedViewParam {
+    1: required string column_name
+    2: optional string origin_column_name
+    3: optional Exprs.TExpr mv_expr
+}
 
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
@@ -172,12 +172,6 @@ struct TAlterTabletReqV2 {
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
-}
-
-struct TAlterMaterializedViewParam {
-    1: required string column_name
-    2: optional string origin_column_name
-    3: optional Exprs.TExpr mv_expr
 }
 
 struct TClusterInfo {
@@ -352,7 +346,7 @@ struct TPublishVersionRequest {
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
-    7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    7: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
     8: optional i64 gtid
     9: optional bool is_version_overwrite = false
 }
@@ -365,7 +359,7 @@ struct TClearAlterTaskRequest {
 struct TClearTransactionTaskRequest {
     1: required Types.TTransactionId transaction_id
     2: required list<Types.TPartitionId> partition_id
-    3: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    3: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
 }
 
 struct TRecoverTabletReq {

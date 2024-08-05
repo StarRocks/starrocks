@@ -141,7 +141,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
 
                 for (int h = 0; h < haystack.size;) {
                     auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
-                    v.emplace_back(Slice(haystack.data + h, char_size));
+                    v.emplace_back(haystack.data + h, char_size);
                     h += char_size;
                     ++offset;
                 }
