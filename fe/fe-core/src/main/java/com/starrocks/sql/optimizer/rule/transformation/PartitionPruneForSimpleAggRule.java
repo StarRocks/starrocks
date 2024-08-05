@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.Map;
@@ -78,16 +79,20 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         OlapTable table = (OlapTable) scanOperator.getTable();
         Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
 
-        if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
-            return Lists.newArrayList(optimizeWithPartitionValues(aggregationOperator, table, minMax));
-        }
-        if (checkRewriteTopN(scanOperator, table)) {
-            return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, scanOperator, table,
-                    minMax));
-        }
-        if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
-            return Lists.newArrayList(optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table,
-                    minMax));
+        try {
+            if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
+                return Lists.newArrayList(optimizeWithPartitionValues(aggregationOperator, table, minMax));
+            }
+            if (checkRewriteTopN(scanOperator, table)) {
+                return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, scanOperator, table,
+                        minMax));
+            }
+            if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
+                return Lists.newArrayList(optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table,
+                        minMax));
+            }
+        } catch (NotImplementedException ignore) {
+            // Some not-supported partition tables
         }
         return Lists.newArrayList();
     }
@@ -196,7 +201,7 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            pruned.add(sorted.get(sorted.size() - 1));
+            pruned.add(sorted.get(0));
         }
 
         LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
@@ -251,7 +256,7 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
             sorted.retainAll(nonEmptyPartitionIds);
             long maxPartition = sorted.get(0);
             ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
-            minValue = partitionValues.minValue().toConstant();
+            minValue = partitionValues.maxValue().toConstant();
         }
         LogicalValuesOperator values = new LogicalValuesOperator.Builder()
                 .setRows(List.of(List.of(minValue)))
