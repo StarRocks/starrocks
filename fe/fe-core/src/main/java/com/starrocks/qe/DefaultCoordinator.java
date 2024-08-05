@@ -893,13 +893,8 @@ public class DefaultCoordinator extends Coordinator {
 
         queryProfile.updateProfile(execState, params);
 
-        lock();
-        try {
-            if (!execState.updateExecStatus(params)) {
-                return;
-            }
-        } finally {
-            unlock();
+        if (!execState.updateExecStatus(params)) {
+            return;
         }
 
         // print fragment instance profile
