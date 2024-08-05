@@ -22,6 +22,8 @@ import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -131,6 +133,30 @@ public class KeyMgrTest {
             reader.close();
 
             Assert.assertEquals(2, keyMgr2.numKeys());
+        } finally {
+            Config.default_master_key = oldConfig;
+        }
+    }
+
+    @Test
+    public void testInitDefaultMasterKey() {
+        new MockUp<System>() {
+            @Mock
+            public void exit(int value) {
+                throw new RuntimeException(String.valueOf(value));
+            }
+        };
+        String oldConfig = Config.default_master_key;
+        try {
+            Config.default_master_key = "plain:aes_128:enwSdCUAiCLLx2Bs9E/neQ==";
+            KeyMgr keyMgr = new KeyMgr();
+            keyMgr.initDefaultMasterKey();
+            Assert.assertEquals(2, keyMgr.numKeys());
+            Config.default_master_key = "plain:aes_128:eCsM28LaDORFTZDUMz3y4g==";
+            keyMgr.initDefaultMasterKey();
+            Assert.fail("should throw exception");
+        } catch (RuntimeException e) {
+            Assert.assertEquals("-1", e.getMessage());
         } finally {
             Config.default_master_key = oldConfig;
         }

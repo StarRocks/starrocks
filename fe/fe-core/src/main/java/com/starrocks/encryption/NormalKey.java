@@ -17,6 +17,7 @@ import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
 
+import java.util.Arrays;
 import java.util.Base64;
 
 public class NormalKey extends EncryptionKey {
@@ -79,8 +80,33 @@ public class NormalKey extends EncryptionKey {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof NormalKey)) {
+            return false;
+        }
+        NormalKey rhs = (NormalKey) obj;
+        if (algorithm != rhs.algorithm) {
+            return false;
+        }
+        if (plainKey != null) {
+            return Arrays.equals(plainKey, rhs.plainKey);
+        } else {
+            return Arrays.equals(encryptedKey, rhs.encryptedKey);
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        if (plainKey != null) {
+            return Arrays.hashCode(plainKey) ^ algorithm.value();
+        } else {
+            return Arrays.hashCode(encryptedKey) ^ algorithm.value();
+        }
+    }
+
+    @Override
     public String toSpec() {
-        return String.format("plain:aes_128:%s", Base64.getEncoder().encodeToString(plainKey));
+        return String.format("plain:%s:%s", algorithm.toString().toLowerCase(), Base64.getEncoder().encodeToString(plainKey));
     }
 
     public NormalKey() {

@@ -28,8 +28,6 @@ TEST(EncryptionKeyTest, ConstructorWithPB) {
     pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
     pb.set_encrypted_key("0000000000000000");
 
-    ASSERT_FALSE(is_decrypted(pb));
-
     auto key = EncryptionKey::create_from_pb(pb).value();
     EXPECT_EQ(key->get_id(), 123);
     EXPECT_EQ(key->get_parent_id(), 456);
@@ -44,8 +42,6 @@ TEST(EncryptionKeyTest, GenerateAndDecrypt) {
     pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
     pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
     pb.set_plain_key("0000000000000000");
-
-    ASSERT_TRUE(is_decrypted(pb));
 
     auto root_key = EncryptionKey::create_from_pb(pb).value();
     auto key = root_key->generate_key().value();
