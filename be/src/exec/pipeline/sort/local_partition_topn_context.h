@@ -48,11 +48,8 @@ public:
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys,
                               int64_t offset, int64_t partition_limit, const TTopNType::type topn_type);
 
-<<<<<<< HEAD
-    Status prepare(RuntimeState* state);
-=======
+
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
->>>>>>> 865bebb090 ([Enhancement] add mem limit for partition top n (#49011))
 
     // Add one chunk to partitioner
     Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
