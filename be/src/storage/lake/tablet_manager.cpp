@@ -559,8 +559,6 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
         } else {
             return Status::InternalError(fmt::format("can not find output rowset schema, id {}", rowset_it->second));
         }
-    } else {
-        return Status::InternalError(fmt::format("input rowset {} not exist in rowset_to_schema", input_id));
     }
     return tablet_schema;
 }

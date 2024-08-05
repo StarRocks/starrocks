@@ -153,6 +153,7 @@ public:
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         }
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
         _has_finalized = true;
         return Status::OK();
@@ -364,6 +365,7 @@ public:
     }
 
     Status finish() override {
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
