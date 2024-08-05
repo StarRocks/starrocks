@@ -50,9 +50,40 @@ public:
         _read_next_batch();
     }
 
+    explicit BitmapRangeIterator(const Roaring& bitmap, uint32_t start) {
+        roaring_init_iterator(&bitmap.roaring, &_iter);
+        roaring::api::roaring_move_uint32_iterator_equalorlarger(&_iter, start);
+        _read_next_batch();
+    }
+
     ~BitmapRangeIterator() = default;
 
     bool has_more_range() const { return !_eof; }
+
+    // read next range into [*from, *to) whose size <= max_range_size.
+    // return false when there is no more range.
+    bool next_range(uint32_t max_range_size, uint32_t end, uint32_t* from, uint32_t* to) {
+        if (_eof) {
+            return false;
+        }
+        if (_buf[_buf_pos] >= end) {
+            _eof = true;
+            return false;
+        } else {
+            *from = _buf[_buf_pos];
+        }
+        uint32_t range_size = 0;
+        do {
+            _last_val = _buf[_buf_pos];
+            _buf_pos++;
+            range_size++;
+            if (_buf_pos == _buf_size) { // read next batch
+                _read_next_batch();
+            }
+        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == _last_val + 1);
+        *to = *from + range_size;
+        return true;
+    }
 
     // read next range into [*from, *to) whose size <= max_range_size.
     // return false when there is no more range.
