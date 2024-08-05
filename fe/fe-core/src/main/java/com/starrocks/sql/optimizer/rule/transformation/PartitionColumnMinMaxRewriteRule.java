@@ -57,9 +57,9 @@ import java.util.stream.Collectors;
  * 2. Partition Values: evaluate the MAX(col) in optimizer for LIST-PARTITION
  * 3. TopN: transform the MAX(col) into TopN query
  */
-public class PartitionPruneForSimpleAggRule extends TransformationRule {
+public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
 
-    public PartitionPruneForSimpleAggRule() {
+    public PartitionColumnMinMaxRewriteRule() {
         super(RuleType.TF_PRUNE_PARTITION_FOR_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.LOGICAL_OLAP_SCAN)));
     }
@@ -70,7 +70,58 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         LogicalOlapScanOperator scanOperator = input.getInputs().get(0).getInputs().get(0).getOp().cast();
         Table table = scanOperator.getTable();
         return table.isNativeTableOrMaterializedView()
+                && ((OlapTable) table).isPartitionedTable()
                 && checkMinMaxAggregation(aggregationOperator, scanOperator, context);
+    }
+
+    /**
+     * Check simple aggregation functions like MIN/MAX
+     * 1. No GROUP-BY
+     * 2. No HAVING
+     * 3. Only MAX or MAX
+     * 4. MIN/MAX only refers partition-column
+     */
+    private boolean checkMinMaxAggregation(LogicalAggregationOperator aggregationOperator,
+                                           LogicalScanOperator scanOperator,
+                                           OptimizerContext context) {
+        boolean simpleAgg = aggregationOperator.getAggregations().entrySet().stream().allMatch(
+                entry -> {
+                    CallOperator aggregator = entry.getValue();
+                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+                    String functionName = aggregateFunction.functionName();
+                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
+                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
+                        if (usedColumns.size() != 1) {
+                            return false;
+                        }
+                        ColumnRefOperator usedColumn =
+                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
+                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+                        if (column == null) {
+                            // not a colum on table
+                            return false;
+                        }
+                        OlapTable olapTable = (OlapTable) scanOperator.getTable();
+                        if (!olapTable.getPartitionColumns().contains(column)) {
+                            return false;
+                        }
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+        );
+        if (!simpleAgg) {
+            return false;
+        }
+        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
+        if (groupingKeys != null && !groupingKeys.isEmpty()) {
+            return false;
+        }
+        if (aggregationOperator.getPredicate() != null) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -113,50 +164,6 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         return Pair.create(hasMin, hasMax);
     }
 
-    /**
-     * Check simple aggregation functions like MIN/MAX
-     * 1. No GROUP-BY
-     * 2. No HAVING
-     * 3. Only MAX or MAX
-     */
-    private boolean checkMinMaxAggregation(LogicalAggregationOperator aggregationOperator,
-                                           LogicalScanOperator scanOperator,
-                                           OptimizerContext context) {
-        boolean simpleAgg = aggregationOperator.getAggregations().entrySet().stream().allMatch(
-                entry -> {
-                    CallOperator aggregator = entry.getValue();
-                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
-                    String functionName = aggregateFunction.functionName();
-                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
-                    if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
-                        if (usedColumns.size() != 1) {
-                            return false;
-                        }
-                        ColumnRefOperator usedColumn =
-                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
-                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-                        if (column == null) {
-                            // not a colum on table
-                            return false;
-                        }
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-        );
-        if (!simpleAgg) {
-            return false;
-        }
-        List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
-        if (groupingKeys != null && !groupingKeys.isEmpty()) {
-            return false;
-        }
-        if (aggregationOperator.getPredicate() != null) {
-            return false;
-        }
-        return true;
-    }
 
     /**
      * Apply this optimization if:
