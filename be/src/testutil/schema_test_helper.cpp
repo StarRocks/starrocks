@@ -88,8 +88,8 @@ void SchemaTestHelper::add_column_pb_to_tablet_schema(TabletSchemaPB* tablet_sch
     column->set_aggregation(agg);
 }
 
-ColumnPB SchemaTestHelper::gen_column_pb(int32_t id, const std::string& name, bool nullable,
-                                         LogicalType type, bool is_key) {
+ColumnPB SchemaTestHelper::gen_column_pb(int32_t id, const std::string& name, bool nullable, LogicalType type,
+                                         bool is_key) {
     ColumnPB col;
 
     col.set_unique_id(id);
