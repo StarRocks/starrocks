@@ -29,12 +29,12 @@ inline thread_local int64_t tls_delta_memory = 0;
 template <class Base>
 class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<Base>> {
 public:
-    ALWAYS_INLINE void* alloc(size_t size) override {
+    void* alloc(size_t size) override {
         void* result = Base::alloc(size);
         _memory_usage += tls_delta_memory;
         return result;
     }
-    ALWAYS_INLINE void free(void* ptr) override {
+    void free(void* ptr) override {
         Base::free(ptr);
         _memory_usage -= tls_delta_memory;
     }

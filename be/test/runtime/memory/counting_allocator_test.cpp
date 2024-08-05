@@ -27,7 +27,7 @@ TEST(CountingAllocatorTest, normal) {
     {
         // stl container
         memory_usage = 0;
-        std::vector<int, CountingAllocator<int>> vec{CountingAllocator<int>(&memory_usage)};
+        std::vector<int, STLCountingAllocator<int>> vec{STLCountingAllocator<int>(&memory_usage)};
         for (int i = 0; i < 100; ++i) {
             vec.push_back(i);
         }
@@ -42,7 +42,7 @@ TEST(CountingAllocatorTest, normal) {
         // phmap
         phmap::flat_hash_map<int, int, phmap::priv::hash_default_hash<int>, phmap::priv::hash_default_eq<int>,
                              CountingAllocator<int>>
-                m{CountingAllocator<int>(&memory_usage)};
+                m{STLCountingAllocator<int>(&memory_usage)};
         m.insert({1, 1});
         ASSERT_EQ(memory_usage, 28);
         m.insert({2, 2});
