@@ -60,7 +60,6 @@ import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
-import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.CommitRateExceededException;

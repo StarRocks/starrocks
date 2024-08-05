@@ -27,13 +27,16 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class SegmentLoadPendingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(SegmentLoadPendingTask.class);
 
     private static final String SPARK_OUTPUT_DATA_FILE_SUFFIX = "dat";
+    private static final String SPARK_OUTPUT_PB_FILE_SUFFIX = "pb";
     private static final String SPARK_OUTPUT_SCHEMA_FILE_SUFFIX = "schema";
     private static final String SPARK_OUTPUT_TABLET_DATA_DIR = "/data";
 
@@ -78,11 +81,12 @@ public class SegmentLoadPendingTask extends LoadTask {
                     + callback.getCallbackId());
         }
 
-        long totalFileSize = 0;
-        int totalFileNum = 0;
+        long totalDataFileSize = 0;
+        int totalDataFileNum = 0;
         SegmentPendingTaskAttachment segmentAttachment = (SegmentPendingTaskAttachment) attachment;
         List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
         String path = fileGroup.getFilePaths().get(0);
+        Set<String> allPbFilePrefix = new HashSet<>();
 
         if (brokerDesc.hasBroker()) {
             BrokerUtil.parseFile(path, brokerDesc, fileStatuses, false, true);
@@ -99,11 +103,15 @@ public class SegmentLoadPendingTask extends LoadTask {
             // tableId/partitionId/indexId/tabletId/tablet.schema
             String relativePath = filePath.substring(filePath.indexOf(String.valueOf(tableId)));
 
-            if (filePath.endsWith(SPARK_OUTPUT_DATA_FILE_SUFFIX) && filePath.contains(SPARK_OUTPUT_TABLET_DATA_DIR)) {
+            if (filePath.contains(SPARK_OUTPUT_TABLET_DATA_DIR) && filePath.endsWith(SPARK_OUTPUT_DATA_FILE_SUFFIX)) {
                 String tabletMeta = relativePath.split(SPARK_OUTPUT_TABLET_DATA_DIR)[0];
                 segmentAttachment.addDataFileInfo(tabletMeta, Pair.create(filePath, fileStatus.size));
-                totalFileNum++;
-                totalFileSize += fileStatus.getSize();
+                totalDataFileNum++;
+                totalDataFileSize += fileStatus.getSize();
+            } else if (filePath.contains(SPARK_OUTPUT_TABLET_DATA_DIR)
+                    && filePath.endsWith(SPARK_OUTPUT_PB_FILE_SUFFIX)) {
+                String tabletMeta = relativePath.split(SPARK_OUTPUT_TABLET_DATA_DIR)[0];
+                allPbFilePrefix.add(tabletMeta);
             } else if (filePath.endsWith(SPARK_OUTPUT_SCHEMA_FILE_SUFFIX)) {
                 String tabletMeta = relativePath.substring(0, relativePath.lastIndexOf("/"));
                 segmentAttachment.addSchemaFilePath(tabletMeta, filePath);
@@ -116,9 +124,15 @@ public class SegmentLoadPendingTask extends LoadTask {
                     + callback.getCallbackId());
         }
 
-         LOG.info("get {} files to be loaded. total size: {}. cost: {} ms, job: {}",
-                 totalFileNum, totalFileSize, (System.currentTimeMillis() - start), callback.getCallbackId());
+        if (allPbFilePrefix.size() != segmentAttachment.getTabletMetaToDataFileInfo().keySet().size()
+                || !allPbFilePrefix.containsAll(segmentAttachment.getTabletMetaToDataFileInfo().keySet())) {
+            throw new UserException("Segment Load file path is invalid, segment pb files does not match data files. " +
+                    "job: " + callback.getCallbackId());
+        }
 
-        ((SegmentLoadJob) callback).setLoadFileInfo(totalFileNum, totalFileSize);
+        LOG.info("get {} files to be loaded. total size: {}. cost: {} ms, job: {}",
+                 totalDataFileNum, totalDataFileSize, (System.currentTimeMillis() - start), callback.getCallbackId());
+
+        ((SegmentLoadJob) callback).setLoadFileInfo(totalDataFileNum, totalDataFileSize);
     }
 }
