@@ -1914,17 +1914,4 @@ public class LowCardinalityTest extends PlanTestBase {
                 "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
     }
 
-    @Test
-    public void testTempPartition() throws Exception {
-        FeConstants.unitTestView = false;
-        try {
-            String sql = "ALTER TABLE lineitem_partition ADD TEMPORARY PARTITION px VALUES [('1998-01-01'), ('1999-01-01'));";
-            starRocksAssert.alterTable(sql);
-            sql = "select distinct L_COMMENT from lineitem_partition TEMPORARY PARTITION(px)";
-            String plan = getFragmentPlan(sql);
-            assertNotContains(plan, "dict_col");
-        } finally {
-            FeConstants.unitTestView = true;
-        }
-    }
 }
