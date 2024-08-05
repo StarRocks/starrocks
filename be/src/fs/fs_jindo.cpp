@@ -37,6 +37,9 @@ using namespace fmt::literals;
 
 namespace starrocks {
 
+const static std::string JINDO_AGENT_FEATURE_OPTION = "fs.oss.user.agent.features";
+const static std::string ENGINE_NAME = "StarRocks";
+
 int JindoSdkConfig::loadConfig(const std::string& config) {
     std::ifstream infile{config};
     std::string line, seg;
@@ -147,6 +150,9 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     for (auto& kv : _jindo_config_map) {
         jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
     }
+
+    // Just for oss-hdfs to distinguish the engines
+    jdo_setOption(jdo_options, JINDO_AGENT_FEATURE_OPTION.c_str(), ENGINE_NAME.c_str());
 
     // load properties in catalog definition
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
