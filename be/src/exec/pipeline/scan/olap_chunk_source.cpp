@@ -315,7 +315,7 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     int64_t leaf_size = 0;
     for (const auto& path : *paths) {
         auto& root = path->path();
-        int32_t index = _tablet->field_index_with_max_version(root);
+        int32_t index = _tablet_schema->field_index(root);
         auto field = schema->get_field_by_name(root);
         if (index >= 0 && field != nullptr) {
             auto res = path->convert_by_index(field.get(), index);
