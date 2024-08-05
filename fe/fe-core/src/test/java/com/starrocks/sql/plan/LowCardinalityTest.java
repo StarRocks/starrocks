@@ -1913,4 +1913,5 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "if(DictExpr(10: S_ADDRESS,[<place-holder> = '']), '', " +
                 "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
     }
+
 }
