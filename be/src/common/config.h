@@ -1163,6 +1163,7 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
 CONF_Bool(datacache_tiered_cache_enable, "true");
+CONF_Bool(datacache_persistence_enable, "false");
 // DataCache engines, alternatives: starcache.
 // `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manully configured by users.
