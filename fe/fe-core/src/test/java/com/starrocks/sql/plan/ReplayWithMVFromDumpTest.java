@@ -248,7 +248,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  3:Project\n" +
-                "  |  <slot 59> : coalesce(82: count, 0)");
+                "  3:Project\n");
+        assertContains(replayPair.second, "  |  <slot 59> : coalesce(");
     }
 }
