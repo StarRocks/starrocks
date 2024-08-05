@@ -23,15 +23,12 @@
 #include "runtime/current_thread.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_hook_allocator.h"
+#include "runtime/memory/roaring_allocator.h"
 #include "runtime/memory/roaring_hook.h"
 #include "runtime/runtime_state.h"
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
 #include "util/random.h"
-#include "runtime/memory/roaring_allocator.h"
-#include "runtime/memory/roaring_hook.h"
-#include "runtime/memory/counting_allocator.h"
-
 
 namespace starrocks {
 
@@ -40,10 +37,11 @@ public:
     void SetUp() {}
     void TearDown() {}
 
-    RoaringBitmapAllocTest(size_t start, size_t end, size_t shift_width):
-        _start(start), _end(end), _shift_width(shift_width) {}
-    template<class Alloc>
+    RoaringBitmapAllocTest(size_t start, size_t end, size_t shift_width)
+            : _start(start), _end(end), _shift_width(shift_width) {}
+    template <class Alloc>
     void do_bench(benchmark::State& state);
+
 private:
     std::unique_ptr<detail::Roaring64Map> _bitmap;
     std::unique_ptr<Allocator> _allocator;
@@ -73,16 +71,16 @@ static void BM_mem_hook_allocator(benchmark::State& state) {
     int num_threads = state.threads;
     for (auto _ : state) {
         std::vector<std::thread> threads;
-        for (int i = 0;i < num_threads;i++) {
+        for (int i = 0; i < num_threads; i++) {
             threads.emplace_back([&]() {
                 RoaringBitmapAllocTest perf(start, end, shift_width);
                 perf.do_bench<MemHookAllocator>(state);
             });
         }
-        for (auto& thread: threads) {
+        for (auto& thread : threads) {
             thread.join();
         }
-   }
+    }
 }
 
 static void BM_counting_allocator(benchmark::State& state) {
@@ -92,16 +90,16 @@ static void BM_counting_allocator(benchmark::State& state) {
     int num_threads = state.threads;
     for (auto _ : state) {
         std::vector<std::thread> threads;
-        for (int i = 0;i < num_threads;i++) {
-            threads.emplace_back([&] () {
+        for (int i = 0; i < num_threads; i++) {
+            threads.emplace_back([&]() {
                 RoaringBitmapAllocTest perf(start, end, shift_width);
                 perf.do_bench<CountingAllocatorWithHook>(state);
             });
         }
-        for(auto& thread: threads) {
+        for (auto& thread : threads) {
             thread.join();
         }
-   }
+    }
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
@@ -114,8 +112,22 @@ static void process_args(benchmark::internal::Benchmark* b) {
     }
 }
 
-BENCHMARK(BM_mem_hook_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8)->Threads(16)->Threads(32);
-BENCHMARK(BM_counting_allocator)->Apply(process_args)->Unit(benchmark::kMillisecond)->Threads(1)->Threads(4)->Threads(8)->Threads(16)->Threads(32);
+BENCHMARK(BM_mem_hook_allocator)
+        ->Apply(process_args)
+        ->Unit(benchmark::kMillisecond)
+        ->Threads(1)
+        ->Threads(4)
+        ->Threads(8)
+        ->Threads(16)
+        ->Threads(32);
+BENCHMARK(BM_counting_allocator)
+        ->Apply(process_args)
+        ->Unit(benchmark::kMillisecond)
+        ->Threads(1)
+        ->Threads(4)
+        ->Threads(8)
+        ->Threads(16)
+        ->Threads(32);
 
 } // namespace starrocks
 

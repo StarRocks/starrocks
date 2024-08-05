@@ -205,8 +205,10 @@ void AggregatorParams::init() {
 
 class ThreadLocalStateAllocatorSetter {
 public:
-    ThreadLocalStateAllocatorSetter(Allocator* allocator): _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
+    ThreadLocalStateAllocatorSetter(Allocator* allocator)
+            : _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
     ~ThreadLocalStateAllocatorSetter() = default;
+
 private:
     ThreadLocalAggregateStateAllocatorSetter _agg_state_allocator_setter;
     ThreadLocalRoaringAllocatorSetter _roaring_allocator_setter;
@@ -214,7 +216,6 @@ private:
 
 #define SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(allocator) \
     auto VARNAME_LINENUM(alloc_setter) = ThreadLocalStateAllocatorSetter(allocator)
-
 
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {
     _allocator = std::make_unique<CountingAllocatorWithHook>();

@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "runtime/memory/allocator.h"
 #include "column/hash_set.h"
 #include "common/config.h"
+#include "runtime/memory/allocator.h"
 
 namespace starrocks {
 
@@ -75,15 +75,16 @@ public:
         _prev = tls_agg_state_allocator;
         tls_agg_state_allocator = allocator;
     }
-    ~ThreadLocalAggregateStateAllocatorSetter() {
-        tls_agg_state_allocator = _prev;
-    }
+    ~ThreadLocalAggregateStateAllocatorSetter() { tls_agg_state_allocator = _prev; }
+
 private:
     Allocator* _prev = nullptr;
 };
 
 template <typename T>
-using HashSetWithAggStateAllocator = phmap::flat_hash_set<T, StdHash<T>, phmap::priv::hash_default_eq<T>, AggregateStateAllocator<T>>;
+using HashSetWithAggStateAllocator =
+        phmap::flat_hash_set<T, StdHash<T>, phmap::priv::hash_default_eq<T>, AggregateStateAllocator<T>>;
 
-using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash, AggregateStateAllocator<SliceWithHash>>;
-}
+using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
+                                                               AggregateStateAllocator<SliceWithHash>>;
+} // namespace starrocks

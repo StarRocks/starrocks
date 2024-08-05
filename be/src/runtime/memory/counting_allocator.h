@@ -26,7 +26,7 @@ namespace starrocks {
 
 inline thread_local int64_t tls_delta_memory = 0;
 
-template<class Base>
+template <class Base>
 class CountingAllocator final : public AllocatorFactory<Base, CountingAllocator<Base>> {
 public:
     ALWAYS_INLINE void* alloc(size_t size) override {
@@ -89,9 +89,7 @@ public:
         return result;
     }
 
-    int64_t memory_usage() const {
-        return _memory_usage;
-    }
+    int64_t memory_usage() const { return _memory_usage; }
 
     int64_t _memory_usage = 0;
 };
