@@ -19,7 +19,9 @@ public enum MetadataTableType {
     REFS("refs"),
     HISTORY("history"),
     METADATA_LOG_ENTRIES("metadata_log_entries"),
-    SNAPSHOTS("snapshots");
+    SNAPSHOTS("snapshots"),
+    MANIFESTS("manifests"),
+    FILES("files");
 
     public final String typeString;
 

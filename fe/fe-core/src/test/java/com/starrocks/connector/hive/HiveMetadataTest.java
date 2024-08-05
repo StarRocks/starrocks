@@ -31,8 +31,10 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -200,8 +202,10 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), TableVersionRange.empty(), null, null, -1);
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPartitionKeys(Lists.newArrayList(hivePartitionKey1, hivePartitionKey2))
+                        .build();
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(hiveTable, params);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -750,12 +754,12 @@ public class HiveMetadataTest {
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemotePartitions(table, partitionNames);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitionInfoList = hiveMetadata.getRemotePartitions(table, partitionNames);
+        Assert.assertEquals(3, partitionInfoList.size());
     }
 
     @Test
-    public void testGetRemoteFileInfos(
+    public void testGetRemoteFiles(
             @Mocked HiveTable table,
             @Mocked HiveMetastoreOperations hmsOps) {
         List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
@@ -776,7 +780,8 @@ public class HiveMetadataTest {
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(table, partitionNames);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, params);
         Assert.assertEquals(3, remoteFileInfos.size());
     }
 }

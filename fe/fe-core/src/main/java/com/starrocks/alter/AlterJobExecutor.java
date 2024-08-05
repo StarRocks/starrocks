@@ -14,26 +14,40 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,9 +87,15 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
+import org.threeten.extra.PeriodDuration;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,8 +146,22 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.db = db;
         this.table = table;
 
-        for (AlterClause alterClause : statement.getAlterClauseList()) {
-            visit(alterClause, context);
+        if (statement.hasRollupOp()) {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
+            try {
+                MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                        .getMaterializedViewHandler();
+                Preconditions.checkState(table instanceof OlapTable);
+                ErrorReport.wrapWithRuntimeException(() ->
+                        materializedViewHandler.process(statement.getAlterClauseList(), db, (OlapTable) table));
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
+            }
+        } else {
+            for (AlterClause alterClause : statement.getAlterClauseList()) {
+                visit(alterClause, context);
+            }
         }
         return null;
     }
@@ -472,8 +506,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
             try {
-                AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-                alterJobMgr.modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
+                modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
             }
@@ -481,6 +514,118 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             throw new AlterJobException(e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Batch update partitions' properties
+     * caller should hold the db lock
+     */
+    private void modifyPartitionsProperty(Database db,
+                                          OlapTable olapTable,
+                                          List<String> partitionNames,
+                                          Map<String, String> properties)
+            throws DdlException, AnalysisException {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+        }
+
+        for (String partitionName : partitionNames) {
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+        }
+
+        boolean hasInMemory = properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY);
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        // get value from properties here
+        // 1. data property
+        PeriodDuration periodDuration = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (!partitionInfo.isRangePartition()) {
+                throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
+            }
+            if (Strings.isNotBlank(storageCoolDownTTL)) {
+                periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            }
+        }
+        DataProperty newDataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
+        // 2. replication num
+        short newReplicationNum =
+                PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);
+        // 3. in memory
+        boolean newInMemory = PropertyAnalyzer.analyzeBooleanProp(properties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // 4. tablet type
+        TTabletType tTabletType =
+                PropertyAnalyzer.analyzeTabletType(properties);
+
+        // modify meta here
+        for (String partitionName : partitionNames) {
+            Partition partition = olapTable.getPartition(partitionName);
+            // 1. date property
+
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+
+            if (newDataProperty != null) {
+                // for storage_cooldown_ttl
+                if (periodDuration != null) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+                    PartitionKey partitionKey = range.upperEndpoint();
+                    if (partitionKey.isMaxValue()) {
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+                    } else {
+                        String stringUpperValue = partitionKey.getKeys().get(0).getStringValue();
+                        DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                        LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                        LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                        long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+                    }
+                }
+                partitionInfo.setDataProperty(partition.getId(), newDataProperty);
+            }
+            // 2. replication num
+            if (newReplicationNum != (short) -1) {
+                if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                    throw new DdlException(
+                            "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
+                }
+                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
+                // update default replication num if this table is unpartitioned table
+                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    olapTable.setReplicationNum(newReplicationNum);
+                }
+            }
+            // 3. in memory
+            boolean oldInMemory = partitionInfo.getIsInMemory(partition.getId());
+            if (hasInMemory && (newInMemory != oldInMemory)) {
+                partitionInfo.setIsInMemory(partition.getId(), newInMemory);
+            }
+            // 4. tablet type
+            if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
+                partitionInfo.setTabletType(partition.getId(), tTabletType);
+            }
+            ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
+                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+            modifyPartitionInfos.add(info);
+        }
+
+        // log here
+        BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
     }
 
     // Alter View

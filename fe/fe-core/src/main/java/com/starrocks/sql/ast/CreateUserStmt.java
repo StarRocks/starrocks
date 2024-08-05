@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 /*
  * We support the following create user stmts:
@@ -40,8 +41,9 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
     public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
                           UserAuthOption authOption,
                           List<String> defaultRoles,
+                          Map<String, String> properties,
                           NodePosition pos) {
-        super(userIdentity, authOption, pos);
+        super(userIdentity, authOption, properties, pos);
         this.ifNotExists = ifNotExists;
         this.setRoleType = SetRoleType.ROLE;
         this.defaultRoles = defaultRoles;

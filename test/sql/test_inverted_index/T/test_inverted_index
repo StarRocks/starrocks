@@ -1,4 +1,4 @@
--- name: test_basic_create_index
+-- name: test_basic_create_index @slow
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;

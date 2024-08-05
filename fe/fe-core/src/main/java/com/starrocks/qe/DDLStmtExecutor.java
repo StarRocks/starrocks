@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
@@ -507,7 +508,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
+                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
             });
             return null;
         }
@@ -585,7 +586,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAlterJobMgr().processAlterCluster(stmt);
+                SystemHandler systemHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler();
+                systemHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
             });
             return null;
         }

@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
@@ -98,6 +99,14 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         if (registerResult.first) {
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
+
+                            // We place the set session environment code here, because we want to notify user if there
+                            // are some errors when setting session environment.
+                            // Unfortunately, the client cannot receive the message.
+                            UserProperty userProperty = context.getGlobalStateMgr().getAuthenticationMgr()
+                                    .getUserProperty(context.getCurrentUserIdentity().getUser());
+                            context.updateByUserProperty(userProperty);
+
                             MysqlProto.sendResponsePacket(context);
                         } else {
                             context.getState().setError(registerResult.second);

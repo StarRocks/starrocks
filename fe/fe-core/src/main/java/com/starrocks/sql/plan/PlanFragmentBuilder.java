@@ -1090,6 +1090,7 @@ public class PlanFragmentBuilder {
             }
 
             hudiScanNode.setLimit(node.getLimit());
+            hudiScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hudiScanNode);
@@ -1132,6 +1133,7 @@ public class PlanFragmentBuilder {
             }
 
             hdfsScanNode.setLimit(node.getLimit());
+            hdfsScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
@@ -1172,6 +1174,7 @@ public class PlanFragmentBuilder {
             }
 
             fileTableScanNode.setLimit(node.getLimit());
+            fileTableScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(fileTableScanNode);
@@ -1226,6 +1229,7 @@ public class PlanFragmentBuilder {
             }
 
             deltaLakeScanNode.setLimit(node.getLimit());
+            deltaLakeScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(deltaLakeScanNode);
@@ -1270,6 +1274,7 @@ public class PlanFragmentBuilder {
             }
 
             paimonScanNode.setLimit(node.getLimit());
+            paimonScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(paimonScanNode);
@@ -1414,6 +1419,7 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setLimit(node.getLimit());
+            icebergScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(icebergScanNode);
@@ -1600,6 +1606,12 @@ public class PlanFragmentBuilder {
                                 break;
                             case "JOB_ID":
                                 scanNode.setJobId(constantOperator.getBigint());
+                                break;
+                            case "ID":
+                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
                                 break;
                             case "TYPE":
                                 scanNode.setType(constantOperator.getVarchar());

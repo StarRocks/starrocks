@@ -89,8 +89,8 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
-    private static final int DATA_FILE = 0;
-    private static final int DELETE_FILE = 1;
+    protected static final int DATA_FILE = 0;
+    protected static final int DELETE_FILE = 1;
     private final String manifestBean;
     private final String predicateInfo;
     private final boolean loadColumnStats;

@@ -439,8 +439,11 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
 
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
+    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                         std::filesystem::file_size(small_page_file));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                         std::filesystem::file_size(small_page_file), 100000, shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -466,6 +469,8 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     // only collect io of 5 pages, 5001-6000, 6001-7000, 7001-8000, 8001-9000, 9001-10000 and a dict page.
     // three columns, (5 + 1) * 3 = 18
     EXPECT_EQ(ranges.size(), 18);
+
+    EXPECT_EQ(shared_buffer->current_range_ref_sum(), 28);
 
     // The second row group is not prepare yet
 

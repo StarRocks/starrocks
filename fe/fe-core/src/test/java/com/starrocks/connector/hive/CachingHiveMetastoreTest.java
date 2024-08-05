@@ -273,7 +273,7 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
-        Assert.assertEquals(ORC, partition.getInputFormat());
+        Assert.assertEquals(ORC, partition.getFileFormat());
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -289,12 +289,12 @@ public class CachingHiveMetastoreTest {
                 cachingHiveMetastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         Partition partition1 = partitions.get("part1=1/part2=2");
-        Assert.assertEquals(ORC, partition1.getInputFormat());
+        Assert.assertEquals(ORC, partition1.getFileFormat());
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
 
         Partition partition2 = partitions.get("part1=3/part2=4");
-        Assert.assertEquals(ORC, partition2.getInputFormat());
+        Assert.assertEquals(ORC, partition2.getFileFormat());
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
     }
