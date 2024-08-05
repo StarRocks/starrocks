@@ -4483,10 +4483,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: 60
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

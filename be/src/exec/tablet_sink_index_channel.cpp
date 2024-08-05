@@ -191,7 +191,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // when load coordinator BE have upgrade to 2.1 but other BE still in 2.0 or previous
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
-    request.set_timeout_ms(_rpc_timeout_ms);
+    request.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -213,7 +213,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
-    open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+    open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
     open_closure->cntl.ignore_eovercrowded();
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
