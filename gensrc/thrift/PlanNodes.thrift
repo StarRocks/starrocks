@@ -528,12 +528,8 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
-<<<<<<< HEAD
-=======
-  35: optional bool enable_prune_column_after_index_filter
-  36: optional bool enable_gin_filter
+  // reserved for backport
   37: optional i64 schema_id
->>>>>>> dc57abbcec ([Enhancement] Initialize olap_reader without copying tablet schema (#48485))
 }
 
 struct TJDBCScanNode {

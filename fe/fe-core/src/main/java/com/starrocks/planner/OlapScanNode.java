@@ -850,12 +850,8 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
-<<<<<<< HEAD
         Set<String> bfColumns = olapTable.getBfColumns();
-=======
-        Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
-        long schemaId = -1;
->>>>>>> dc57abbcec ([Enhancement] Initialize olap_reader without copying tablet schema (#48485))
+        long schemaId = 0;
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
