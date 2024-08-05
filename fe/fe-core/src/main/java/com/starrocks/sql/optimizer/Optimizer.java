@@ -553,7 +553,7 @@ public class Optimizer {
         ruleRewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
-
+        ruleRewriteIterative(tree, rootTaskContext, new PartitionPruneForSimpleAggRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
@@ -577,7 +577,6 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        ruleRewriteIterative(tree, rootTaskContext, new PartitionPruneForSimpleAggRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());

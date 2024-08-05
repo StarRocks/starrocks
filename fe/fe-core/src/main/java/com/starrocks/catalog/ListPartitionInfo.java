@@ -615,7 +615,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 asc ? ListPartitionCell.single(lhs).minValue() : ListPartitionCell.single(lhs).maxValue();
         ListPartitionValue rhsValue =
                 asc ? ListPartitionCell.single(rhs).minValue() : ListPartitionCell.single(rhs).maxValue();
-        return lhsValue.compareTo(rhsValue);
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
     }
 
     private static int compareColumns(List<LiteralExpr> lhs, List<LiteralExpr> rhs) {
@@ -634,7 +634,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 asc ? ListPartitionCell.multi(lhs).minValue() : ListPartitionCell.multi(lhs).maxValue();
         ListPartitionValue rhsValue =
                 asc ? ListPartitionCell.multi(rhs).minValue() : ListPartitionCell.multi(rhs).maxValue();
-        return lhsValue.compareTo(rhsValue);
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
     }
 
     @Override

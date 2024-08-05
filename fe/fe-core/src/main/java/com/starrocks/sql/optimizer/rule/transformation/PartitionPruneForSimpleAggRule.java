@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -80,16 +81,16 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         Pair<Boolean, Boolean> minMax = checkMinMax(aggregationOperator);
 
         try {
+            OptExpression result = null;
             if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
-                return Lists.newArrayList(optimizeWithPartitionValues(aggregationOperator, table, minMax));
+                result = optimizeWithPartitionValues(aggregationOperator, table, minMax);
+            } else if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
+                result = optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table, minMax);
+            } else if (checkRewriteTopN(scanOperator, table)) {
+                result = optimizeWithTop1(input, aggregationOperator, scanOperator, table, minMax);
             }
-            if (checkRewriteTopN(scanOperator, table)) {
-                return Lists.newArrayList(optimizeWithTop1(input, aggregationOperator, scanOperator, table,
-                        minMax));
-            }
-            if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
-                return Lists.newArrayList(optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table,
-                        minMax));
+            if (result != null) {
+                return Lists.newArrayList(result);
             }
         } catch (NotImplementedException ignore) {
             // Some not-supported partition tables
@@ -121,13 +122,24 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
     private boolean checkMinMaxAggregation(LogicalAggregationOperator aggregationOperator,
                                            LogicalScanOperator scanOperator,
                                            OptimizerContext context) {
-        boolean simpleAgg = aggregationOperator.getAggregations().values().stream().allMatch(
-                aggregator -> {
+        boolean simpleAgg = aggregationOperator.getAggregations().entrySet().stream().allMatch(
+                entry -> {
+                    CallOperator aggregator = entry.getValue();
                     AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
                     String functionName = aggregateFunction.functionName();
                     ColumnRefSet usedColumns = aggregator.getUsedColumns();
                     if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN)) {
-                        return usedColumns.size() == 1;
+                        if (usedColumns.size() != 1) {
+                            return false;
+                        }
+                        ColumnRefOperator usedColumn =
+                                context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
+                        Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+                        if (column == null) {
+                            // not a colum on table
+                            return false;
+                        }
+                        return true;
                     } else {
                         return false;
                     }
@@ -243,27 +255,40 @@ public class PartitionPruneForSimpleAggRule extends TransformationRule {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
 
-        ConstantOperator minValue = null;
-        if (hasMinMax.first) {
-            List<Long> sorted = partitionInfo.getSortedPartitions(true);
-            sorted.retainAll(nonEmptyPartitionIds);
-            long minPartition = sorted.get(0);
-            ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
-            minValue = partitionValues.minValue().toConstant();
-        }
-        if (hasMinMax.second) {
-            List<Long> sorted = partitionInfo.getSortedPartitions(false);
-            sorted.retainAll(nonEmptyPartitionIds);
-            long maxPartition = sorted.get(0);
-            ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
-            minValue = partitionValues.maxValue().toConstant();
+        List<ScalarOperator> valueRow = Lists.newArrayList();
+        List<ColumnRefOperator> columns = Lists.newArrayList();
+        for (var entry : aggregationOperator.getAggregations().entrySet()) {
+            if (isMin(entry.getValue())) {
+                List<Long> sorted = partitionInfo.getSortedPartitions(true);
+                sorted.retainAll(nonEmptyPartitionIds);
+                long minPartition = sorted.get(0);
+                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
+                ConstantOperator minValue = partitionValues.minValue().toConstant();
+                valueRow.add(minValue);
+                columns.add(entry.getKey());
+            } else if (isMax(entry.getValue())) {
+                List<Long> sorted = partitionInfo.getSortedPartitions(false);
+                sorted.retainAll(nonEmptyPartitionIds);
+                long maxPartition = sorted.get(0);
+                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
+                ConstantOperator maxValue = partitionValues.maxValue().toConstant();
+                valueRow.add(maxValue);
+                columns.add(entry.getKey());
+            }
         }
         LogicalValuesOperator values = new LogicalValuesOperator.Builder()
-                .setRows(List.of(List.of(minValue)))
-                .setColumnRefSet(Lists.newArrayList(aggregationOperator.getColumnRefMap().keySet()))
+                .setRows(List.of(valueRow))
+                .setColumnRefSet(columns)
                 .build();
-
         return OptExpression.create(values);
+    }
+
+    private static boolean isMax(CallOperator call) {
+        return call.getFunction().functionName().equalsIgnoreCase(FunctionSet.MAX);
+    }
+
+    private static boolean isMin(CallOperator call) {
+        return call.getFunction().functionName().equalsIgnoreCase(FunctionSet.MIN);
     }
 
     /**
