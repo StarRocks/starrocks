@@ -424,13 +424,6 @@ public class RemoteScanRangeLocations {
         // making BE have to scan more data to find rows that meet the conditions.
         // So shuffle scan ranges can naturally disrupt the scan ranges' order to avoid very bad cases.
         Collections.shuffle(result);
-
-        LOG.debug("Get {} scan range locations cost: {} ms",
-                getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
         return result;
-    }
-
-    public int getScanRangeLocationsSize() {
-        return result.size();
     }
 }
