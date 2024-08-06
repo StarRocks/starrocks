@@ -122,6 +122,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
+            boolean forceDelete = Config.meta_sync_force_delete_shard_meta;
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
@@ -130,7 +131,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
+                    if (stCode != TStatusCode.INVALID_ARGUMENT && !forceDelete) {
                         response.failedTablets.forEach(shards::remove);
                     }
                 }
@@ -139,7 +140,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                continue;
+                if (!forceDelete) {
+                    continue;
+                }
             }
 
             // 2. delete shard
