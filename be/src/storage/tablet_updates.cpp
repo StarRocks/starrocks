@@ -2015,7 +2015,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
     return Status::OK();
 }
 
-Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, const vector<uint32_t>& all_rowset_ids) {
+Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, const vector<uint32_t>& all_rowset_ids,
+                                     uint64_t task_id) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
@@ -2084,8 +2085,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     cfg.algorithm = algorithm;
 
     // compaction task maybe failed if tablet is deleted
-    st = compaction_merge_rowsets(_tablet, info->start_version.major_number(), input_rowsets, rowset_writer.get(), cfg,
-                                  cur_tablet_schema);
+    st = compaction_merge_rowsets(_tablet, task_id, info->start_version.major_number(), input_rowsets,
+                                  rowset_writer.get(), cfg, cur_tablet_schema);
     if (!st.ok()) {
         if (_tablet.tablet_state() == TABLET_SHUTDOWN) {
             std::string msg = strings::Substitute(
@@ -2109,7 +2110,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     }
     // 4. commit compaction
     EditVersion version;
-    RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
+    RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version, task_id));
     {
         std::unique_lock<std::mutex> ul(_lock);
         auto st = _wait_for_version(version, 120000, ul, true);
@@ -2170,7 +2171,7 @@ Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) 
 }
 
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
-                                         EditVersion* commit_version) {
+                                         EditVersion* commit_version, uint64_t task_id) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
     _compaction_state = std::make_unique<CompactionState>();
@@ -2284,13 +2285,11 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
     LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
-              << " version:" << edit_version_info_ptr->version.to_string();
-    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
-            << ", disk:" << _tablet.data_dir()->path() << " version:" << edit_version_info_ptr->version.to_string()
-            << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-            << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-            << " #pending:" << _pending_commits.size()
-            << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
+              << ", disk:" << _tablet.data_dir()->path() << " version:" << edit_version_info_ptr->version.to_string()
+              << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+              << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+              << " #pending:" << _pending_commits.size()
+              << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(2) << "update compaction commit " << _debug_string(false, true);
     _check_for_apply();
     *commit_version = edit_version_info_ptr->version;
@@ -3049,18 +3048,20 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
-    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id() << ", disk:" << _tablet.data_dir()->path()
-            << " version:" << info->start_version.to_string() << " score:" << total_score
-            << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-            << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
-            << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
-            << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
-            << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+    uint64_t task_id = StorageEngine::instance()->next_compaction_task_id();
+    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id() << " task_id:" << task_id
+              << " disk:" << _tablet.data_dir()->path() << " version:" << info->start_version.to_string()
+              << " score:" << total_score << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets
+              << "/all:" << rowsets.size() << " " << int_list_to_string(info->inputs)
+              << " #pick_segments:" << total_segments << " #valid_segments:" << total_valid_segments
+              << " #rows:" << total_rows << "->" << total_rows_after_compaction
+              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+              << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, rowsets);
+    Status st = _do_compaction(&info, rowsets, task_id);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
@@ -3236,19 +3237,20 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
 
     std::sort(info->inputs.begin(), info->inputs.end());
     std::vector<int32_t> levels(compaction_level_candidate.begin(), compaction_level_candidate.end());
-    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
-            << " version:" << info->start_version.to_string() << " score:" << max_score
-            << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
-            << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " " << int_list_to_string(info->inputs)
-            << " #pick_segments:" << total_merged_segments << " #valid_segments:" << total_valid_segments
-            << " #rows:" << total_rows << "->" << stat.num_rows
-            << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
-            << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
+    uint64_t task_id = StorageEngine::instance()->next_compaction_task_id();
+    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id() << " task_id:" << task_id
+              << " version:" << info->start_version.to_string() << " score:" << max_score
+              << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
+              << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_merged_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->" << stat.num_rows
+              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+              << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, rowsets);
+    Status st = _do_compaction(&info, rowsets, task_id);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
@@ -3372,8 +3374,9 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     }
     // do not reset _last_compaction_time_ms so we can continue doing compaction
     std::sort(info->inputs.begin(), info->inputs.end());
-    LOG(INFO) << "update compaction with specified rowsets start tablet:" << _tablet.tablet_id()
-              << " version:" << info->start_version.to_string() << " pick:" << info->inputs.size()
+    uint64_t task_id = StorageEngine::instance()->next_compaction_task_id();
+    LOG(INFO) << "update compaction with specified rowsets start tablet:" << _tablet.tablet_id() << " task_id"
+              << task_id << " version:" << info->start_version.to_string() << " pick:" << info->inputs.size()
               << "/all:" << all_rowsets_set.size() << " " << int_list_to_string(info->inputs) << " #rows:" << total_rows
               << "->" << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES)
               << "->" << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
@@ -3381,7 +3384,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, rowsets);
+    Status st = _do_compaction(&info, rowsets, task_id);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();

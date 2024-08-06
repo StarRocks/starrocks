@@ -121,7 +121,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
           _publish_version_manager(new PublishVersionManager()),
-          _dictionary_cache_manager(new DictionaryCacheManager()) {
+          _dictionary_cache_manager(new DictionaryCacheManager()),
+          _compaction_task_id(0) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;

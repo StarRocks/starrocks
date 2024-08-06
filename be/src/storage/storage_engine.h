@@ -323,6 +323,8 @@ public:
 
     bool enable_light_pk_compaction_publish();
 
+    uint64_t next_compaction_task_id() { return _compaction_task_id++; }
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -537,6 +539,7 @@ private:
     std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
                         std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
             _schedule_apply_tasks;
+    std::atomic<uint64_t> _compaction_task_id;
 
 #ifdef USE_STAROS
     std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;

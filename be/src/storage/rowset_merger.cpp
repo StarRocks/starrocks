@@ -39,9 +39,9 @@ public:
 
     virtual ~RowsetMerger() = default;
 
-    virtual Status do_merge(Tablet& tablet, const starrocks::TabletSchemaCSPtr& tablet_schema, int64_t version,
-                            const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
-                            const MergeConfig& cfg) = 0;
+    virtual Status do_merge(Tablet& tablet, const starrocks::TabletSchemaCSPtr& tablet_schema, uint64_t task_id,
+                            int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
+                            RowsetWriter* writer, const MergeConfig& cfg) = 0;
 };
 
 template <class T>
@@ -276,8 +276,8 @@ public:
         return Status::EndOfFile("merge end");
     }
 
-    Status do_merge(Tablet& tablet, const starrocks::TabletSchemaCSPtr& tablet_schema, int64_t version,
-                    const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
+    Status do_merge(Tablet& tablet, const starrocks::TabletSchemaCSPtr& tablet_schema, uint64_t task_id,
+                    int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
                     const MergeConfig& cfg) override {
         size_t total_input_size = 0;
         size_t total_rows = 0;
@@ -308,7 +308,7 @@ public:
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
         StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
         std::stringstream ss;
-        ss << "update compaction merge finished. tablet=" << tablet.tablet_id()
+        ss << "update compaction merge finished. tablet=" << tablet.tablet_id() << " task_id=" << task_id
            << ", disk=" << tablet.data_dir()->path() << ", #key=" << schema.sort_key_idxes().size()
            << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
            << " column_group_size=" << column_groups.size() << " chunk_size min:" << _min_chunk_size
@@ -625,8 +625,8 @@ private:
     Heap _heap;
 };
 
-Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
-                                RowsetWriter* writer, const MergeConfig& cfg,
+Status compaction_merge_rowsets(Tablet& tablet, uint64_t task_id, int64_t version,
+                                const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                 const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
     auto final_tablet_schema = cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
     Schema schema = [&final_tablet_schema]() {
@@ -669,7 +669,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     default:
         return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(key_type)));
     }
-    return merger->do_merge(tablet, final_tablet_schema, version, schema, rowsets, writer, cfg);
+    return merger->do_merge(tablet, final_tablet_schema, task_id, version, schema, rowsets, writer, cfg);
 }
 
 } // namespace starrocks
