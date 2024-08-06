@@ -1795,8 +1795,6 @@ public class AstToStringBuilder {
             location = table.getTableLocation();
         } else if (table.isPaimonTable()) {
             location = table.getTableLocation();
-        } else if (table instanceof IcebergView) {
-            location = table.getTableLocation();
         }
 
         // Comment
