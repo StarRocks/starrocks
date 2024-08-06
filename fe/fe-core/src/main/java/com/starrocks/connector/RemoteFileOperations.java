@@ -158,7 +158,6 @@ public class RemoteFileOperations {
         }
 
         class MyAsyncTaskQueue extends AsyncTaskQueue<RemoteFileInfo> implements RemoteFileInfoSource {
-
             public MyAsyncTaskQueue(Executor executor) {
                 super(executor);
             }

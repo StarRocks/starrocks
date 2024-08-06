@@ -118,6 +118,9 @@ public class AsyncTaskQueue<T> {
                 // unless we try to fetch it.
                 if (taskException.get() != null || taskQueueSize.get() == 0) {
                     hasMoreOutput = false;
+                    if (taskException.get() != null) {
+                        throw new RuntimeException(taskException.get());
+                    }
                     return;
                 }
                 outputQueueCondition.await();
@@ -147,13 +150,12 @@ public class AsyncTaskQueue<T> {
             expectedSize = maxSize - outputs.size();
             triggerTasks();
         }
-        if (taskException.get() != null) {
-            throw new RuntimeException(taskException.get());
-        }
         return outputs;
     }
 
     public boolean hasMoreOutput() {
+        // update end of stream state
+        tryGetOutputs(null, 0);
         return hasMoreOutput;
     }
 
