@@ -199,7 +199,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
-    std::unique_ptr<PersistentIndex> _persistent_index;
+    std::shared_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;
