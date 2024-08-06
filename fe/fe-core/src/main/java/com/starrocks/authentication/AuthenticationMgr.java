@@ -62,7 +62,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
-    private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
     public static final String ROOT_USER = "root";
     public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
@@ -203,10 +202,6 @@ public class AuthenticationMgr {
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
-    }
-
-    public String getDefaultPlugin() {
-        return DEFAULT_PLUGIN;
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {

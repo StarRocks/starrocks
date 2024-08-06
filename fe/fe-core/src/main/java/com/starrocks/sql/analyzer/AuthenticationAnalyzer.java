@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -21,7 +20,6 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
-import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,8 +32,6 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
-
-import java.nio.charset.StandardCharsets;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -76,20 +72,6 @@ public class AuthenticationAnalyzer {
             }
         }
 
-        /**
-         * Get scrambled password from plain password
-         */
-        private byte[] analysePassword(String originalPassword, boolean isPasswordPlain) {
-            if (Strings.isNullOrEmpty(originalPassword)) {
-                return MysqlPassword.EMPTY_PASSWORD;
-            }
-            if (isPasswordPlain) {
-                return MysqlPassword.makeScrambledPassword(originalPassword);
-            } else {
-                return MysqlPassword.checkPassword(originalPassword);
-            }
-        }
-
         @Override
         public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             stmt.getUserIdentity().analyze();
@@ -116,42 +98,20 @@ public class AuthenticationAnalyzer {
 
             UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
             stmt.setAuthenticationInfo(userAuthenticationInfo);
-
-            if (!Config.enable_password_reuse) {
-                UserIdentity user = stmt.getUserIdentity();
-                GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(
-                        user.getUser(), user.getHost(), stmt.getAuthOption().getPassword());
-            }
             return null;
         }
 
         private UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
-            byte[] password = MysqlPassword.EMPTY_PASSWORD;
             String authPluginUsing;
-            if (userAuthOption == null) {
-                authPluginUsing = authenticationManager.getDefaultPlugin();
+            if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
+                authPluginUsing = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
             } else {
                 authPluginUsing = userAuthOption.getAuthPlugin();
-                if (authPluginUsing == null) {
-                    authPluginUsing = authenticationManager.getDefaultPlugin();
-                    password = analysePassword(userAuthOption.getPassword(), userAuthOption.isPasswordPlain());
-                } else {
-                    authPluginUsing = userAuthOption.getAuthPlugin();
-                    if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
-                        // In this case, authString is the password
-                        password = analysePassword(userAuthOption.getAuthString(), userAuthOption.isPasswordPlain());
-                    }
-                }
             }
 
             try {
                 AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
-                UserAuthenticationInfo info = provider.validAuthenticationInfo(
-                        userIdentity, new String(password, StandardCharsets.UTF_8),
-                        userAuthOption == null ? null : userAuthOption.getAuthString());
-                info.setAuthPlugin(authPluginUsing);
-                info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-                return info;
+                return provider.analyzeAuthOption(userIdentity, userAuthOption);
             } catch (AuthenticationException e) {
                 throw new SemanticException("invalidate authentication: " + e.getMessage(), e);
             }

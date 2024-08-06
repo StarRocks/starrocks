@@ -16,8 +16,8 @@ package com.starrocks.authentication;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.Password;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.lang.reflect.Method;
@@ -26,18 +26,20 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_KERBEROS.name();
 
     @Override
-    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password,
-                                                          String textForAuthPlugin) throws AuthenticationException {
+    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+            throws AuthenticationException {
         if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
             throw new AuthenticationException("Not support kerberos authentication");
         }
 
         UserAuthenticationInfo info = new UserAuthenticationInfo();
+        info.setAuthPlugin(PLUGIN_NAME);
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        if (textForAuthPlugin == null) {
+        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+        if (userAuthOption == null || userAuthOption.getAuthString() == null) {
             info.setTextForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
         } else {
-            info.setTextForAuthPlugin(textForAuthPlugin);
+            info.setTextForAuthPlugin(userAuthOption.getAuthString());
         }
         return info;
     }
@@ -62,16 +64,5 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
             throw new AuthenticationException("Failed to authenticate for [user: " + user + "] " +
                     "by kerberos, msg: " + e.getMessage());
         }
-    }
-
-    @Override
-    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
-            throws AuthenticationException {
-        UserAuthenticationInfo ret = new UserAuthenticationInfo();
-        ret.setPassword(password.getPassword());
-        ret.setAuthPlugin(PLUGIN_NAME);
-        ret.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
-        return ret;
     }
 }

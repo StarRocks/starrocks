@@ -17,7 +17,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -33,9 +33,8 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name();
 
     @Override
-    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity,
-                                                          String password, String textForAuthPlugin)
-            throws AuthenticationException {
+    public UserAuthenticationInfo analyzeAuthOption(
+            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException {
         throw new AuthenticationException("unsupported");
     }
 
@@ -47,7 +46,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
             ctx = securityIntegration.createDirContextOnConnection(userDn, userPwd);
             if (ctx == null) {
                 throw new AuthenticationException(String.format("create ldap context for %s failed, " +
-                        "pwd len: %s, security integration: %s", userDn,
+                                "pwd len: %s, security integration: %s", userDn,
                         userPwd == null ? "null" : userPwd.length(), securityIntegration));
             }
             return true;
@@ -109,18 +108,12 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                     user, StringUtils.stripEnd(new String(password), "\0"), ldapSecurityIntegration);
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
-                                "external ldap authentication failure for user %s@%s", user, host));
+                        "external ldap authentication failure for user %s@%s", user, host));
             }
         } catch (Exception e) {
             throw new AuthenticationException(String.format(
                     "external ldap authentication failure for user %s@%s with exception, error: %s",
                     user, host, e.getMessage()), e);
         }
-    }
-
-    @Override
-    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
-            throws AuthenticationException {
-        throw new AuthenticationException("unsupported operation");
     }
 }
