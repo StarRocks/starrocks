@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,8 +28,13 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class SchemaTableEvaluateRule extends TransformationRule {
 
@@ -69,12 +75,37 @@ public class SchemaTableEvaluateRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSchemaScanOperator operator = input.getOp().cast();
         SystemTable systemTable = ((SystemTable) operator.getTable());
-        List<List<ScalarOperator>> values = systemTable.evaluate(operator.getPredicate());
-        List<ColumnRefOperator> columns = Lists.newArrayList();
+
+        // Evaluate result
+        List<List<ScalarOperator>> values;
+        try {
+            values = systemTable.evaluate(operator.getPredicate());
+        } catch (NotImplementedException e) {
+            return Lists.newArrayList();
+        }
+
+        // Compute the column index
+        List<Column> columns = systemTable.getColumns();
+        Map<Column, Integer> columnIndex = IntStream.range(0, columns.size())
+                .boxed()
+                .collect(Collectors.toMap(columns::get, Function.identity()));
+
+        // Compute the output index
+        List<ColumnRefOperator> output = operator.getOutputColumns();
+        List<Integer> outputIndex = output.stream()
+                .map(ref -> columnIndex.get(operator.getColRefToColumnMetaMap().get(ref)))
+                .collect(Collectors.toList());
+
+        // Reorder the values according to output index
+        List<List<ScalarOperator>> reorderedValues = Lists.newArrayList();
+        for (List<ScalarOperator> row : values) {
+            List<ScalarOperator> result = outputIndex.stream().map(row::get).collect(Collectors.toList());
+            reorderedValues.add(result);
+        }
 
         LogicalValuesOperator valuesOperator = new LogicalValuesOperator.Builder()
-                .setRows(values)
-                .setColumnRefSet(columns)
+                .setRows(reorderedValues)
+                .setColumnRefSet(operator.getOutputColumns())
                 .build();
         return Lists.newArrayList(OptExpression.create(valuesOperator));
     }

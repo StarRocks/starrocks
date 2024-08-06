@@ -19,6 +19,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
@@ -116,22 +117,23 @@ public class TaskRunsSystemTable extends SystemTable {
     private static List<ScalarOperator> infoToScalar(TTaskRunInfo info) {
         List<ScalarOperator> result = Lists.newArrayList();
         for (Column column : TABLE.getColumns()) {
-            String name = column.getName();
+            String name = column.getName().toLowerCase();
             TTaskRunInfo._Fields field = TTaskRunInfo._Fields.findByName(name);
             FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
             byte type = meta.type;
 
             Object obj = info.getFieldValue(field);
-            ScalarOperator scalar = null;
+            Type valueType;
             if (type == TType.I32) {
-                scalar = ConstantOperator.createInt(((Integer) obj));
+                valueType = Type.INT;
             } else if (type == TType.I64) {
-                scalar = ConstantOperator.createBigint(((Long) obj));
+                valueType = Type.BIGINT;
             } else if (type == TType.STRING) {
-                scalar = ConstantOperator.createVarchar(((String) obj));
+                valueType = Type.STRING;
             } else {
                 throw new NotImplementedException("not supported type: " + type);
             }
+            ScalarOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
             result.add(scalar);
         }
         return result;
