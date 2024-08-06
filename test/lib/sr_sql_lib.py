@@ -2640,12 +2640,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
 
+<<<<<<< HEAD
     def wait_table_rowcount_not_empty(self, table, max_times=300):
         times = 0
         rc = 0
         sql = 'show partitions from ' + table
         while times < max_times:
             result = self.execute_sql(sql, True)
+=======
+    def wait_table_rowcount_not_empty(self, table, time_out=300):
+        times = 0
+        rc = 0
+        sql = 'show partitions from ' + table
+        while times < time_out and times < time_out:
+            result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
+>>>>>>> b84bd41a4b ([BugFix] Fix subpartitions with tablet pruing bug (#49394))
             if len(result["result"]) > 0:
                 rc = int(result["result"][0][-4])
                 log.info(rc)
@@ -2653,6 +2664,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                     break
             time.sleep(1)
             times += 1
+<<<<<<< HEAD
         tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
 
     def assert_cache_select_is_success(self, query):
@@ -2672,3 +2684,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             return True
 
         return False
+=======
+        tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
+
+>>>>>>> b84bd41a4b ([BugFix] Fix subpartitions with tablet pruing bug (#49394))
