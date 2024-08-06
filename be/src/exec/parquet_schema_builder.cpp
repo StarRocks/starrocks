@@ -88,6 +88,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
             *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
                                                                decimal_logical_type->scale());
+        } else if (logical_type->is_JSON()) {
+            *type_desc = TypeDescriptor::create_json_type();
         } else {
             *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
