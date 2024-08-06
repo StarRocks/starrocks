@@ -463,7 +463,7 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
 
     READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 class BadOrcFileStream : public ORCHdfsFileStream {
@@ -516,7 +516,7 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
         status = scanner->open(_runtime_state);
         EXPECT_FALSE(status.ok()) << status.message();
         EXPECT_EQ(status.code(), ec.ret_code);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -1212,7 +1212,7 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok()) << status.to_string();
     READ_SCANNER_ROWS(scanner, 4);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -1442,7 +1442,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     ASSERT_EQ(0, chunk->num_rows());
     ASSERT_TRUE(status.is_end_of_file());
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
@@ -1750,7 +1750,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         ASSERT_EQ(0, scanner->estimated_mem_usage());
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // compressed file with skip_header_line_count
@@ -1767,7 +1767,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         READ_SCANNER_ROWS(scanner, 50);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // compressed file with skip_header_line_count > total line count
@@ -1784,7 +1784,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         READ_SCANNER_ROWS(scanner, 0);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         auto* range = _create_scan_range(compressed_file, 0, 0);
@@ -2061,7 +2061,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         EXPECT_EQ(1, chunk->num_rows());
 
         EXPECT_EQ("['6358db89e73b']", chunk->debug_row(0));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 
     {
@@ -2086,7 +2086,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         EXPECT_EQ(2, chunk->num_rows());
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(0));
         EXPECT_EQ("['6358db89e73b']", chunk->debug_row(1));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 

@@ -203,21 +203,12 @@ void HdfsScanner::close() noexcept {
         return;
     }
 
-    DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
     _mor_processor->close(_runtime_state);
-}
-
-void HdfsScanner::enter_pending_queue() {
-    _pending_queue_sw.start();
-}
-
-uint64_t HdfsScanner::exit_pending_queue() {
-    return _pending_queue_sw.reset();
 }
 
 Status HdfsScanner::open_random_access_file() {
