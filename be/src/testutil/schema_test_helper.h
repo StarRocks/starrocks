@@ -26,5 +26,6 @@ public:
     static TColumn gen_value_column_for_agg_table(const std::string& col_name, TPrimitiveType::type type);
     static void add_column_pb_to_tablet_schema(TabletSchemaPB* tablet_schema_pb, const std::string& name,
                                                const std::string& type, const std::string& agg, uint32_t length);
+    static ColumnPB gen_column_pb(int32_t id, const std::string& name, bool nullable, LogicalType type, bool is_key);
 };
 } // namespace starrocks

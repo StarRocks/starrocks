@@ -1398,5 +1398,7 @@ CONF_mString(try_release_resource_before_core_dump, "data_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
+// Delete ratio <= 10%, we will use sparse range to apply delete vector.
+CONF_mDouble(apply_del_vector_using_sparse_range_ratio, "0.1");
 
 } // namespace starrocks::config

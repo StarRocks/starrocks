@@ -19,12 +19,25 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 static inline SparseRange<> roaring2range(const Roaring& roaring) {
     SparseRange<> range;
     BitmapRangeIterator iter(roaring);
     uint32_t from;
     uint32_t to;
     while (iter.next_range(1024, &from, &to)) {
+        range.add(Range<>(from, to));
+    }
+    return range;
+}
+
+static inline SparseRange<> roaring2range_with_start_end(const Roaring& roaring, uint32_t start, uint32_t end) {
+    SparseRange<> range;
+    BitmapRangeIterator iter(roaring, start);
+    uint32_t from;
+    uint32_t to;
+    while (iter.next_range(1024, end, &from, &to)) {
         range.add(Range<>(from, to));
     }
     return range;
