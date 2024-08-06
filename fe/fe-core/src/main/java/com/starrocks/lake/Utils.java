@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
@@ -85,6 +86,7 @@ public class Utils {
             throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
                     Long beId = chooseBackend((LakeTablet) tablet);
@@ -92,6 +94,18 @@ public class Utils {
                         throw new NoAliveBackendException("no alive backend");
                     }
                     groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+=======
+            for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalParition.getMaterializedIndices(indexState)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
+                                warehouseId, (LakeTablet) tablet);
+                        if (computeNode == null) {
+                            throw new NoAliveBackendException("no alive backend");
+                        }
+                        groupMap.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                    }
+>>>>>>> 0897002e1e ([BugFix] Fix auto bucket delete job (#49125))
                 }
             }
         }
