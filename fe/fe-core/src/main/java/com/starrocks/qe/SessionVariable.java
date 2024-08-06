@@ -443,11 +443,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
-<<<<<<< HEAD
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
-=======
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
->>>>>>> 3def3c1d3d ([Feature] Support dynamic partition pruning (#30319))
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
