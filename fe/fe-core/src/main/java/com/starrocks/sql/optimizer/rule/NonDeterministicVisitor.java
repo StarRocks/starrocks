@@ -117,7 +117,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     }
 
     private Boolean visitChildren(OptExpression optExpression) {
-        for (OptExpression child: optExpression.getInputs()) {
+        for (OptExpression child : optExpression.getInputs()) {
             if (checkCommon(child)) {
                 return true;
             }
