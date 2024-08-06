@@ -1520,12 +1520,7 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
-<<<<<<< HEAD
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->major_compaction(data_dir, tablet_id, mutex);
-=======
-Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
     // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
     std::shared_ptr<PersistentIndex> pindex;
     {
@@ -1534,7 +1529,6 @@ Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std:
     }
     if (pindex != nullptr) {
         return pindex->major_compaction(data_dir, tablet_id, mutex);
->>>>>>> 1c8df3aa98 ([BugFix] fix concurrent issue between primary index unload and compaction (#49341))
     } else {
         return Status::OK();
     }
