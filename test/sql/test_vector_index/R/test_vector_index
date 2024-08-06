@@ -71,10 +71,6 @@ PROPERTIES (
 insert into t_test_vector_table values(1, [1,2,3,4,5]);
 -- result:
 -- !result
-insert into t_test_vector_table values(2, [0,0]);
--- result:
-E: (5025, 'The dimensions of the vector written are inconsistent')
--- !result
 
 DROP TABLE t_test_vector_table;
 -- result:

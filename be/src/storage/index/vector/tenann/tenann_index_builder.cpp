@@ -78,9 +78,13 @@ Status TenAnnIndexBuilderProxy::add(const Column& data) {
             size_t last_offset = 0;
             auto* offsets_data = reinterpret_cast<uint32_t*>(offsets.mutable_raw_data());
             for (size_t i = 1; i < offsets.size(); i++) {
-                if (_dim != (offsets_data[i] - last_offset)) {
-                    LOG(WARNING) << "index dim: " << _dim << ", written dim: " << offsets_data[i] - last_offset;
-                    return Status::InvalidArgument("The dimensions of the vector written are inconsistent");
+                size_t dim = offsets_data[i] - last_offset;
+                if (dim > 0 && _dim != dim) {
+                    LOG(WARNING) << "index dim: " << _dim << ", written dim: " << dim;
+                    return Status::InvalidArgument(
+                            strings::Substitute("The dimensions of the vector written are inconsistent, index dim is "
+                                                "$0 but data dim is $1, vector data is ",
+                                                _dim, dim));
                 }
                 last_offset = offsets_data[i];
             }
