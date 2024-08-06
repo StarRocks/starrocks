@@ -45,9 +45,9 @@ If yes, please specify the type of change:
 ## Documentation PRs only:
 
 If you are submitting a PR that adds or changes English documentation and have not
-included Chinese documentation then you can check the box to have GPT translate the
-English doc to Chinese, and un-check the **Do not translate** box. A new PR will be
-created with the Chinese documentation.
+included Chinese documentation, then you can check the box to request GPT to translate the
+English doc to Chinese. Please ensure to uncheck the **Do not translate** box if translation is needed.
+The workflow will generate a new PR with the Chinese translation after this PR is merged.
 
 - [ ] Yes, translate English markdown files with GPT
 - [x] Do not translate
