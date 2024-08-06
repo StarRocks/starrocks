@@ -293,3 +293,42 @@ select @test = ["abc\\'"];
 -- result:
 1
 -- !result
+set @test = concat(upper('a'), '\'', '\\' 'b', '"');
+-- result:
+E: (1064, "Getting syntax error at line 1, column 42. Detail message: Unexpected input ''b'', the most similar input is {',', ')'}.")
+-- !result
+select @test = concat(upper('a'), '\'', '\\' 'b', '"');
+-- result:
+E: (1064, "Getting syntax error at line 1, column 45. Detail message: Unexpected input ''b'', the most similar input is {',', ')'}.")
+-- !result
+SELECT /*+ set_user_variable(@c = 1, @d = 1) */c1,  lag(c1, @c, @d) over (ORDER BY c2), lead(c1, 1, @d) over (ORDER BY c2), lead(@c, 1, @d) over (ORDER BY c2) from t1;
+-- result:
+a	1	b	1
+b	a	c	1
+c	b	d	1
+d	c	None	1
+None	d	f	1
+f	None	1	1
+-- !result
+SELECT /*+ set_user_variable(@c = 1, @d = 1) */c1,  lag(c1, @c, @d) over (ORDER BY c2), lead(c1, 1, @d) over (ORDER BY c2), lead(@c, 1, @d) over (ORDER BY c2) from t1;
+-- result:
+a	1	b	1
+b	a	c	1
+c	b	d	1
+d	c	None	1
+None	d	f	1
+f	None	1	1
+-- !result
+select /*+ set_user_variable(@c = 1, @d = 100000) */ APPROX_TOP_K(c1, @c), APPROX_TOP_K(c2, @a, @d) from (select c1, c2 from t1 where c0 = 1) t1;
+-- result:
+[{"item":"a","count":1}]	[{"item":"Value1","count":1}]
+-- !result
+select /*+ set_user_variable(@c = 1, @d = 10) */ c1, ntile(@c) over (partition by c2 order by c3) as bucket_id from t1;
+-- result:
+a	1
+d	1
+c	1
+f	1
+b	1
+None	1
+-- !result
