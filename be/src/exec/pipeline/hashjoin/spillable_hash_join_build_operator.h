@@ -21,6 +21,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 
@@ -52,8 +53,8 @@ public:
     size_t estimated_memory_reserved() override;
 
 private:
-    void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
-    spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
+    void set_spill_strategy(spill::SpillStrategy strategy);
+    spill::SpillStrategy spill_strategy() const;
 
     std::function<StatusOr<ChunkPtr>()> _convert_hash_map_to_chunk();
 

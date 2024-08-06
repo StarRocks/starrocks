@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "exec/mor_processor.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
