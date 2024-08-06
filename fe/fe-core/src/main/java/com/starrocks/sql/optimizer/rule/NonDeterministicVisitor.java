@@ -29,10 +29,8 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
-import java.util.Set;
 
 public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
-    private final Set<String> nonDeterministicFunctions = FunctionSet.nonDeterministicFunctions;
     public NonDeterministicVisitor() {
     }
 
@@ -51,7 +49,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     private boolean hasNonDeterministicFunc(ScalarOperator scalarOperator) {
         if (scalarOperator instanceof CallOperator) {
             String fnName = ((CallOperator) scalarOperator).getFnName();
-            if (nonDeterministicFunctions.contains(fnName)) {
+            if (FunctionSet.allNonDeterministicFunctions.contains(fnName)) {
                 return true;
             }
         } else if (scalarOperator instanceof LambdaFunctionOperator) {
@@ -98,23 +96,32 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
         return false;
     }
 
-    private boolean checkOptExpression(OptExpression optExpression) {
+    private boolean checkCommon(OptExpression optExpression) {
         Operator operator = optExpression.getOp();
         // projections
         if (operator.getProjection() != null && checkProject(operator.getProjection())) {
             return true;
         }
         // predicates
-        if (operator.getPredicate() != null &&
-                hasNonDeterministicFunc(operator.getPredicate())) {
+        if (operator.getPredicate() != null && hasNonDeterministicFunc(operator.getPredicate())) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean checkOptExpression(OptExpression optExpression) {
+        if (checkCommon(optExpression)) {
             return true;
         }
         return visitChildren(optExpression);
     }
 
     private Boolean visitChildren(OptExpression optExpression) {
-        for (OptExpression input : optExpression.getInputs()) {
-            if (checkOptExpression(input)) {
+        for (OptExpression child: optExpression.getInputs()) {
+            if (checkCommon(child)) {
+                return true;
+            }
+            if (child.getOp().accept(this, child, null)) {
                 return true;
             }
         }
@@ -123,7 +130,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     @Override
     public Boolean visit(OptExpression optExpression, Void context) {
-        return visitChildren(optExpression);
+        return checkOptExpression(optExpression);
     }
 
     @Override

@@ -1563,7 +1563,7 @@ public class AnalyzerUtils {
                 nonDeterministicFunctionOpt = Optional.of(expr.getFn().functionName());
                 return null;
             }
-            for (Expr param : expr.getParams().exprs()) {
+            for (Expr param : expr.getChildren()) {
                 visit(param);
                 if (nonDeterministicFunctionOpt.isPresent()) {
                     return null;
