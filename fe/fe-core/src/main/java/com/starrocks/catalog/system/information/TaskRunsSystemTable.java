@@ -29,6 +29,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -46,16 +47,17 @@ import org.apache.thrift.protocol.TType;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
-import static com.starrocks.catalog.system.SystemTable.builder;
-
-public class TaskRunsSystemTable {
+public class TaskRunsSystemTable extends SystemTable {
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
 
     private static final SystemTable TABLE = create();
 
     public static SystemTable create() {
-        return new SystemTable(SystemId.TASK_RUNS_ID,
+        return new TaskRunsSystemTable();
+    }
+
+    public TaskRunsSystemTable() {
+        super(SystemId.TASK_RUNS_ID,
                 "task_runs",
                 Table.TableType.SCHEMA,
                 builder()
@@ -74,6 +76,16 @@ public class TaskRunsSystemTable {
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
                         .column("PROPERTIES", ScalarType.createVarcharType(512))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
+    }
+
+    @Override
+    public boolean supportFeEvaluation() {
+        return true;
+    }
+
+    @Override
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        return evaluate(Utils.extractConjuncts(predicate));
     }
 
     public static List<List<ScalarOperator>> evaluate(List<ScalarOperator> conjuncts) {
@@ -111,8 +123,10 @@ public class TaskRunsSystemTable {
 
             Object obj = info.getFieldValue(field);
             ScalarOperator scalar = null;
-            if (type == TType.I64 || type == TType.I32) {
+            if (type == TType.I32) {
                 scalar = ConstantOperator.createInt(((Integer) obj));
+            } else if (type == TType.I64) {
+                scalar = ConstantOperator.createBigint(((Long) obj));
             } else if (type == TType.STRING) {
                 scalar = ConstantOperator.createVarchar(((String) obj));
             } else {
