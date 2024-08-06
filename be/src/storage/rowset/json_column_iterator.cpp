@@ -15,6 +15,7 @@
 #include "storage/rowset/json_column_iterator.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -46,19 +47,26 @@ namespace starrocks {
 
 class JsonFlatColumnIterator final : public ColumnIterator {
 public:
-    JsonFlatColumnIterator(ColumnReader* _reader, std::unique_ptr<ColumnIterator>& null_iter,
-                           std::vector<std::unique_ptr<ColumnIterator>>& field_iters,
-                           std::vector<std::string>& flat_paths, std::vector<LogicalType> target_types,
-                           std::vector<LogicalType> source_types, ColumnAccessPath* path)
-            : _reader(_reader),
+    JsonFlatColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+                           std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                           const std::vector<std::string>& target_paths, const std::vector<LogicalType>& target_types,
+                           const std::vector<std::string>& source_paths, const std::vector<LogicalType>& source_types)
+            : _reader(reader),
               _null_iter(std::move(null_iter)),
               _flat_iters(std::move(field_iters)),
-              _flat_paths(std::move(flat_paths)),
+              _target_paths(std::move(target_paths)),
               _target_types(std::move(target_types)),
-              _source_types(std::move(source_types)),
-              _path(path) {}
+              _source_paths(std::move(source_paths)),
+              _source_types(std::move(source_types)){};
 
-    ~JsonFlatColumnIterator() override = default;
+    ~JsonFlatColumnIterator() override {
+        if (transformer != nullptr) {
+            auto [c, m, f] = transformer->cost_ms();
+            _opts.stats->json_cast_ns += c;
+            _opts.stats->json_merge_ns += m;
+            _opts.stats->json_flatten_ns += f;
+        }
+    }
 
     [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
@@ -82,22 +90,22 @@ public:
 
 private:
     template <typename FUNC>
-    Status _read_and_cast(JsonColumn* json_column, FUNC fn);
+    Status _read(JsonColumn* json_column, FUNC fn);
 
 private:
     ColumnReader* _reader;
 
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _flat_iters;
-    std::vector<std::string> _flat_paths;
+    std::vector<std::string> _target_paths;
     std::vector<LogicalType> _target_types;
+    std::vector<std::string> _source_paths;
     std::vector<LogicalType> _source_types;
-    // to avoid create column with find type
-    std::vector<ColumnPtr> _source_columns;
-    ColumnAccessPath* _path;
 
-    ObjectPool _pool;
-    std::vector<Expr*> _cast_exprs;
+    std::vector<ColumnPtr> _source_column_modules;
+    // to avoid create column with find type
+
+    std::unique_ptr<HyperJsonTransformer> transformer;
 };
 
 Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
@@ -110,66 +118,56 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         RETURN_IF_ERROR(iter->init(opts));
     }
 
-    // update stats
-    DCHECK(_path != nullptr);
-    auto abs_path = _path->absolute_path();
-    if (opts.stats->flat_json_hits.count(abs_path) == 0) {
-        opts.stats->flat_json_hits[abs_path] = 1;
-    } else {
-        opts.stats->flat_json_hits[abs_path] = opts.stats->flat_json_hits[abs_path] + 1;
+    bool has_remain = _source_paths.size() != _flat_iters.size();
+    transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, false);
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
+        transformer->init_read_task(_source_paths, _source_types, has_remain);
+
+        for (int i = 0; i < _source_paths.size(); i++) {
+            auto column = ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true);
+            _source_column_modules.emplace_back(column);
+        }
     }
 
-    DCHECK(_target_types.size() == _source_types.size());
+    DCHECK_EQ(_source_column_modules.size(), _source_paths.size());
+    if (has_remain) {
+        _source_column_modules.emplace_back(JsonColumn::create());
+    }
 
-    for (int i = 0; i < _target_types.size(); i++) {
-        if (_target_types[i] == _source_types[i]) {
-            _cast_exprs.push_back(nullptr);
-            _source_columns.push_back(nullptr);
-            continue;
+    // update stats
+    {
+        auto cp = transformer->cast_paths();
+        for (int i = 0; i < cp.size(); i++) {
+            opts.stats->flat_json_hits[cp[i]] += 1;
         }
-
-        TypeDescriptor source_type(_source_types[i]);
-        TypeDescriptor target_type(_target_types[i]);
-
-        SlotDescriptor source_slot(i, "mock_solt", source_type);
-        ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-
-        auto cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, col_ref, &_pool);
-        _cast_exprs.push_back(cast_expr);
-        _source_columns.push_back(ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true));
+        auto mp = transformer->merge_paths();
+        for (int i = 0; i < mp.size(); i++) {
+            opts.stats->merge_json_hits[mp[i]] += 1;
+        }
+        auto fp = transformer->flat_paths();
+        for (int i = 0; i < fp.size(); i++) {
+            opts.stats->dynamic_json_hits[fp[i]] += 1;
+        }
     }
 
     return Status::OK();
 }
 
 template <typename FUNC>
-Status JsonFlatColumnIterator::_read_and_cast(JsonColumn* json_column, FUNC read_fn) {
-    json_column->init_flat_columns(_flat_paths, _target_types);
-    Chunk chunk;
+Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
+    std::vector<ColumnPtr> columns;
+    for (int i = 0; i < _source_column_modules.size(); i++) {
+        columns.emplace_back(_source_column_modules[i]->clone_empty());
+    }
 
     for (int i = 0; i < _flat_iters.size(); i++) {
-        if (_cast_exprs[i] != nullptr) {
-            ColumnPtr source = _source_columns[i]->clone_empty();
-            RETURN_IF_ERROR(read_fn(i, source.get()));
-
-            chunk.append_column(source, i);
-            ASSIGN_OR_RETURN(auto res, _cast_exprs[i]->evaluate_checked(nullptr, &chunk));
-            auto target = json_column->get_flat_field(i);
-            target->set_delete_state(source->delete_state());
-            if (res->only_null()) {
-                target->append_nulls(source->size());
-            } else if (res->is_constant()) {
-                auto data = down_cast<ConstColumn*>(res.get())->data_column();
-                target->append_value_multiple_times(*data, 0, source->size());
-            } else {
-                target->append(*res, 0, source->size());
-            }
-            DCHECK_EQ(json_column->size(), target->size());
-        } else {
-            auto* flat_column = json_column->get_flat_field(i).get();
-            RETURN_IF_ERROR(read_fn(i, flat_column));
-        }
+        RETURN_IF_ERROR(read_fn(_flat_iters[i].get(), columns[i].get()));
     }
+
+    RETURN_IF_ERROR(transformer->trans(columns));
+    auto result = transformer->mutable_result();
+    json_column->set_flat_columns(_target_paths, _target_types, result);
     return Status::OK();
 }
 
@@ -192,8 +190,8 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
     }
 
     // 2. Read flat column
-    auto read = [&](int index, Column* column) { return _flat_iters[index]->next_batch(n, column); };
-    return _read_and_cast(json_column, read);
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
+    return _read(json_column, read);
 }
 
 Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -216,8 +214,8 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
     }
 
     // 2. Read flat column
-    auto read = [&](int index, Column* column) { return _flat_iters[index]->next_batch(range, column); };
-    return _read_and_cast(json_column, read);
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
+    return _read(json_column, read);
 }
 
 Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
@@ -235,11 +233,9 @@ Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size
     }
 
     // 2. Read flat column
-    auto read = [&](int index, Column* column) {
-        return _flat_iters[index]->fetch_values_by_rowid(rowids, size, column);
-    };
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
 
-    return _read_and_cast(json_column, read);
+    return _read(json_column, read);
 }
 
 Status JsonFlatColumnIterator::seek_to_first() {
@@ -271,12 +267,11 @@ Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<cons
 
 class JsonDynamicFlatIterator final : public ColumnIterator {
 public:
-    JsonDynamicFlatIterator(std::unique_ptr<ScalarColumnIterator>& json_iter, std::vector<std::string> flat_paths,
-                            std::vector<LogicalType> target_types, ColumnAccessPath* path)
+    JsonDynamicFlatIterator(std::unique_ptr<ScalarColumnIterator>& json_iter, std::vector<std::string> target_paths,
+                            std::vector<LogicalType> target_types)
             : _json_iter(std::move(json_iter)),
-              _flat_paths(std::move(flat_paths)),
-              _target_types(std::move(target_types)),
-              _path(path){};
+              _target_paths(std::move(target_paths)),
+              _target_types(std::move(target_types)){};
 
     ~JsonDynamicFlatIterator() override = default;
 
@@ -306,24 +301,20 @@ private:
 
 private:
     std::unique_ptr<ScalarColumnIterator> _json_iter;
-    std::vector<std::string> _flat_paths;
+    std::vector<std::string> _target_paths;
     std::vector<LogicalType> _target_types;
-    ColumnAccessPath* _path;
 
-    JsonFlattener _flattener;
+    std::unique_ptr<JsonFlattener> _flattener;
 };
 
 Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(ColumnIterator::init(opts));
-    DCHECK(_path != nullptr);
-    auto abs_path = _path->absolute_path();
-    if (opts.stats->dynamic_json_hits.count(abs_path) == 0) {
-        opts.stats->dynamic_json_hits[abs_path] = 1;
-    } else {
-        opts.stats->dynamic_json_hits[abs_path] = opts.stats->dynamic_json_hits[abs_path] + 1;
+    for (auto& p : _target_paths) {
+        opts.stats->dynamic_json_hits[p] += 1;
     }
 
-    _flattener = JsonFlattener(_flat_paths, _target_types);
+    SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
+    _flattener = std::make_unique<JsonFlattener>(_target_paths, _target_types, false);
     return _json_iter->init(opts);
 }
 
@@ -350,8 +341,9 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
     }
 
     // 2. flat
-    json_data->init_flat_columns(_flat_paths, _target_types);
-    _flattener.flatten(input, &(json_data->get_flat_fields()));
+    _flattener->flatten(input);
+    auto result = _flattener->mutable_result();
+    json_data->set_flat_columns(_target_paths, _target_types, result);
     return Status::OK();
 }
 
@@ -390,18 +382,240 @@ Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<con
     return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
-        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& full_paths,
-        std::vector<LogicalType>& target_types, std::vector<LogicalType>& source_types, ColumnAccessPath* path) {
-    return std::make_unique<JsonFlatColumnIterator>(reader, null_iter, field_iters, full_paths, target_types,
-                                                    source_types, path);
+class JsonMergeIterator final : public ColumnIterator {
+public:
+    JsonMergeIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+                      std::vector<std::unique_ptr<ColumnIterator>> all_iter, const std::vector<std::string>& src_paths,
+                      const std::vector<LogicalType>& src_types, bool is_merge)
+            : _reader(reader),
+              _null_iter(std::move(null_iter)),
+              _all_iter(std::move(all_iter)),
+              _src_paths(std::move(src_paths)),
+              _src_types(std::move(src_types)),
+              _is_merge(is_merge){};
+
+    ~JsonMergeIterator() override = default;
+
+    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    [[nodiscard]] Status seek_to_first() override;
+
+    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+
+    ordinal_t get_current_ordinal() const override { return _all_iter[0]->get_current_ordinal(); }
+
+    ordinal_t num_rows() const override { return _all_iter[0]->num_rows(); }
+
+    /// for vectorized engine
+    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                    CompoundNodeType pred_relation) override;
+
+    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+private:
+    template <typename FUNC>
+    Status _merge(JsonColumn* dst, FUNC func);
+
+private:
+    ColumnReader* _reader;
+
+    std::unique_ptr<ColumnIterator> _null_iter;
+    std::vector<std::unique_ptr<ColumnIterator>> _all_iter;
+    std::vector<std::string> _src_paths;
+    std::vector<LogicalType> _src_types;
+    std::vector<ColumnPtr> _src_column_modules;
+
+    std::unique_ptr<JsonMerger> _merger;
+    bool _is_merge;
+};
+
+Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
+    RETURN_IF_ERROR(ColumnIterator::init(opts));
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->init(opts));
+    }
+
+    for (auto& iter : _all_iter) {
+        RETURN_IF_ERROR(iter->init(opts));
+    }
+
+    if (_is_merge) {
+        for (auto& p : _src_paths) {
+            opts.stats->merge_json_hits[p] += 1;
+        }
+
+        SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
+        _merger = std::make_unique<JsonMerger>(_src_paths, _src_types, _all_iter.size() != _src_paths.size());
+    }
+
+    DCHECK(_all_iter.size() == _src_paths.size() || _all_iter.size() == _src_paths.size() + 1);
+    for (int i = 0; i < _src_paths.size(); i++) {
+        auto column = ColumnHelper::create_column(TypeDescriptor(_src_types[i]), true);
+        _src_column_modules.emplace_back(column);
+    }
+
+    if (_all_iter.size() != _src_paths.size()) {
+        // remain
+        _src_column_modules.emplace_back(JsonColumn::create());
+    }
+
+    return Status::OK();
+}
+
+template <typename FUNC>
+Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
+    std::vector<ColumnPtr> all_columns;
+    for (size_t i = 0; i < _all_iter.size(); i++) {
+        auto iter = _all_iter[i].get();
+        auto c = _src_column_modules[i]->clone_empty();
+        RETURN_IF_ERROR(func(iter, c.get()));
+        all_columns.emplace_back(std::move(c));
+    }
+
+    if (_is_merge) {
+        SCOPED_RAW_TIMER(&_opts.stats->json_merge_ns);
+        auto json = _merger->merge(all_columns);
+        dst->append(*json, 0, json->size());
+    } else {
+        dst->set_flat_columns(_src_paths, _src_types, all_columns);
+    }
+    dst->check_or_die();
+    return Status::OK();
+}
+
+Status JsonMergeIterator::next_batch(size_t* n, Column* dst) {
+    JsonColumn* json_column = nullptr;
+    NullColumn* null_column = nullptr;
+    if (dst->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+    } else {
+        json_column = down_cast<JsonColumn*>(dst);
+    }
+
+    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+
+    // 1. Read null column
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
+        down_cast<NullableColumn*>(dst)->update_has_null();
+    }
+
+    auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
+    return _merge(json_column, func);
+}
+
+Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
+    JsonColumn* json_column = nullptr;
+    NullColumn* null_column = nullptr;
+    if (dst->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+    } else {
+        json_column = down_cast<JsonColumn*>(dst);
+    }
+
+    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+
+    // 1. Read null column
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
+        down_cast<NullableColumn*>(dst)->update_has_null();
+    }
+
+    auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
+    return _merge(json_column, func);
+}
+
+Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* dst) {
+    JsonColumn* json_column = nullptr;
+    NullColumn* null_column = nullptr;
+    if (dst->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+    } else {
+        json_column = down_cast<JsonColumn*>(dst);
+    }
+
+    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+
+    // 1. Read null column
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
+        down_cast<NullableColumn*>(dst)->update_has_null();
+    }
+
+    auto func = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
+    return _merge(json_column, func);
+}
+
+Status JsonMergeIterator::seek_to_first() {
+    for (auto& iter : _all_iter) {
+        RETURN_IF_ERROR(iter->seek_to_first());
+    }
+
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->seek_to_first());
+    }
+    return Status::OK();
+}
+
+Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
+    for (auto& iter : _all_iter) {
+        RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
+    }
+
+    if (_null_iter != nullptr) {
+        RETURN_IF_ERROR(_null_iter->seek_to_ordinal(ord));
+    }
+    return Status::OK();
+}
+
+Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                     CompoundNodeType pred_relation) {
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
+    return Status::OK();
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(ColumnReader* reader,
+                                                                    std::unique_ptr<ColumnIterator> null_iter,
+                                                                    std::vector<std::unique_ptr<ColumnIterator>> iters,
+                                                                    const std::vector<std::string>& target_paths,
+                                                                    const std::vector<LogicalType>& target_types,
+                                                                    const std::vector<std::string>& source_paths,
+                                                                    const std::vector<LogicalType>& source_types) {
+    return std::make_unique<JsonFlatColumnIterator>(reader, std::move(null_iter), std::move(iters), target_paths,
+                                                    target_types, source_paths, source_types);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
-        std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths,
-        std::vector<LogicalType>& target_types, ColumnAccessPath* path) {
-    return std::make_unique<JsonDynamicFlatIterator>(json_iter, flat_paths, target_types, path);
+        std::unique_ptr<ScalarColumnIterator> json_iter, const std::vector<std::string>& target_paths,
+        const std::vector<LogicalType>& target_types) {
+    return std::make_unique<JsonDynamicFlatIterator>(json_iter, target_paths, target_types);
 }
 
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
+        const std::vector<LogicalType>& merge_types) {
+    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
+                                               merge_types, true);
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_direct_iterator(
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
+        const std::vector<LogicalType>& merge_types) {
+    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
+                                               merge_types, false);
+}
 } // namespace starrocks
