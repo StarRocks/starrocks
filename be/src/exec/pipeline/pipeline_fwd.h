@@ -50,4 +50,9 @@ class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class GlobalDriverExecutor;
 class ExecStateReporter;
+class PipelineBuilderContext;
 } // namespace starrocks::pipeline
+
+namespace starrocks {
+using OperatorFactoryPtr = pipeline::OpFactoryPtr;
+}

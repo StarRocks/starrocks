@@ -18,12 +18,13 @@
 
 #include <atomic>
 
-#include "exec/hash_joiner.h"
-#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -48,7 +49,7 @@ public:
     bool need_input() const override { return !is_finished(); }
 
     Status set_finishing(RuntimeState* state) override;
-    bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
+    bool is_finished() const override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
