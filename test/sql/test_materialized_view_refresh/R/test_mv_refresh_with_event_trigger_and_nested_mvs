@@ -1,4 +1,4 @@
--- name: test_mv_refresh_with_event_trigger_and_nested_mvs
+-- name: test_mv_refresh_with_event_trigger_and_nested_mvs @slow
 create database db_${uuid0};
 -- result:
 -- !result
