@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.iceberg.data.GenericRecord;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 public class IcebergMetadataColumnValue implements ColumnValue {
     private static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
@@ -94,12 +96,21 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
-
+        Map data = (Map) fieldData;
+        data.forEach((key, value) -> {
+            keys.add(new IcebergMetadataColumnValue(key, timezone));
+            values.add(new IcebergMetadataColumnValue(value, timezone));
+        });
     }
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
-
+        GenericRecord record = (GenericRecord) fieldData;
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            Integer idx = structFieldIndex.get(i);
+            IcebergMetadataColumnValue value = new IcebergMetadataColumnValue(record.get(idx));
+            values.add(value);
+        }
     }
 
     @Override

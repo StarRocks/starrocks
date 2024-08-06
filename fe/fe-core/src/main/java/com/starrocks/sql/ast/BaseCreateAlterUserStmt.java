@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Map;
+
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public abstract class BaseCreateAlterUserStmt extends DdlStmt {
     protected UserIdentity userIdentity;
@@ -25,11 +27,15 @@ public abstract class BaseCreateAlterUserStmt extends DdlStmt {
     // used in new RBAC privilege framework
     private UserAuthenticationInfo authenticationInfo = null;
 
-    public BaseCreateAlterUserStmt(UserIdentity userIdentity, UserAuthOption authOption, NodePosition pos) {
+    private final Map<String, String> properties;
+
+    public BaseCreateAlterUserStmt(UserIdentity userIdentity, UserAuthOption authOption,
+                                   Map<String, String> properties, NodePosition pos) {
         super(pos);
 
         this.userIdentity = userIdentity;
         this.authOption = authOption;
+        this.properties = properties;
     }
 
     public UserIdentity getUserIdentity() {
@@ -46,6 +52,10 @@ public abstract class BaseCreateAlterUserStmt extends DdlStmt {
 
     public void setAuthenticationInfo(UserAuthenticationInfo authenticationInfo) {
         this.authenticationInfo = authenticationInfo;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

@@ -19,7 +19,10 @@ select name, type from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${u
 
 select is_current_ancestor from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$history where parent_id is not null order by is_current_ancestor;
 select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null order by latest_schema_id;
+select added_data_files_count,added_rows_count,existing_data_files_count,partitions from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests order by added_data_files_count;
+select operation from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$snapshots order by operation;
 
+select record_count,lower_bounds from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$files order by element_at(lower_bounds, 1);
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};

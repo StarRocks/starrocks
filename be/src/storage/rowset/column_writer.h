@@ -41,7 +41,7 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
-#include "storage/inverted/inverted_writer.h"
+#include "storage/index/inverted/inverted_writer.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -85,6 +85,7 @@ struct ColumnWriterOptions {
     GlobalDictMap* global_dict = nullptr;
 
     bool need_flat = false;
+    bool is_compaction = false;
 
     std::string field_name;
 };

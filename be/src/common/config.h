@@ -944,6 +944,9 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
 CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
+// -1: ulimited, 0: limit by memory use, >0: limit by queue_size
+CONF_mInt64(runtime_filter_queue_limit, "-1");
+
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
@@ -1320,16 +1323,13 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 CONF_mBool(enable_json_flat, "true");
 
 // extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.3");
+CONF_mDouble(json_flat_null_factor, "0.4");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
-// only flatten json when the number of sub-field in the JSON exceeds the limit
-CONF_mInt32(json_flat_internal_column_min_limit, "5");
-
 // the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "20");
+CONF_mInt32(json_flat_column_max, "100");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1383,15 +1383,18 @@ CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
-// 1. storage_page_cache
+// 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor
 // 3. non_pipeline_scan_thread_pool
 // 4. pipeline_prepare_thread_pool
 // 5. pipeline_sink_io_thread_pool
 // 6. query_rpc_thread_pool
+// 7. publish_version_worker_pool
+// 8. olap_scan_executor
+// 9. wg_driver_executor
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "storage_page_cache")
+CONF_mString(try_release_resource_before_core_dump, "data_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");

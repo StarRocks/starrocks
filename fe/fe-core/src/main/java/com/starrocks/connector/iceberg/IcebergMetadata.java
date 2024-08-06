@@ -39,6 +39,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorViewDefinition;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -368,7 +369,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
         switch (version.getPointerType()) {
-            case TEMPORAL :
+            case TEMPORAL:
                 return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
             case VERSION:
                 return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
@@ -430,7 +431,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .snapshotId();
     }
 
-
     public Table getView(String dbName, String viewName) {
         try {
             View icebergView = icebergCatalog.getView(dbName, viewName);
@@ -479,15 +479,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange version, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        TableVersionRange version = params.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate, limit);
+        return getRemoteFiles((IcebergTable) table, snapshotId, params.getPredicate(), params.getLimit());
     }
 
-    private List<RemoteFileInfo> getRemoteFileInfos(IcebergTable table, long snapshotId,
-                                                    ScalarOperator predicate, long limit) {
+    private List<RemoteFileInfo> getRemoteFiles(IcebergTable table, long snapshotId,
+                                                ScalarOperator predicate, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = table.getRemoteDbName();
         String tableName = table.getRemoteTableName();
@@ -626,13 +625,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
-                                                    String serializedPredicate, MetadataTableType metadataTableType) {
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
+                                                    MetadataTableType metadataTableType) {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         if (snapshotId == -1) {
-            snapshotId = nativeTable.currentSnapshot().snapshotId();
+            Snapshot currentSnapshot = nativeTable.currentSnapshot();
+            if (currentSnapshot == null) {
+                return IcebergMetaSpec.EMPTY;
+            } else {
+                snapshotId = nativeTable.currentSnapshot().snapshotId();
+            }
         }
         Snapshot snapshot = nativeTable.snapshot(snapshotId);
 
@@ -661,6 +665,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
         List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
+        if (metadataTableType == MetadataTableType.FILES) {
+            for (ManifestFile file : matchingDeleteManifests) {
+                remoteMetaSplits.add(IcebergMetaSplit.from(file));
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+        }
 
         boolean loadColumnStats = enableCollectColumnStatistics(ConnectContext.get()) ||
                 (!matchingDeleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
@@ -780,7 +790,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode(connectContext), connectContext))
+                        catalogName, dbName, tableName, planMode(connectContext), connectContext))
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
@@ -871,7 +881,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Tracers.Module module = Tracers.Module.EXTERNAL;
         if (metrics.isPresent()) {
-            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
+            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "[" + icebergPredicate + "]";
             String value = metrics.get().scanMetrics().toString();
             if (tracers == null) {
                 Tracers.record(module, name, value);
@@ -883,7 +893,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         if (((StarRocksIcebergTableScan) scan).isRemotePlanFiles()) {
-            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "["  + icebergPredicate + "]";
+            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "[" + icebergPredicate + "]";
             if (tracers == null) {
                 Tracers.record(module, name, "true");
             } else {

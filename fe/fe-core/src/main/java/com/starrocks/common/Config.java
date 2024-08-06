@@ -343,6 +343,12 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
@@ -2053,16 +2059,22 @@ public class Config extends ConfigBase {
     public static int max_distribution_pruner_recursion_depth = 100;
 
     /**
-     * Used to limit num of partition for one batch partition clause
+     * Used to limit num of partition for one batch partition clause or one load for expression partition
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, aliases = {"auto_partition_max_creation_number_per_load"})
     public static long max_partitions_in_one_batch = 4096;
 
     /**
      * Used to limit num of partition for automatic partition table automatically created
      */
+    @ConfField(mutable = true, aliases = {"max_automatic_partition_number"})
+    public static long max_partition_number_per_table = 100000;
+
+    /**
+     * Used to limit num of partition for load open partition number
+     */
     @ConfField(mutable = true)
-    public static long max_automatic_partition_number = 4096;
+    public static long max_load_initial_open_partition_number = 32;
 
     /**
      * enable automatic bucket for random distribution table
@@ -2392,6 +2404,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long star_mgr_meta_sync_interval_sec = 600L;
+
+    /**
+     * Whether allows delete shard meta if failes to delete actual data.
+     * In extreme cases, actual data deletion might fail or timeout,
+     * and if shard meta is not deleted, the FE memory will grow,
+     * eventually cause fe frequently Full GC
+     */
+    @ConfField(mutable = true)
+    public static boolean meta_sync_force_delete_shard_meta = false;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
