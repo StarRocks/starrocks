@@ -442,6 +442,11 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             int n = expr->root()->get_slot_ids(&slot_ids);
             DCHECK(slot_ids.size() == n);
 
+            // do not allow struct subfield
+            if (expr->root()->get_subfields(nullptr) > 0) {
+                return false;
+            }
+
             for (auto slot_id : slot_ids) {
                 if (!partial_chunk->is_slot_exist(slot_id)) {
                     return false;
