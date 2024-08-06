@@ -106,18 +106,12 @@ public:
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         Status st = _builder.finalize(_max_txn_id);
         if (st.ok()) {
             _has_finalized = true;
         }
-<<<<<<< HEAD
         return st;
-=======
-        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
-        RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
-        _has_finalized = true;
-        return Status::OK();
->>>>>>> 8725ea7362 ([BugFix] Fix lake table upgrade downgrade (#49388))
     }
 
 private:
