@@ -76,9 +76,12 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
+<<<<<<< HEAD
     if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
+=======
+    if (metadata->enable_persistent_index()) {
+>>>>>>> 1c8df3aa98 ([BugFix] fix concurrent issue between primary index unload and compaction (#49341))
         DCHECK(_persistent_index == nullptr);
 
         auto persistent_index_type = tablet->get_persistent_index_type(base_version);
@@ -100,6 +103,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                                                                ->get_persistent_index_path(),
                                                        tablet->id());
 
+<<<<<<< HEAD
                 RETURN_IF_ERROR(StorageEngine::instance()
                                         ->get_persistent_index_store(tablet->id())
                                         ->create_dir_if_path_not_exists(path));
@@ -112,6 +116,26 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                 LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
                 return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
             }
+=======
+            RETURN_IF_ERROR(StorageEngine::instance()
+                                    ->get_persistent_index_store(metadata->id())
+                                    ->create_dir_if_path_not_exists(path));
+            _persistent_index = std::make_shared<LakeLocalPersistentIndex>(path);
+            set_enable_persistent_index(true);
+            return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
+                    ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
+        }
+        case PersistentIndexTypePB::CLOUD_NATIVE: {
+            _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
+            set_enable_persistent_index(true);
+            auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+            RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));
+            return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
+        }
+        default:
+            return Status::InternalError("Unsupported lake_persistent_index_type " +
+                                         PersistentIndexTypePB_Name(metadata->persistent_index_type()));
+>>>>>>> 1c8df3aa98 ([BugFix] fix concurrent issue between primary index unload and compaction (#49341))
         }
     }
 
