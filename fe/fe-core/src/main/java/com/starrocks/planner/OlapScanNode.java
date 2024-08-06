@@ -1112,6 +1112,9 @@ public class OlapScanNode extends ScanNode {
         return selectedIndexId;
     }
 
+    /**
+     * Get partition id -> tablets map, note that the partition id is unrolled partition id which may be subpartition id.
+     */
     public Map<Long, List<Long>> getPartitionToScanTabletMap() {
         return partitionToScanTabletMap;
     }
