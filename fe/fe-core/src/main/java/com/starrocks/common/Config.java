@@ -2947,4 +2947,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+    
+    @ConfField
+    public static boolean enable_parser_context_cache = true;
 }
