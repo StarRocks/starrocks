@@ -176,7 +176,8 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         }
         case 11: {
             // VERSION_TXN_TYPE
-            Slice version_txn_type = Slice(to_string(info.version_txn_type));
+            std::string version_txn_type_str = to_string(info.version_txn_type);
+            Slice version_txn_type = Slice(version_txn_type_str);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&version_txn_type);
             break;
         }
