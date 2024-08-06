@@ -38,11 +38,12 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 // A fast range iterator for roaring bitmap. Output ranges use closed-open form, like [from, to).
 // Example:
 //   input bitmap:  [0 1 4 5 6 7 10 15 16 17 18 19]
-//   output ranges: [0,2), [4,8), [10,11), [15,20) (when max_range_size=10)
-//   output ranges: [0,2), [4,8), [10,11), [15,18), [18,20) (when max_range_size=3)
+//   output ranges: [0,2), [4,8), [10,11), [15,20)
 class BitmapRangeIterator {
 public:
     explicit BitmapRangeIterator(const Roaring& bitmap) {
@@ -52,25 +53,23 @@ public:
 
     ~BitmapRangeIterator() = default;
 
-    bool has_more_range() const { return !_eof; }
-
-    // read next range into [*from, *to) whose size <= max_range_size.
+    // read next range into [*from, *to)
     // return false when there is no more range.
-    bool next_range(uint32_t max_range_size, uint32_t* from, uint32_t* to) {
+    bool next_range(uint32_t* from, uint32_t* to) {
         if (_eof) {
             return false;
         }
         *from = _buf[_buf_pos];
-        uint32_t range_size = 0;
+        auto last_val = *from;
+
         do {
-            _last_val = _buf[_buf_pos];
             _buf_pos++;
-            range_size++;
-            if (_buf_pos == _buf_size) { // read next batch
+            last_val++;
+            if (_buf_pos == _buf_size) {
                 _read_next_batch();
             }
-        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == _last_val + 1);
-        *to = *from + range_size;
+        } while (!_eof && _buf[_buf_pos] == last_val);
+        *to = last_val;
         return true;
     }
 
@@ -85,7 +84,6 @@ private:
     static const uint32_t kBatchSize = 256;
 
     roaring::api::roaring_uint32_iterator_t _iter{};
-    uint32_t _last_val{0};
     uint32_t _buf_pos{0};
     uint32_t _buf_size{0};
     bool _eof{false};
