@@ -65,7 +65,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
