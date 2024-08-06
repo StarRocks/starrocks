@@ -46,6 +46,11 @@ public class CachingMvPlanContextBuilder {
 
     public static class AstKey {
         private final String sql;
+
+        /**
+         * Create a AstKey with parseNode(sub parse node)
+         * @param parseNode
+         */
         public AstKey(ParseNode parseNode) {
             this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false).visit(parseNode);
         }
@@ -168,9 +173,6 @@ public class CachingMvPlanContextBuilder {
             return;
         }
         try {
-            // initialize define query parse node each time
-            mv.initDefineQueryParseNode();
-
             // cache by ast
             ParseNode parseNode = mv.getDefineQueryParseNode();
             if (parseNode == null) {
@@ -188,11 +190,11 @@ public class CachingMvPlanContextBuilder {
      * @param parseNode: ast to query.
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
-    public Set<MaterializedView> getMvsByAst(ParseNode parseNode) {
-        if (parseNode == null) {
+    public Set<MaterializedView> getMvsByAst(AstKey ast) {
+        if (ast == null) {
             return null;
         }
-        return astToMvsMap.get(new AstKey(parseNode));
+        return astToMvsMap.get(ast);
     }
 
     /**

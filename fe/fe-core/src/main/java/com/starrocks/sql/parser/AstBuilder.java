@@ -1494,6 +1494,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        int queryStartIndex = context.queryStatement().start.getStartIndex();
 
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
@@ -1587,7 +1588,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
+                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                createPos(context));
     }
 
     @Override
