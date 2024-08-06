@@ -1155,7 +1155,7 @@ StatusOr<ColumnPtr> JsonFunctions::_json_keys_without_path(FunctionContext* cont
 
 StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    return cast_nested_to_json(columns[0]);
+    return cast_nested_to_json(columns[0], context->allow_throw_exception());
 }
 
 } // namespace starrocks
