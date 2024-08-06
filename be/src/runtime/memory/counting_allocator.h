@@ -41,9 +41,7 @@ public:
 
     void* realloc(void* ptr, size_t size) override {
         void* result = Base::realloc(ptr, size);
-        if (LIKELY(result != nullptr)) {
-            _memory_usage += tls_delta_memory;
-        }
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
@@ -83,9 +81,7 @@ public:
 
     int posix_memalign(void** ptr, size_t align, size_t size) override {
         int result = Base::posix_memalign(ptr, align, size);
-        if (LIKELY(result == 0)) {
-            _memory_usage += tls_delta_memory;
-        }
+        _memory_usage += tls_delta_memory;
         return result;
     }
 
