@@ -177,6 +177,8 @@ public:
 
     bool error_if_overflow() const;
 
+    bool allow_throw_exception() const;
+
     std::unique_ptr<NgramBloomFilterState>& get_ngram_state() { return _ngramState; }
 
 private:
