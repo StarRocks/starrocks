@@ -107,16 +107,6 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
-<<<<<<< HEAD
-=======
-        case PersistentIndexTypePB::CLOUD_NATIVE: {
-            _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
-            set_enable_persistent_index(true);
-            auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-            RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));
-            return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
-        }
->>>>>>> 1c8df3aa98 ([BugFix] fix concurrent issue between primary index unload and compaction (#49341))
         default:
             LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
             return Status::InternalError("only support LOCAL lake_persistent_index_type for now");

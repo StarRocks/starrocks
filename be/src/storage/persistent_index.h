@@ -787,8 +787,8 @@ public:
         return res;
     }
 
-    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
@@ -806,12 +806,6 @@ public:
 
     void reset_cancel_major_compaction();
 
-<<<<<<< HEAD
-=======
-    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
-
->>>>>>> 1c8df3aa98 ([BugFix] fix concurrent issue between primary index unload and compaction (#49341))
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
     void test_calc_memory_usage() { return _calc_memory_usage(); }
