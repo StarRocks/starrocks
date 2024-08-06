@@ -114,7 +114,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
