@@ -1855,7 +1855,6 @@ Status SegmentIterator::_apply_del_vector() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
         size_t total_span_size = _scan_range.span_size();
-        size_t range_count = _scan_range.size();
         size_t del_row_count = roaring::api::roaring_bitmap_range_cardinality(&_del_vec->roaring()->roaring,
                                                                               _scan_range.begin(), _scan_range.end());
 
