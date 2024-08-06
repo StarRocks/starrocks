@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <thread>
@@ -160,6 +161,14 @@ struct RuntimeFilterWorkerMetrics {
 
     void update_rf_bytes(EventType event_type, int64_t delta) { runtime_filter_bytes[event_type] += delta; }
 
+    int64_t total_rf_bytes() {
+        int64_t total = 0;
+        for (int i = 0; i < EventType::MAX_COUNT; i++) {
+            total += runtime_filter_bytes[i];
+        }
+        return total;
+    }
+
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> event_nums{};
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
 };
@@ -202,6 +211,8 @@ private:
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
                                       int64_t rpc_http_min_size);
+
+    bool _reach_queue_limit();
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
