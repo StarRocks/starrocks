@@ -133,8 +133,9 @@ public class StatementPlanner {
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
                 } else {
+                    long planStartTime = OptimisticVersion.generate();
                     unLock(dbs);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, planStartTime);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
@@ -275,7 +276,8 @@ public class StatementPlanner {
 
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
-                                                    TResultSinkType resultSinkType) {
+                                                    TResultSinkType resultSinkType,
+                                                    long planStartTime) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -289,12 +291,12 @@ public class StatementPlanner {
         // TODO: double check relatedMvs for OlapTable
         // the original olapTable in queryStmt had been replaced with the copied olapTable
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
-        long planStartTime = 0;
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
+                planStartTime = OptimisticVersion.generate();
                 reAnalyzeStmt(queryStmt, dbs, session);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
+                isSchemaValid = true;
             }
 
             LogicalPlan logicalPlan;
@@ -343,13 +345,13 @@ public class StatementPlanner {
                 }
             }
         }
-
         List<String> updatedTables = Lists.newArrayList();
         for (OlapTable olapTable : olapTables) {
             if (!OptimisticVersion.validateTableUpdate(olapTable, planStartTime)) {
                 updatedTables.add(olapTable.getName());
             }
         }
+
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
                 "schema of %s had been updated frequently during the plan generation", updatedTables);
     }

@@ -173,7 +173,13 @@ public class OlapTable extends Table {
          * doing alter operation.
          * This state is an in-memory state and no need to persist.
          */
-        WAITING_STABLE
+        WAITING_STABLE,
+        /* This state means table is updating table meta during alter operation(SCHEMA_CHANGE
+         * or ROLLUP).
+         * The query plan which is generate during this state is invalid because the meta
+         * during the creation of the logical plan and the physical plan might be inconsistent. 
+        */
+        UPDATING_META
     }
 
     @SerializedName(value = "clusterId")
