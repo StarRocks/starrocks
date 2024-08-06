@@ -855,11 +855,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
         // Copy group by keys as projection
         aggregationOperator.getGroupingKeys().forEach(c -> newProjection.put(c, c));
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjection);
         // Copy original projection mappings.
         if (aggregationOperator.getProjection() != null) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjection);
             aggregationOperator.getProjection().getColumnRefMap().forEach((k, v) ->
                     newProjection.put(k, rewriter.rewrite(v)));
+        }
+        ScalarOperator newPredicate = null;
+        if (aggregationOperator.getPredicate() != null) {
+            newPredicate = rewriter.rewrite(aggregationOperator.getPredicate());
         }
 
         // Make a new logical agg with new projections.
@@ -869,6 +873,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 .setGroupingKeys(aggregationOperator.getGroupingKeys())
                 .setAggregations(newColumnRefToAggFuncMap)
                 .setProjection(new Projection(newProjection))
+                .setPredicate(newPredicate)
                 .build();
 
         return newAggOp;
