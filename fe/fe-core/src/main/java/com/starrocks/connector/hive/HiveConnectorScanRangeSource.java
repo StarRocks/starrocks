@@ -348,10 +348,10 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
         if (connectContext == null) {
             return;
         }
-        long splitSize = connectContext.getSessionVariable().getConnectorMaxSplitSize();
+        long hugeFileSize = connectContext.getSessionVariable().getConnectorHugeFileSize();
         for (RemoteFileDesc fileDesc : partition.getFiles()) {
             if (fileDesc.isSplittable()) {
-                backendSplitCount += (fileDesc.getLength() + splitSize - 1) / splitSize;
+                backendSplitCount += (fileDesc.getLength() + hugeFileSize - 1) / hugeFileSize;
             } else {
                 backendSplitCount += 1;
             }
