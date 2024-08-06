@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
@@ -49,12 +50,22 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class TaskRunsSystemTable extends SystemTable {
+
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
 
-    private static final SystemTable TABLE = create();
+    private static final SystemTable TABLE = new TaskRunsSystemTable();
 
-    public static SystemTable create() {
-        return new TaskRunsSystemTable();
+    private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
+            ImmutableMap.<Byte, Type>builder()
+                    .put(TType.I16, Type.SMALLINT)
+                    .put(TType.I32, Type.INT)
+                    .put(TType.I64, Type.BIGINT)
+                    .put(TType.STRING, Type.STRING)
+                    .put(TType.BOOL, Type.BOOLEAN)
+                    .build();
+
+    public static SystemTable getInstance() {
+        return TABLE;
     }
 
     public TaskRunsSystemTable() {
@@ -120,23 +131,20 @@ public class TaskRunsSystemTable extends SystemTable {
             String name = column.getName().toLowerCase();
             TTaskRunInfo._Fields field = TTaskRunInfo._Fields.findByName(name);
             FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
-            byte type = meta.type;
-
             Object obj = info.getFieldValue(field);
-            Type valueType;
-            if (type == TType.I32) {
-                valueType = Type.INT;
-            } else if (type == TType.I64) {
-                valueType = Type.BIGINT;
-            } else if (type == TType.STRING) {
-                valueType = Type.STRING;
-            } else {
-                throw new NotImplementedException("not supported type: " + type);
-            }
+            Type valueType = thriftToScalarType(meta.type);
             ScalarOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
             result.add(scalar);
         }
         return result;
+    }
+
+    private static Type thriftToScalarType(byte type) {
+        Type valueType = THRIFT_TO_SCALAR_TYPE_MAPPING.get(type);
+        if (valueType == null) {
+            throw new NotImplementedException("not supported type: " + type);
+        }
+        return valueType;
     }
 
     public static TGetTaskRunInfoResult query(TGetTasksParams params) {

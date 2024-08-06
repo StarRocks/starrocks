@@ -333,7 +333,10 @@ public class InformationSchemaDataSourceTest {
                         " from information_schema.task_runs where task_name > 't_1024' ")
                 .explainContains("SCAN SCHEMA");
         starRocksAssert.query("select state, error_message" +
-                        " from information_schema.task_runs where  > 't_1024' ")
+                        " from information_schema.task_runs where error_message > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where state = 'SUCCESS' ")
                 .explainContains("SCAN SCHEMA");
     }
 }

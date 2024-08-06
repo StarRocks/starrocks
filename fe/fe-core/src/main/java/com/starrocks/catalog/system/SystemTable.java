@@ -128,10 +128,20 @@ public class SystemTable extends Table {
         return true;
     }
 
+    /**
+     * Whether this system table supports evaluation in FE
+     *
+     * @return true if it's supported
+     */
     public boolean supportFeEvaluation() {
         return false;
     }
 
+    /**
+     * Evaluate the system table query with specified predicate
+     * @param predicate can only be conjuncts
+     * @return All columns and rows according to the schema of this table
+     */
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         throw new NotImplementedException("not supported");
     }

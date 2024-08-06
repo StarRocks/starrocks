@@ -36,6 +36,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+/**
+ * Evaluate the schema-table query in optimizer
+ * A regular schema-scan would send query plan to BE and retrieve metadata from FE with RPC, which can be pretty slow
+ * in particular cases.
+ * So in this rule we try to evaluate some simple queries in optimizer directly, to eliminate the overhead of RPC
+ */
 public class SchemaTableEvaluateRule extends TransformationRule {
 
     private static final Pattern PATTERN = Pattern.create(OperatorType.LOGICAL_SCHEMA_SCAN);
@@ -61,12 +67,16 @@ public class SchemaTableEvaluateRule extends TransformationRule {
         return true;
     }
 
+    // Only support the pattern: c1=v1 AND c2=v2
     private static boolean checkConjuncts(ScalarOperator predicate) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         return conjuncts.stream().allMatch(ScalarOperator::isColumnEqualConstant);
     }
 
     private static boolean checkTable(Table table) {
+        if (!(table instanceof SystemTable)) {
+            return false;
+        }
         SystemTable systemTable = ((SystemTable) table);
         return systemTable.supportFeEvaluation();
     }
