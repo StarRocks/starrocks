@@ -34,3 +34,11 @@ SELECT to_json(NULL);
 -- result:
 None
 -- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ to_json(map{null:null});
+-- result:
+E: (1064, 'key of Map should not be null')
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ to_json(map{null:null});
+-- result:
+None
+-- !result

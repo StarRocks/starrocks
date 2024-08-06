@@ -169,6 +169,10 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
