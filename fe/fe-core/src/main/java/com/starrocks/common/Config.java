@@ -2405,6 +2405,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static long star_mgr_meta_sync_interval_sec = 600L;
 
+    /**
+     * Whether allows delete shard meta if failes to delete actual data.
+     * In extreme cases, actual data deletion might fail or timeout,
+     * and if shard meta is not deleted, the FE memory will grow,
+     * eventually cause fe frequently Full GC
+     */
+    @ConfField(mutable = true)
+    public static boolean meta_sync_force_delete_shard_meta = false;
+
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
     // ***********************************************************
