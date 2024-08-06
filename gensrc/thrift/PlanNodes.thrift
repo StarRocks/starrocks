@@ -528,6 +528,8 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  // reserved for backport
+  37: optional i64 schema_id
 }
 
 struct TJDBCScanNode {
