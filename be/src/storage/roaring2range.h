@@ -19,6 +19,8 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 static inline SparseRange<> roaring2range(const Roaring& roaring) {
     SparseRange<> range;
     BitmapRangeIterator iter(roaring);
