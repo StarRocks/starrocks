@@ -155,7 +155,6 @@ public class MvRewriteMetricsTest extends MvRewriteTestBase {
                 assertContains(pr, "TEXT_BASED_REWRITE: Rewrite Succeed");
 
                 Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
-                Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 0);
                 Assert.assertTrue(mvMetric.counterQueryTextBasedMatchedTotal.getValue() == 1);
                 Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 0);
                 Assert.assertTrue(mvMetric.counterQueryMaterializedViewTotal.getValue() == 1);

@@ -1343,12 +1343,13 @@ public class MvUtils {
         }
     }
 
-    public static ParseNode getQueryAst(String query) {
+    public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
         try {
             List<StatementBase> statementBases =
-                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+                    com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
             StatementBase stmt = statementBases.get(0);
+            Analyzer.analyze(stmt, connectContext);
             return stmt;
         } catch (ParsingException parsingException) {
             LOG.warn("Parse query {} failed:{}", query, parsingException);
