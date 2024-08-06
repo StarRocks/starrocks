@@ -802,7 +802,6 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
         res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
         ASSERT_EQ(res.value()->id(), schema_id2);
-
     }
 
     {
