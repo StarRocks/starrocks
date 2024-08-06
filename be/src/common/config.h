@@ -1320,16 +1320,13 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 CONF_mBool(enable_json_flat, "true");
 
 // extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.3");
+CONF_mDouble(json_flat_null_factor, "0.4");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
-// only flatten json when the number of sub-field in the JSON exceeds the limit
-CONF_mInt32(json_flat_internal_column_min_limit, "5");
-
 // the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "20");
+CONF_mInt32(json_flat_column_max, "100");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
