@@ -448,6 +448,7 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
                     return false;
                 }
             }
+
             return true;
         };
 
