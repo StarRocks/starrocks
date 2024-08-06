@@ -16,7 +16,6 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -99,7 +98,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
             metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
-            refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
+            refreshRemoteFiles(table, Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
             if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
                 processSchemaChange(dbName, (HiveTable) table);
             }
@@ -121,7 +120,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 List<String> updatedPaths = updatedPartitions.values().stream().map(Partition::getFullPath)
                         .map(path -> path.endsWith("/") ? path : path + "/")
                         .collect(Collectors.toList());
-                refreshRemoteFilesBackground(hmsTbl.getTableLocation(), updatedPaths, onlyCachedPartitions, executor);
+                refreshRemoteFilesBackground(table, updatedPaths, onlyCachedPartitions, executor);
 
                 LOG.info("{}.{}.{} partitions has updated, updated partition size is {}, " +
                                 "refresh partition and file success", hmsTbl.getCatalogName(), hmsTbl.getDbName(),
@@ -215,8 +214,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             List<RemotePathKey> remotePathKeys = partitions.values().stream()
                     .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive))
                     .collect(Collectors.toList());
-            RemoteFileScanContext scanContext = new RemoteFileScanContext();
-            scanContext.hudiTableLocation = hmsTable.getTableLocation();
+            RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
             remotePathKeys.forEach(path -> {
                 path.setScanContext(scanContext);
                 remoteFileIO.get().updateRemoteFiles(path);
@@ -245,13 +243,13 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         }
     }
 
-    private void refreshRemoteFilesBackground(String tableLocation, List<String> updatePaths,
+    private void refreshRemoteFilesBackground(Table table, List<String> updatePaths,
                                               boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey = updatePaths.stream().map(path -> RemotePathKey.of(path, isRecursive))
                     .collect(Collectors.toList());
             if (onlyCachedPartitions) {
-                List<RemotePathKey> cachedPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation,
+                List<RemotePathKey> cachedPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(),
                         isRecursive);
                 presentPathKey = cachedPathKey.stream().filter(pathKey -> {
                     String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
@@ -259,16 +257,16 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 }).collect(Collectors.toList());
             }
 
-            refreshRemoteFilesImpl(tableLocation, presentPathKey, Lists.newArrayList(), refreshExecutor);
+            refreshRemoteFilesImpl(table, presentPathKey, Lists.newArrayList(), refreshExecutor);
         }
     }
 
-    private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
+    private void refreshRemoteFiles(Table table, Operator operator, List<String> existPaths,
                                     boolean onlyCachedPartitions) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey;
             if (onlyCachedPartitions) {
-                presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive);
+                presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive);
             } else {
                 presentPathKey = existPaths.stream()
                         .map(path -> RemotePathKey.of(path, isRecursive))
@@ -284,16 +282,15 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                     invalidateKeys.add(pathKey);
                 }
             });
-            refreshRemoteFilesImpl(tableLocation, updateKeys, invalidateKeys, executor);
+            refreshRemoteFilesImpl(table, updateKeys, invalidateKeys, executor);
         }
     }
 
-    private void refreshRemoteFilesImpl(String tableLocation, List<RemotePathKey> updateKeys,
+    private void refreshRemoteFilesImpl(Table table, List<RemotePathKey> updateKeys,
                                         List<RemotePathKey> invalidateKeys,
                                         ExecutorService refreshExecutor) {
         Preconditions.checkArgument(remoteFileIO.isPresent());
-        RemoteFileScanContext scanContext = new RemoteFileScanContext();
-        scanContext.hudiTableLocation = tableLocation;
+        RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         List<Future<?>> futures = Lists.newArrayList();
         updateKeys.forEach(pathKey -> {
             pathKey.setScanContext(scanContext);
@@ -310,7 +307,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             try {
                 future.get();
             } catch (InterruptedException | ExecutionException e) {
-                LOG.error("Failed to update remote files on [{}]", tableLocation, e);
+                LOG.error("Failed to update remote files on [{}]", table.getTableLocation(), e);
                 throw new StarRocksConnectorException("Failed to update remote files", e);
             }
         }
@@ -326,7 +323,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
 
     public void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
         ((CachingHiveMetastore) metastore).refreshTableByEvent(updatedHiveTable, commonStats, partition);
-        refreshRemoteFiles(updatedHiveTable.getTableLocation(), Operator.UPDATE, getExistPaths(updatedHiveTable), true);
+        refreshRemoteFiles(updatedHiveTable, Operator.UPDATE, getExistPaths(updatedHiveTable), true);
     }
 
     public void refreshPartitionByEvent(HivePartitionName hivePartitionName, HiveCommonStats commonStats, Partition partion) {
@@ -342,14 +339,12 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         remoteFileIO.ifPresent(CachingRemoteFileIO::invalidateAll);
     }
 
-    public void invalidateTable(String dbName, String tableName, String originLocation) {
+    public void invalidateTable(String dbName, String tableName, Table table) {
         String tableLocation;
-        if (!Strings.isNullOrEmpty(originLocation)) {
-            tableLocation = originLocation;
-        } else {
+        if (table == null) {
             LOG.warn("table [{}.{}] origin location is null", dbName, tableName);
             try {
-                tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
+                table = metastore.getTable(dbName, tableName);
             } catch (Exception e) {
                 LOG.error("Can't get table location from cache or hive metastore. ignore it");
                 return;
@@ -359,7 +354,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         metastore.invalidateTable(dbName, tableName);
 
         if (remoteFileIO.isPresent()) {
-            refreshRemoteFiles(tableLocation, Operator.DROP, Lists.newArrayList(), true);
+            refreshRemoteFiles(table, Operator.DROP, Lists.newArrayList(), true);
         }
     }
 

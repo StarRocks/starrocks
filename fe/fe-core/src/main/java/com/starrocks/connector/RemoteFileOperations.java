@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -90,10 +91,8 @@ public class RemoteFileOperations {
         }
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Options options) {
-        RemoteFileScanContext scanContext = new RemoteFileScanContext();
-        scanContext.hudiTableLocation = options.hudiTableLocation;
-
+    public List<RemoteFileInfo> getRemoteFiles(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+        RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
             RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
@@ -101,7 +100,7 @@ public class RemoteFileOperations {
         }
 
         int cacheMissSize = partitions.size();
-        if (enableCatalogLevelCache && options.useCache) {
+        if (enableCatalogLevelCache && params.isUseCache()) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
         }
@@ -116,7 +115,7 @@ public class RemoteFileOperations {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
                 pathKey.setScanContext(scanContext);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = pullRemoteFileExecutor.submit(() ->
-                        remoteFileIO.getRemoteFiles(pathKey, options.useCache));
+                        remoteFileIO.getRemoteFiles(pathKey, params.isUseCache()));
                 futures.add(future);
             }
 
@@ -150,11 +149,11 @@ public class RemoteFileOperations {
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Options options) {
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
         if (enableCatalogLevelCache) {
             return getPresentFilesInCache(partitions);
         } else {
-            return getRemoteFiles(partitions, options);
+            return getRemoteFiles(table, partitions, params);
         }
     }
 

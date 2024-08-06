@@ -165,11 +165,12 @@ public class HiveMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+            Table table = GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             if (hmsTable != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+                        hmsTable.getDbName(), hmsTable.getTableName(), table));
             }
         } else {
             HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
@@ -261,7 +262,9 @@ public class HiveMetadata implements ConnectorMetadata {
             useCache = false;
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useCache));
+        GetRemoteFilesParams updatedParams = params.copy();
+        updatedParams.setUseCache(useCache);
+        return fileOps.getRemoteFiles(table, partitions.build(), updatedParams);
     }
 
     @Override

@@ -167,8 +167,7 @@ public class HudiMetadata implements ConnectorMetadata {
             }
         }
 
-        return fileOps.getRemoteFiles(partitions.build(),
-                RemoteFileOperations.Options.toUseHudiTableLocation(hmsTbl.getTableLocation()));
+        return fileOps.getRemoteFiles(table, partitions.build(), params);
     }
 
     @Override
@@ -222,11 +221,12 @@ public class HudiMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+            Table table = GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             if (hmsTable != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+                        hmsTable.getDbName(), hmsTable.getTableName(), table));
             }
         }
     }
