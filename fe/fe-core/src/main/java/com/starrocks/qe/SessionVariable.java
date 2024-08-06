@@ -1961,7 +1961,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
-    @VariableMgr.VarAttr(name = WAREHOUSE_NAME)
+    @VariableMgr.VarAttr(name = WAREHOUSE_NAME, flag = VariableMgr.SESSION_ONLY)
     private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
