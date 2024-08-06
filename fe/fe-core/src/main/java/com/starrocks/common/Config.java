@@ -1334,6 +1334,42 @@ public class Config extends ConfigBase {
     public static long memory_tracker_interval_seconds = 60;
 
     /**
+     * true to enable collect proc memory alloc profile
+     */
+    @ConfField(mutable = true)
+    public static boolean proc_profile_mem_enable = true;
+
+    /**
+     * true to enable collect proc cpu profile
+     */
+    @ConfField(mutable = true)
+    public static boolean proc_profile_cpu_enable = true;
+
+    /**
+     * The number of seconds between proc profile collections
+     */
+    @ConfField(mutable = true)
+    public static long proc_profile_collect_interval_s = 600;
+
+    /**
+     * The number of seconds it takes to collect single proc profile
+     */
+    @ConfField(mutable = true)
+    public static long proc_profile_collect_time_s = 300;
+
+    /**
+     * The number of days to retain profile files
+     */
+    @ConfField(mutable = true)
+    public static int proc_profile_file_retained_days = 2;
+
+    /**
+     * The number of size to retain profile files
+     */
+    @ConfField(mutable = true)
+    public static long proc_profile_file_retained_size_bytes = Long.MAX_VALUE;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
