@@ -38,6 +38,7 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeStringLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -1049,6 +1050,8 @@ public class AstToStringBuilder {
                 } else {
                     return visitExpression(node, context);
                 }
+            } else if (node instanceof LargeStringLiteral) {
+                return ((LargeStringLiteral) node).toFullSqlImpl();
             } else {
                 return visitExpression(node, context);
             }
@@ -1058,6 +1061,8 @@ public class AstToStringBuilder {
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else if (node.getLabel() != null) {
+                return node.getLabel();
             } else {
                 return node.getColumnName();
             }
