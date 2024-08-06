@@ -245,7 +245,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
                         Assert.assertTrue(queryCacheStats != null);
-                        Assert.assertTrue(!queryCacheStats.getCounter().containsKey(key));
+                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
                     }
 
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -266,7 +266,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
                         Assert.assertTrue(queryCacheStats != null);
-                        Assert.assertTrue(!queryCacheStats.getCounter().containsKey(key));
+                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
                     }
                 });
         starRocksAssert.dropTable("tbl1");
