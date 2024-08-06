@@ -1,0 +1,3 @@
+-- name: test_table_profile
+create table t(k int, v int);
+
