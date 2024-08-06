@@ -405,7 +405,7 @@ void TabletScanner::update_counter() {
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
     if (_reader->stats().flat_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathHits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");
 
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
@@ -413,11 +413,34 @@ void TabletScanner::update_counter() {
         }
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathUnhits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonUnhits");
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
+    }
+    if (_reader->stats().merge_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("MergeJsonUnhits");
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
+    }
+    if (_reader->stats().json_init_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonInit");
+        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+    }
+    if (_reader->stats().json_cast_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonCast");
+        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+    }
+    if (_reader->stats().json_merge_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonMerge");
+        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+    }
+    if (_reader->stats().json_flatten_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonFlatten");
+        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
     }
     _has_update_counter = true;
 }

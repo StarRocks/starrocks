@@ -185,6 +185,8 @@ public:
 
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
+    bool has_remain_json() const { return _has_remain; }
+
 private:
     const std::string& file_name() const { return _segment->file_name(); }
     template <bool is_original_bf>
@@ -284,6 +286,8 @@ private:
 
     // only for json flat column
     std::string _name;
+    bool _is_flat_json = false;
+    bool _has_remain = false;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

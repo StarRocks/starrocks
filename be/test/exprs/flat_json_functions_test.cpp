@@ -68,14 +68,10 @@ TEST_P(FlatJsonQueryTestFixture2, flat_json_query) {
 
     auto flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back(p);
-    }
-    flat_json_ptr->init_flat_columns(full_paths, param_flat_type);
 
-    JsonFlattener jf(param_flat_path, param_flat_type);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns{flat_json, builder.build(true)};
 
@@ -171,14 +167,15 @@ TEST_P(FlatJsonQueryErrorTestFixture, json_query) {
 
     auto flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back(p);
-    }
-    flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlattener jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
+    }
+
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns{flat_json, builder.build(true)};
 
@@ -227,14 +224,9 @@ TEST_P(FlatJsonExistsTestFixture2, flat_json_exists_test) {
     auto flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back(p);
-    }
-    flat_json_ptr->init_flat_columns(full_paths, param_flat_type);
-
-    JsonFlattener jf(param_flat_path, param_flat_type);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
@@ -312,14 +304,9 @@ TEST_P(FlatJsonLengthTestFixture2, flat_json_length_test) {
     auto flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back(p);
-    }
-    flat_json_ptr->init_flat_columns(full_paths, param_flat_type);
-
-    JsonFlattener jf(param_flat_path, param_flat_type);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
@@ -379,16 +366,12 @@ TEST_P(FlatJsonKeysTestFixture2, json_keys) {
 
     auto flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back(p);
-    }
 
     Columns columns{flat_json, builder.build(true)};
-    flat_json_ptr->init_flat_columns(full_paths, param_flat_type);
 
-    JsonFlattener jf(param_flat_path, param_flat_type);
-    jf.flatten(json_column.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_column.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
@@ -457,10 +440,9 @@ public:
         auto flat_json = JsonColumn::create();
         auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-        flat_json_ptr->init_flat_columns(flat_path, flat_type);
-
-        JsonFlattener jf(flat_path, flat_type);
-        jf.flatten(ints.get(), &flat_json_ptr->get_flat_fields());
+        JsonFlattener jf(flat_path, flat_type, false);
+        jf.flatten(ints.get());
+        flat_json_ptr->set_flat_columns(flat_path, flat_type, jf.mutable_result());
 
         Columns columns{flat_json, builder.build(true)};
 
@@ -618,13 +600,11 @@ TEST_P(FlatJsonDeriverPaths, flat_json_path_test) {
     ASSERT_TRUE(json2.ok());
     json_column->append(&*json2);
 
-    Columns columns{json_column};
-    JsonFlattener jf;
-    config::json_flat_internal_column_min_limit = 0;
-    jf.derived_paths(columns);
-    config::json_flat_internal_column_min_limit = 5;
-    std::vector<std::string> path = jf.get_flat_paths();
-    std::vector<LogicalType> type = jf.get_flat_types();
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.derived(columns);
+    std::vector<std::string> path = jf.flat_paths();
+    std::vector<LogicalType> type = jf.flat_types();
 
     ASSERT_EQ(param_flat_path, path);
     ASSERT_EQ(param_flat_type, type);
@@ -635,15 +615,15 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonPathDeriver, FlatJsonDeriverPaths,
     ::testing::Values(
         std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_VARCHAR}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
         std::make_tuple(R"({ "k1": [1,2,3] })", R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
 
         std::make_tuple(R"({ "k1": "v1", "k2": [3,4,5], "k3": 1, "k4": 1.2344 })",  
-                        R"({ "k1": "abc", "k2": [11,123,54], "k3": 23423, "k4": 1.2344 })", 
-                        std::vector<std::string> {"k3", "k4", "k1", "k2"}, 
-                        std::vector<LogicalType> {TYPE_BIGINT, TYPE_DOUBLE, TYPE_VARCHAR, TYPE_JSON}),
+                        R"({ "k1": "abc", "k2": [11,123,54], "k3": 23423, "k4": 1.2344 })",
+                        std::vector<std::string> {"k1", "k2", "k3", "k4"}, 
+                        std::vector<LogicalType> {TYPE_VARCHAR, TYPE_JSON, TYPE_BIGINT, TYPE_DOUBLE}),
         std::make_tuple(R"({ "k1": 1, "k2": "a" })", R"({ "k1": 3, "k2": null })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}),
         std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),
 
