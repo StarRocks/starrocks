@@ -41,7 +41,7 @@ TEST(CountingAllocatorTest, normal) {
     {
         // phmap
         phmap::flat_hash_map<int, int, phmap::priv::hash_default_hash<int>, phmap::priv::hash_default_eq<int>,
-                             CountingAllocator<int>>
+                             STLCountingAllocator<int>>
                 m{STLCountingAllocator<int>(&memory_usage)};
         m.insert({1, 1});
         ASSERT_EQ(memory_usage, 28);
