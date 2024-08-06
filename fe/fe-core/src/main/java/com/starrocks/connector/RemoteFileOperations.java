@@ -200,7 +200,7 @@ public class RemoteFileOperations {
         for (int i = 0; i < partitions.size(); i++) {
             final Partition partition = partitions.get(i);
             final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
-            final Object attachment = (attachments != null) ? attachments.get(i): null;
+            final Object attachment = (attachments != null) ? attachments.get(i) : null;
             pathKey.setScanContext(scanContext);
             tasks.add(() -> {
                 Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey);
