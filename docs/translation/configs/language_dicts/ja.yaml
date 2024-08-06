@@ -1,0 +1,242 @@
+experiment tracking: 実験管理
+tree: ツリー
+discrete values: 離散値
+importance plot: インポータンスプロット
+API key: APIキー
+AV model: AVモデル
+Artifact CLI Reference Guide: Artifact CLIリファレンスガイド
+Artifacts: Artifacts
+Bayesian optimization: ベイズ最適化
+Bayesian search: ベイズ探索
+Colab notebook: Colabノートブック
+Common Questions: よくある質問
+Data Visualization: Data Visualization
+Dedicated Cloud: 専用クラウド
+Deployer: Deployer
+Experiments: 実験管理
+Sweeps: スイープ
+Model Registry: モデルレジストリ
+Automations: オートメーション
+Launch: ローンンチ
+Traces: トレース
+Evaluations: 評価
+Artifacts: アーティファクト
+Tables: テーブル
+Reports: レポート
+GPU: GPU
+How It Works: 仕組み
+How to Get Started: 開始方法
+Hugging Face transformer: Hugging Face transformer
+INFO: 情報
+IOU: IoU
+Integrations guide: インテグレーションガイド
+Let's Take a Look: 見てみましょう
+Model Management: Model Management
+Optimizer: オプティマイザー
+Overview tab: Overviewタブ
+Quickstart: クイックスタート
+Reports: Reports
+SaaS: SaaS
+Sweeps: Sweeps
+Video Tutorials: 動画チュートリアル
+W&B Developer Guide: W&B開発者ガイド
+W&B Easy Integration YouTube: W&Bの簡単なインテグレーションを紹介したYouTube
+W&B Fully Connected: W&B Fully Connected
+W&B SDK Reference Guide: W&B SDKリファンレンスガイド
+Weave expression: Weave表現
+Weights & Biases: Weights & Biases
+What Next?: 次の学習内容
+access: アクセス
+accuracy plot: 精度図
+address: アドレス
+agent: エージェント
+alias: エイリアス
+analysis: 分析
+application: アプリケーション
+architecture: アーキテクチャー
+arg: arg
+argument: 引数
+artifact: アーティファクト
+assignment: 割り当て
+autonomous vehicle: 自動運転車
+backup: バックアップ
+baseline: ベースライン
+batch size: バッチサイズ
+behavior: 振る舞い
+best practices: ベストプラクティス
+bias: バイアス
+blog: ブログ
+bucket: バケット
+business context: ビジネスコンテキスト
+callback: コールバック
+case study: ケーススタディ
+channel: チャンネル
+chapter: チャプター
+chatbot: チャットボット
+checkpoint: チェックポイント
+cloud: クラウド
+cluster: クラスター
+code: コード
+code snippet: コードスニペット
+command: コマンド
+command line: コマンドライン
+complex code base: 複雑なコードベース
+computer vision: コンピュータビジョン
+configuration: 設定
+controller: コントローラ
+convolutional block: 畳み込みブロック
+couple lines of code: コード2行
+course: コース
+cross validation: 交差検証
+customer case study: 顧客ケーススタディ
+cutting-edge: 最先端の
+dashboard: ダッシュボード
+data: データ
+data frame: データフレーム
+data leakage: データリーケージ
+data obfuscation: データ難読化
+data partitioning: データパーティション化
+data visualization: データ可視化
+dataset: データセット
+dataset-agnostic: データセットに依存しない
+deep learning: ディープラーニング
+demo: デモ
+deployment: デプロイメント
+dictionary: 辞書
+directory: ディレクトリー
+docker container: dockerコンテナ
+ecosystem: エコシステム
+edge case: エッジケース
+end-to-end: エンドツーエンド
+environment: 環境
+epoch: エポック
+evaluation metric: 評価メトリクス
+experiment: 実験
+findings: 学び
+fine-tune: ファインチューン
+forward pass: forward pass
+framework: フレームワーク
+gradient: 勾配
+grid search: グリッド検索
+ground truth: 正解
+group partitioning: グループパーティション化
+guide: ガイド
+holdout set: ホールドアウトセット
+hook: フック
+host flag: ホストフラグ
+hyperparameter: ハイパーパラメーター
+hyperparameter sweep: ハイパーパラメーター探索
+hyperparameter tuning: ハイパーパラメータチューニング
+image classification: 画像分類
+image segmentation: 画像セグメンテーション
+infrastructure: インフラストラクチャー
+instance segmentation: インスタンスセグメンテーション
+integration: インテグレーション
+interactive charts: インタラクティブなグラフ
+intersection over union: Intersection over union
+intro: イントロダクション
+job type: ジョブタイプ
+key: キー
+learner object: 学習オブジェクト
+lesson: レッスン
+library: ライブラリ
+line of code: コード行
+lineage: リネージ
+local minima: 局所最小値
+log: ログ
+machine learning: 機械学習
+machine learning practitioner: 機械学習エンジニア
+metadata: メタデータ
+method: メソッド
+metrics: メトリクス
+model: モデル
+model evaluation: モデルの評価
+model evolution: モデルの進化
+model lineage: モデルリネージ
+model management: モデル管理
+model registry: モデルレジストリ
+model training: モデルトレーニング
+navigation bar: ナビゲーションバー
+neural network: ニューラルネットワーク
+next steps: 次のステップ
+noise: ノイズ
+noising: ノイジング
+notebook: ノートブック
+object: オブジェクト
+object detection: オブジェクト検出
+on-prem: オンプレミス
+orchestration: オーケストレーション
+overfitting: 過学習
+panel: パネル
+parallel coordinates plots: パラレル座標図
+parameter: パラメータ
+parameter importance: パラメータの重要性
+partition: パーティション
+person IOU: 人物IOU
+pipeline: パイプライン
+pkce grant types: pkce許可タイプ
+platform: プラットフォーム
+population based training: population based training
+pre-trained: 学習済み
+precision-recall curve: PR曲線
+prediction: 予測
+private cloud: プライベートクラウド
+process: プロセス
+processing: プロセッシング
+production: プロダクション
+project: プロジェクト
+random search: ランダム検索
+recommender system: 推薦システム
+reinforcement learning: 強化学習
+report: レポート
+reproducibility: 再現性
+research: 研究
+result: 結果
+run: run
+script: スクリプト
+semantic segmentation: セマンティックセグメンテーション
+sentiment analysis: センチメント分析
+server: サーバー
+settings: 設定
+single-tenant: シングルテナント
+snapshot: スナップショット
+state assignments: 状態割り当て
+stratified partitioning: 層化パーティショニング
+subset: サブセット
+support team: サポートチーム
+sweep: sweep
+sweep agent: sweep agent
+sweep configuration: sweep configuration
+sweep server: sweep server
+system of record: SoR
+team member: チームメンバー
+terminal: ターミナル
+test set: テストセット
+text-to-image: text-to-image
+time series: 時系列
+time series cross validation: 時系列相互検証
+tool: ツール
+torchvision: torchvision
+tracked hours: 追跡時間
+traffic light: 信号
+training: トレーニング
+training data: トレーニングデータ
+training script: トレーニングスクリプト
+traverse: トラバース
+trial: トライアル
+tune: チューニングする
+tuning transformers: transformerのチューニング
+underfitting: 学習不足
+use case: ユースケース
+user: ユーザー
+validation accuracy: 検証精度
+validation loop: 検証ループ
+validation set: 検証セット
+value: 値
+version: バージョン
+versioning: バージョン管理
+video walkthrough: 動画ガイド
+visualization: 可視化
+wandb library: wandbライブラリ
+workflow: ワークフロー
+workspace: ワークスペース
