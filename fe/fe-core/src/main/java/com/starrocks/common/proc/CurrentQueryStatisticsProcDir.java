@@ -57,7 +57,6 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("StartTime")
-            .add("CustomQueryId")
             .add("QueryId")
             .add("ConnectionId")
             .add("Database")
@@ -69,6 +68,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("CPUTime")
             .add("ExecTime")
             .add("Warehouse")
+            .add("CustomQueryId")
             .build();
 
     @Override

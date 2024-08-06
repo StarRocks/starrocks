@@ -1054,6 +1054,10 @@ public class StmtExecutor {
 
     // Handle kill running query statement.
     private void handleKillQuery(String queryId) throws DdlException {
+        if (StringUtils.isEmpty(queryId)) {
+            context.getState().setOk();
+            return;
+        }
         // > 0 means it is forwarded from other fe
         if (context.getForwardTimes() == 0) {
             String errorMsg = null;
