@@ -192,7 +192,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
         RemoteFileInfo remoteFileInfo;
         List<RemoteFileDesc> files;
         int fileIndex = 0;
-        List<TScanRangeLocations> buffer;
+        List<TScanRangeLocations> buffer = new ArrayList<>();
 
         public ScanRangeIterator(RemoteFileInfo remoteFileInfo) {
             this.remoteFileInfo = remoteFileInfo;
