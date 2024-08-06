@@ -167,6 +167,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
 
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
@@ -253,6 +254,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         TabletReaderParams reader_params;
         reader_params.reader_type = compaction_type();
         reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+        reader_params.column_access_paths = &_column_access_paths;
 
         int64_t total_num_rows = 0;
         int64_t total_mem_footprint = 0;
