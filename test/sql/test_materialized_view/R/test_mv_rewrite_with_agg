@@ -34,11 +34,11 @@ GROUP BY `pt`, `id`;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("select pt,avg(gmv) as a from t1 group by pt';", "test_mv1")
+function: print_hit_materialized_view("select pt,avg(gmv) as a from t1 group by pt;", "test_mv1")
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("select pt,avg(gmv) as a from t1 group by pt having a>0;';", "test_mv1")
+function: print_hit_materialized_view("select pt,avg(gmv) as a from t1 group by pt having a>0;", "test_mv1")
 -- result:
 True
 -- !result
@@ -48,7 +48,7 @@ select pt,avg(gmv) as a from t1 group by pt order by 1;
 2023-03-08	3.0
 2023-03-11	10.0
 -- !result
-select pt,avg(gmv) as a from t1 group by pt having a>5.0 order by 1; 
+select pt,avg(gmv) as a from t1 group by pt having a>5.0 order by 1;
 -- result:
 2023-03-11	10.0
 -- !result
