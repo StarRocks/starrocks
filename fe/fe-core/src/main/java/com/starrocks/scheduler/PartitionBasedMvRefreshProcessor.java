@@ -1448,8 +1448,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
-        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        ctx.getSessionVariable().setEnableInsertStrict(false);
+        ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        LOG.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), materializedView.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
