@@ -1,0 +1,26 @@
+-- name: test_apply_del_vector
+CREATE table t1 (
+    c1 int,
+    c2 int
+)
+PRIMARY KEY(c1)
+DISTRIBUTED BY HASH(c1) buckets 1
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series * 100 from table(generate_series(1, 100));
+-- result:
+-- !result
+select count(*) from t1;
+-- result:
+100
+-- !result
+delete from t1 where c1%20=0;
+-- result:
+-- !result
+select count(*) from t1;
+-- result:
+95
+-- !result

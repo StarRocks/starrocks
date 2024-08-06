@@ -63,6 +63,8 @@ public:
 
     std::string to_string() const;
 
+    void set_begin(T v) { _begin = v; }
+
 private:
     T _begin{0};
     T _end{0};
@@ -193,6 +195,8 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     SparseRange<T> intersection(const SparseRange<T>& rhs) const;
 
+    SparseRange<T> remove_for_sorted_range(const SparseRange<T>& rhs) const;
+
     SparseRangeIterator<T> new_iterator() const;
 
     std::string to_string() const;
@@ -318,6 +322,77 @@ inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) co
         }
     }
     return result;
+}
+
+template <typename T>
+SparseRange<T> SparseRange<T>::remove_for_sorted_range(const SparseRange<T>& rhs) const {
+    CHECK(_is_sorted && rhs._is_sorted);
+
+    SparseRange<T> res;
+    size_t i = 0;
+    size_t j = 0;
+
+    for (; i < _ranges.size();) {
+        auto l_range = _ranges[i];
+
+        bool next_l = false;
+        for (; j < rhs._ranges.size();) {
+            auto r_range = rhs._ranges[j];
+
+            if (l_range.end() <= r_range.begin()) {
+                res._add_uncheck(Range<T>(l_range.begin(), l_range.end()));
+                next_l = true;
+                break;
+            } else if (l_range.begin() >= r_range.end()) {
+                j++;
+                continue;
+            } else if (l_range.begin() < r_range.begin()) {
+                res._add_uncheck(Range<T>(l_range.begin(), r_range.begin()));
+                if (l_range.end() < r_range.end()) {
+                    next_l = true;
+                    break;
+                } else if (l_range.end() > r_range.end()) {
+                    l_range.set_begin(r_range.end());
+                    j++;
+                    continue;
+                } else {
+                    next_l = true;
+                    j++;
+                    break;
+                }
+            } else { // l_range.begin() >= r_range.begin()
+                if (l_range.end() > r_range.end()) {
+                    l_range.set_begin(r_range.end());
+                    j++;
+                    continue;
+                } else if (l_range.end() < r_range.end()) {
+                    next_l = true;
+                    break;
+                } else {
+                    j++;
+                    next_l = true;
+                    break;
+                }
+            }
+        }
+
+        if (next_l) {
+            i++;
+        } else if (j == rhs._ranges.size()) {
+            res._add_uncheck(Range<T>(l_range.begin(), l_range.end()));
+            i++;
+            break;
+        } else {
+            CHECK(false);
+        }
+    }
+
+    for (; i < _ranges.size(); i++) {
+        auto l_range = _ranges[i];
+        res._add_uncheck(Range<T>(l_range.begin(), l_range.end()));
+    }
+
+    return res;
 }
 
 template <typename T>
