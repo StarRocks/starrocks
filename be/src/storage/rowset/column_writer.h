@@ -85,6 +85,7 @@ struct ColumnWriterOptions {
     GlobalDictMap* global_dict = nullptr;
 
     bool need_flat = false;
+    bool is_compaction = false;
 
     std::string field_name;
 };

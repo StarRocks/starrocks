@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -41,8 +42,6 @@ import java.util.stream.Collectors;
  * normalize expression to ColumnAccessPath
  */
 public class SubfieldAccessPathNormalizer {
-    // todo: BE only support one-layer json path, supported more layer in future
-    public static int JSON_FLATTEN_DEPTH = 1;
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
 
@@ -82,6 +81,7 @@ public class SubfieldAccessPathNormalizer {
         }
     }
 
+
     public ColumnAccessPath normalizePath(ColumnRefOperator root, String columnName) {
         List<AccessPath> paths = allAccessPaths.stream().filter(path -> path.root().equals(root))
                 .sorted((o1, o2) -> Integer.compare(o2.paths.size(), o1.paths.size()))
@@ -90,11 +90,7 @@ public class SubfieldAccessPathNormalizer {
         ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, Type.INVALID);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
-            int depth = accessPath.paths.size();
-            if (accessPath.root.getType().isJsonType()) {
-                depth = Math.min(depth, JSON_FLATTEN_DEPTH);
-            }
-            for (int i = 0; i < depth; i++) {
+            for (int i = 0; i < accessPath.paths.size(); i++) {
                 if (parentPath.hasChildPath(accessPath.paths.get(i))) {
                     ColumnAccessPath childPath = parentPath.getChildPath(accessPath.paths.get(i));
                     TAccessPathType pathType = accessPath.pathTypes.get(i);
@@ -152,6 +148,12 @@ public class SubfieldAccessPathNormalizer {
     }
 
     private static class Collector extends ScalarOperatorVisitor<Optional<AccessPath>, List<Optional<AccessPath>>> {
+        private final int jsonFlattenDepth;
+
+        public Collector(int jsonDepth) {
+            this.jsonFlattenDepth = jsonDepth;
+        }
+
         @Override
         public Optional<AccessPath> visit(ScalarOperator scalarOperator,
                                           List<Optional<AccessPath>> childrenAccessPaths) {
@@ -239,7 +241,7 @@ public class SubfieldAccessPathNormalizer {
         //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
         //  a.b.c -> [a, b, c]
         // when meet some unsupported path, return null
-        public static boolean formatJsonPath(String path, List<String> result) {
+        public boolean formatJsonPath(String path, List<String> result) {
             path = StringUtils.trimToEmpty(path);
             if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||
                     StringUtils.countMatches(path, "\"") % 2 != 0) {
@@ -254,7 +256,7 @@ public class SubfieldAccessPathNormalizer {
             if (tokens.length < 1) {
                 return false;
             }
-            int size = JSON_FLATTEN_DEPTH;
+            int size = jsonFlattenDepth;
             int i = 0;
             if (tokens[0].equals("$")) {
                 size++;
@@ -309,7 +311,11 @@ public class SubfieldAccessPathNormalizer {
     }
 
     public void collect(List<ScalarOperator> scalarOperators) {
-        Collector collector = new Collector();
+        int jsonDepth = 20;
+        if (null != ConnectContext.get() && null != ConnectContext.get().getSessionVariable()) {
+            jsonDepth = ConnectContext.get().getSessionVariable().getCboPruneJsonSubfieldDepth();
+        }
+        Collector collector = new Collector(jsonDepth);
         List<Optional<AccessPath>> paths =
                 scalarOperators.stream().map(op -> collector.process(op, allAccessPaths)).collect(Collectors.toList());
         paths.forEach(p -> p.ifPresent(allAccessPaths::add));

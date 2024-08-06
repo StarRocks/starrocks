@@ -77,6 +77,7 @@ struct SegmentWriterOptions {
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
     std::string encryption_meta;
+    bool is_compaction = false;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.

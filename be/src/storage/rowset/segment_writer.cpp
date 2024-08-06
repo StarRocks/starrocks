@@ -94,6 +94,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
+        json_meta->set_is_flat(false);
+        json_meta->set_has_remain(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -199,6 +201,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
 
         opts.need_flat = config::enable_json_flat;
+        opts.is_compaction = _opts.is_compaction;
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
