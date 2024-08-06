@@ -143,7 +143,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
 }
 
 TEST_F(VectorIndexWriterTest, testwrite_with_empty_mark) {
-    config::config_tenann_default_build_threshold = 100;
+    config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();
 
     tablet_index->add_common_properties("index_type", "ivfpq");

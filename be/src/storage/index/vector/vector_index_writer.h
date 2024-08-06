@@ -61,7 +61,7 @@ private:
     std::string _vector_index_file_path;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 
-    uint32_t _start_vector_index_build_threshold = config::config_tenann_default_build_threshold;
+    uint32_t _start_vector_index_build_threshold = config::config_vector_index_default_build_threshold;
 
     // buffer data for tiny data size
     ColumnPtr _buffer_column;
