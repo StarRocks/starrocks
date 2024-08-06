@@ -752,4 +752,41 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         }
         connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(true);
     }
+
+    @Test
+    public void testMVRewriteWithHaving() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_pt` (\n" +
+                "  `id` int(11) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into test_pt values(2,'2023-03-07',10), (2,'2023-03-08',10), (2," +
+                "'2023-03-11',10);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_pt_mv4` \n" +
+                        "PARTITION BY (`pt`)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "REFRESH ASYNC START(\"2024-03-08 03:00:00\") EVERY(INTERVAL 1 DAY)\n" +
+                        "PROPERTIES (\n" +
+                        "\"partition_refresh_number\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT `pt`, `id`, sum(gmv) AS `sum_gmv`, count(gmv) AS `count_gmv`\n" +
+                        "FROM `test`.`test_pt`\n" +
+                        "GROUP BY `pt`, `id`;",
+                () -> {
+                    String plan = getFragmentPlan("select pt, avg(gmv) as a from test_pt group by pt having a>0;");
+                    PlanTestBase.assertContains(plan, "     TABLE: test_pt_mv4\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=0/0");
+                    PlanTestBase.assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                            "  |  output: sum(7: sum_gmv), sum(8: count_gmv)\n" +
+                            "  |  group by: 5: pt\n" +
+                            "  |  having: CAST(11: sum AS DOUBLE) / CAST(12: count AS DOUBLE) > 0.0");
+                });
+    }
 }
