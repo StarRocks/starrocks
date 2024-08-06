@@ -199,7 +199,6 @@ public:
         if (it != _node_exec_stats.end()) {
             it->second->push_rows += push_rows;
         }
-
     }
 
     void update_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
@@ -227,6 +226,13 @@ public:
         auto it = _node_exec_stats.find(plan_node_id);
         if (it != _node_exec_stats.end()) {
             it->second->rf_filter_rows += rf_filter_rows;
+        }
+    }
+
+    void force_set_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows.exchange(pull_rows);
         }
     }
 

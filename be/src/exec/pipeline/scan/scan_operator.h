@@ -93,6 +93,8 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
+    void update_exec_stats(RuntimeState* state) override;
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -121,7 +123,6 @@ protected:
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
                                            int64_t scan_rows, int64_t scan_bytes);
     void _detach_chunk_sources();
-    void update_exec_stats(RuntimeState* state);
 
     void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;

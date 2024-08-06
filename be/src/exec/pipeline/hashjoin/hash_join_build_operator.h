@@ -59,6 +59,7 @@ public:
     }
 
     size_t output_amplification_factor() const override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 protected:
     HashJoinerPtr _join_builder;
