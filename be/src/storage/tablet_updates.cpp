@@ -2203,12 +2203,13 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     auto& index = index_entry->value();
 
     Status st;
-    PersistentIndexMetaPB index_meta;
+    google::protobuf::Arena arena;
+    auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
 
     bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
-        st = index.reset(&_tablet, version_info.version, &index_meta);
+        st = index.reset(&_tablet, version_info.version, index_meta);
     } else {
         st = index.load(&_tablet);
     }
@@ -2234,7 +2235,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         }
     });
     if (enable_persistent_index && !rebuild_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, index_meta);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_get_pindex_meta_failed,
                                    { st = Status::InternalError("inject tablet_apply_get_pindex_meta_failed"); });
         if (!st.ok() && !st.is_not_found()) {
@@ -2360,7 +2361,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     int64_t t_index_delvec = MonotonicMillis();
 
-    st = index.commit(&index_meta);
+    st = index.commit(index_meta);
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
@@ -2385,7 +2386,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs, index_meta, enable_persistent_index, nullptr);
+                                                    delvecs, *index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
@@ -2423,7 +2424,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         failure_handler(msg, st.code());
         return apply_st;
     }
-    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     {
         // Update the stats of affected rowsets.
