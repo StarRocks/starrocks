@@ -718,37 +718,7 @@ public class MvRewritePreprocessor {
             MaterializedView mv = mvWithPlanContext.getMv();
             MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
             try {
-<<<<<<< HEAD
                 preprocessMv(mv, mvPlanContext, queryTables, originQueryColumns);
-=======
-                // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
-                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
-                    continue;
-                }
-                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-                if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
-                    continue;
-                }
-                logMVPrepare(mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
-
-                // mv's partial partition predicates
-                ScalarOperator mvPartialPartitionPredicates =
-                        mvPartialPartitionPredicate(mv, mvPlanContext, partitionNamesToRefresh);
-                if (mvPartialPartitionPredicates == null) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "partition compensate fail");
-                    continue;
-                }
-                logMVPrepare(mv, "MV compensate partition predicate: {}", mvPartialPartitionPredicates);
-                MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                        mvPartialPartitionPredicates, mvUpdateInfo, queryTables);
-                if (materializationContext == null) {
-                    continue;
-                }
-                queryMaterializationContext.addValidCandidateMV(materializationContext);
-                logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
->>>>>>> a8e64b69a8 ([Enhancement] Optimize text based mv rewrite performance (#49330))
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e.getMessage());
@@ -883,7 +853,7 @@ public class MvRewritePreprocessor {
             outputMapping.put(mvOutputColumns.get(i), scanMvOutputColumns.get(i));
         }
         materializationContext.setOutputMapping(outputMapping);
-        context.addCandidateMvs(materializationContext);
+        queryMaterializationContext.addValidCandidateMV(materializationContext);
         logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
     }
 

@@ -1292,32 +1292,7 @@ public class MvUtils {
         return scanMvOutputColumns;
     }
 
-<<<<<<< HEAD
-    public static ParseNode getQueryAst(String query) {
-=======
-    public static OptExpression addExtraPredicate(OptExpression result,
-                                                  ScalarOperator extraPredicate) {
-        Operator op = result.getOp();
-        if (op instanceof LogicalSetOperator) {
-            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
-            return OptExpression.create(filter, result);
-        } else {
-            // If op is aggregate operator, use setPredicate directly.
-            ScalarOperator origPredicate = op.getPredicate();
-            if (op.getProjection() != null) {
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
-                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
-                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
-            } else {
-                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
-            }
-            return result;
-        }
-    }
-
     public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
->>>>>>> a8e64b69a8 ([Enhancement] Optimize text based mv rewrite performance (#49330))
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());

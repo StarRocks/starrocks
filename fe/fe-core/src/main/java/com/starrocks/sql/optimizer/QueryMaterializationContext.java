@@ -23,7 +23,6 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
@@ -41,8 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
-
 /**
  * Store materialized view context during the query lifecycle which is seperated from per materialized view's context.
  */
@@ -53,8 +50,6 @@ public class QueryMaterializationContext {
     private Set<MaterializedView> relatedMVs = Sets.newHashSet();
     // MVs with context that are valid (SPJG pattern) candidates for materialization rewrite
     private List<MaterializationContext> validCandidateMVs = Lists.newArrayList();
-    // MV with the cached timeliness update info which should be initialized once in one query context.
-    private Map<MaterializedView, MvUpdateInfo> mvTimelinessInfos = Maps.newHashMap();
 
     // used by view based mv rewrite
     // query's logical plan with view
@@ -178,24 +173,6 @@ public class QueryMaterializationContext {
      */
     public void addValidCandidateMV(MaterializationContext mv) {
         validCandidateMVs.add(mv);
-    }
-
-    /**
-     * Get or init the cached timeliness update info for the materialized view.
-     * @param mv intput mv
-     * @return MvUpdateInfo of the mv, null if mv is null or initialize fail
-     */
-    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv) {
-        if (mv == null) {
-            return null;
-        }
-        if (!mvTimelinessInfos.containsKey(mv)) {
-            MvUpdateInfo result = getMVTimelinessUpdateInfo(mv, true);
-            mvTimelinessInfos.put(mv, result);
-            return result;
-        } else {
-            return mvTimelinessInfos.get(mv);
-        }
     }
 
     /**

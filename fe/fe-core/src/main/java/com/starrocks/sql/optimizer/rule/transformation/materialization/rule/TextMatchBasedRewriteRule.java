@@ -223,13 +223,8 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-<<<<<<< HEAD
                 Set<String> partitionNamesToRefresh = Sets.newHashSet();
                 if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
-=======
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
-                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
->>>>>>> a8e64b69a8 ([Enhancement] Optimize text based mv rewrite performance (#49330))
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
                             "stale partitions {}", mv.getName(), partitionNamesToRefresh);
                     continue;
