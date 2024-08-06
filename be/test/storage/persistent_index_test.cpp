@@ -3276,7 +3276,7 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
     input_l2_versions.emplace_back(1, 0);
     input_l2_versions.emplace_back(1, 1);
     input_l2_versions.emplace_back(3, 0);
-    PersistentIndex::modify_l2_versions(input_l2_versions, input_l2_versions.back(), index_meta);
+    ASSERT_TRUE(PersistentIndex::modify_l2_versions(input_l2_versions, input_l2_versions.back(), index_meta).ok());
 
     // check result
     ASSERT_EQ(index_meta.l2_versions_size(), index_meta.l2_version_merged_size());
@@ -3290,6 +3290,11 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
             ASSERT_FALSE(index_meta.l2_version_merged(i));
         }
     }
+
+    // rebuild index
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
+    ASSERT_FALSE(PersistentIndex::modify_l2_versions(input_l2_versions, input_l2_versions.back(), index_meta).ok());
 }
 
 INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,

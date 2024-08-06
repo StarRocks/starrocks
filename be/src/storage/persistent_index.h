@@ -787,8 +787,8 @@ public:
         return res;
     }
 
-    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
