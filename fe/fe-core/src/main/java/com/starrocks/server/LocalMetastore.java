@@ -3165,6 +3165,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
+        materializedView.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         // set partitionRefTableExprs
         materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         // set base index id

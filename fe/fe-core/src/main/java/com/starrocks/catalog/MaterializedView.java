@@ -381,13 +381,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;
 
-    // TODO: now it is original definition sql
-    // for show create mv, constructing refresh job(insert into select)
+    // This is a normalized view define SQL by AstToSQLBuilder#toSQL, which is used for show create mv, constructing a refresh job
+    // (insert into select)
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
-
+    // This is a normalized view define SQL by AstToSQLBuilder#buildSimple.
     @SerializedName(value = "simpleDefineSql")
     private String simpleDefineSql;
+    // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
+    @SerializedName(value = "originalViewDefineSql")
+    private String originalViewDefineSql;
 
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
@@ -521,6 +524,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setSimpleDefineSql(String simple) {
         this.simpleDefineSql = simple;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
     }
 
     public String getTaskDefinition() {
@@ -1839,17 +1850,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Used for text based materialized view rewrite.
-     */
-    public synchronized void initDefineQueryParseNode() {
-        // cache by ast
-        defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql);
-    }
-
-    /**
      * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
      */
     public synchronized ParseNode getDefineQueryParseNode() {
-        return defineQueryParseNode;
+        if (this.defineQueryParseNode == null) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                return null;
+            }
+            ConnectContext connectContext = new ConnectContext();
+            connectContext.setDatabase(db.getOriginName());
+            if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
+                this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+            } else {
+                this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+            }
+        }
+        return this.defineQueryParseNode;
     }
 }
