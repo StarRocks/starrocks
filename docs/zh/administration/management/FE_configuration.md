@@ -2759,6 +2759,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
 - 引入版本：-
 
+##### auto_partition_max_creation_number_per_load
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个导入任务在表达式分区表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_partition_number_per_table
+
+- 默认值：100000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_bucket_number_per_partition
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个分区中最多可以创建的分桶数量。
+- 引入版本：v3.3.2
+
+##### max_column_number_per_table
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的列数量。
+- 引入版本：v3.3.2
+
 ### 存算分离
 
 ##### run_mode
