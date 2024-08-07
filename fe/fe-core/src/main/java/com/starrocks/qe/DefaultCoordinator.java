@@ -855,10 +855,13 @@ public class DefaultCoordinator extends Coordinator {
             // if this query is a block query do not cancel.
             long numLimitRows = executionDAG.getRootFragment().getPlanFragment().getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1 && hasLimit &&
-                    numReceivedRows >= numLimitRows) {
-                LOG.debug("no block query, return num >= limit rows, need cancel");
-                cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1) {
+                if (hasLimit && numReceivedRows >= numLimitRows) {
+                    LOG.debug("no block query, return num >= limit rows, need cancel");
+                    cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+                } else {
+                    cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
+                }
             }
         } else {
             numReceivedRows += resultBatch.getBatch().getRowsSize();
