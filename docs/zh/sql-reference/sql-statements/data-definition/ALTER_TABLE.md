@@ -958,16 +958,6 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
     ```
 
-<<<<<<< HEAD
-=======
-13. 批量修改字段数据类型。
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
-    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
-    ```
-
 14. STRUCT 类型增删字段。
 
     **准备工作**：建表并导入数据
@@ -1082,7 +1072,6 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
->>>>>>> 745d5f4194 ([Doc] Add/Drop fields in STRUCT (#49325))
 ### Table property
 
 1. 修改表的 Colocate 属性。
