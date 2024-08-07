@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # partitions
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `partitions` provides information about table partitions.
 
 The following fields are provided in `partitions`:

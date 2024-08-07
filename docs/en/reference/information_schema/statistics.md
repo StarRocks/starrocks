@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # statistics
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `statistics` provides information about table indexes.
 
 The following fields are provided in `statistics`:
