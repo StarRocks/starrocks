@@ -83,7 +83,7 @@ sidebar_label: "能力边界"
 
 | 外部数据源 | 支持场景和版本                                                           | 稳定版本    |
 | :----------------- | :----------------------------------------------------------- | :--------- |
-| Hive               | <ul><li>非分区表：v2.5.4 & v3.0+</li><li>DATE 和 DATETIME 类型分区：v2.5.4 & v3.0+</li><li>STRING 类型分区：v3.1.4 & v3.2+</li><li>基于 Hive 视图的物化视图：待支持</li><li>多级分区：待支持</li></ul> | v2.5.13+<br />v3.0.6+<br />v3.1.5+<br />v3.2+ |
+| Hive               | <ul><li>非分区表：v2.5.4 & v3.0+</li><li>DATE 和 DATETIME 类型分区：v2.5.4 & v3.0+</li><li>STRING 类型分区键转化为 DATE 类型：v3.1.4 & v3.2+</li><li>基于 Hive 视图的物化视图：待支持</li><li>多级分区：待支持</li></ul> | v2.5.13+<br />v3.0.6+<br />v3.1.5+<br />v3.2+ |
 | Iceberg            | <ul><li>非分区表：v3.0+</li><li>DATE 和 DATETIME 类型分区：v3.1.4 & v3.2+</li><li>STRING 类型分区键转化为 DATE 类型：v3.1.4 & v3.2+</li><li>基于 Iceberg 视图的物化视图：待支持</li><li>Partition Transform：v3.2.3</li><li>分区级刷新：v3.1.7 & v3.2.3</li><li>多级分区：待支持</li></ul> | v3.1.5+<br />v3.2+                            |
 | Hudi               | <ul><li>非分区表：v3.2+</li><li>DATE 和 DATETIME 类型分区：v3.2+</li><li>多级分区：待支持</li></ul> | 不稳定                                        |
 | Paimon             | <ul><li>非分区表：v2.5.4 & v3.0+</li><li>DATE 和 DATETIME 类型分区：待支持</li><li>多级分区：待支持</li></ul> | 不稳定                                        |
