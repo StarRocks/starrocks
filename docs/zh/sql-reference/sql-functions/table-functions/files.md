@@ -50,8 +50,8 @@ StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简�
 - 如果您使用 IAM User 认证访问 AWS S3：
 
   ```SQL
-  "aws.s3.access_key" = "xxxxxxxxxx",
-  "aws.s3.secret_key" = "yyyyyyyyyy",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   "aws.s3.region" = "<s3_region>"
   ```
 
@@ -75,6 +75,53 @@ StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简�
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
 
+## 返回
+
+当与 SELECT 语句一同使用时，FILES() 函数会以表的形式返回远端存储文件中的数据。
+
+- 当查询 Parquet 或 ORC 文件时，您可以在 SELECT 语句直接指定对应列名，或使用 `*` 查询所有列。
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE c1 IN (101,105);
+  +------+------+---------------------+
+  | c1   | c2   | c3                  |
+  +------+------+---------------------+
+  |  101 |    9 | 2018-05-15T18:30:00 |
+  |  105 |    6 | 2018-05-15T18:30:00 |
+  +------+------+---------------------+
+  2 rows in set (0.29 sec)
+
+  SELECT c1, c3 FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  );
+  +------+---------------------+
+  | c1   | c3                  |
+  +------+---------------------+
+  |  101 | 2018-05-15T18:30:00 |
+  |  102 | 2018-05-15T18:30:00 |
+  |  103 | 2018-05-15T18:30:00 |
+  |  104 | 2018-05-15T18:30:00 |
+  |  105 | 2018-05-15T18:30:00 |
+  |  106 | 2018-05-15T18:30:00 |
+  |  107 | 2018-05-15T18:30:00 |
+  |  108 | 2018-05-15T18:30:00 |
+  |  109 | 2018-05-15T18:30:00 |
+  |  110 | 2018-05-15T18:30:00 |
+  +------+---------------------+
+  10 rows in set (0.55 sec)
+  ```
+
 ## 示例
 
 示例一：查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
@@ -83,8 +130,8 @@ StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简�
 MySQL > SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
-     "aws.s3.access_key" = "XXXXXXXXXX",
-     "aws.s3.secret_key" = "YYYYYYYYYY",
+     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
      "aws.s3.region" = "us-west-2"
 );
 +------+---------------------------------------------------------+
@@ -103,8 +150,8 @@ MySQL > INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (23.03 sec)
@@ -118,8 +165,8 @@ MySQL > CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (22.09 sec)

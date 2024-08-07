@@ -47,8 +47,8 @@ The authentication information used by StarRocks to access your storage system.
 - Use the IAM user-based authentication to access AWS S3:
 
   ```SQL
-  "aws.s3.access_key" = "xxxxxxxxxx",
-  "aws.s3.secret_key" = "yyyyyyyyyy",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   "aws.s3.region" = "<s3_region>"
   ```
 
@@ -58,6 +58,53 @@ The authentication information used by StarRocks to access your storage system.
   | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
   | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
 
+## Return
+
+When used with SELECT, FILES() returns the data in the file as a table.
+
+- When querying Parquet or ORC files, you can directly specify the name of the desired columns in the SELECT statement, or specify `*` to obtain data from all columns.
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  )
+  WHERE c1 IN (101,105);
+  +------+------+---------------------+
+  | c1   | c2   | c3                  |
+  +------+------+---------------------+
+  |  101 |    9 | 2018-05-15T18:30:00 |
+  |  105 |    6 | 2018-05-15T18:30:00 |
+  +------+------+---------------------+
+  2 rows in set (0.29 sec)
+
+  SELECT c1, c3 FROM FILES(
+      "path" = "s3://inserttest/parquet/file2.parquet",
+      "format" = "parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "aws.s3.region" = "us-west-2"
+  );
+  +------+---------------------+
+  | c1   | c3                  |
+  +------+---------------------+
+  |  101 | 2018-05-15T18:30:00 |
+  |  102 | 2018-05-15T18:30:00 |
+  |  103 | 2018-05-15T18:30:00 |
+  |  104 | 2018-05-15T18:30:00 |
+  |  105 | 2018-05-15T18:30:00 |
+  |  106 | 2018-05-15T18:30:00 |
+  |  107 | 2018-05-15T18:30:00 |
+  |  108 | 2018-05-15T18:30:00 |
+  |  109 | 2018-05-15T18:30:00 |
+  |  110 | 2018-05-15T18:30:00 |
+  +------+---------------------+
+  10 rows in set (0.55 sec)
+  ```
+
 ## Examples
 
 Example 1: Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
@@ -66,8 +113,8 @@ Example 1: Query the data from the Parquet file **parquet/par-dup.parquet** with
 MySQL > SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
-     "aws.s3.access_key" = "XXXXXXXXXX",
-     "aws.s3.secret_key" = "YYYYYYYYYY",
+     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
      "aws.s3.region" = "us-west-2"
 );
 +------+---------------------------------------------------------+
@@ -86,8 +133,8 @@ MySQL > INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (23.03 sec)
@@ -101,8 +148,8 @@ MySQL > CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
-        "aws.s3.access_key" = "XXXXXXXXXX",
-        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+        "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         "aws.s3.region" = "us-west-2"
 );
 Query OK, 2 rows affected (22.09 sec)
