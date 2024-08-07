@@ -133,7 +133,25 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         try {
+<<<<<<< HEAD
             prepare(connectContext, logicOperatorTree, columnRefFactory);
+=======
+            // prepare for optimizer
+            prepare(connectContext, columnRefFactory, logicOperatorTree);
+
+            // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
+            try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
+                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+                        .transform(logicOperatorTree, context).get(0);
+            }
+
+            // prepare for mv rewrite
+            prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+
+            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+                    .transform(logicOperatorTree, context).get(0);
+
+>>>>>>> cd9b8f3e37 ([Enhancement] add trace for MVTextRewrite in optimizer (#49227))
             OptExpression result = optimizerConfig.isRuleBased() ?
                     optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
                     optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
