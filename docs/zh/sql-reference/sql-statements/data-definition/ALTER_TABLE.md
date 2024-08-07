@@ -9,7 +9,7 @@ displayed_sidebar: "Chinese"
 
 该语句用于修改已有表，包括：
 
-- [修改表名、分区名、索引名](#rename-对名称进行修改)
+- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
@@ -35,7 +35,7 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
@@ -81,6 +81,22 @@ RENAME ROLLUP old_rollup_name new_rollup_name;
 ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
+
+#### 修改列名（RENAME COLUMN）
+
+自 v3.3.2 起，StarRocks 支持修改列名。
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- 在将某列由 A 重命名为 B 后，不支持继续增加 A 列。
+- 在列名变更后，基于该列创建的物化视图将不再生效，您需要根据新的列名重新创建。
+
+:::
 
 ### 修改表的注释（3.1 版本起）
 
