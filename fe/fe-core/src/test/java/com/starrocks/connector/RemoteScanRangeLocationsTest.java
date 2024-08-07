@@ -15,7 +15,6 @@
 package com.starrocks.connector;
 
 import com.starrocks.common.Pair;
-import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -23,7 +22,6 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
-import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
