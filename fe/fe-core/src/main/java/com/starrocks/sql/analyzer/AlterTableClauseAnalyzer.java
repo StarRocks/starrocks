@@ -294,6 +294,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            try {
+                PropertyAnalyzer.analyzeMutableBucketNum(properties);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
