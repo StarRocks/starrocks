@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # user_privileges
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `user_privileges` 提供有关用户权限的信息。
 
 `user_privileges` 提供以下字段：

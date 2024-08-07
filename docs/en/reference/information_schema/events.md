@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # events
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `events` provides information about Event Manager events.
 
 The following fields are provided in `events`:

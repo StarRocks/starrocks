@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # events
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `events` 提供有关 Event Manager 事件的信息。
 
 `events` 提供以下字段：

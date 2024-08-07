@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # column_privileges
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `column_privileges` 用于识别当前启用的角色被授予的或由当前启用的角色授予的所有列权限。
 
 `column_privileges` 提供以下字段：

@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # schema_privileges
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `schema_privileges` 提供有关数据库权限的信息。
 
 `schema_privileges` 提供以下字段：

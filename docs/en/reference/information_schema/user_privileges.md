@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # user_privileges
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `user_privileges` provides information about user privileges.
 
 The following fields are provided in `user_privileges`:

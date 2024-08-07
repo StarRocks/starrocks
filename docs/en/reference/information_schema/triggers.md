@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # triggers
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `triggers` provides information about triggers.
 
 The following fields are provided in `triggers`:

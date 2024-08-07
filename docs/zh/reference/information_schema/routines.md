@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # routines
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `routines` 包含所有存储的过程（Routine），包括流程和函数。
 
 `routine` 提供以下字段：

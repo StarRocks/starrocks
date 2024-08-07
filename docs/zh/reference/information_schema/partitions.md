@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # partitions
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `partitions` 提供有关表分区的信息。
 
 `partitions` 提供以下字段：

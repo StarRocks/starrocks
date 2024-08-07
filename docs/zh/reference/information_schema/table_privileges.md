@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # table_privileges
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `table_privileges` 提供有关表权限的信息。
 
 `table_privileges` 提供以下字段：

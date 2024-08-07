@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # table_constraints
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `table_constraints` describes which tables have constraints.
 
 The following fields are provided in `table_constraints`:

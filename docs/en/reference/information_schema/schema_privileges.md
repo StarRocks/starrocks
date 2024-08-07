@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # schema_privileges
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `schema_privileges` provides information about database privileges.
 
 The following fields are provided in `schema_privileges`:

@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # statistics
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `statistics` 提供有关表索引的信息。
 
 `statistics` 提供以下字段：

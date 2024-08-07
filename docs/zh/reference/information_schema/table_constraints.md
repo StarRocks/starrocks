@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # table_constraints
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `table_constraints` 描述具有约束的表。
 
 `table_constraints` 提供以下字段：
