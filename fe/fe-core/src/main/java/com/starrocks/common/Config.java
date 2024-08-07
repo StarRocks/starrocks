@@ -2399,6 +2399,29 @@ public class Config extends ConfigBase {
     public static long key_rotation_days = 7;
 
     /**
+     * specify VAULT_ADDR if using vault to store master key
+     */
+    @ConfField(mutable = false)
+    public static String vault_addr = "";
+
+    /**
+     * specify VAULT_TOKEN if using vault to store master key
+     */
+    @ConfField(mutable = false)
+    public static String vault_token = "";
+
+    @ConfField
+    public static String aws_kms_region = "";
+    @ConfField
+    public static String aws_kms_access_key = "";
+    @ConfField
+    public static String aws_kms_secret_key = "";
+    @ConfField
+    public static String aws_kms_iam_role_arn = "";
+    @ConfField
+    public static String aws_kms_external_id = "";
+
+    /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
      * hybrid: run on both, not production ready, should only be used in test environment now.

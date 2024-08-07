@@ -179,6 +179,15 @@ public class KeyMgr {
             case NORMAL_KEY:
                 key = new NormalKey();
                 break;
+            case VAULT_PLAIN_KEY:
+                key = new VaultKey();
+                break;
+            case KMS_KEY:
+                key = new KmsKey();
+                break;
+            case KMS_DATA_KEY:
+                key = new KmsDataKey();
+                break;
             default:
                 throw new IllegalStateException("Unexpected EncryptionKeyTypePB value: " + pb.type);
         }

@@ -241,6 +241,15 @@ CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 CONF_Bool(enable_transparent_data_encryption, "false");
+// Vault config if using vault for TDE
+CONF_mString(vault_addr, "");
+CONF_mString(vault_token, "");
+// KMS config if using KMS for TDE
+CONF_mString(aws_kms_region, "");
+CONF_mString(aws_kms_access_key, "");
+CONF_mString(aws_kms_secret_key, "");
+CONF_mString(aws_kms_iam_role_arn, "");
+CONF_mString(aws_kms_external_id, "");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "100");
 // CONF_Int32(default_num_rows_per_data_block, "1024");

@@ -100,6 +100,10 @@ public abstract class EncryptionKey {
         String keySpec = parts[1];
         if (type.equalsIgnoreCase("plain")) {
             return NormalKey.createFromSpec(keySpec);
+        } else if (type.equalsIgnoreCase("vault")) {
+            return VaultKey.createFromSpec(keySpec);
+        } else if (type.equalsIgnoreCase("kms")) {
+            return KmsKey.createFromSpec(keySpec);
         } else {
             throw new IllegalArgumentException("key spec type not supported: " + type);
         }

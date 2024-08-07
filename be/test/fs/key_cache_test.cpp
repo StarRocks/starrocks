@@ -17,6 +17,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "util/url_coding.h"
+
 namespace starrocks {
 
 // Test EncryptionKey constructor with EncryptionKeyPB and accessors
@@ -61,6 +63,27 @@ TEST(EncryptionKeyTest, GenerateAndDecrypt) {
         LOG(INFO) << st;
         ASSERT_FALSE(st.ok());
     }
+}
+
+struct KeySpec {
+    EncryptionAlgorithmPB algorithm;
+    std::string key;
+};
+
+StatusOr<KeySpec> get_key_spec_from_vault_response(const std::string& vault_get_response);
+
+TEST(VaultTest, GetKeySpecFromVaultResponse) {
+    std::string response =
+            "{\"request_id\":\"657f959e-063a-e947-296a-97e7c9ea5776\",\"lease_id\":\"\",\"renewable\":false,\"lease_"
+            "duration\":0,\"data\":{\"data\":{\"plain_key\":\"aes_128:3bozYSHPqtPi49TMQU1T4g==\"},\"metadata\":{"
+            "\"created_time\":\"2024-07-18T15:23:24.115424002Z\",\"custom_metadata\":null,\"deletion_time\":\"\","
+            "\"destroyed\":false,\"version\":1}},\"wrap_info\":null,\"warnings\":null,\"auth\":null,\"mount_type\":"
+            "\"kv\"}";
+    auto spec = get_key_spec_from_vault_response(response).value();
+    ASSERT_EQ(spec.algorithm, EncryptionAlgorithmPB::AES_128);
+    std::string key_encoded;
+    base64_encode(spec.key, &key_encoded);
+    ASSERT_EQ(key_encoded, "3bozYSHPqtPi49TMQU1T4g==");
 }
 
 class KeyCacheTest : public testing::Test {};
