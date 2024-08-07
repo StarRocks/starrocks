@@ -87,7 +87,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String queryPlan = jsonObject.getString("opaqued_query_plan");
             Assert.assertNotNull(queryPlan);
             byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
-            TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();;
+            TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
             TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
             deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
             Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));

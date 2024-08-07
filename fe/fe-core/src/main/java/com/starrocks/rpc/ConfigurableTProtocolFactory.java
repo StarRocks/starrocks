@@ -52,14 +52,14 @@ public class ConfigurableTProtocolFactory {
     public static class ConfigurableTCompactFactory implements TProtocolFactory {
 
         private static final long NO_LENGTH_LIMIT = -1;
-        private final long stringLengthLimit_;
-        private final long containerLengthLimit_;
+        private final long stringLengthLimit;
+        private final long containerLengthLimit;
 
         private final TConfiguration configuration;
 
         public ConfigurableTCompactFactory(TConfiguration configuration) {
-            this.stringLengthLimit_ = NO_LENGTH_LIMIT;
-            this.containerLengthLimit_ = NO_LENGTH_LIMIT;
+            this.stringLengthLimit = NO_LENGTH_LIMIT;
+            this.containerLengthLimit = NO_LENGTH_LIMIT;
             this.configuration = configuration;
         }
 
@@ -68,7 +68,7 @@ public class ConfigurableTProtocolFactory {
             trans.getConfiguration().setMaxFrameSize(configuration.getMaxFrameSize());
             trans.getConfiguration().setMaxMessageSize(configuration.getMaxMessageSize());
             trans.getConfiguration().setRecursionLimit(configuration.getRecursionLimit());
-            return new TCompactProtocol(trans, stringLengthLimit_, containerLengthLimit_);
+            return new TCompactProtocol(trans, stringLengthLimit, containerLengthLimit);
         }
     }
 

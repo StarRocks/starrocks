@@ -177,7 +177,7 @@ public class MetadataParser {
 
     private List<DataFile> buildIcebergDataFile(TResultBatch resultBatch) throws TTransportException {
         List<DataFile> dataFiles = new ArrayList<>();
-        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();;
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
         for (ByteBuffer bb : resultBatch.rows) {
             TMetadataEntry metadataEntry = deserializeToMetadataThrift(deserializer, bb);
             DataFile baseFile = (DataFile) parseThriftToIcebergDataFile(metadataEntry);
