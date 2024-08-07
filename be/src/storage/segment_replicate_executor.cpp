@@ -314,6 +314,43 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 return set_status(st);
             }
         }
+        if (!segment->seg_indexes().empty()) {
+            auto mutable_indexes = segment->mutable_seg_indexes();
+            size_t total_index_data_size = 0;
+            for (int i = 0; i < mutable_indexes->size(); i++) {
+                auto& index = mutable_indexes->at(i);
+                if (index.index_type() == VECTOR) {
+                    auto index_path = mutable_indexes->at(i).index_path();
+                    auto res = _fs->new_random_access_file(index_path);
+
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to open index file " << index_path << " by " << debug_string()
+                                     << " err " << res.status();
+                        return set_status(res.status());
+                    }
+
+                    auto file_size_res = _fs->get_file_size(index_path);
+                    if (!file_size_res.ok()) {
+                        LOG(WARNING) << "Failed to get index file size " << index_path << " err " << res.status();
+                        return set_status(res.status());
+                    }
+                    auto file_size = file_size_res.value();
+                    mutable_indexes->at(i).set_index_file_size(file_size);
+                    total_index_data_size += file_size;
+
+                    auto rfile = std::move(res.value());
+                    auto buf = new uint8[file_size];
+                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
+                    auto st = rfile->read_fully(buf, file_size);
+                    if (!st.ok()) {
+                        LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
+                                     << debug_string() << " err " << st;
+                        return set_status(st);
+                    }
+                }
+                segment->set_seg_index_data_size(total_index_data_size);
+            }
+        }
     }
 
     // 2. send segment to secondary replica
