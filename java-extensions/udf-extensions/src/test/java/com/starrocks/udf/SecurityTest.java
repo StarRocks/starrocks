@@ -69,7 +69,7 @@ public class SecurityTest {
     }
 
     @Test
-    public void testNoUDFCreateFile() throws IOException, ClassNotFoundException {
+    public void testNoUDFCreateFile() {
         System.setSecurityManager(new UDFSecurityManager(TestClassLoader.class));
         ScalarAdd concat = new ScalarAdd();
         Assertions.assertTrue(concat.evaluate("./test").contains("test"));
