@@ -1042,6 +1042,10 @@ public class StmtExecutor {
 
     // Handle kill running query statement.
     private void handleKillQuery(String queryId) throws DdlException {
+        if (StringUtils.isEmpty(queryId)) {
+            context.getState().setOk();
+            return;
+        }
         // > 0 means it is forwarded from other fe
         if (context.getForwardTimes() == 0) {
             String errorMsg = null;
@@ -1071,7 +1075,10 @@ public class StmtExecutor {
             context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
             return;
         }
-        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
+        if (killCtx == null) {
+            killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        }
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
         }

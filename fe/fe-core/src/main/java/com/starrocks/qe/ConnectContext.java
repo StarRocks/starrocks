@@ -673,6 +673,10 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
+    public String getCustomQueryId() {
+        return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
+    }
+
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
