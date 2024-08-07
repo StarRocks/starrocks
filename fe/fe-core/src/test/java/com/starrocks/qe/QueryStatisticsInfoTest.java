@@ -39,6 +39,7 @@ public class QueryStatisticsInfoTest {
                 firstQuery.getSpillBytes(),
                 firstQuery.getExecTime(),
                 firstQuery.getWareHouseName(),
+                firstQuery.getCustomQueryId(),
                 firstQuery.getResourceGroupName()
         );
         Assert.assertEquals(firstQuery, otherQuery);

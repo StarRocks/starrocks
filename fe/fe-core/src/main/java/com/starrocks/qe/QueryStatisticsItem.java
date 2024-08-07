@@ -26,6 +26,7 @@ import java.util.List;
 
 public final class QueryStatisticsItem {
 
+    private final String customQueryId;
     private final String queryId;
     private final String user;
     private final String sql;
@@ -40,6 +41,7 @@ public final class QueryStatisticsItem {
     private final String resourceGroupName;
 
     private QueryStatisticsItem(Builder builder) {
+        this.customQueryId = builder.customQueryId;
         this.queryId = builder.queryId;
         this.user = builder.user;
         this.sql = builder.sql;
@@ -78,6 +80,10 @@ public final class QueryStatisticsItem {
         return currentTime - queryStartTime;
     }
 
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
     public String getQueryId() {
         return queryId;
     }
@@ -103,6 +109,7 @@ public final class QueryStatisticsItem {
     }
 
     public static final class Builder {
+        private String customQueryId;
         private String queryId;
         private String db;
         private String user;
@@ -117,6 +124,11 @@ public final class QueryStatisticsItem {
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
+        }
+
+        public Builder customQueryId(String customQueryId) {
+            this.customQueryId = customQueryId;
+            return this;
         }
 
         public Builder queryId(String queryId) {
@@ -180,6 +192,10 @@ public final class QueryStatisticsItem {
         }
 
         private void initDefaultValue(Builder builder) {
+            if (customQueryId == null) {
+                builder.customQueryId = "";
+            }
+
             if (queryId == null) {
                 builder.queryId = "0";
             }

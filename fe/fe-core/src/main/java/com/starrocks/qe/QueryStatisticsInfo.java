@@ -62,6 +62,7 @@ public class QueryStatisticsInfo {
     private long spillBytes;
     private long execTime;
     private String wareHouseName;
+    private String customQueryId;
     private String resourceGroupName;
 
     public QueryStatisticsInfo() {
@@ -69,7 +70,7 @@ public class QueryStatisticsInfo {
 
     public QueryStatisticsInfo(long queryStartTime, String feIp, String queryId, String connId, String db, String user,
                                long cpuCostNs, long scanBytes, long scanRows, long memUsageBytes, long spillBytes,
-                               long execTime, String wareHouseName, String resourceGroupName) {
+                               long execTime, String wareHouseName, String customQueryId, String resourceGroupName) {
         this.queryStartTime = queryStartTime;
         this.feIp = feIp;
         this.queryId = queryId;
@@ -83,6 +84,7 @@ public class QueryStatisticsInfo {
         this.spillBytes = spillBytes;
         this.execTime = execTime;
         this.wareHouseName = wareHouseName;
+        this.customQueryId = customQueryId;
         this.resourceGroupName = resourceGroupName;
     }
 
@@ -136,6 +138,10 @@ public class QueryStatisticsInfo {
 
     public String getWareHouseName() {
         return wareHouseName;
+    }
+
+    public String getCustomQueryId() {
+        return customQueryId;
     }
 
     public String getResourceGroupName() {
@@ -211,6 +217,11 @@ public class QueryStatisticsInfo {
         return this;
     }
 
+    public QueryStatisticsInfo withCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+        return this;
+    }
+
     public TQueryStatisticsInfo toThrift() {
         return new TQueryStatisticsInfo()
                 .setQueryStartTime(queryStartTime)
@@ -226,6 +237,7 @@ public class QueryStatisticsInfo {
                 .setSpillBytes(spillBytes)
                 .setExecTime(execTime)
                 .setWareHouseName(wareHouseName)
+                .setCustomQueryId(customQueryId)
                 .setResourceGroupName(resourceGroupName);
     }
 
@@ -244,6 +256,7 @@ public class QueryStatisticsInfo {
                 .withCpuCostNs(tinfo.getCpuCostNs())
                 .withExecTime(tinfo.getExecTime())
                 .withWareHouseName(tinfo.getWareHouseName())
+                .withCustomQueryId(tinfo.getCustomQueryId())
                 .withResourceGroupName(tinfo.getResourceGroupName());
     }
 
@@ -262,6 +275,7 @@ public class QueryStatisticsInfo {
         values.add(QueryStatisticsFormatter.getSecondsFromNano(this.getCpuCostNs()));
         values.add(QueryStatisticsFormatter.getSecondsFromMilli(this.getExecTime()));
         values.add(this.getWareHouseName());
+        values.add(this.getCustomQueryId());
         values.add(this.getResourceGroupName());
         return values;
     }
@@ -341,6 +355,7 @@ public class QueryStatisticsInfo {
                     .withCpuCostNs(statistics.getCpuCostNs())
                     .withExecTime(item.getQueryExecTime())
                     .withWareHouseName(item.getWarehouseName())
+                    .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
             sortedRowData.add(info);
         }
