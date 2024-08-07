@@ -20,15 +20,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 // alter table clause
 public abstract class AlterTableClause extends AlterClause {
-
     protected AlterTableClause(AlterOpType opType, NodePosition pos) {
         super(opType, pos);
-    }
-
-    // if set to true, the corresponding table should be stable before processing this operation on it.
-    protected boolean needTableStable = true;
-
-    public boolean isNeedTableStable() {
-        return needTableStable;
     }
 }

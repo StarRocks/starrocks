@@ -49,6 +49,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
@@ -322,9 +323,8 @@ public class LakeMaterializedViewTest {
 
             // modify column which defined in mv
             String alterSql = "alter table base_table4 modify column k5 varchar(10)";
-            AlterTableStmt
-                    alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
 

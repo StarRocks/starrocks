@@ -18,11 +18,9 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.lang.NotImplementedException;
 
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 public class BackendClause extends AlterClause {
     protected List<String> hostPortsUnResolved;
@@ -44,11 +42,6 @@ public class BackendClause extends AlterClause {
 
     public List<String> getHostPortsUnResolved() {
         return hostPortsUnResolved;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        throw new NotImplementedException();
     }
 
     @Override
