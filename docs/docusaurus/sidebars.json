@@ -141,7 +141,8 @@
                         "table_design/expression_partitioning",
                         "table_design/list_partitioning",
                         "table_design/dynamic_partitioning",
-                        "table_design/Temporary_partition"
+                        "table_design/Temporary_partition",
+                        "table_design/feature-support-data-distribution"
                     ]
                 },
                 {
@@ -1600,7 +1601,8 @@
                         "table_design/expression_partitioning",
                         "table_design/list_partitioning",
                         "table_design/dynamic_partitioning",
-                        "table_design/Temporary_partition"
+                        "table_design/Temporary_partition",
+                        "table_design/feature-support-data-distribution"
                     ]
                 },
                 {
