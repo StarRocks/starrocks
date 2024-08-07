@@ -1,0 +1,15 @@
+-- name: testHiveView
+
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view order by col_int;
+
+show create view hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view;
+show create table hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view;
+
+drop catalog hive_sql_test_${uuid0};
