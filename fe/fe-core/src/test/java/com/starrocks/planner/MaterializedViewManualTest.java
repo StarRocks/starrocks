@@ -411,7 +411,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
     @Test
     public void testMVRewriteWithNonDeterministicFunctions() {
-        setTracLogModule("MV");
         starRocksAssert.withMaterializedView("create materialized view mv0" +
                 " distributed by random" +
                 " as select current_date(), t1a, t1b from test.test_all_type ;", () -> {
