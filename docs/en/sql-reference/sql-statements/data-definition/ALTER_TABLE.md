@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Modifies an existing table, including:
 
-- [Rename table, partition, index](#rename)
+- [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
@@ -32,7 +32,7 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition.
+- rename: renames a table, rollup index, partition, or column (supported from **v3.3.2 onwards**).
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
@@ -74,6 +74,22 @@ RENAME ROLLUP <old_rollup_name> <new_rollup_name>
 ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
+
+#### Rename a column
+
+From v3.3.2 onwards, StarRocks supports renaming columns.
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- After renaming a column from A to B, adding a new column named A is not supported.
+- Materialized views built on a renamed column will not take effect. You must rebuild them upon the column with the new name.
+
+:::
 
 ### Alter table comment (from v3.1)
 
