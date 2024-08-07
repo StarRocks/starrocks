@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # triggers
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `triggers` 提供有关触发器的信息。
 
 `triggers` 提供以下字段：
