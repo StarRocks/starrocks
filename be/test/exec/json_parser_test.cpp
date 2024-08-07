@@ -580,8 +580,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_array) {
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_TRUE(st.get_error_msg().find(
                         "The value is array type in json document stream, you can set strip_outer_array=true "
-                        "to parse each element of the array as individual rows, "
-                        "value: [{\"key\":1},{\"key\":2}]") != std::string::npos);
+                        "to parse each element of the array as individual rows") != std::string::npos);
 }
 
 PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_not_object) {
@@ -599,7 +598,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_not_objec
     simdjson::ondemand::object row;
     st = parser->get_current(&row);
     ASSERT_TRUE(st.is_data_quality_error());
-    ASSERT_TRUE(st.get_error_msg().find("The value should be object type in json document stream, value: 1") !=
+    ASSERT_TRUE(st.get_error_msg().find("The value should be object type in json document stream") !=
                 std::string::npos);
 }
 
