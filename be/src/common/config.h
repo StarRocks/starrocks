@@ -946,9 +946,6 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
 CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
-// -1: ulimited, 0: limit by memory use, >0: limit by queue_size
-CONF_mInt64(runtime_filter_queue_limit, "-1");
-
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
@@ -1410,5 +1407,11 @@ CONF_mInt32(config_vector_index_build_concurrency, "8");
 
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "0");
+
+CONF_mInt32(thrift_max_message_size, "1073741824"); // 1 GB
+
+CONF_mInt32(thrift_max_frame_size, "16384000");
+
+CONF_mInt32(thrift_max_recursion_depth, "64");
 
 } // namespace starrocks::config
