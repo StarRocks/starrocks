@@ -4035,6 +4035,23 @@ public class LocalMetastore implements ConnectorMetadata {
         GlobalStateMgr.getCurrentState().getEditLog().logModifyBucketSize(info);
     }
 
+    public void modifyTableMutableBucketNum(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildMutableBucketNum();
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyMutableBucketNum(info);
+    }
+
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
         TableProperty tableProperty = table.getTableProperty();
@@ -4063,6 +4080,8 @@ public class LocalMetastore implements ConnectorMetadata {
             modifyTableReplicatedStorage(db, table, properties);
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             modifyTableAutomaticBucketSize(db, table, properties);
+        } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
+            modifyTableMutableBucketNum(db, table, properties);
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
         }

@@ -1113,8 +1113,12 @@ public class OlapTable extends Table {
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                int numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                info.setBucketNum(numBucket);
+                // prior to use user set mutable bucket num
+                long numBucket = getMutableBucketNum();
+                if (numBucket <= 0) {
+                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                }
+                info.setBucketNum((int) numBucket);
             } else {
                 throw new DdlException("Unknown distribution info type: " + info.getType());
             }
@@ -2439,6 +2443,13 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
+    public Long getMutableBucketNum() {
+        if (tableProperty != null) {
+            return tableProperty.getMutableBucketNum();
+        }
+        return (long) 0;
+    }
+
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2447,6 +2458,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setMutableBucketNum(long bucketNum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM,
+                        String.valueOf(bucketNum));
+        tableProperty.buildMutableBucketNum();
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -3039,6 +3060,91 @@ public class OlapTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
+<<<<<<< HEAD
+=======
+        // common properties for olap table, cloud native table
+        // use TreeMap to ensure the order of keys, such as for show create table.
+        Map<String, String> properties = Maps.newTreeMap();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+
+        // replication num
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
+
+        // bloom filter
+        Set<String> bfColumnNames = getBfColumnNames();
+        if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
+        }
+
+        // colocate group
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+        }
+
+        // dynamic partition
+        if (dynamicPartitionExists()) {
+            properties.putAll(tableProperty.getDynamicPartitionProperty().getProperties());
+        }
+
+        // automatic bucket
+        Long bucketSize = getAutomaticBucketSize();
+        if (bucketSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // mutable bucket num
+        Long mutableBucketNum = getMutableBucketNum();
+        if (mutableBucketNum > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
+        }
+
+        // locations
+        Multimap<String, String> locationsMap = getLocation();
+        if (locationsMap != null) {
+            String locations = PropertyAnalyzer.convertLocationMapToString(locationsMap);
+            properties.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+
+        // primary key
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            // persistent index
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
+
+            // index cache expire
+            int indexCacheExpireSec = primaryIndexCacheExpireSec();
+            if (indexCacheExpireSec > 0) {
+                properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
+            }
+        }
+
+        // partition live number
+        String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
+        if (partitionLiveNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // compression type
+        TCompressionType compressionType = getCompressionType();
+        if (compressionType == TCompressionType.LZ4_FRAME) {
+            compressionType = TCompressionType.LZ4;
+        }
+        int compressionLevel = getCompressionLevel();
+        String compressionTypeName = compressionType.name();
+        if (compressionLevel != -1) {
+            compressionTypeName = compressionTypeName + "(" + String.valueOf(compressionLevel) + ")";
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionTypeName);
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    // unique properties for olap table, cloud native table
+    public Map<String, String> getUniqueProperties() {
+>>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
         Map<String, String> properties = Maps.newHashMap();
 
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());

@@ -374,7 +374,23 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
+<<<<<<< HEAD
                     
+=======
+
+            try {
+                long mutableBucketNum = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, 0);
+                if (mutableBucketNum >= 0) {
+                    table.setMutableBucketNum(mutableBucketNum);
+                } else {
+                    throw new DdlException("Illegal mutable bucket num: " + mutableBucketNum);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
+>>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));

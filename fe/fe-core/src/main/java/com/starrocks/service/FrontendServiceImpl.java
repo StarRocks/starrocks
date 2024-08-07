@@ -2116,6 +2116,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
             updatePartitionIds.add(p.getParentId());
+            p.setImmutable(true);
 
             List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
             try {
@@ -2126,10 +2127,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } finally {
                 db.readUnlock();
             }
+<<<<<<< HEAD
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().addSubPartitions(db, olapTable.getName(), partition, 1);
+=======
+            if (mutablePartitions.size() <= 0) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addSubPartitions(db, olapTable, partition, 1, warehouseId);
+>>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
             }
-            p.setImmutable(true);
         }
 
         // return all mutable partitions

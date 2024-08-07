@@ -411,7 +411,8 @@ enum TTabletMetaType {
     BINLOG_CONFIG,
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE
+    STORAGE_TYPE,
+    MUTABLE_BUCKET_NUM
 }
 
 struct TTabletMetaInfo {
