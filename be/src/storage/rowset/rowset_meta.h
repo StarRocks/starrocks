@@ -39,6 +39,7 @@
 #include <string_view>
 #include <vector>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "google/protobuf/util/message_differencer.h"
@@ -244,10 +245,20 @@ public:
         *rs_meta_pb = *_rowset_meta_pb;
         const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
 
-        if (target_schema != nullptr) {
-            rs_meta_pb->clear_tablet_schema();
-            TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-            target_schema->to_schema_pb(ts_pb);
+        if (!_has_tablet_schema_id) {
+            LOG(INFO) << "rowset does not have rowset id";
+            if (target_schema != nullptr) {
+                rs_meta_pb->clear_tablet_schema();
+                TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
+                target_schema->to_schema_pb(ts_pb);
+            }
+        }
+    }
+
+    void set_tablet_schema_id() {
+        if (_schema != nullptr && !_has_tablet_schema_id) {
+            _rowset_meta_pb->set_schema_id(_schema->id());
+            _has_tablet_schema_id = true;
         }
     }
 
@@ -273,7 +284,9 @@ public:
 
     bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
 
-    bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
+    bool has_tablet_schema() { return _has_tablet_schema_id || _has_tablet_schema_pb; }
+
+    bool has_tablet_schema_id() { return _has_tablet_schema_id; }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
@@ -287,15 +300,21 @@ private:
             _rowset_id.init(_rowset_meta_pb->rowset_id());
         }
 
-        if (_rowset_meta_pb->has_tablet_schema()) {
+        if (_rowset_meta_pb->has_schema_id() && _rowset_meta_pb->schema_id() != 0) {
+            _schema = GlobalTabletSchemaMap::Instance()->get(_rowset_meta_pb->schema_id());
+            if (_schema != nullptr) {
+                _has_tablet_schema_id = true;
+            }
+        }
+        if (_rowset_meta_pb->has_tablet_schema() && !_has_tablet_schema_id) {
             if (_rowset_meta_pb->tablet_schema().has_id() &&
                 _rowset_meta_pb->tablet_schema().id() != TabletSchema::invalid_id()) {
                 _schema = GlobalTabletSchemaMap::Instance()->emplace(_rowset_meta_pb->tablet_schema()).first;
             } else {
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }
+            _has_tablet_schema_pb = true;
         }
-        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
 
         // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();
@@ -330,6 +349,7 @@ private:
     bool _is_removed_from_rowset_meta = false;
     TabletSchemaCSPtr _schema = nullptr;
     bool _has_tablet_schema_pb = false;
+    bool _has_tablet_schema_id = false;
 };
 
 } // namespace starrocks

@@ -1362,6 +1362,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             auto ret = rowset_writer->build();
             if (!ret.ok()) return ret.status();
             new_rowset = std::move(ret.value());
+            new_rowset->rowset_meta()->set_tablet_schema_id();
             st = tablet->add_rowset(new_rowset, false);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name() << ": " << st;
