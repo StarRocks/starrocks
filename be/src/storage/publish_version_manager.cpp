@@ -158,7 +158,7 @@ Status PublishVersionManager::finish_publish_version_task() {
             if (st.ok()) {
                 erase_finish_task_signature.emplace_back(signature);
             } else {
-                LOG(WARNING << "submit finish publish task failed: " << signature;
+                LOG(WARNING) << "submit finish publish task failed: " << signature;
             }
         }
 
@@ -176,7 +176,7 @@ Status PublishVersionManager::finish_publish_version_task() {
                 if (st.ok()) {
                     erase_waitting_finish_task_signature.emplace_back(signature);
                 } else {
-                    LOG(WARNING << "submit finish publish task failed: " << signature;
+                    LOG(WARNING) << "submit finish publish task failed: " << signature;
                 }
             }
         }
