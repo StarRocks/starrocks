@@ -15,9 +15,11 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -158,5 +160,23 @@ public class AnalyzeUtilTest {
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk"));
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+    }
+
+    @Test
+    public void testContainsNonDeterministicFunction() {
+        String[] sqls = {
+                "select current_date(), a.v2, a.v1 from db1.t0 a",
+                "select a.v2, a.v1 from db1.t0 a where current_date() > '2024-08-06'",
+                "select a.v2, a.v1 from db1.t0 a where curdate() > '2024-08-06'",
+                "select a.v2, a.v1 from db1.t0 a where now() > '2024-08-06'",
+                "select * from (select current_date(), a.v2, a.v1 from db1.t0 a) t",
+                "with cte as (select * from (select current_date(), a.v2, a.v1 from db1.t0 a) t) select * from cte",
+        };
+        for (String sql : sqls) {
+            StatementBase statementBase = analyzeSuccess(sql);
+            Pair<Boolean, String> result = AnalyzerUtils.containsNonDeterministicFunction(statementBase);
+            Assert.assertEquals(true, result.first);
+            Assert.assertTrue(!Strings.isNullOrEmpty(result.second));
+        }
     }
 }
