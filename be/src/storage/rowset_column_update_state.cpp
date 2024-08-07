@@ -749,14 +749,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             std::vector<uint32_t> selective_unique_update_column_ids =
                     append_fixed_batch(unique_update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
             // 3.2 build partial schema
-<<<<<<< HEAD
             auto partial_tschema = TabletSchema::create(tschema, selective_update_column_ids);
             Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_uids);
-=======
-            auto partial_tschema = TabletSchema::create(tschema, selective_update_column_uids);
-            Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_ids);
             ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
->>>>>>> 3b682c7027 ([BugFix] fix column overflow when handle too large partial update (#49054))
             // 3.3 read from source segment
             ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(each.first));
             const std::string seg_path = Rowset::segment_file_path(
