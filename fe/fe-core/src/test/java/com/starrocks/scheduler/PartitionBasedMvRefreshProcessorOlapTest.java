@@ -260,11 +260,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         }
     }
 
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-    }
-
     @Test
     public void testUnionAllMvWithPartition() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
@@ -2506,11 +2501,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
     @Test
     public void testRefreshWithTraceProfile() {
         starRocksAssert.withMaterializedView("create materialized view test_mv1 \n" +
-                "partition by date_trunc('month',k1) \n" +
-                "distributed by random \n" +
-                "refresh deferred manual\n" +
-                "as select k1, k2 from tbl1;",
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by random \n" +
+                        "refresh deferred manual\n" +
+                        "as select k1, k2 from tbl1;",
                 () -> {
+                    Config.enable_mv_refresh_query_rewrite = false;
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("test_mv1"));
 
@@ -2568,5 +2564,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
                     }
                 });
+        Config.enable_mv_refresh_query_rewrite = true;
     }
 }

@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -105,6 +106,8 @@ public class MVPCTRefreshPlanBuilder {
         Set<String> uniqueTableNames = tableRelations.keySet().stream().collect(Collectors.toSet());
         int numOfPushDownIntoTables = 0;
         boolean hasGenerateNonPushDownPredicates = false;
+        boolean isEnableMVRefreshQueryRewrite = isEnableMVRefreshQueryRewrite(mvContext.getCtx(),
+                mvRefBaseTablePartitionSlotRefs.keySet());
         for (String tblName : uniqueTableNames) {
             // skip to generate partition predicate for non-ref base tables
             if (!refTableRefreshPartitions.containsKey(tblName)) {
@@ -140,7 +143,7 @@ public class MVPCTRefreshPlanBuilder {
             boolean isPushDownBelowTable = (relations.size() == 1);
             if (isPushDownBelowTable) {
                 boolean ret = pushDownPartitionPredicates(table, tableRelation, refTablePartitionSlotRef,
-                        tablePartitionNames);
+                        tablePartitionNames, isEnableMVRefreshQueryRewrite);
                 if (ret) {
                     numOfPushDownIntoTables += 1;
                 } else {
@@ -207,17 +210,36 @@ public class MVPCTRefreshPlanBuilder {
         return insertStmt;
     }
 
+    private boolean isEnableMVRefreshQueryRewrite(ConnectContext ctx,
+                                                  Set<Table> baseTables) {
+        if (!ctx.getSessionVariable().isEnableMaterializedViewRewriteForInsert()) {
+            return false;
+        }
+
+        Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(ctx, 1, baseTables);
+        LOG.info("Refresh mv {} with related mvs: {}", mv.getName(), relatedMvs);
+        // only enable mv rewrite when there are more than one related mvs
+        return relatedMvs.size() > 1;
+    }
+
     private boolean pushDownPartitionPredicates(Table table,
                                                 TableRelation tableRelation,
                                                 SlotRef refBaseTablePartitionSlot,
-                                                Set<String> tablePartitionNames) throws AnalysisException {
-        if (pushDownByPartitionNames(table, tableRelation, tablePartitionNames)) {
-            return true;
+                                                Set<String> tablePartitionNames,
+                                                boolean isEnableMVRefreshQueryRewrite) throws AnalysisException {
+        if (isEnableMVRefreshQueryRewrite) {
+            // When `isEnableMVRefreshQueryRewrite` is true, disable push down partition names into scan node since
+            // mv rewrite will disable rewrite if table scan contains table partitions/tablets hint.
+            return pushDownByPredicate(table, tableRelation, refBaseTablePartitionSlot, tablePartitionNames);
+        } else {
+            if (pushDownByPartitionNames(table, tableRelation, tablePartitionNames)) {
+                return true;
+            }
+            if (pushDownByPredicate(table, tableRelation, refBaseTablePartitionSlot, tablePartitionNames)) {
+                return true;
+            }
+            return false;
         }
-        if (pushDownByPredicate(table, tableRelation, refBaseTablePartitionSlot, tablePartitionNames)) {
-            return true;
-        }
-        return false;
     }
 
     private boolean pushDownByPartitionNames(Table table,

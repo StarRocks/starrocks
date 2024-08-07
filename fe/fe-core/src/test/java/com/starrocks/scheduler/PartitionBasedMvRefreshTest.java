@@ -146,7 +146,7 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
         taskRun.executeTaskRun();
     }
 
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
+    protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         initAndExecuteTaskRun(taskRun, null, null);
     }
 

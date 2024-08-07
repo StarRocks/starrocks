@@ -1280,6 +1280,9 @@ public class UtFrameUtils {
         // Enable mv refresh insert strict in test
         Config.enable_mv_refresh_insert_strict = true;
 
+        // Enable mv rewrite in mv refresh by default
+        Config.enable_mv_refresh_query_rewrite = true;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 

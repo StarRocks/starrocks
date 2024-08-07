@@ -592,6 +592,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!isMVPropertyContains(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
             mvSessionVariable.setOptimizerExecuteTimeout(Config.mv_refresh_default_planner_optimize_timeout);
         }
+        // set enable_materialized_view_rewrite by default
+        if (!isMVPropertyContains(SessionVariable.ENABLE_MATERIALIZED_VIEW_REWRITE)) {
+            mvSessionVariable.setEnableMaterializedViewRewrite(Config.enable_mv_refresh_query_rewrite);
+            mvSessionVariable.setEnableMaterializedViewRewriteForInsert(Config.enable_mv_refresh_query_rewrite);
+            mvSessionVariable.setNestedMvRewriteMaxLevel(1);
+        }
     }
 
     private boolean isMVPropertyContains(String key) {
@@ -978,8 +984,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private InsertStmt generateInsertAst(Set<String> materializedViewPartitions, MaterializedView materializedView,
                                          ConnectContext ctx) {
-        // TODO: Support use mv when refreshing mv.
-        ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
