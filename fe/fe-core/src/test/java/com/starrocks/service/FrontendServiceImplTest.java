@@ -358,14 +358,14 @@ public class FrontendServiceImplTest {
 
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
 
         partitionIds = table.getPhysicalPartitions().stream()
                 .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(5, table.getPhysicalPartitions().size());
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
     }
 
     @Test

@@ -144,7 +144,6 @@ create materialized view mv as select k, v1 from t;
 function: wait_alter_table_finish("rollup", 8)
 select k, v1 from t;
 
-
 -- name: test_delete
 create table t(k int, v int)
 PROPERTIES (
@@ -161,3 +160,26 @@ select * from t;
 
 delete from t where k = 1;
 select * from t;
+
+-- name: test_mutable_bucket @sequential
+create database ggg;
+use ggg;
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1",
+"mutable_bucket_num" = "2"
+);
+show create table t;
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+
+alter table t set('mutable_bucket_num'='3');
+show create table t;
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+select * from t;
+
+alter table t set('mutable_bucket_num'='-1');
+alter table t set('mutable_bucket_num'='a');
