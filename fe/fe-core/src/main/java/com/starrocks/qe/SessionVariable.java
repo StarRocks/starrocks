@@ -546,6 +546,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
 
+    public static final String CUSTOM_QUERY_ID = "custom_query_id";
+
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
@@ -2244,6 +2246,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
+
+    @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
+    private String customQueryId = "";
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -4059,6 +4064,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+    public void setCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
     }
 
     // Serialize to thrift object

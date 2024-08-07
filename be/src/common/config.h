@@ -321,6 +321,8 @@ CONF_mInt64(update_compaction_result_bytes, "1073741824");
 CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 // This config defines the maximum percentage of data allowed per compaction
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
+// This config controls max memory that we can use for partial update.
+CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");

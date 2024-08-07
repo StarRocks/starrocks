@@ -68,6 +68,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("CPUTime")
             .add("ExecTime")
             .add("Warehouse")
+            .add("CustomQueryId")
             .build();
 
     @Override
@@ -110,6 +111,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             }
             final List<String> values = Lists.newArrayList();
             values.add(TimeUtils.longToTimeString(item.getQueryStartTime()));
+            values.add(item.getCustomQueryId());
             values.add(item.getQueryId());
             values.add(item.getConnId());
             values.add(item.getDb());

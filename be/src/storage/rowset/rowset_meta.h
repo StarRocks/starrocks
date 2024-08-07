@@ -98,6 +98,8 @@ public:
 
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
+    int64_t num_rows_upt() const { return _rowset_meta_pb->num_rows_upt(); }
+
     void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }
 
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }

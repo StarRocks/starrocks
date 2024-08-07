@@ -1270,19 +1270,27 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
+- Description: The soft limit (in percentage) of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
 
-<!--
+
+##### load_process_max_memory_hard_limit_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The hard limit (ratio) of memory resources that can be taken up by all load processes on a BE node. When `enable_new_load_on_memory_limit_exceeded` is set to `false`, and the memory consumption of all loading processes exceeds `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio`, new loading processes will be rejected.
+- Introduced in: v3.3.2
+
 ##### enable_new_load_on_memory_limit_exceeded
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
+- Introduced in: v3.3.2
 
 ##### sync_tablet_meta
 
@@ -1800,26 +1808,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: No
 - Description: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
-
-##### load_process_max_memory_limit_percent
-
-- Default: 30
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
-- Introduced in: -
-
-<!--
-##### enable_new_load_on_memory_limit_exceeded
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### txn_commit_rpc_timeout_ms (Deprecated)
 

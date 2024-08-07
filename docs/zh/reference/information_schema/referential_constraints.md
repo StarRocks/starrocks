@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # referential_constraints
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `referential_constraints` 包含所有参照（外键）约束。
 
 `referential_constraints` 提供以下字段：

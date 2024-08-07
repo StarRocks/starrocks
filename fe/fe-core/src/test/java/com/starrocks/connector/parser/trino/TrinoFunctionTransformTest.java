@@ -279,10 +279,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
 
         sql = "SELECT replace('hello-world', '-');";
-        assertPlanContains(sql, "replace('hello-world', '-', '')");
+        assertPlanContains(sql, "'helloworld'");
 
         sql = "SELECT replace('hello-world', '-', '$');";
-        assertPlanContains(sql, "replace('hello-world', '-', '$')");
+        assertPlanContains(sql, "'hello$world'");
 
         sql = "select index('hello', 'l')";
         assertPlanContains(sql, "instr('hello', 'l')");
