@@ -466,6 +466,7 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
@@ -606,7 +607,6 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);

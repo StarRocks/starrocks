@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
@@ -57,6 +58,9 @@ public class SchemaTableEvaluateRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableEvaluateSchemaScanRule()) {
+            return false;
+        }
         LogicalSchemaScanOperator operator = input.getOp().cast();
         if (!checkConjuncts(operator.getPredicate())) {
             return false;
@@ -70,7 +74,8 @@ public class SchemaTableEvaluateRule extends TransformationRule {
     // Only support the pattern: c1=v1 AND c2=v2
     private static boolean checkConjuncts(ScalarOperator predicate) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        return conjuncts.stream().allMatch(ScalarOperator::isColumnEqualConstant);
+        return CollectionUtils.isNotEmpty(conjuncts) &&
+                conjuncts.stream().allMatch(ScalarOperator::isColumnEqualConstant);
     }
 
     private static boolean checkTable(Table table) {

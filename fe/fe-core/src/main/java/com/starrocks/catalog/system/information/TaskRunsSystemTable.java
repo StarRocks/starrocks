@@ -25,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
@@ -139,10 +140,31 @@ public class TaskRunsSystemTable extends SystemTable {
             FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
             Object obj = info.getFieldValue(field);
             Type valueType = thriftToScalarType(meta.type);
-            ScalarOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
+            ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
+            scalar = mayCast(scalar, column.getType());
             result.add(scalar);
         }
         return result;
+    }
+
+    /**
+     * The thrift type may differ from schema-type, for example user a LONG timestamp in thrift, but return a
+     * DATETIME in the schema table.
+     */
+    private static ConstantOperator mayCast(ConstantOperator value, Type schemaType) {
+        if (value.getType().equals(schemaType)) {
+            return value;
+        }
+        if (value.getType().isStringType() && schemaType.isStringType()) {
+            return value;
+        }
+        // From timestamp to DATETIME
+        if (value.getType().isBigint() && schemaType.isDatetime()) {
+            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
+        }
+        return value.castTo(schemaType)
+                .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
+                        value.getType(), schemaType)));
     }
 
     private static Type thriftToScalarType(byte type) {

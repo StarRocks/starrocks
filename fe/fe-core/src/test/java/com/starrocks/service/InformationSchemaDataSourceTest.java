@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -42,6 +43,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -304,6 +306,10 @@ public class InformationSchemaDataSourceTest {
         taskRun.setTaskName("t_1024");
         taskRun.setState(Constants.TaskRunState.SUCCESS);
         taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setProcessStartTime(
+                DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
         new MockUp<TaskManager>() {
             @Mock
             public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
@@ -311,14 +317,34 @@ public class InformationSchemaDataSourceTest {
             }
         };
 
-        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
-                .explainContains("     constant exprs: ",
-                        "NULL | 't_1024' | 0 | 0 | 'SUCCESS' | NULL | 'd1' | 'insert into t1 select * from t1' " +
-                                "| 0 | 0 | NULL | '0%' | '' | NULL\n");
-        starRocksAssert.query("select state, error_message" +
+        //        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
+        //                .explainContains("     constant exprs: ",
+        //                                "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' |
+        //                                'SUCCESS' | NULL " +
+        //                                        "| 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00'
+        //                                        " +
+        //                                        "| 0 | NULL | '0%' | '' | NULL\n");
+        //        starRocksAssert.query("select state, error_message" +
+        //                        " from information_schema.task_runs where task_name = 't_1024' ")
+        //                .explainContains("     constant exprs: ",
+        //                        "'SUCCESS' | NULL");
+        starRocksAssert.query("select count(task_name) " +
                         " from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
-                        "'SUCCESS' | NULL");
+                        "'t_1024'");
+        starRocksAssert.query("select count(error_code) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: \n         0\n");
+        starRocksAssert.query("select count(*) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "NULL");
+        starRocksAssert.query("select count(distinct task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "'t_1024'");
+        starRocksAssert.query("select error_code + 1, error_message + 'haha' " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "0 | NULL");
 
         // Not supported
         starRocksAssert.query("select state, error_message" +

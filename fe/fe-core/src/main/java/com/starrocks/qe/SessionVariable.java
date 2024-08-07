@@ -631,6 +631,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+    public static final String ENABLE_EVALUATE_SCHEMA_SCAN_RULE = "enable_evaluate_schema_scan_rule";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -1489,6 +1490,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
     private boolean enableRewriteSimpleAggToHdfsScan = false;
+
+    @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
+    private boolean enableEvaluateSchemaScanRule = true;
 
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;
@@ -3720,6 +3724,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteSimpleAggToHdfsScan() {
         return this.enableRewriteSimpleAggToHdfsScan;
+    }
+
+    public boolean isEnableEvaluateSchemaScanRule() {
+        return enableEvaluateSchemaScanRule;
     }
 
     public boolean getEnablePruneComplexTypes() {
