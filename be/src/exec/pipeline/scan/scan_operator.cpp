@@ -432,7 +432,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
             // kick start this chunk source
-            RETURN_IF_ERROR(chunk_source->start(state));
+            auto start_status = chunk_source->start(state);
+            if (!start_status.ok()) {
+                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
+                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                _set_scan_status(start_status);
+            }
 
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
 
