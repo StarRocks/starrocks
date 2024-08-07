@@ -342,7 +342,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
      * And this process will also output a report in `fe.log`, including valid number of
      * tablet and number of tablet in recycle bin for each backend.
      */
-    public void checkTabletMetaConsistency() {
+    public void checkTabletMetaConsistency(Map<Long, Integer> creatingTableIds) {
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
 
@@ -391,6 +391,9 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                     // validate table
                     long tableId = tabletMeta.getTableId();
+                    if (creatingTableIds.containsKey(tableId)) {
+                        continue;
+                    }
                     com.starrocks.catalog.Table table = db.getTable(tableId);
                     if (table == null) {
                         table = recycleBin.getTable(dbId, tableId);
