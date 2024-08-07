@@ -34,6 +34,7 @@ import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -67,7 +68,7 @@ public class HudiConnectorScanRangeSource extends HiveConnectorScanRangeSource {
         RemoteFileInfo remoteFileInfo;
         List<RemoteFileDesc> files;
         int fileIndex = 0;
-        List<TScanRangeLocations> buffer;
+        List<TScanRangeLocations> buffer = new ArrayList<>();
 
         public ScanRangeIterator(RemoteFileInfo remoteFileInfo) {
             this.remoteFileInfo = remoteFileInfo;
