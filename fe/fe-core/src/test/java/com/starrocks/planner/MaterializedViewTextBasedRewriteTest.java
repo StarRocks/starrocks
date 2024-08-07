@@ -344,4 +344,16 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
         // TODO: support text based view for more patterns, now only rewrite the same query and subquery
         testRewriteFail(mv, query);
     }
+
+    @Test
+    public void testMVRewriteWithNonDeterministicFunctions() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select current_date(), t1a, t1b from test.test_all_type ;", () -> {
+            {
+                String query = " select current_date(), t1a, t1b from test.test_all_type";
+                sql(query).nonMatch("mv0");
+            }
+        });
+    }
 }

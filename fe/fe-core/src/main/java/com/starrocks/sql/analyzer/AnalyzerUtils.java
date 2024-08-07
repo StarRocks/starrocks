@@ -70,6 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.privilege.AccessDeniedException;
@@ -99,6 +100,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -131,6 +133,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -1520,6 +1523,66 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+    }
+
+    static class NonDeterministicAnalyzeVisitor extends AstTraverser<Void, Void> {
+        Optional<String> nonDeterministicFunctionOpt = Optional.empty();
+
+        public Pair<Boolean, String> getResult() {
+            return Pair.create(nonDeterministicFunctionOpt.isPresent(), nonDeterministicFunctionOpt.orElse(null));
+        }
+
+        private boolean containsNonDeterministicFunction(FunctionCallExpr expr) {
+            FunctionName functionName = expr.getFnName();
+            if (functionName == null) {
+                return false;
+            }
+            return FunctionSet.allNonDeterministicFunctions.contains(functionName.getFunction());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null) {
+                for (SelectListItem item : node.getSelectList().getItems()) {
+                    Expr expr = item.getExpr();
+                    if (expr instanceof FunctionCallExpr) {
+                        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                        if (containsNonDeterministicFunction(functionCallExpr)) {
+                            nonDeterministicFunctionOpt = Optional.of(functionCallExpr.getFnName().getFunction());
+                            return null;
+                        }
+                    }
+                }
+            }
+            return super.visitSelect(node, context);
+        }
+
+        @Override
+        public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+            if (containsNonDeterministicFunction(expr)) {
+                nonDeterministicFunctionOpt = Optional.of(expr.getFn().functionName());
+                return null;
+            }
+            for (Expr param : expr.getChildren()) {
+                visit(param);
+                if (nonDeterministicFunctionOpt.isPresent()) {
+                    return null;
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Check if the function is a non-deterministic function with strict mode, eg current_date/current_timestamp also
+     * is treated as non-deterministic function too.
+     * @param node the node to check
+     * @return true if node contains non-deterministic functions, false otherwise.
+     */
+    public static Pair<Boolean, String> containsNonDeterministicFunction(ParseNode node) {
+        NonDeterministicAnalyzeVisitor visitor = new NonDeterministicAnalyzeVisitor();
+        visitor.visit(node);
+        return visitor.getResult();
     }
 
     public static void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {

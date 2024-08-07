@@ -450,13 +450,9 @@ public class MvUtils {
                 || (operator instanceof LogicalAggregationOperator);
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
-            MaterializedView mv,
-            String sql,
-            ColumnRefFactory columnRefFactory,
-            ConnectContext connectContext,
-            OptimizerConfig optimizerConfig,
-            boolean inlineView) {
+    public static StatementBase parse(MaterializedView mv,
+                                      String sql,
+                                      ConnectContext connectContext) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -467,6 +463,14 @@ public class MvUtils {
             LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
             return null;
         }
+        return mvStmt;
+    }
+
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
+                                                                               ColumnRefFactory columnRefFactory,
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig,
+                                                                               boolean inlineView) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();

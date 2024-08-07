@@ -184,4 +184,16 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Map<String, String> result = runtimeProfile.getInfoStrings();
         Assert.assertTrue(result.isEmpty());
     }
+
+    @Test
+    public void testTracerWithNonDeterministicFunctions() {
+        connectContext.getSessionVariable().setTraceLogMode("command");
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        String mv = "select empid, current_date(), current_timestamp() from emps ";
+        testRewriteFail(mv, "select empid, current_date(), current_timestamp(), random() from emps");
+        String pr = Tracers.printLogs();
+        Assert.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
+        Tracers.close();
+    }
 }
