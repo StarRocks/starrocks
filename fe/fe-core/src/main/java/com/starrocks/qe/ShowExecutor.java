@@ -54,11 +54,15 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergView;
+=======
+>>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -268,8 +272,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -783,6 +785,7 @@ public class ShowExecutor {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
+<<<<<<< HEAD
             // create table catalogName.dbName.tableName (
             StringBuilder createTableSql = new StringBuilder();
             createTableSql.append("CREATE TABLE ")
@@ -825,22 +828,18 @@ public class ShowExecutor {
                 createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
             }
 
+=======
+>>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
             List<List<String>> rows = Lists.newArrayList();
-            rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
-            return new ShowResultSet(showStmt.getMetaData(), rows);
-        }
-
-        private String toMysqlDDL(Column column) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("  `").append(column.getName()).append("` ");
-            sb.append(column.getType().toSql());
-            sb.append(" DEFAULT NULL");
-
-            if (!Strings.isNullOrEmpty(column.getComment())) {
-                sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+            if (table.isConnectorView()) {
+                String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table);
+                rows.add(Lists.newArrayList(tableName, createViewSql));
+                return new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
+            } else {
+                String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+                rows.add(Lists.newArrayList(tableName, createTableSql));
+                return new ShowResultSet(showStmt.getMetaData(), rows);
             }
-
-            return sb.toString();
         }
 
         @Override
