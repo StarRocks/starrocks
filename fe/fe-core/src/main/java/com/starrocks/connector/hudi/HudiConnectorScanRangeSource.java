@@ -46,10 +46,11 @@ public class HudiConnectorScanRangeSource extends HiveConnectorScanRangeSource {
 
     public HudiConnectorScanRangeSource(DescriptorTable descriptorTable, Table table, HDFSScanNodePredicates scanNodePredicates) {
         super(descriptorTable, table, scanNodePredicates);
-        init();
     }
 
-    private void init() {
+    @Override
+    protected void init() {
+        super.init();
         HudiTable hudiTable = (HudiTable) table;
         String tableInputFormat = hudiTable.getHudiInputFormat();
         morTable = hudiTable.getTableType() == HoodieTableType.MERGE_ON_READ;

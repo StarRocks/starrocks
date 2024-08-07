@@ -48,16 +48,6 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
         connectContext.getSessionVariable().setForceScheduleLocal(false);
     }
 
-    private static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
-        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
-        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
-            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
-                scanRangeParams.addAll(x);
-            }
-        }
-        return scanRangeParams;
-    }
-
     @Test
     public void testHiveSplit() throws Exception {
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
