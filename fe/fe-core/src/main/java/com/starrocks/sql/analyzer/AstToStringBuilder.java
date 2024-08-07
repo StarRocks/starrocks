@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -51,7 +52,12 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
@@ -117,6 +123,7 @@ import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+import static com.starrocks.catalog.Table.TableType.JDBC;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -1323,5 +1330,81 @@ public class AstToStringBuilder {
             }
             return hintBuilder.toString();
         }
+    }
+
+    public static String getExternalCatalogTableDdlStmt(Table table) {
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        String tableName = table.getName();
+        if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            createTableSql.append("CREATE EXTERNAL TABLE ");
+        } else {
+            createTableSql.append("CREATE TABLE ");
+        }
+        createTableSql.append("`").append(tableName).append("`")
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+                collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nPARTITION BY ( ")
+                    .append(String.join(", ", table.getPartitionColumnNames()))
+                    .append(" )");
+        }
+
+        // Location
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = table.getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = table.getTableLocation();
+        } else if (table.isPaimonTable()) {
+            location = table.getTableLocation();
+        }
+
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        }
+
+        return createTableSql.toString();
+    }
+
+    public static String getExternalCatalogViewDdlStmt(HiveView view) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE VIEW `").append(view.getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+        for (Column column : view.getBaseSchema()) {
+            colDef.add("`" + column.getName() + "`");
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+        sb.append(")");
+
+        sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+        return sb.toString();
+    }
+
+    private static String toMysqlDDL(Column column) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  `").append(column.getName()).append("` ");
+        sb.append(column.getType().toSql());
+        sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+        }
+
+        return sb.toString();
     }
 }

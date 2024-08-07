@@ -57,7 +57,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -145,6 +145,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -258,8 +259,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -1121,11 +1120,11 @@ public class ShowExecutor {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             showCreateInternalCatalogTable(showStmt);
         } else {
-            showCreateExternalCatalogTable(tbl, catalogName);
+            showCreateExternalCatalogTable(showStmt, tbl, catalogName);
         }
     }
 
-    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
+    private void showCreateExternalCatalogTable(ShowCreateTableStmt showStmt, TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -1138,44 +1137,16 @@ public class ShowExecutor {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
 
-        // create table catalogName.dbName.tableName (
-        StringBuilder createTableSql = new StringBuilder();
-        createTableSql.append("CREATE TABLE ")
-                .append("`").append(tableName).append("`")
-                .append(" (\n");
-
-        // Columns
-        List<String> columns = table.getFullSchema().stream().map(
-                this::toMysqlDDL).collect(Collectors.toList());
-        createTableSql.append(String.join(",\n", columns))
-                .append("\n)");
-
-        // Partition column names
-        if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY ( ")
-                    .append(String.join(", ", table.getPartitionColumnNames()))
-                    .append(" )");
-        }
-
-        // Location
-        String location = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
-        }
-
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
-        }
-
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
-        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+        if (table.isHiveView()) {
+            String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((HiveView) table);
+            rows.add(Lists.newArrayList(tableName, createViewSql));
+            resultSet = new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
+        } else {
+            String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+            rows.add(Lists.newArrayList(tableName, createTableSql));
+            resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+        }
     }
 
     private String toMysqlDDL(Column column) {
