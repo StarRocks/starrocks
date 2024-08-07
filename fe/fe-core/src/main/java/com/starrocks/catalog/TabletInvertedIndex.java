@@ -337,7 +337,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
      * And this process will also output a report in `fe.log`, including valid number of
      * tablet and number of tablet in recycle bin for each backend.
      */
-    public void checkTabletMetaConsistency() {
+    public void checkTabletMetaConsistency(Map<Long, Integer> creatingTableIds) {
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentRecycleBin();
 
@@ -385,7 +385,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                     // validate table
                     long tableId = tabletMeta.getTableId();
+<<<<<<< HEAD
                     com.starrocks.catalog.Table table = database.getTable(tableId);
+=======
+                    if (creatingTableIds.containsKey(tableId)) {
+                        continue;
+                    }
+                    com.starrocks.catalog.Table table = db.getTable(tableId);
+>>>>>>> 44199b8d16 ([BugFix] Fix ConsistencyChecker error dropping tablet if creating table takes too long (#49010))
                     if (table == null) {
                         table = recycleBin.getTable(dbId, tableId);
                         if (table != null) {

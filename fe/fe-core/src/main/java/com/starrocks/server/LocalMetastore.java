@@ -1723,6 +1723,7 @@ public class LocalMetastore implements ConnectorMetadata {
             numReplicas += partition.getReplicaCount();
         }
 
+<<<<<<< HEAD
         if (numReplicas > Config.create_table_max_serial_replicas) {
             LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
                     partitions.size(), db.getFullName(), table.getName(), numReplicas);
@@ -1731,6 +1732,21 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
                     partitions.size(), db.getFullName(), table.getName(), numReplicas);
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+=======
+        try {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
+            if (numReplicas > Config.create_table_max_serial_replicas) {
+                LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+            } else {
+                LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
+>>>>>>> 44199b8d16 ([BugFix] Fix ConsistencyChecker error dropping tablet if creating table takes too long (#49010))
         }
     }
 
