@@ -21,16 +21,34 @@
 
 #include "storage/olap_common.h"
 
-#define INVERTED_INDEX_MARK_NAME "ivt"
-
 namespace starrocks {
 class IndexDescriptor {
 public:
+    inline static const std::string mark_word = "TENANNEMPTYMARK";
+
+    static StatusOr<std::string> get_index_file_path(const IndexType index_type, const std::string& rowset_dir,
+                                                     const std::string& rowset_id, int segment_id, int64_t index_id) {
+        switch (index_type) {
+        case VECTOR:
+            return vector_index_file_path(rowset_dir, rowset_id, segment_id, index_id);
+        case GIN:
+            return inverted_index_file_path(rowset_dir, rowset_id, segment_id, index_id);
+        default:
+            return Status::NotSupported("Not supported");
+        }
+    }
+
     static std::string inverted_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
                                                 int segment_id, int64_t index_id) {
         // inverted index is a directory, it's path likes below
         // {rowset_dir}/{schema_hash}/{rowset_id}_{seg_num}_{index_id}
-        return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, INVERTED_INDEX_MARK_NAME);
+        return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "ivt");
+    }
+
+    static std::string vector_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
+                                              int segment_id, int64_t index_id) {
+        // {rowset_dir}/{schema_hash}/{rowset_id}_{seg_num}_{index_id}.vi
+        return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "vi");
     }
 
     static const std::string get_temporary_null_bitmap_file_name() { return "null_bitmap"; }
