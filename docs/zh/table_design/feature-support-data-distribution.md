@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: "能力边界"
 ---
 
 # 功能边界：数据分布
