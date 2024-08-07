@@ -54,14 +54,10 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
-<<<<<<< HEAD
-import com.starrocks.catalog.HiveMetaStoreTable;
-=======
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -149,6 +145,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -498,151 +495,6 @@ public class ShowExecutor {
                                 baseTableHasPrivilege.set(false);
                             }
                         }
-<<<<<<< HEAD
-=======
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
-                    }
-                }
-
-                List<String> createTableStmt = Lists.newArrayList();
-                AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
-                if (createTableStmt.isEmpty()) {
-                    return new ShowResultSet(showStmt.getMetaData(), rows);
-                }
-
-                if (table instanceof View) {
-                    if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
-                                showStmt.getTable(), "MATERIALIZED VIEW");
-                    }
-                    rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
-                    return new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
-                } else if (table instanceof MaterializedView) {
-                    // In order to be compatible with BI, we return the syntax supported by
-                    // mysql according to the standard syntax.
-                    if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.VIEW) {
-                        MaterializedView mv = (MaterializedView) table;
-                        String sb = "CREATE VIEW `" + table.getName() + "` AS " + mv.getViewDefineSql();
-                        rows.add(Lists.newArrayList(table.getName(), sb, "utf8", "utf8_general_ci"));
-                        return new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
-                    } else {
-                        rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
-                        return new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
-                    }
-                } else {
-                    if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.TABLE) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
-                                showStmt.getTable(), showStmt.getType().getValue());
-                    }
-                    rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
-                    return new ShowResultSet(showStmt.getMetaData(), rows);
-                }
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
-        }
-
-        private ShowResultSet showCreateExternalCatalogTable(ShowCreateTableStmt showStmt, TableName tbl, String catalogName) {
-            String dbName = tbl.getDb();
-            String tableName = tbl.getTbl();
-            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            Database db = metadataMgr.getDb(catalogName, dbName);
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
-            Table table = metadataMgr.getTable(catalogName, dbName, tableName);
-            if (table == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
-
-            List<List<String>> rows = Lists.newArrayList();
-            if (table.isConnectorView()) {
-                String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table);
-                rows.add(Lists.newArrayList(tableName, createViewSql));
-                return new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
-            } else {
-                String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
-                rows.add(Lists.newArrayList(tableName, createTableSql));
-                return new ShowResultSet(showStmt.getMetaData(), rows);
-            }
-        }
-
-        @Override
-        public ShowResultSet visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
-            List<List<String>> rowSet = Lists.newArrayList();
-
-            List<ConnectContext.ThreadInfo> threadInfos = context.getConnectScheduler()
-                    .listConnection(context.getQualifiedUser(), statement.getForUser());
-            long nowMs = System.currentTimeMillis();
-            for (ConnectContext.ThreadInfo info : threadInfos) {
-                List<String> row = info.toRow(nowMs, statement.showFull());
-                if (row != null) {
-                    rowSet.add(row);
-                }
-            }
-
-            return new ShowResultSet(statement.getMetaData(), rowSet);
-        }
-
-        @Override
-        public ShowResultSet visitShowProfilelistStatement(ShowProfilelistStmt statement, ConnectContext context) {
-            List<List<String>> rowSet = Lists.newArrayList();
-
-            List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
-            Collections.reverse(profileElements);
-            Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
-            int count = 0;
-            while (iterator.hasNext()) {
-                ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow();
-                rowSet.add(row);
-                count++;
-                if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
-                    break;
-                }
-            }
-
-            return new ShowResultSet(statement.getMetaData(), rowSet);
-        }
-
-        @Override
-        public ShowResultSet visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, ConnectContext context) {
-            List<List<String>> rows = Lists.newArrayList();
-
-            List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
-            slots.sort(Comparator.comparingLong(LogicalSlot::getStartTimeMs)
-                    .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
-
-            for (LogicalSlot slot : slots) {
-                List<String> row =
-                        ShowRunningQueriesStmt.getColumnSuppliers().stream().map(columnSupplier -> columnSupplier.apply(slot))
-                                .collect(Collectors.toList());
-                rows.add(row);
-
-                if (statement.getLimit() >= 0 && rows.size() >= statement.getLimit()) {
-                    break;
-                }
-            }
-
-            return new ShowResultSet(statement.getMetaData(), rows);
-        }
-
-        @Override
-        public ShowResultSet visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, ConnectContext context) {
-            List<List<String>> rows = Lists.newArrayList();
-
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
-                    .flatMap(worker -> worker.getResourceGroupUsages().stream()
-                            .map(usage -> new ShowResourceGroupUsageStmt.ShowItem(worker, usage)))
-                    .filter(item -> statement.getGroupName() == null ||
-                            statement.getGroupName().equals(item.getUsage().getGroup().getName()))
-                    .sorted()
-                    .forEach(item -> {
-                        List<String> row = ShowResourceGroupUsageStmt.getColumnSuppliers().stream()
-                                .map(columnSupplier -> columnSupplier.apply(item))
-                                .collect(Collectors.toList());
-                        rows.add(row);
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
                     });
                     if (!baseTableHasPrivilege.get()) {
                         continue;
@@ -1268,11 +1120,11 @@ public class ShowExecutor {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             showCreateInternalCatalogTable(showStmt);
         } else {
-            showCreateExternalCatalogTable(tbl, catalogName);
+            showCreateExternalCatalogTable(showStmt, tbl, catalogName);
         }
     }
 
-    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
+    private void showCreateExternalCatalogTable(ShowCreateTableStmt showStmt, TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -1285,44 +1137,16 @@ public class ShowExecutor {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
 
-        // create table catalogName.dbName.tableName (
-        StringBuilder createTableSql = new StringBuilder();
-        createTableSql.append("CREATE TABLE ")
-                .append("`").append(tableName).append("`")
-                .append(" (\n");
-
-        // Columns
-        List<String> columns = table.getFullSchema().stream().map(
-                this::toMysqlDDL).collect(Collectors.toList());
-        createTableSql.append(String.join(",\n", columns))
-                .append("\n)");
-
-        // Partition column names
-        if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY ( ")
-                    .append(String.join(", ", table.getPartitionColumnNames()))
-                    .append(" )");
-        }
-
-        // Location
-        String location = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
-        }
-
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
-        }
-
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
-        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+        if (table.isHiveView()) {
+            String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((HiveView) table);
+            rows.add(Lists.newArrayList(tableName, createViewSql));
+            resultSet = new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
+        } else {
+            String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+            rows.add(Lists.newArrayList(tableName, createTableSql));
+            resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+        }
     }
 
     private String toMysqlDDL(Column column) {
