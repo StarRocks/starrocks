@@ -33,13 +33,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropTableStmt;
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;

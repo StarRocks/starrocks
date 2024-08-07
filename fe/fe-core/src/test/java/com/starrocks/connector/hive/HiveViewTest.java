@@ -19,12 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.MetastoreType;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;

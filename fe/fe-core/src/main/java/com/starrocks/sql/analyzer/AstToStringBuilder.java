@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -47,35 +48,11 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
-<<<<<<< HEAD
-import com.starrocks.catalog.FunctionSet;
-=======
-import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ConnectorView;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Index;
-import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
@@ -391,7 +368,7 @@ public class AstToStringBuilder {
             }
             if (dbName != null) {
                 sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
-                    .append(jobName).append(" ON ").append(stmt.getTableName());
+                        .append(jobName).append(" ON ").append(stmt.getTableName());
             } else {
                 sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
             }
@@ -1298,353 +1275,19 @@ public class AstToStringBuilder {
             }
             return sb.toString();
         }
-<<<<<<< HEAD
-=======
-
-        @Override
-        public String visitCreateCatalogStatement(CreateCatalogStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("CREATE EXTERNAL CATALOG '");
-            sb.append(stmt.getCatalogName()).append("' ");
-            if (stmt.getComment() != null) {
-                sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
-            }
-            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
-            return sb.toString();
-        }
-
-        protected String extractHintStr(List<HintNode> hintNodes) {
-            StringBuilder hintBuilder = new StringBuilder();
-            for (HintNode hintNode : hintNodes) {
-                hintBuilder.append(hintNode.toSql());
-                hintBuilder.append(" ");
-            }
-            return hintBuilder.toString();
-        }
-    }
-
-    public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition,
-                                  boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition,
-                hidePassword, table.isTemporaryTable());
-    }
-
-    public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
-                                  List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword,
-                                  boolean isTemporary) {
-        // 1. create table
-        // 1.1 materialized view
-        if (table.isMaterializedView()) {
-            MaterializedView mv = (MaterializedView) table;
-            createTableStmt.add(mv.getMaterializedViewDdlStmt(true));
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        // 1.2 view
-        if (table.getType() == Table.TableType.VIEW) {
-            View view = (View) table;
-            sb.append("CREATE VIEW `").append(table.getName()).append("` (");
-            List<String> colDef = Lists.newArrayList();
-            for (Column column : table.getBaseSchema()) {
-                StringBuilder colSb = new StringBuilder();
-                colSb.append("`" + column.getName() + "`");
-                if (!Strings.isNullOrEmpty(column.getComment())) {
-                    colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
-                }
-                colDef.add(colSb.toString());
-            }
-            sb.append(Joiner.on(", ").join(colDef));
-            sb.append(")");
-            addTableComment(sb, view);
-
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
-            createTableStmt.add(sb.toString());
-            return;
-        }
-
-        // 1.3 other table type
-        sb.append("CREATE ");
-        if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
-                || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
-                || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
-                || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
-                || table.getType() == Table.TableType.FILE) {
-            sb.append("EXTERNAL ");
-        }
-        if (isTemporary) {
-            sb.append("TEMPORARY ");
-        }
-        sb.append("TABLE ");
-        if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("`").append(dbName).append("`.");
-        }
-        sb.append("`").append(table.getName()).append("` (\n");
-        int idx = 0;
-        for (Column column : table.getBaseSchema()) {
-            if (idx++ != 0) {
-                sb.append(",\n");
-            }
-            // There MUST BE 2 space in front of each column description line
-            // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
-            if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
-                OlapTable olapTable = (OlapTable) table;
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName(table.getIdToColumn()));
-                } else {
-                    sb.append("  ").append(column.toSql(table.getIdToColumn()));
-                }
-            } else {
-                sb.append("  ").append(column.toSql(table.getIdToColumn()));
-            }
-        }
-        if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
-            OlapTable olapTable = (OlapTable) table;
-            if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
-                for (Index index : olapTable.getIndexes()) {
-                    sb.append(",\n");
-                    sb.append("  ").append(index.toSql(table));
-                }
-            }
-        }
-
-        sb.append("\n) ENGINE=");
-        sb.append(table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
-
-        if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
-            OlapTable olapTable = (OlapTable) table;
-
-            // keys
-            sb.append("\n").append(olapTable.getKeysType().toSql()).append("(");
-            List<String> keysColumnNames = Lists.newArrayList();
-            for (Column column : olapTable.getBaseSchema()) {
-                if (column.isKey()) {
-                    keysColumnNames.add("`" + column.getName() + "`");
-                }
-            }
-            sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            addTableComment(sb, table);
-
-            // partition
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            List<Long> partitionId = null;
-            if (separatePartition) {
-                partitionId = Lists.newArrayList();
-            }
-            if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
-            }
-
-            // distribution
-            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
-
-            // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-            if (index.getSortKeyIdxes() != null) {
-                sb.append("\nORDER BY(");
-                List<String> sortKeysColumnNames = Lists.newArrayList();
-                for (Integer i : index.getSortKeyIdxes()) {
-                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
-                }
-                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(olapTable.getProperties(), "=", true, true, hidePassword).toString());
-            sb.append("\n)");
-        } else if (table.getType() == Table.TableType.MYSQL) {
-            MysqlTable mysqlTable = (MysqlTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
-            sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
-            sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
-            sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
-            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
-            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
-            sb.append(")");
-        } else if (table.getType() == Table.TableType.BROKER) {
-            BrokerTable brokerTable = (BrokerTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
-            sb.append("\"path\" = \"").append(Joiner.on(",").join(brokerTable.getEncodedPaths())).append("\",\n");
-            sb.append("\"column_separator\" = \"").append(brokerTable.getReadableColumnSeparator()).append("\",\n");
-            sb.append("\"line_delimiter\" = \"").append(brokerTable.getReadableRowDelimiter()).append("\"\n");
-            sb.append(")");
-            if (!brokerTable.getBrokerProperties().isEmpty()) {
-                sb.append("\nBROKER PROPERTIES (\n");
-                sb.append(new PrintableMap<>(brokerTable.getBrokerProperties(), " = ", true, true,
-                        hidePassword).toString());
-                sb.append("\n)");
-            }
-        } else if (table.getType() == Table.TableType.ELASTICSEARCH) {
-            EsTable esTable = (EsTable) table;
-            addTableComment(sb, table);
-
-            // partition
-            PartitionInfo partitionInfo = esTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                sb.append("\n");
-                sb.append("PARTITION BY RANGE(");
-                idx = 0;
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns(table.getIdToColumn())) {
-                    if (idx != 0) {
-                        sb.append(", ");
-                    }
-                    sb.append("`").append(column.getName()).append("`");
-                }
-                sb.append(")\n()");
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
-            sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
-            sb.append("\"password\" = \"").append(hidePassword ? "" : esTable.getPasswd()).append("\",\n");
-            sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
-            if (esTable.getMappingType() != null) {
-                sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
-            }
-            sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
-            sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
-            sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
-            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\",\n");
-            sb.append("\"es.nodes.wan.only\" = \"").append(esTable.wanOnly()).append("\"\n");
-            sb.append(")");
-        } else if (table.getType() == Table.TableType.HIVE) {
-            HiveTable hiveTable = (HiveTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
-            if (!hiveTable.getProperties().isEmpty()) {
-                sb.append(",\n");
-            }
-            sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
-            sb.append("\n)");
-        } else if (table.getType() == Table.TableType.FILE) {
-            FileTable fileTable = (FileTable) table;
-            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
-            CredentialUtil.maskCredential(clonedFileProperties);
-            addTableComment(sb, table);
-
-            sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
-            sb.append("\n)");
-        } else if (table.getType() == Table.TableType.HUDI) {
-            HudiTable hudiTable = (HudiTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
-            sb.append("\n)");
-        } else if (table.getType() == Table.TableType.ICEBERG) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
-            sb.append("\n)");
-        } else if (table.getType() == Table.TableType.JDBC) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            addTableComment(sb, table);
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
-            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
-            sb.append("\n)");
-        }
-        sb.append(";");
-
-        createTableStmt.add(sb.toString());
-
-        // 2. add partition
-        if (separatePartition && (table instanceof OlapTable)
-                && ((OlapTable) table).getPartitionInfo().isRangePartition()
-                && table.getPartitions().size() > 1) {
-            OlapTable olapTable = (OlapTable) table;
-            RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-            boolean first = true;
-            for (Map.Entry<Long, Range<PartitionKey>> entry : partitionInfo.getSortedRangeMap(false)) {
-                if (first) {
-                    first = false;
-                    continue;
-                }
-                sb = new StringBuilder();
-                Partition partition = olapTable.getPartition(entry.getKey());
-                sb.append("ALTER TABLE ").append(table.getName());
-                sb.append(" ADD PARTITION ").append(partition.getName()).append(" VALUES [");
-                sb.append(entry.getValue().lowerEndpoint().toSql());
-                sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
-                sb.append("(\"version_info\" = \"");
-                sb.append(partition.getVisibleVersion()).append("\"");
-                sb.append(");");
-                addPartitionStmt.add(sb.toString());
-            }
-        }
-
-        // 3. rollup
-        if (createRollupStmt != null && (table instanceof OlapTable)) {
-            OlapTable olapTable = (OlapTable) table;
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
-                if (entry.getKey() == olapTable.getBaseIndexId()) {
-                    continue;
-                }
-                MaterializedIndexMeta materializedIndexMeta = entry.getValue();
-                sb = new StringBuilder();
-                String indexName = olapTable.getIndexNameById(entry.getKey());
-                sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
-                sb.append("(");
-
-                List<Column> indexSchema = materializedIndexMeta.getSchema();
-                for (int i = 0; i < indexSchema.size(); i++) {
-                    Column column = indexSchema.get(i);
-                    sb.append(column.getName());
-                    if (i != indexSchema.size() - 1) {
-                        sb.append(", ");
-                    }
-                }
-                sb.append(");");
-                createRollupStmt.add(sb.toString());
-            }
-        }
     }
 
     public static String getExternalCatalogTableDdlStmt(Table table) {
+        String tableName = table.getName();
         // create table catalogName.dbName.tableName (
         StringBuilder createTableSql = new StringBuilder();
-        String tableName = table.getName();
-        if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
-            createTableSql.append("CREATE EXTERNAL TABLE ");
-        } else {
-            createTableSql.append("CREATE TABLE ");
-        }
-        createTableSql.append("`").append(tableName).append("`")
+        createTableSql.append("CREATE TABLE ")
+                .append("`").append(tableName).append("`")
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
-                collect(Collectors.toList());
+        List<String> columns = table.getFullSchema().stream().map(
+                AstToStringBuilder::toMysqlDDL).collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
 
@@ -1667,11 +1310,6 @@ public class AstToStringBuilder {
             location = table.getTableLocation();
         }
 
-        // Comment
-        if (!Strings.isNullOrEmpty(table.getComment())) {
-            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
-        }
-
         if (!Strings.isNullOrEmpty(location)) {
             createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
         }
@@ -1679,7 +1317,7 @@ public class AstToStringBuilder {
         return createTableSql.toString();
     }
 
-    public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
+    public static String getExternalCatalogViewDdlStmt(HiveView view) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE VIEW `").append(view.getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
@@ -1704,12 +1342,5 @@ public class AstToStringBuilder {
         }
 
         return sb.toString();
-    }
-
-    private static void addTableComment(StringBuilder sb, Table table) {
-        if (!Strings.isNullOrEmpty(table.getComment())) {
-            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
-        }
->>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
     }
 }
