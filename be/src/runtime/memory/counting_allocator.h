@@ -24,6 +24,8 @@
 
 namespace starrocks {
 
+// used to record the memory changes after each operation, for example,
+// if malloc allocates 4 bytes  its value will be 4, and if free releases 4 bytes, its value will be -4
 inline thread_local int64_t tls_delta_memory = 0;
 
 template <class Base>
@@ -36,7 +38,7 @@ public:
     }
     void free(void* ptr) override {
         Base::free(ptr);
-        _memory_usage -= tls_delta_memory;
+        _memory_usage += tls_delta_memory;
     }
 
     void* realloc(void* ptr, size_t size) override {
@@ -53,7 +55,7 @@ public:
 
     void cfree(void* ptr) override {
         Base::cfree(ptr);
-        _memory_usage -= tls_delta_memory;
+        _memory_usage += tls_delta_memory;
     }
 
     void* memalign(size_t align, size_t size) override {
