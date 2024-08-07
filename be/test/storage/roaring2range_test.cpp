@@ -83,6 +83,8 @@ TEST_F(Roaring2rangeTest, test_roaring2range_with_start) {
     ASSERT_EQ(ret_4_2.to_string(), "([450,480))");
     auto ret_4_3 = roaring2range(roaring_4, 450, 200);
     ASSERT_EQ(ret_4_3.to_string(), "([450,500), [600,750))");
+    auto ret_4_4 = roaring2range(roaring_4, 2000, 200);
+    ASSERT_EQ(ret_4_4.to_string(), "()");
 
     Roaring roaring_5;
     roaring_5.addRange(1, 257);
