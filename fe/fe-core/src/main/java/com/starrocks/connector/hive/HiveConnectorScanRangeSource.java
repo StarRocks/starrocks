@@ -82,7 +82,6 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
             // ConnectContext sometimes will be nullptr, we need to cover it up
             forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
         }
-        init();
     }
 
     public void setup() {
@@ -104,7 +103,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
         public DataCacheOptions dataCacheOptions;
     }
 
-    private void init() {
+    protected void init() {
         List<PartitionAttachment> partitionAttachments = Lists.newArrayList();
 
         // get partitions keys;
@@ -364,6 +363,9 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     private void updateIterator() {
         if (!hasMoreOutput) {
             return;
+        }
+        if (remoteFileInfoSource == null) {
+            init();
         }
         while ((iterator == null || !iterator.hasNext())) {
             while (true) {
