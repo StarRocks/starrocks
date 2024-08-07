@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -40,6 +42,7 @@ import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
+import com.starrocks.thrift.TUserIdentity;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -120,6 +123,9 @@ public class TaskRunsSystemTable extends SystemTable {
             }
         }
 
+        ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
         return info.getTask_runs().stream().map(TaskRunsSystemTable::infoToScalar).collect(Collectors.toList());

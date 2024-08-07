@@ -20,7 +20,6 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -45,7 +44,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class InformationSchemaDataSourceTest {
 
@@ -312,12 +310,6 @@ public class InformationSchemaDataSourceTest {
                 return Lists.newArrayList(taskRun);
             }
         };
-        new MockUp<Authorizer>() {
-            @Mock
-            public void checkAnyActionOnOrInDb(UserIdentity currentUser,
-                                               Set<Long> roleIds, String catalogName, String db) {
-            }
-        };
 
         starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
@@ -331,6 +323,9 @@ public class InformationSchemaDataSourceTest {
         // Not supported
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where task_name > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name='t_1024' or task_name='t_1025' ")
                 .explainContains("SCAN SCHEMA");
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where error_message > 't_1024' ")
