@@ -236,7 +236,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
+    public long registerLoadJob(String label, String dbName, long tableId, long txnId, EtlJobType jobType,
                                 long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
                                 TLoadJobType type, long timeout,
@@ -257,6 +257,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     isStatisticsJob, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
+            loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
