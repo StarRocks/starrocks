@@ -61,7 +61,7 @@ Status IcebergMORProcessor::build_hash_table(RuntimeState* runtime_state) {
 }
 
 Status IcebergMORProcessor::append_chunk_to_hashtable(RuntimeState* runtime_state, ChunkPtr& chunk) {
-    return _hash_joiner->append_chunk_to_ht(runtime_state, chunk);
+    return _hash_joiner->append_chunk_to_ht(chunk);
 }
 
 Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
