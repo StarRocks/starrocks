@@ -33,11 +33,10 @@
 
 <div align="center"> 
 
-  </div>
+</div>
 StarRocks, a Linux Foundation project, is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
-It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br>
+It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br></br>
 
-<br>
 Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
 
 <br>
@@ -75,7 +74,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="docs/en/assets/shared-data.png">
+    <img src="docs/en/_assets/shared-data.png">
    </a>
 </p>
 
