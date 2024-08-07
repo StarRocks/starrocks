@@ -86,7 +86,7 @@ Hive Catalog's support for Hive Metastore (HMS) and AWS Glue mostly overlaps exc
 The performance of metadata retrieval largely depends on the performance of the user's HMS or HDFS NameNode. Please consider all factors and base your judgment on test results.
 
 - **[Default and Recommended] Best performance with a tolerance of minute-level data inconsistency**
-  - **Configuration**: By default. Data updated within 10 minutes (by default) is not visible. Old data will be returned to queries within this duration.
+  - **Configuration**: You can use the default setting. Data updated within 10 minutes (by default) is not visible. Old data will be returned to queries within this duration.
   - **Advantage**: Best query performance.
   - **Disadvantage**: Data inconsistency caused by latency.
   - **Supported Version(s)**: v2.5.5+ (Disabled by default in v2.5 and enabled by default in v3.0+)
