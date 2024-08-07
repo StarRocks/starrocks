@@ -23,6 +23,33 @@
 namespace starrocks {
 
 TEST(CountingAllocatorTest, normal) {
+    CountingAllocator<MemHookAllocator> allocator;
+    auto ptr = allocator.alloc(8);
+    ASSERT_NE(ptr, nullptr);
+    ptr = allocator.realloc(ptr, 2);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.calloc(10, 4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.cfree(ptr);
+    ptr = allocator.memalign(8, 4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.aligned_alloc(16, 64);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.valloc(4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.pvalloc(16);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    int res = allocator.posix_memalign(&ptr, 16, 64);
+    ASSERT_EQ(res, 0);
+    allocator.free(ptr);
+}
+
+TEST(STLCountingAllocatorTest, normal) {
     int64_t memory_usage = 0;
     {
         // stl container
