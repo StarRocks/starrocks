@@ -33,6 +33,13 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+>>>>>>> 50dbbd39ae ([Enhancement] Support show create view for connector view (#49393))
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -222,6 +229,18 @@ public class HiveMetadataTest {
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assert.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+    }
+
+    @Test
+    public void testShowCreateHiveTbl() {
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        Assert.assertEquals("CREATE TABLE `table1` (\n" +
+                "  `col2` int(11) DEFAULT NULL,\n" +
+                "  `col1` int(11) DEFAULT NULL\n" +
+                ")\n" +
+                "PARTITION BY ( col1 )\n" +
+                "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
     @Test
