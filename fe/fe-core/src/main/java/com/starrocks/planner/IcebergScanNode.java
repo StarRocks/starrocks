@@ -344,6 +344,10 @@ public class IcebergScanNode extends ScanNode {
         return scanNodePredicates;
     }
 
+    public IcebergTable getIcebergTable() {
+        return icebergTable;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);

@@ -744,6 +744,9 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                 return Status::OK();
             }
         } else {
+            if (status.code() == TStatusCode::REMOTE_FILE_NOT_FOUND) {
+                return status;
+            }
             auto s = strings::Substitute("FileReader::get_next failed. reason = $0, file = $1", status.to_string(),
                                          _file->filename());
             LOG(WARNING) << s;

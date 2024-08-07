@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
@@ -23,6 +24,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
@@ -78,6 +80,33 @@ public class ExecuteExceptionHandler {
                     metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
                     // clear query level metadata cache
                     metadata.clear();
+                }
+            } else if (scanNode instanceof IcebergScanNode) {
+                IcebergTable icebergTable = ((IcebergScanNode) scanNode).getIcebergTable();
+                String catalogName = icebergTable.getCatalogName();
+                if (CatalogMgr.isExternalCatalog(catalogName)) {
+                    existExternalCatalog = true;
+                    ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getOptionalMetadata(icebergTable.getCatalogName()).get();
+                    // refresh catalog level metadata cache
+                    metadata.refreshTable(icebergTable.getRemoteDbName(), icebergTable, new ArrayList<>(), true);
+                    // clear query level metadata cache
+                    metadata.clear();
+                    // Replan
+                    try {
+                        context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
+                    } catch (Exception planEx) {
+                        // throw original
+                        if (LOG.isDebugEnabled()) {
+                            ConnectContext connectContext = context.connectContext;
+                            LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
+                                    DebugUtil.printId(connectContext.getExecutionId()),
+                                    context.parsedStmt.getOrigStmt() == null ? "" :
+                                            context.parsedStmt.getOrigStmt().originStmt,
+                                    planEx);
+                        }
+                        throw e;
+                    }
                 }
             }
         }

@@ -28,6 +28,9 @@
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {
+    if (error.GetResponseCode() == Aws::Http::HttpResponseCode::NOT_FOUND) {
+        return Status::RemoteFileNotFound("S3 file does not exist");
+    }
     return Status::IOError(fmt::format(
             "BE access S3 file failed, SdkResponseCode={}, SdkErrorType={}, SdkErrorMessage={}",
             static_cast<int>(error.GetResponseCode()), static_cast<int>(error.GetErrorType()), error.GetMessage()));
