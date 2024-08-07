@@ -1038,7 +1038,7 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill(), "killed by kill statement : " + originStmt);
+            killCtx.kill(killStmt.isConnectionKill(), "killed manually: " + originStmt.getOrigStmt());
         }
         context.getState().setOk();
     }
