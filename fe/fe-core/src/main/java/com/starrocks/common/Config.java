@@ -2127,7 +2127,7 @@ public class Config extends ConfigBase {
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int max_hive_partitions_per_rpc = 5000;
 
     /**
