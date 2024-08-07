@@ -184,6 +184,28 @@ private:
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
+
+    // shared_buffer_stream
+    RuntimeProfile::Counter* _shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_hit_io_count = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_hit_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_align_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_timer = nullptr;
+
+    // index page
+    RuntimeProfile::Counter* _ordinal_index_page_io_count = nullptr;
+
+    RuntimeProfile::Counter* _ordinal_index_page_count = nullptr;
+    RuntimeProfile::Counter* _ordinal_index_page_bytes = nullptr;
+    RuntimeProfile::Counter* _ordinal_index_load_timer = nullptr;
+
+    RuntimeProfile::Counter* _dict_page_io_count = nullptr;
+    RuntimeProfile::Counter* _dict_page_bytes = nullptr;
+    RuntimeProfile::Counter* _dict_page_load_timer = nullptr;
 };
 
 // ================================

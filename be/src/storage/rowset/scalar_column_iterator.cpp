@@ -346,8 +346,14 @@ Status ScalarColumnIterator::_load_dict_page() {
     // read dictionary page
     Slice dict_data;
     PageFooterPB dict_footer;
-    RETURN_IF_ERROR(
-            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
+    _opts.stats->dict_page_io_count += 1;
+    _opts.stats->dict_page_bytes += _reader->get_dict_page_pointer().size;
+    {
+        SCOPED_RAW_TIMER(&(_opts.stats->dict_page_load_time_ns));
+        RETURN_IF_ERROR(_reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data,
+                                           &dict_footer));
+    }
+
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
     if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR || Type == TYPE_JSON) {

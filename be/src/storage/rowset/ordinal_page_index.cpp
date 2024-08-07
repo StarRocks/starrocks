@@ -120,17 +120,25 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
 
+    opts.stats->ordinal_index_page_io_count += 1;
+    opts.stats->ordinal_index_page_bytes += page_opts.page_pointer.size;
+
     // read index page
     PageHandle page_handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(PageIO::read_and_decompress_page(page_opts, &page_handle, &body, &footer));
+
+    {
+        SCOPED_RAW_TIMER(&(opts.stats->ordinal_index_load_time_ns));
+        RETURN_IF_ERROR(PageIO::read_and_decompress_page(page_opts, &page_handle, &body, &footer));
+    }
 
     // parse and save all (ordinal, pp) from index page
     IndexPageReader reader;
     RETURN_IF_ERROR(reader.parse(body, footer.index_page_footer()));
 
     _num_pages = reader.count();
+    opts.stats->ordinal_index_page_count += _num_pages;
     _ordinals = std::make_unique<ordinal_t[]>(_num_pages + 1);
     _pages = std::make_unique<uint64_t[]>(_num_pages + 1);
     for (int i = 0; i < _num_pages; i++) {

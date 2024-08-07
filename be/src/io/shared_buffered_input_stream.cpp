@@ -198,10 +198,13 @@ StatusOr<SharedBufferedInputStream::SharedBufferPtr> SharedBufferedInputStream::
                                                                                                    size_t count) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
+        LOG(WARNING) << "failed to find shared buffer based on filename:offset " << _filename << ":" << _offset;
         return Status::RuntimeError("failed to find shared buffer based on offset");
     }
     const SharedBufferPtr& sb = iter->second;
     if ((sb->offset > offset) || (sb->offset + sb->size) < (offset + count)) {
+        LOG(WARNING) << "bad construction of shared buffer " << _filename << "/" << sb->offset << "/" << offset << "/"
+                     << sb->size << "/" << count;
         return Status::RuntimeError("bad construction of shared buffer");
     }
     return sb;
@@ -227,6 +230,9 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         }
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+    } else {
+        _hit_io_count += 1;
+        _hit_io_bytes += count;
     }
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();

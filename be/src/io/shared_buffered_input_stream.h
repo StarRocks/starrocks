@@ -21,6 +21,7 @@
 
 #include "common/status.h"
 #include "io/seekable_input_stream.h"
+#include "storage/olap_common.h"
 
 namespace starrocks::io {
 
@@ -75,7 +76,20 @@ public:
     Status get_bytes(const uint8_t** buffer, size_t offset, size_t count, SharedBufferPtr shared_buffer);
 
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
-        return _stream->get_numeric_statistics();
+        auto status_or = _stream->get_numeric_statistics();
+        // NumericStatistics may be nullptr
+        if (status_or.ok() && status_or.value() != nullptr) {
+            status_or.value()->append(kSharedIoCount, _shared_io_count);
+            status_or.value()->append(kSharedIoBytes, _shared_io_bytes);
+            status_or.value()->append(kHitIoCount, _hit_io_count);
+            status_or.value()->append(kHitIoBytes, _hit_io_bytes);
+            status_or.value()->append(kSharedAlignIoBytes, _shared_align_io_bytes);
+            status_or.value()->append(kSharedIoTimer, _shared_io_timer);
+            status_or.value()->append(kDirectIoCount, _direct_io_count);
+            status_or.value()->append(kDirectIoBytes, _direct_io_bytes);
+            status_or.value()->append(kDirectIoTimer, _direct_io_timer);
+        }
+        return status_or;
     }
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
@@ -88,6 +102,8 @@ public:
     void set_align_size(int64_t size) { _align_size = size; }
 
     int64_t shared_io_count() const { return _shared_io_count; }
+    int64_t hit_io_count() const { return _hit_io_count; }
+    int64_t hit_io_bytes() const { return _hit_io_bytes; }
     int64_t shared_io_bytes() const { return _shared_io_bytes; }
     int64_t shared_align_io_bytes() const { return _shared_align_io_bytes; }
     int64_t shared_io_timer() const { return _shared_io_timer; }
@@ -119,6 +135,8 @@ private:
     int64_t _offset = 0;
     int64_t _file_size = 0;
     int64_t _shared_io_count = 0;
+    int64_t _hit_io_count = 0;
+    int64_t _hit_io_bytes = 0;
     int64_t _shared_io_bytes = 0;
     int64_t _shared_align_io_bytes = 0;
     int64_t _shared_io_timer = 0;

@@ -602,6 +602,42 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+
+    const std::string shared_buffered_name = "SharedBuffered";
+    ADD_COUNTER(_runtime_profile, shared_buffered_name, TUnit::NONE);
+    // shared_buffer_stream
+    _shared_buffered_shared_io_bytes =
+            ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, shared_buffered_name);
+    _shared_buffered_shared_io_count =
+            ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, shared_buffered_name);
+    _shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", shared_buffered_name);
+    _shared_buffered_hit_io_count =
+            ADD_CHILD_COUNTER(_runtime_profile, "SharedHitIOCount", TUnit::UNIT, shared_buffered_name);
+    _shared_buffered_hit_io_bytes =
+            ADD_CHILD_COUNTER(_runtime_profile, "SharedHitIOBytes", TUnit::UNIT, shared_buffered_name);
+    _shared_buffered_shared_align_io_bytes =
+            ADD_CHILD_COUNTER(_runtime_profile, "SharedAlignIOBytes", TUnit::BYTES, shared_buffered_name);
+    _shared_buffered_direct_io_bytes =
+            ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, shared_buffered_name);
+    _shared_buffered_direct_io_count =
+            ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, shared_buffered_name);
+    _shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", shared_buffered_name);
+
+    const std::string index_page_statistics = "IndexPageStatistics";
+    ADD_COUNTER(_runtime_profile, index_page_statistics, TUnit::NONE);
+
+    _ordinal_index_page_io_count =
+            ADD_CHILD_COUNTER(_runtime_profile, "OrdinalIndexPageIoCount", TUnit::UNIT, index_page_statistics);
+
+    _ordinal_index_page_count =
+            ADD_CHILD_COUNTER(_runtime_profile, "OrdinalIndexPageCount", TUnit::UNIT, index_page_statistics);
+    _ordinal_index_page_bytes =
+            ADD_CHILD_COUNTER(_runtime_profile, "OrdinalIndexPageBytes", TUnit::UNIT, index_page_statistics);
+    _ordinal_index_load_timer = ADD_CHILD_TIMER(_runtime_profile, "OrdinalIndexLoadTime", index_page_statistics);
+
+    _dict_page_io_count = ADD_CHILD_COUNTER(_runtime_profile, "DictPageIoCount", TUnit::UNIT, index_page_statistics);
+    _dict_page_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DictPageBytes", TUnit::UNIT, index_page_statistics);
+    _dict_page_load_timer = ADD_CHILD_TIMER(_runtime_profile, "DictPageLoadTime", index_page_statistics);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -716,6 +752,26 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
+
+    auto stats = _reader->stats();
+    COUNTER_UPDATE(_shared_buffered_shared_io_count, stats.shared_buffered_shared_io_count);
+    COUNTER_UPDATE(_shared_buffered_shared_io_bytes, stats.shared_buffered_shared_io_bytes);
+    COUNTER_UPDATE(_shared_buffered_hit_io_count, stats.shared_buffered_hit_io_count);
+    COUNTER_UPDATE(_shared_buffered_hit_io_bytes, stats.shared_buffered_hit_io_bytes);
+    COUNTER_UPDATE(_shared_buffered_shared_align_io_bytes, stats.shared_buffered_shared_align_io_bytes);
+    COUNTER_UPDATE(_shared_buffered_shared_io_timer, stats.shared_buffered_shared_io_time_ns);
+    COUNTER_UPDATE(_shared_buffered_direct_io_count, stats.shared_buffered_direct_io_count);
+    COUNTER_UPDATE(_shared_buffered_direct_io_bytes, stats.shared_buffered_direct_io_bytes);
+    COUNTER_UPDATE(_shared_buffered_direct_io_timer, stats.shared_buffered_direct_io_time_ns);
+
+    COUNTER_UPDATE(_ordinal_index_page_io_count, stats.ordinal_index_page_io_count);
+    COUNTER_UPDATE(_ordinal_index_page_bytes, stats.ordinal_index_page_bytes);
+    COUNTER_UPDATE(_ordinal_index_page_count, stats.ordinal_index_page_count);
+    COUNTER_UPDATE(_ordinal_index_load_timer, stats.ordinal_index_load_time_ns);
+
+    COUNTER_UPDATE(_dict_page_io_count, stats.dict_page_io_count);
+    COUNTER_UPDATE(_dict_page_bytes, stats.dict_page_bytes);
+    COUNTER_UPDATE(_dict_page_load_timer, stats.dict_page_load_time_ns);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&
