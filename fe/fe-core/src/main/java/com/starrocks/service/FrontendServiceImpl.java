@@ -2112,7 +2112,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2197,7 +2198,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                     LocalTablet localTablet = (LocalTablet) tablet;
                     Multimap<Replica, Long> bePathsMap =
-                            localTablet.getNormalReplicaBackendPathMap();
+                            localTablet.getNormalReplicaBackendPathMap(
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
@@ -2450,7 +2452,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap();
+                                localTablet.getNormalReplicaBackendPathMap(
+                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
                         if (bePathsMap.keySet().size() < quorum) {
                             String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                             "tablet_id: %s, replicas: %s. Check quorum number failed" +
@@ -2475,7 +2478,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getWarehouseId());
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getWarehouseId(),
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2872,7 +2876,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     dictTable.getAutomaticBucketSize(), allPartitions);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
-            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
         } catch (UserException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
             semanticException.initCause(e);
