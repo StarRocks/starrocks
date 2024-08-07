@@ -19,6 +19,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Optional;
 
 //
@@ -68,6 +70,16 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             }
         } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
             return operator.getChild(0);
+        }
+
+        if (operator.getChild(0).getType().isBoolean() && !operator.getChild(0).isNullable()
+                && !operator.getType().isBoolean()) {
+            Optional<ConstantOperator> trueOp = ConstantOperator.TRUE.castTo(operator.getType());
+            Optional<ConstantOperator> falseOp = ConstantOperator.FALSE.castTo(operator.getType());
+            if (trueOp.isPresent() && falseOp.isPresent()) {
+                return new CaseWhenOperator(operator.getType(), null,
+                        falseOp.get(), Arrays.asList(operator.getChild(0), trueOp.get()));
+            }
         }
 
         return operator;

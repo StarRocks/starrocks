@@ -1906,4 +1906,33 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertNotNull(func);
         Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
     }
+
+    @Test
+    public void testReduceBooleanCast() throws Exception {
+        String sql = "select * from test_all_type_not_null where cast((t1d > 0 and t1d < 2) as bigint) = '1'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 4: t1d > 0, 4: t1d < 2");
+
+        sql = "select * from test_all_type_not_null where cast((t1d > 0 and t1d < 2) as bigint) IN ('1', '0')";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "PREDICATES:");
+
+        sql = "select * from test_all_type_not_null where cast((t1d > 0 and t1d < 2) as bigint) IN ('0')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (4: t1d <= 0) OR (4: t1d >= 2)");
+
+        sql = "select * from test_all_type where cast((t1d > 0 and t1d < 2) as bigint) IN ('0')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: CAST((4: t1d > 0) AND (4: t1d < 2) AS BIGINT) = 0");
+
+        sql = "select cast((t1d > 0 and t1d < 2) as bigint) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:Project\n" +
+                "  |  <slot 11> : CAST((4: t1d > 0) AND (4: t1d < 2) AS BIGINT)");
+
+        sql = "select cast((t1d > 0 and t1d < 2) as bigint) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:Project\n" +
+                "  |  <slot 11> : if((4: t1d > 0) AND (4: t1d < 2), 1, 0)");
+    }
 }
