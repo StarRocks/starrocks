@@ -90,6 +90,7 @@ private:
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
+    void _init_rf_counters();
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
@@ -111,6 +112,7 @@ private:
     int32_t _datacache_evict_probability = 0;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
+    bool _enable_dynamic_prune_scan_range = true;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;

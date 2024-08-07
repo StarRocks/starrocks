@@ -250,7 +250,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ========================= ORC SCANNER ============================
@@ -438,7 +438,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestOrcSkipFile) {
@@ -463,7 +463,7 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
 
     READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 class BadOrcFileStream : public ORCHdfsFileStream {
@@ -516,7 +516,7 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
         status = scanner->open(_runtime_state);
         EXPECT_FALSE(status.ok()) << status.message();
         EXPECT_EQ(status.code(), ec.ret_code);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -622,7 +622,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
@@ -653,7 +653,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
@@ -684,7 +684,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -761,7 +761,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -847,7 +847,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 200.
     EXPECT_EQ(scanner->raw_rows_read(), 200);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -940,7 +940,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 4640);
     EXPECT_EQ(scanner->raw_rows_read(), 4640);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -1044,7 +1044,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -1161,7 +1161,7 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok()) << status.to_string();
         READ_SCANNER_ROWS(scanner, c.exp);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -1212,7 +1212,7 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok()) << status.to_string();
     READ_SCANNER_ROWS(scanner, 4);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // ====================================================================================================
@@ -1309,7 +1309,7 @@ TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 1);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 /**
@@ -1371,7 +1371,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     // Should be end of file in next read.
     EXPECT_TRUE(status.is_end_of_file());
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 /**
@@ -1442,7 +1442,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     ASSERT_EQ(0, chunk->num_rows());
     ASSERT_TRUE(status.is_end_of_file());
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
@@ -1492,7 +1492,7 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
 
     EXPECT_EQ("[1]", chunk->debug_row(0));
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =============================================================================
@@ -1545,7 +1545,7 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 
     READ_SCANNER_ROWS(scanner, 100000);
 
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
@@ -1592,9 +1592,9 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false);
+        ASSERT_OK(RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
 
-        rf_probe_desc.init(0, &probe_expr_ctx);
+        ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);
         rf_collector.add_descriptor(&rf_probe_desc);
         param->runtime_filter_collector = &rf_collector;
@@ -1607,7 +1607,7 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
 
         READ_SCANNER_ROWS(scanner, tc.exp_rows);
 
-        scanner->close(_runtime_state);
+        scanner->close();
         probe_expr_ctx.close(_runtime_state);
     }
 }
@@ -1676,7 +1676,7 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(!status.ok());
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =============================================================================
@@ -1718,7 +1718,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 100);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         auto* range = _create_scan_range(compressed_file, 0, 0);
@@ -1734,7 +1734,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 100);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // compressed file with offset != 0
@@ -1750,7 +1750,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         ASSERT_EQ(0, scanner->estimated_mem_usage());
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // compressed file with skip_header_line_count
@@ -1767,7 +1767,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         READ_SCANNER_ROWS(scanner, 50);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // compressed file with skip_header_line_count > total line count
@@ -1784,7 +1784,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         READ_SCANNER_ROWS(scanner, 0);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         auto* range = _create_scan_range(compressed_file, 0, 0);
@@ -1804,7 +1804,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         uint64_t records = 0;
         READ_SCANNER_RETURN_ROWS(scanner, records);
         EXPECT_NE(records, 100);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -1833,7 +1833,7 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 5);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
     {
         // test line delimiter = \r
@@ -1851,7 +1851,7 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 5);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -1884,7 +1884,7 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 2);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 
     for (int offset = 10; offset < 20; offset++) {
@@ -1906,7 +1906,7 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
 
             READ_SCANNER_RETURN_ROWS(scanner, records);
 
-            scanner->close(_runtime_state);
+            scanner->close();
         };
 
         read_range(0, offset);
@@ -1937,7 +1937,7 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 2);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -1973,7 +1973,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 3);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2005,7 +2005,7 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
         EXPECT_EQ("['hello']", chunk->debug_row(0));
         EXPECT_EQ("['world']", chunk->debug_row(1));
         EXPECT_EQ("['starrocks']", chunk->debug_row(2));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2036,7 +2036,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
 
         EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 
     {
@@ -2061,7 +2061,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         EXPECT_EQ(1, chunk->num_rows());
 
         EXPECT_EQ("['6358db89e73b']", chunk->debug_row(0));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 
     {
@@ -2086,7 +2086,7 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         EXPECT_EQ(2, chunk->num_rows());
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(0));
         EXPECT_EQ("['6358db89e73b']", chunk->debug_row(1));
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2122,7 +2122,7 @@ TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
         EXPECT_EQ("['hello', '5', 'smith', NULL]", chunk->debug_row(0));
         EXPECT_EQ("['world', '6', 'cruise', NULL]", chunk->debug_row(1));
 
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2159,7 +2159,7 @@ TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
         EXPECT_EQ("['smith', '5', 'hello', NULL]", chunk->debug_row(0));
         EXPECT_EQ("['cruise', '6', 'world', NULL]", chunk->debug_row(1));
 
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2208,7 +2208,7 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         EXPECT_EQ("[1, [NULL,NULL], [NULL,NULL,NULL]]", chunk->debug_row(0));
         EXPECT_EQ("[2, [NULL], [NULL,NULL]]", chunk->debug_row(1));
 
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2300,7 +2300,7 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
     status = scanner->open(_runtime_state);
     // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
     EXPECT_TRUE(!status.ok()) << status.get_error_msg();
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =============================================================================
@@ -2331,7 +2331,7 @@ TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 3);
-        scanner->close(_runtime_state);
+        scanner->close();
     }
 }
 
@@ -2396,7 +2396,7 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =============================================================================
@@ -2463,7 +2463,7 @@ TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 1500);
     EXPECT_EQ(scanner->raw_rows_read(), 1500);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =============================================================================
@@ -2562,7 +2562,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 50);
     EXPECT_EQ(scanner->raw_rows_read(), 200);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // Test min-max logic when parquet file contains complex types
@@ -2607,7 +2607,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 // =======================================================
@@ -2740,7 +2740,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 3);
     EXPECT_EQ(scanner->raw_rows_read(), 3);
-    scanner->close(_runtime_state);
+    scanner->close();
 
     EXPECT_EQ(_debug_row_output, "[0, 'hello', NULL, NULL, {a:NULL,b:{'key1':10},c:{a:[10,20],b:{a:10,b:'world'}}}]\n");
 }
@@ -2832,7 +2832,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         EXPECT_TRUE(status.ok());
         READ_SCANNER_ROWS(scanner, 1);
         EXPECT_EQ(scanner->raw_rows_read(), 1);
-        scanner->close(_runtime_state);
+        scanner->close();
 
         EXPECT_EQ(_debug_row_output, "[1, 'hello', [10,20,30], {'key1':1,'key2':2}, {a:10,b:'world'}]\n");
     }
@@ -2860,7 +2860,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         EXPECT_TRUE(status.ok());
         READ_SCANNER_ROWS(scanner, 1);
         EXPECT_EQ(scanner->raw_rows_read(), 1);
-        scanner->close(_runtime_state);
+        scanner->close();
 
         EXPECT_EQ(_debug_row_output, "[{b:'world',a:10}]\n");
     }
@@ -2888,7 +2888,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         EXPECT_TRUE(status.ok());
         READ_SCANNER_ROWS(scanner, 1);
         EXPECT_EQ(scanner->raw_rows_read(), 1);
-        scanner->close(_runtime_state);
+        scanner->close();
 
         EXPECT_EQ(_debug_row_output, "[{B:NULL,a:10}]\n");
     }
@@ -2914,7 +2914,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         EXPECT_TRUE(status.ok());
         READ_SCANNER_ROWS(scanner, 1);
         EXPECT_EQ(scanner->raw_rows_read(), 1);
-        scanner->close(_runtime_state);
+        scanner->close();
 
         EXPECT_EQ(_debug_row_output, "[{a:10}]\n");
     }
@@ -2941,7 +2941,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         EXPECT_TRUE(status.ok());
         READ_SCANNER_ROWS(scanner, 1);
         EXPECT_EQ(scanner->raw_rows_read(), 1);
-        scanner->close(_runtime_state);
+        scanner->close();
 
         EXPECT_EQ(_debug_row_output, "[{'key1':NULL,'key2':NULL}]\n");
     }
@@ -3019,7 +3019,7 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
     EXPECT_EQ(scanner->raw_rows_read(), 4);
     EXPECT_EQ(_debug_row_output,
               "[3023-01-01 00:00:00]\n[2023-01-01 00:00:00]\n[1000-01-01 00:00:00]\n[1900-01-01 00:00:00]\n");
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
@@ -3052,7 +3052,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
     READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 1);
     EXPECT_EQ(_debug_row_output, "[1]\n");
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
@@ -3073,7 +3073,7 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100000);
-    scanner->close(_runtime_state);
+    scanner->close();
 }
 
 } // namespace starrocks
