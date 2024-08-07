@@ -187,19 +187,24 @@ if [ -f $pidfile ]; then
     # check if the binary name can be grepped from the process cmdline.
     # still it has chances to be false positive, but the possibility is greatly reduced.
     oldpid=$(cat $pidfile)
-    psstatus=$(ps -q $oldpid -o stat=)
-    if [[ "$psstatus" == *Z* ]]; then
-        echo "Process $oldpid is a zombie process. Killing it."
-        kill -9 $oldpid
-        rm -f $pidfile
-    else
-        pscmd=$(ps -q $oldpid -o cmd=)
-        if echo "$pscmd" | grep -q -w "$BIN_NAME" &>/dev/null ; then
-            echo "Backend running as process $oldpid. Stop it first."
-            exit 1
-        else
+    if ps -p $oldpid > /dev/null 2>&1; then
+        psstatus=$(ps -q $oldpid -o stat=)
+        if [[ "$psstatus" == *Z* ]]; then
+            echo "Process $oldpid is a zombie process. Killing it."
+            kill -9 $oldpid
             rm -f $pidfile
+        else
+            pscmd=$(ps -q $oldpid -o cmd=)
+            if echo "$pscmd" | grep -q -w "$BIN_NAME" &>/dev/null ; then
+                echo "Backend running as process $oldpid. Stop it first."
+                exit 1
+            else
+                rm -f $pidfile
+            fi
         fi
+    else
+        echo "No such process with PID $oldpid. Removing stale pidfile."
+        rm -f $pidfile
     fi
 fi
 
