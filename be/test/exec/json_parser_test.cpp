@@ -541,6 +541,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_invalid_type_not_objec
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_TRUE(st.get_error_msg().find("The value should be object type in json document stream") !=
                 std::string::npos);
+}
 
 PARALLEL_TEST(JsonParserTest, test_document_stream_parser_with_jsonroot_invalid_type_array) {
     // ndjson with ' ', '/t', '\n'
