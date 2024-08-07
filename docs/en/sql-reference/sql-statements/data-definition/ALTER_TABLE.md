@@ -566,6 +566,40 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
+#### Modify a STRUCT column to add or drop a field
+
+From v3.2.10 and v3.3.2 onwards, StarRocks supports modifying a STRUCT column to add or drop a field, which can be nested or within an ARRAY type.
+
+Syntax:
+
+```sql
+-- Add a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+
+-- Drop a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> DROP FIELD <field_name>
+```
+
+Parameters:
+
+- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+
+For more usage instructions, see [Example - Column -14](#column).
+
+:::note
+
+- Currently, this feature is only supported in shared-nothing clusters.
+- The table must have the `fast_schema_evolution` property enabled.
+- Adding or dropping fields in the STRUCT type within a MAP type is not supported.
+- Newly added fields cannot have default values or attributes such as Nullable specified. They default to being Nullable, with a default value of null.
+- After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
+
+:::
+
+
 ### Modify rollup index
 
 #### Create a rollup index
@@ -977,6 +1011,120 @@ The `be_compactions` table in the `information_schema` database records compacti
     ALTER TABLE example_db.my_table
     MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
     MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
+14. Add and drop fields in STRUCT-type data.
+
+    **Prerequisites**: Create a table and insert a row of data.
+
+    ```sql
+    CREATE TABLE struct_test(
+        c0 INT,
+        c1 STRUCT<v1 INT, v2 STRUCT<v4 INT, v5 INT>, v3 INT>,
+        c2 STRUCT<v1 INT, v2 ARRAY<STRUCT<v3 INT, v4 STRUCT<v5 INT, v6 INT>>>>
+    )
+    DUPLICATE KEY(c0)
+    DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+    PROPERTIES (
+        "fast_schema_evolution" = "true"
+    );
+    INSERT INTO struct_test VALUES (
+        1, 
+        ROW(1, ROW(2, 3), 4), 
+        ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
+    );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v4 INT AFTER v2;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v2.v6 INT FIRST;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 ADD FIELD v2.[*].v7 INT AFTER v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v2.v4;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 DROP FIELD v2.[*].v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
 ### Table property
