@@ -96,7 +96,7 @@ public enum ErrorCode {
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
-    ERR_NO_SUCH_QUERY(1365, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown query id: %s"),
+    ERR_NO_SUCH_QUERY(1365, new byte[] {'4', '2', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},

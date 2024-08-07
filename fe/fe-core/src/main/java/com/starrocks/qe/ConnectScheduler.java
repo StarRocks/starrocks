@@ -209,6 +209,11 @@ public class ConnectScheduler {
                 .findFirst().orElse(null);
     }
 
+    public ConnectContext findContextByCustomQueryId(String customQueryId) {
+        return connectionMap.values().stream().filter(
+                (Predicate<ConnectContext>) c -> customQueryId.equals(c.getCustomQueryId())).findFirst().orElse(null);
+    }
+
     public int getConnectionNum() {
         return numberConnection.get();
     }

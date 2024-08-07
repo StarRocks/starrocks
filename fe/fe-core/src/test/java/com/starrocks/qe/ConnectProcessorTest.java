@@ -58,6 +58,8 @@ import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -68,6 +70,7 @@ import org.mockito.Mockito;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -470,6 +473,34 @@ public class ConnectProcessorTest extends DDLTestBase {
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
         Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+    }
+
+    @Test
+    public void testQueryWithCustomQueryId(@Mocked StmtExecutor executor) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomQueryId("a_custom_query_id");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customQueryId = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customQueryId.set(ctx.getCustomQueryId());
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        processor.processOnce();
+        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customQueryId is set during query execution
+        Assert.assertEquals("a_custom_query_id", customQueryId.get());
+        // customQueryId is cleared after query finished
+        Assert.assertEquals("", ctx.getCustomQueryId());
+        Assert.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
     }
 
     @Test
