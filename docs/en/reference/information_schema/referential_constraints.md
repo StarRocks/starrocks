@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # referential_constraints
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `referential_constraints` contains all referential (foreign key) constraints.
 
 The following fields are provided in `referential_constraints`:
