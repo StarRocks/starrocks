@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.rpc.AttachmentRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
@@ -25,11 +26,18 @@ import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.thrift.transport.TTransportException;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+
+    @Test
+    public void test() throws TTransportException {
+        AttachmentRequest.getSerializer("binary");
+        System.out.println();
+    }
     @Test
     public void testIsNullPredicatePushdownClear() throws Exception {
         {
