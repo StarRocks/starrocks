@@ -670,11 +670,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### qe_max_connection
 
-- 默认值：1024
+- 默认值：4096
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：FE 支持的最大连接数，包括所有用户发起的连接。
+- 描述：FE 支持的最大连接数，包括所有用户发起的连接。默认值由 v3.1.12、v3.2.7 起由 `1024` 变为 `4096`。
 - 引入版本：-
 
 ##### max_connection_scheduler_threads_num
