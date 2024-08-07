@@ -50,6 +50,19 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
     try {
         if (_doc_stream_itr != _doc_stream.end()) {
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
+<<<<<<< HEAD
+=======
+            // simdjson version 3.9.4 and JsonFunctions::to_json_string may crash when json is invalid.
+            // https://github.com/StarRocks/StarRocksTest/issues/8327
+            // TODO: add value in error message
+            if (doc.type() == simdjson::ondemand::json_type::array) {
+                return Status::DataQualityError(
+                        "The value is array type in json document stream, you can set strip_outer_array=true to parse "
+                        "each element of the array as individual rows");
+            } else if (doc.type() != simdjson::ondemand::json_type::object) {
+                return Status::DataQualityError("The value should be object type in json document stream");
+            }
+>>>>>>> e7d9dc06da ([BugFix] Remove json value from error message (#49526))
 
             _curr = doc.get_object();
             *row = _curr;
