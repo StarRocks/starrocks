@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
@@ -60,6 +61,7 @@ public abstract class ScanNode extends PlanNode {
     protected List<ColumnAccessPath> columnAccessPaths;
     protected boolean canUseAnyColumn;
     protected boolean canUseMinMaxCountOpt;
+    protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     protected ScanOptimzeOption scanOptimzeOption;
 
@@ -74,6 +76,10 @@ public abstract class ScanNode extends PlanNode {
 
     public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
         this.columnAccessPaths = columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
     }
 
     public void setWarehouseId(long warehouseId) {

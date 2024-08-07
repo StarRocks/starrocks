@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -49,6 +50,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
     protected TableVersionRange tableVersionRange;
+    protected DataCacheOptions dataCacheOptions = null;
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -155,6 +157,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public List<ColumnAccessPath> getColumnAccessPaths() {
         return columnAccessPaths;
+    }
+
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public DataCacheOptions getDataCacheOptions() {
+        return dataCacheOptions;
     }
 
     @Override

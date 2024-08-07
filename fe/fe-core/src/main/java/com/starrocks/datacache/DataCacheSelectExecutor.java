@@ -44,6 +44,7 @@ public class DataCacheSelectExecutor {
         // force enable datacache and populate
         tmpSessionVariable.setEnableScanDataCache(true);
         tmpSessionVariable.setEnablePopulateDataCache(true);
+        tmpSessionVariable.setDataCachePopulateMode(DataCachePopulateMode.ALWAYS.modeName());
         // make sure all accessed data must be cached
         tmpSessionVariable.setEnableDataCacheAsyncPopulateMode(false);
         tmpSessionVariable.setEnableDataCacheIOAdaptor(false);

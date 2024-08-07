@@ -205,6 +205,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 20: l_receiptdate > 19: l_commitdate
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 300018951
 probe runtime filters:
 - filter_id = 1, probe_expr = (10: l_suppkey)
@@ -251,6 +252,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (4: s_nationkey)
@@ -278,6 +280,7 @@ NON-PARTITION PREDICATES: 34: n_name = 'CANADA'
 MIN/MAX PREDICATES: 34: n_name <= 'CANADA', 34: n_name >= 'CANADA'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -302,6 +305,7 @@ NON-PARTITION PREDICATES: 26: o_orderstatus = 'F'
 MIN/MAX PREDICATES: 26: o_orderstatus <= 'F', 26: o_orderstatus >= 'F'
 partitions=1/1
 avgRowSize=9.0
+dataCacheOptions={populate: false}
 cardinality: 50000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)
@@ -329,6 +333,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 66: l_receiptdate > 65: l_commitdate
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 300018951
 probe runtime filters:
 - filter_id = 3, probe_expr = (54: l_orderkey)
@@ -349,6 +354,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 37: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 4, probe_expr = (37: l_orderkey)
