@@ -175,6 +175,8 @@ message RowsetMetaPB {
     optional uint32 max_compact_input_rowset_id = 61;
     // global transaction id
     optional int64 gtid = 62;
+    // total number of upt file's rows.
+    optional int64 num_rows_upt = 63;
 }
 
 enum DataFileType {
