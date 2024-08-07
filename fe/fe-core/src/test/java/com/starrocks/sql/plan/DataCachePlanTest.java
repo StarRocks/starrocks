@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.Pair;
 import com.starrocks.datacache.DataCacheMgr;
-import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -24,7 +23,6 @@ import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;

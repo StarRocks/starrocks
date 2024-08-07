@@ -16,7 +16,6 @@ package com.starrocks.connector;
 
 import com.starrocks.common.Pair;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -29,7 +28,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class RemoteScanRangeLocationsTest extends PlanTestBase {
