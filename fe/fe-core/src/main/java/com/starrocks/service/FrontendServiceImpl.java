@@ -2062,6 +2062,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
             updatePartitionIds.add(p.getParentId());
+            p.setImmutable(true);
 
             List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
             try {
@@ -2072,11 +2073,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }
-            if (mutablePartitions.size() <= 1) {
+            if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .addSubPartitions(db, olapTable, partition, 1, warehouseId);
             }
-            p.setImmutable(true);
         }
 
         // return all mutable partitions
