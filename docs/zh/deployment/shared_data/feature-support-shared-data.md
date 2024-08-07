@@ -215,6 +215,12 @@ StarRocks v3.3.0
 
 SSB 1TB 数据集
 
+:::note
+
+以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements)。
+
+:::
+
 ### 测试结果
 
 下表列出了十三个查询的测试结果及各集群的总和。查询延迟的单位为毫秒（ms）。
