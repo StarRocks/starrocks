@@ -112,7 +112,8 @@ public:
     }
 
     // Only use for UT
-    bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config) {
+    bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
+                                               AWSCloudConfiguration* cloud_config = nullptr) {
         return _find_client_cache_keys_by_config_TEST(config);
     }
 
@@ -135,9 +136,11 @@ private:
     constexpr static int kMaxItems = 8;
 
     // Only use for UT
-    bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config) {
+    bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
+                                                AWSCloudConfiguration* cloud_config = nullptr) {
         for (size_t i = 0; i < _items; i++) {
-            if (_client_cache_keys[i] == ClientCacheKey{config, AWSCloudConfiguration{}}) return true;
+            if (_client_cache_keys[i] == ClientCacheKey{config, cloud_config == nullptr ?
+                                                                AWSCloudConfiguration{} : *cloud_config}) return true;
         }
         return false;
     }
@@ -321,7 +324,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
                                                                  : hdfs_properties->cloud_configuration;
-        return S3ClientFactory::instance().new_client(tCloudConfiguration);
+        return S3ClientFactory::instance().new_client(tCloudConfiguration, operation_type);
     } else if (hdfs_properties != nullptr) {
         DCHECK(hdfs_properties->__isset.end_point);
         if (hdfs_properties->__isset.end_point) {

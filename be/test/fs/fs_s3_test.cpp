@@ -544,12 +544,37 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
 
     // use config::object_storage_request_timeout_ms instead
+    int old_object_storage_rename_file_request_timeout_ms = config::object_storage_rename_file_request_timeout_ms;
+    int old_object_storage_request_timeout_ms = config::object_storage_request_timeout_ms;
     config::object_storage_rename_file_request_timeout_ms = -1;
     config::object_storage_request_timeout_ms = 1000;
     // only used for generate a new S3 client into global cache
     (void)fs->rename_file(S3Path("/dir/source_name"), S3Path("/dir/target_name"));
     config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+    config::object_storage_rename_file_request_timeout_ms = old_object_storage_rename_file_request_timeout_ms;
+    config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
+
+    std::map<std::string, std::string> test_properties;
+    test_properties[AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR] = "true";
+    TCloudConfiguration tCloudConfiguration;
+    tCloudConfiguration.__set_cloud_type(TCloudType::AWS);
+    tCloudConfiguration.__set_cloud_properties_v2(test_properties);
+    auto cloud_config = CloudConfigurationFactory::create_aws(tCloudConfiguration);
+
+    config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+
+    old_object_storage_rename_file_request_timeout_ms = config::object_storage_rename_file_request_timeout_ms;
+    old_object_storage_request_timeout_ms = config::object_storage_request_timeout_ms;
+    config::object_storage_rename_file_request_timeout_ms = -1;
+    config::object_storage_request_timeout_ms = 1000;
+    (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
+    config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+    config::object_storage_rename_file_request_timeout_ms = old_object_storage_rename_file_request_timeout_ms;
+    config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
 }
 
 } // namespace starrocks
