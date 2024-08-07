@@ -912,11 +912,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testAggregateWithGroupByKeyExpr() {
-=======
-    public void testAggregateWithGroupByKeyExpr1() {
->>>>>>> 7ecd96c275 ([BugFix] MV shold not rewrite if its defined query contains non determinic time functions (#48291))
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
