@@ -680,11 +680,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### qe_max_connection
 
-- Default: 1024
+- Default: 4096
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum number of connections that can be established by all users to the FE node.
+- Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
 - Introduced in: -
 
 ##### max_connection_scheduler_threads_num
