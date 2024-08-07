@@ -343,7 +343,6 @@ public class DefaultWorkerProviderTest {
 
         // test ComputeNode only
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            //System.out.println("test ComputeNode only the numUsedComputeNodes = " + numUsedComputeNodes);
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
@@ -357,7 +356,6 @@ public class DefaultWorkerProviderTest {
         }
         // test Backend only
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            //System.out.println("test Backend only the numUsedComputeNodes = " + numUsedComputeNodes);
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
@@ -371,14 +369,12 @@ public class DefaultWorkerProviderTest {
         }
         // test Backend and ComputeNode
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            //System.out.println("test Backend and ComputeNode the numUsedComputeNodes = " + numUsedComputeNodes);
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
                             WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
-            //System.out.println("test Backend and ComputeNode selectedWorkerId:" + selectedWorkerIdsList.toString());
             //test ComputeNode
             for (int i = 0; i < idToComputeNodeGroupA.size() && i < selectedWorkerIdsList.size(); i++) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
