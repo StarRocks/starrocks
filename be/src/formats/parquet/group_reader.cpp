@@ -263,6 +263,10 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
             RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
                                                  column.t_iceberg_schema_field, &column_reader));
         }
+        if (column_reader == nullptr) {
+            // this shouldn't happen but guard
+            return Status::InternalError("No valid column reader.");
+        }
 
         if (column.slot_type().is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
