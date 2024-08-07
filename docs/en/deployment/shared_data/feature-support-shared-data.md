@@ -215,6 +215,12 @@ StarRocks v3.3.0
 
 SSB 1TB dataset
 
+:::note
+
+The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements)
+
+:::
+
 ### Test Results
 
 The following table shows the performance test results on thirteen queries and the sum of each cluster. The unit of query latency is milliseconds (ms).
