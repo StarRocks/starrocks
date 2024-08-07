@@ -53,7 +53,7 @@ StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全
 
 - 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
 - 如未手动配置缓存路径和内存以及磁盘上限，系统会自动选择相应的路径并设置上限：
-  - 在 `storage_root_path` 的目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
+  - 在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
   - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 70% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
   - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
 - 默认使用异步缓存方式，减少缓存填充影响数据读操作。
@@ -73,8 +73,8 @@ SET GLOBAL enable_scan_datacache=false;
 
 * 对于非 SELECT 的查询， 不进行填充。比如 `ANALYZE TABLE`，`INSERT INTO xxx SELECT xx` 等等。
 
-* 对一个表分区全扫的时候（只有一个分区则不考虑），不进行填充。
-* 对一个表的所有列扫描的时候（只有一列则不考虑），不进行填充。
+* 对一个表分区全扫的时候，不进行填充。但如果只有一个分区则例外，默认进行填充。
+* 对一个表的所有列扫描的时候，不进行填充。但如果只有一个列则例外，默认进行填充。
 * 对于非 `hive/paimon/delta lake/hudi/iceberg` 的表，不进行填充。
 
 可以通过 `explain verbose` 来查看本次查询不同表的具体填充行为：

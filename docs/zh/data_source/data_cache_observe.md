@@ -79,11 +79,11 @@ mysql> select * from information_schema.be_datacache_metrics;
 * `/api/datacache/app_stat`：绝大多数用户关心这个指标就够了，它能最直观的反应当前缓存命中率的状态。
 * `/api/datacache/stat`：对于资深用户，可以通过此 api 得到底层 Data Cache 的执行状态。
 
-两者的区别？
+关于两者的区别？
 
-Data Cache 作为 StarRocks 的一个底层模块，因 StarRocks 执行层面的优化，会导致 `/api/datacache/app_stat` 和 `/api/datacache/stat` 观测的结果并不相同。
+`/api/datacache/app_stat` 返回的是整个查询最真实的缓存命中率，计算公式为 `远端读取数据量 / (远端读取数据量 + Data Cache 数据读取量)`。
 
-比如 StarRocks 对一个没有读取过的 block 反复读取了 5 次，站在 StarRocks 的角度（`/api/datacache/app_stat`），它的缓存命中率是 0%。而对于 Data Cache 模块（`/api/datacache/stat`），它的命中率是 4/5 = 80%。
+`/api/datacache/stat` 返回的则是 Data Cache 底层 api 被调用后的统计，其返回值主要是为了便于 Data Cache 的运维和性能问题定位，并不能反应查询的真实命中率。
 
 ### 获取缓存命中指标
 
