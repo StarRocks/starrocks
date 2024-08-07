@@ -139,8 +139,9 @@ private:
     bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                 AWSCloudConfiguration* cloud_config = nullptr) {
         for (size_t i = 0; i < _items; i++) {
-            if (_client_cache_keys[i] == ClientCacheKey{config, cloud_config == nullptr ?
-                                                                AWSCloudConfiguration{} : *cloud_config}) return true;
+            if (_client_cache_keys[i] ==
+                ClientCacheKey{config, cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config})
+                return true;
         }
         return false;
     }
