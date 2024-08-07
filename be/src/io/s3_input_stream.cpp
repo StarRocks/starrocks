@@ -20,6 +20,8 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
 
+#include "io/s3_zero_copy_iostream.h"
+
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
 #include "metrics/metrics.h"
@@ -47,13 +49,14 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     request.SetBucket(_bucket);
     request.SetKey(_object);
     request.SetRange(std::move(range));
+    request.SetResponseStreamFactory([out, count]() {
+        return Aws::New<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, reinterpret_cast<char*>(out), count);
+    });
 
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
-        Aws::IOStream& body = outcome.GetResult().GetBody();
-        body.read(static_cast<char*>(out), count);
-        _offset += body.gcount();
-        return body.gcount();
+        _offset += count;
+        return count;
     } else {
         return make_error_status(outcome.GetError());
     }
