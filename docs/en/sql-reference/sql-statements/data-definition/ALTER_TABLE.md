@@ -972,16 +972,6 @@ The `be_compactions` table in the `information_schema` database records compacti
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-<<<<<<< HEAD
-=======
-13. Modify the data type of multiple columns in a single statement.
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
-    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
-    ```
-
 14. Add and drop fields in STRUCT-type data.
 
     **Prerequisites**: Create a table and insert a row of data.
@@ -1096,7 +1086,6 @@ The `be_compactions` table in the `information_schema` database records compacti
     c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
->>>>>>> 745d5f4194 ([Doc] Add/Drop fields in STRUCT (#49325))
 ### Table property
 
 1. Alter the Colocate property of the table.
