@@ -74,9 +74,50 @@ mysql> select * from information_schema.be_datacache_metrics;
 
 ## 调用 API
 
-### 调用方法
+自 v3.3.2 起，StarRocks 提供了两个 api 接口获取缓存指标，其反应的是系统不同层面的指标：
 
-通过访问以下 API 接口，可获取该节点 Data Cache 的详细指标。
+* `/api/datacache/app_stat`：绝大多数用户关心这个指标就够了，它能最直观的反应当前缓存命中率的状态。
+* `/api/datacache/stat`：对于资深用户，可以通过此 api 得到底层 Data Cache 的执行状态。
+
+两者的区别？
+
+Data Cache 作为 StarRocks 的一个底层模块，因 StarRocks 执行层面的优化，会导致 `/api/datacache/app_stat` 和 `/api/datacache/stat` 观测的结果并不相同。
+
+比如 StarRocks 对一个没有读取过的 block 反复读取了 5 次，站在 StarRocks 的角度（`/api/datacache/app_stat`），它的缓存命中率是 0%。而对于 Data Cache 模块（`/api/datacache/stat`），它的命中率是 4/5 = 80%。
+
+### 获取缓存命中指标
+
+通过访问以下 API 接口获取：
+
+```bash
+http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
+```
+
+返回结果如下：
+
+```bash
+{
+    "hit_bytes": 4008,
+    "miss_bytes": 2004,
+    "hit_rate": 0.67,
+    "hit_bytes_last_minute": 4008,
+    "miss_bytes_last_minute": 2004,
+    "hit_rate_last_minute": 0.67
+}
+```
+
+| **指标**               | **说明**                                             |
+| ---------------------- | ---------------------------------------------------- |
+| hit_bytes              | 从缓存中读取的字节数。                               |
+| miss_bytes             | 从远端读取的字节数。                                 |
+| hit_rate               | 缓存命中率（hit_bytes / (hit_bytes + miss_bytes)）。 |
+| hit_bytes_last_minute  | 最近一分钟内从缓存中读取的字节数。                   |
+| miss_bytes_last_minute | 最近一分钟内从远端读取的字节数。                     |
+| hit_rate_last_minute   | 最近一分钟内缓存命中率。                             |
+
+### 获取底层 Data Cache 详细指标
+
+通过访问以下 API 接口，可获取该节点 Data Cache 更加详细的指标。
 
 ```Bash
 http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat

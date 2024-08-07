@@ -31,13 +31,7 @@ hash(filename) + fileModificationTime + blockId
 1. StarRocks 检查缓存中是否存在该 block。
 2. 如存在，则从缓存中读取该 block；如不存在，则从 Amazon S3 远端读取该 block 并将其缓存在 BE 上。
 
-开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。如不希望缓存某些数据，可进行如下设置。
-
-```SQL
-SET enable_populate_datacache = false;
-```
-
-关于 `enable_populate_datacache` 的更多信息，参见 [系统变量](../reference/System_variable.md#支持的变量)。
+开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。
 
 ## 缓存介质
 
@@ -59,7 +53,7 @@ StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全
 
 - 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
 - 如未手动配置缓存路径和内存以及磁盘上限，系统会自动选择相应的路径并设置上限：
-  - 在 `storage_root_path` 的父目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
+  - 在 `storage_root_path` 的目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
   - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 70% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
   - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
 - 默认使用异步缓存方式，减少缓存填充影响数据读操作。
@@ -72,6 +66,36 @@ SET GLOBAL enable_scan_datacache=false;
 ```
 
 ## 填充 Data Cache
+
+### 填充规则
+
+自 v3.3.2 起，为了提高 Data Cache 的缓存命中率，先按照如下默认规则填充：
+
+* 对于非 SELECT 的查询， 不进行填充。比如 `ANALYZE TABLE`，`INSERT INTO xxx SELECT xx` 等等。
+
+* 对一个表分区全扫的时候（只有一个分区则不考虑），不进行填充。
+* 对一个表的所有列扫描的时候（只有一列则不考虑），不进行填充。
+* 对于非 `hive/paimon/delta lake/hudi/iceberg` 的表，不进行填充。
+
+可以通过 `explain verbose` 来查看本次查询不同表的具体填充行为：
+
+```sql
+mysql> explain verbose select col1 from hudi_table;
+|   0:HudiScanNode                        |
+|      TABLE: hudi_table                  |
+|      partitions=3/3                     |
+|      cardinality=9084                   |
+|      avgRowSize=2.0                     |
+|      dataCacheOptions={populate: false} |
+|      cardinality: 9084                  |
++-----------------------------------------+
+```
+
+`dataCacheOptions={populate: false}` 即意味着不填充，因为它是分区全扫的 SQL。
+
+可以通过 Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+
+### 填充方式
 
 Data Cache 支持以同步或异步的方式进行缓存填充。
 
@@ -219,7 +243,7 @@ datacache_auto_adjust_enable=true
 
 ### 系统变量
 
-- [enable_populate_datacache](../reference/System_variable.md#enable_populate_datacache25-及以后)
+- [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode)
 - [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../reference/System_variable.md)
