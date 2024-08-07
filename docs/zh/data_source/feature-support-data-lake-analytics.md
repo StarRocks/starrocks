@@ -185,7 +185,7 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
 
 ### Iceberg 视图
 
-StarRocks 从 v3.3.0 版本开始支持查询 Iceberg 视图。
+StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持读取通过 StarRocks 创建的视图。
 
 :::note
 

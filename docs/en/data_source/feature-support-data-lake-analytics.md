@@ -185,7 +185,7 @@ Please note that the default value of the session variable `enable_iceberg_metad
 
 ### Iceberg views
 
-StarRocks supports querying Iceberg views from v3.3.0 onwards.
+StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only Iceberg views created through StarRocks are supported.
 
 :::note
 
