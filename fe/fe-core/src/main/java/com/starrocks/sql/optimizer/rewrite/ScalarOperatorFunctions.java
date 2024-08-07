@@ -1290,6 +1290,12 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
+    @ConstantFunction(name = "replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator replace(ConstantOperator value, ConstantOperator target,
+                                           ConstantOperator replacement) {
+        return ConstantOperator.createVarchar(value.getVarchar().replace(target.getVarchar(), replacement.getVarchar()));
+    }
+
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
