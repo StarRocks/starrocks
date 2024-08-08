@@ -4,6 +4,63 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.3
 
+:::warning
+
+升级至 v3.3 后，请勿直接将集群降级至 v3.2.0、v3.2.1 或 v3.2.2，否则会导致元数据丢失。您必须降级到 v3.2.3 或更高版本以避免出现此问题。
+
+:::
+
+## 3.3.2
+
+发布日期：2024 年 8 月 8 日
+
+### 新增功能
+
+- 支持重命名 StarRocks 内表的列。[#47851](https://github.com/StarRocks/starrocks/pull/47851)
+- 支持读取 Iceberg 的视图（View）。目前仅支持读取通过 StarRocks 创建的视图。[#46273](https://github.com/StarRocks/starrocks/issues/46273)
+- [Experimental] 支持 STRUCT 类型数据增减子列。[#46452](https://github.com/StarRocks/starrocks/issues/46452)
+- 支持在建表时指定 ZSTD 压缩格式的压缩级别。 [#46839](https://github.com/StarRocks/starrocks/issues/46839)
+- 增加以下 FE 动态参数以限制表的边界。[#47896](https://github.com/StarRocks/starrocks/pull/47869)
+
+  包括 ：
+
+  - `auto_partition_max_creation_number_per_load`
+  - `max_partition_number_per_table`
+  - `max_bucket_number_per_partition` 
+  - `max_column_number_per_table`
+
+- 支持在线优化表数据分布，确保优化任务与针对该表的 DML 运行不冲突。[#43747](https://github.com/StarRocks/starrocks/pull/43747)
+- 支持全局 Data Cache 命中率可观测性接口。 [#48450](https://github.com/StarRocks/starrocks/pull/48450)
+- 支持函数 array_repeat。 [#47862](https://github.com/StarRocks/starrocks/pull/47862)
+
+### 功能优化
+
+- 优化因 Kafka 鉴权失败而导致的 Routine Load 失败的报错信息。[#46136](https://github.com/StarRocks/starrocks/pull/46136) [#47649](https://github.com/StarRocks/starrocks/pull/47649)
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+- 优化写入算子的的异步统计信息收集方式，解决导入任务较多时延迟变高的问题。[#48162](https://github.com/StarRocks/starrocks/pull/48162)
+-  增加以下 BE 动态参数以控制导入过程中的资源硬限制，从而降低写入大量 Tablet 时对 BE 稳定性的影响。[#48495](https://github.com/StarRocks/starrocks/pull/48495)
+
+  包括：
+
+  - `load_process_max_memory_hard_limit_ratio`
+  - `enable_new_load_on_memory_limit_exceeded`
+
+- 增加同一表内 Column ID 的一致性检查，防止引起 Compaction 错误。[#48498](https://github.com/StarRocks/starrocks/pull/48628)
+- 持久化 PIPE 元数据，防止因 FE 重启而导致元数据丢失。[#48852](https://github.com/StarRocks/starrocks/pull/48852)
+
+### 问题修复
+
+- 在 FE Follower 上创建字典时进程无法结束。 [#47802](https://github.com/StarRocks/starrocks/pull/47802)
+- SHOW PARTITIONS 命令在存算分离集群和存算一体集群中返回的信息不一致。[#48647](https://github.com/StarRocks/starrocks/pull/48647)
+- 从 JSON 类型的子列导入至 `ARRAY<BOOLERAN>` 类型列时，因类型处理错误而导致的数据错误。[#48387](https://github.com/StarRocks/starrocks/pull/48387)
+- `information_schema.task_runs` 中的 `query_id` 列无法查询。[#48876](https://github.com/StarRocks/starrocks/pull/48879)
+- 备份时针对同一操作的多份请求会提交给不同 Broker，导致请求报错。[#48856](https://github.com/StarRocks/starrocks/pull/48856)
+- 降级至 v3.1.11、v3.2.4 之前的版本，导致主键表的索引解压失败，进而导致查询报错。[#48659](https://github.com/StarRocks/starrocks/pull/48659)
+
+### 降级说明
+
+如果您已经使用列重命名功能，在您降级到旧版本前，请您将所有列的名字改回历史名字，以防降级出现问题。您可以通过 Audit Log 来查看自升级以来是否出现 `ALTER TABLE RENAME COLUMN` 相关操作，并找到历史名称。
+
 ## 3.3.1（已下线）
 
 发布日期：2024 年 7 月 18 日
