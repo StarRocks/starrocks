@@ -267,12 +267,15 @@ Start to run: %s
 
                 actual_res = self.execute_sql(sql)
                 self_print("[SQL]: %s" % sql)
+                log.info("actual_res[result]: %s" % actual_res["result"])
+                log.info("actual_res[status]: %s" % actual_res["status"])
+                log.info("actual_res[msg]: %s" % actual_res["msg"])
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
 
                 actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-                log.info("actual_res: %s" % actual_res)
+                # log.info("actual_res: %s" % actual_res)
 
                 # pretreatment actual res
                 actual_res, actual_res_log = self.pretreatment_res(actual_res)
