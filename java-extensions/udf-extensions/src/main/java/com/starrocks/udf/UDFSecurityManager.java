@@ -17,7 +17,7 @@ package com.starrocks.udf;
 import java.security.Permission;
 
 public class UDFSecurityManager extends SecurityManager {
-    private Class<?> clazz;
+    private final Class<?> clazz;
 
     public UDFSecurityManager(Class<?> clazz) {
         this.clazz = clazz;
@@ -30,6 +30,7 @@ public class UDFSecurityManager extends SecurityManager {
         }
     }
 
+    @Override
     public void checkPermission(Permission perm, Object context) {
         if (isCreateFromUDFClassLoader()) {
             super.checkPermission(perm, context);
