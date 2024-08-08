@@ -272,6 +272,7 @@ Start to run: %s
                     self.treatment_record_res(sql, actual_res)
 
                 actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+                log.info("actual_res: %s" % actual_res)
 
                 # pretreatment actual res
                 actual_res, actual_res_log = self.pretreatment_res(actual_res)
