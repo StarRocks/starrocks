@@ -22,6 +22,12 @@ Review the information in this section before downgrading. Perform any recommend
 
   For compatibility and safety reasons, we strongly recommend you downgrade your StarRocks cluster **consecutively from one minor version to another**. For example, to downgrade a StarRocks v2.5 cluster to v2.2, you need to downgrade it in the following order: v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x.
 
+  :::warning
+
+  After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+
+  :::
+
 - **For major version downgrade**
 
   You can only downgrade your StarRocks v3.0 cluster to v2.5.3 and later versions.
