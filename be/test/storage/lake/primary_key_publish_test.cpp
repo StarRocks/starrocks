@@ -65,6 +65,7 @@ public:
     }
 
     void SetUp() override {
+        config::enable_transparent_data_encryption = GetParam().enable_transparent_data_encryption;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -76,6 +77,7 @@ public:
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         (void)fs::remove_all(kTestGroupPath);
+        config::enable_transparent_data_encryption = false;
     }
 
     ChunkPtr gen_data(int64_t chunk_size, int shift, bool random_shuffle, bool upsert) {
@@ -1448,6 +1450,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE}));
+                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
+                                                           PartialUpdateMode::ROW_MODE, true}));
 
 } // namespace starrocks::lake
