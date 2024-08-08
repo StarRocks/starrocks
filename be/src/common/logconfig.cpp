@@ -158,14 +158,10 @@ static void dontdump_unused_pages() {
     start_dump = true;
 }
 
-<<<<<<< HEAD
 static void failure_writer(const char* data, size_t size) {
     if (config::enable_core_file_size_optimization) {
         dontdump_unused_pages();
     }
-=======
-static void failure_writer(const char* data, int size) {
->>>>>>> 7ac446d96e ([Enhancement] Release mem of page cache and execute purge dirty page before core dump (#48997))
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 
