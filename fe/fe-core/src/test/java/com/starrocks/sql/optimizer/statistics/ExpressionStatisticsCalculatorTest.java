@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -520,6 +522,54 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(50, columnStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testWeek() {
+        ColumnRefOperator left = new ColumnRefOperator(0, Type.DATETIME, "left", true);
+        ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
+        double min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2021-09-01", DateUtils.DATE_FORMATTER_UNIX));
+        double max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-07-01", DateUtils.DATE_FORMATTER_UNIX));
+        ColumnStatistic leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        ColumnStatistic rightStatistic = new ColumnStatistic(1, 1, 0, 1, 1);
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        CallOperator week = new CallOperator(FunctionSet.WEEK, Type.INT, Lists.newArrayList(left, right));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(45, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(29, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 100);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(54, columnStatistic.getDistinctValuesCount(), 0.1);
+
+        min = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-01-20", DateUtils.DATE_FORMATTER_UNIX));
+        max = Utils.getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2023-08-01", DateUtils.DATE_FORMATTER_UNIX));
+        leftStatistic = new ColumnStatistic(min, max, 0, 0, 2);
+        builder = Statistics.builder();
+        builder.setOutputRowCount(100);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, builder.build());
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.1);
+
     }
 
     @Test
