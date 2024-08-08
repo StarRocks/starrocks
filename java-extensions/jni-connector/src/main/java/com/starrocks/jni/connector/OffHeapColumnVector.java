@@ -627,11 +627,13 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
-            case DATE:
+                sb.append(getUTF8String(i));
+                break;
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
-                sb.append(getUTF8String(i));
+                // using long
+                sb.append(getLong(i));
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -716,6 +718,24 @@ public class OffHeapColumnVector {
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
+<<<<<<< HEAD
+=======
+                if (type.isStruct()) {
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
+                        throw new RuntimeException(
+                                "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
+                                elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +
+                                ", elementsAppended=" + c.elementsAppended);
+                    }
+                }
+>>>>>>> b47bdebcfc ([Enhancement] Fix cve problems in java-extensions module (#49425))
             }
         } else {
             checker.check(context + "#data", data);

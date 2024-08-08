@@ -14,19 +14,24 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
+<<<<<<< HEAD
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <iceberg.version>1.5.0</iceberg.version>
         <hadoop.version>3.4.0</hadoop.version>
+=======
+>>>>>>> b47bdebcfc ([Enhancement] Fix cve problems in java-extensions module (#49425))
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+<<<<<<< HEAD
             <version>${hadoop.version}</version>
+=======
+            <scope>provided</scope>
+>>>>>>> b47bdebcfc ([Enhancement] Fix cve problems in java-extensions module (#49425))
         </dependency>
 
         <dependency>
@@ -53,16 +58,5 @@
 
     <build>
         <finalName>starrocks-hadoop-ext</finalName>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${compiler-plugin.version}</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-        </plugins>
     </build>
 </project>
