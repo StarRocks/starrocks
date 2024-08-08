@@ -267,7 +267,7 @@ public class Log4jConfig extends XmlConfiguration {
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
             // json logging
             String jsonLayout =
-                    "<JsonTemplateLayout locationInfoEnabled=\"true\">\n" +
+                    "<JsonTemplateLayout maxStringLength=\"104857600\" locationInfoEnabled=\"true\">\n" +
                             "        <EventTemplate><![CDATA[\n{\n" +
                             "   \"@timestamp\": {\n" +
                             "       \"$resolver\": \"timestamp\",\n" +
