@@ -10,7 +10,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorTableId;
@@ -18,22 +17,13 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
-import io.delta.kernel.Scan;
-import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.data.FilteredColumnarBatch;
-import io.delta.kernel.data.Row;
-import io.delta.kernel.engine.Engine;
-import io.delta.kernel.internal.InternalScanFileUtils;
-import io.delta.kernel.utils.CloseableIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
-import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public class DatabricksUnityMetastore implements IMetastore {
     private static final Logger LOG = LogManager.getLogger(DatabricksUnityMetastore.class);
@@ -56,6 +46,7 @@ public class DatabricksUnityMetastore implements IMetastore {
         this.hdfsEnvironment = hdfsEnvironment;
     }
 
+    @Override
     public List<String> getAllDatabaseNames() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getAllDatabases")) {
             List<String> dbNames = Lists.newArrayList();
@@ -72,6 +63,7 @@ public class DatabricksUnityMetastore implements IMetastore {
         }
     }
 
+    @Override
     public List<String> getAllTableNames(String dbName) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getAllTables")) {
             List<String> tableNames = Lists.newArrayList();
@@ -90,6 +82,7 @@ public class DatabricksUnityMetastore implements IMetastore {
         }
     }
 
+    @Override
     public Database getDb(String dbName) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getDatabase")) {
             SchemaInfo schemaInfo = workspaceClient.schemas().get(databricksCatalogName + "." + dbName);
@@ -118,52 +111,10 @@ public class DatabricksUnityMetastore implements IMetastore {
         }
     }
 
-    public DeltaLakeTable getTable(String dbName, String tblName) {
-        // remove this method later
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
+    @Override
     public boolean tableExists(String dbName, String tblName) {
         String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tblName);
         TableInfo tableInfo = workspaceClient.tables().get(fullName);
         return tableInfo != null;
-    }
-
-    public List<String> getPartitionKeys(String dbName, String tblName) {
-        DeltaLakeTable deltaLakeTable = getTable(dbName, tblName);
-        if (deltaLakeTable == null) {
-            LOG.error("Table {}.{}.{} doesn't exist", catalogName, dbName, tblName);
-            return Lists.newArrayList();
-        }
-
-        List<String> partitionKeys = Lists.newArrayList();
-        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
-        List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
-
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
-        Scan scan = scanBuilder.build();
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
-            while (scanFilesAsBatches.hasNext()) {
-                FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-
-                try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
-                    while (scanFileRows.hasNext()) {
-                        Row scanFileRow = scanFileRows.next();
-                        Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(scanFileRow);
-                        List<String> partitionValues =
-                                partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                                        Collectors.toList());
-                        String partitionName = toHivePartitionName(partitionColumnNames, partitionValues);
-                        partitionKeys.add(partitionName);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOG.error("Failed to get partition keys for table {}.{}.{}", catalogName, dbName, tblName, e);
-            throw new StarRocksConnectorException(String.format("Failed to get partition keys for table %s.%s.%s",
-                    catalogName, dbName, tblName), e);
-        }
-
-        return partitionKeys;
     }
 }

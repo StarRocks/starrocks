@@ -12,20 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.metastore;
+package com.starrocks.connector.delta;
 
-import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.metastore.IMetastore;
 
 import java.util.List;
 
-public interface IMetastore {
-    List<String> getAllDatabaseNames();
+public interface IDeltaLakeMetastore extends IMetastore {
+    Table getTable(String dbName, String tableName);
 
-    List<String> getAllTableNames(String dbName);
-
-    Database getDb(String dbName);
-
-    MetastoreTable getMetastoreTable(String dbName, String tableName);
-
-    boolean tableExists(String dbName, String tableName);
+    List<String> getPartitionKeys(String dbName, String tableName);
 }

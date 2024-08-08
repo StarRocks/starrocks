@@ -22,7 +22,6 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
-import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -41,20 +40,20 @@ import java.util.concurrent.Executor;
 
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 
-public class CachingDeltaLakeMetastore extends CachingMetastore implements IMetastore {
+public class CachingDeltaLakeMetastore extends CachingMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingDeltaLakeMetastore.class);
 
-    public final IMetastore delegate;
+    public final IDeltaLakeMetastore delegate;
     private final Map<DatabaseTableName, Long> lastAccessTimeMap;
 
-    public CachingDeltaLakeMetastore(IMetastore metastore, Executor executor, long expireAfterWriteSec,
+    public CachingDeltaLakeMetastore(IDeltaLakeMetastore metastore, Executor executor, long expireAfterWriteSec,
                                      long refreshIntervalSec, long maxSize) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.delegate = metastore;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
     }
 
-    public static CachingDeltaLakeMetastore createQueryLevelInstance(IMetastore metastore, long perQueryCacheMaxSize) {
+    public static CachingDeltaLakeMetastore createQueryLevelInstance(IDeltaLakeMetastore metastore, long perQueryCacheMaxSize) {
         return new CachingDeltaLakeMetastore(
                 metastore,
                 newDirectExecutorService(),
@@ -63,7 +62,7 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
                 perQueryCacheMaxSize);
     }
 
-    public static CachingDeltaLakeMetastore createCatalogLevelInstance(IMetastore metastore, Executor executor,
+    public static CachingDeltaLakeMetastore createCatalogLevelInstance(IDeltaLakeMetastore metastore, Executor executor,
                                                                   long expireAfterWrite, long refreshInterval,
                                                                   long maxSize) {
         return new CachingDeltaLakeMetastore(metastore, executor, expireAfterWrite, refreshInterval, maxSize);
