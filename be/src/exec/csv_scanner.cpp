@@ -259,7 +259,18 @@ Status CSVScanner::_init_reader() {
         if (_parse_options.skip_header) {
             for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                 CSVReader::Record dummy;
-                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                auto st = _curr_reader->next_record(&dummy);
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        auto err_msg = fmt::format(
+                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                                _parse_options.skip_header, i);
+
+                        return Status::EndOfFile(err_msg);
+                    } else {
+                        return st;
+                    }
+                }
             }
         }
         return Status::OK();
