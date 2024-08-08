@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -39,6 +40,7 @@ import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
+import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -175,6 +177,27 @@ public class RboOptimizer {
             AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, null);
             return Objects.requireNonNull(policy.convert(optPlanPiece.get()).orElse(null));
         };
+    }
+
+    public static Optional<PlanPiece> getPlanPieceFromLegacyMV(MaterializedViewPlus mvPlus, ConnectContext context) {
+        String createMvSql = mvPlus.getCreateMaterializedViewSql();
+        StatementBase stmt = RboOptimizer.parseAndAnalyze(context, createMvSql);
+        Preconditions.checkArgument(stmt instanceof CreateMaterializedViewStatement);
+        CreateMaterializedViewStatement createMvStmt = (CreateMaterializedViewStatement) stmt;
+        QueryStatement queryStmt = createMvStmt.getQueryStatement();
+        QueryStatementPlus queryStmtPlus = RboOptimizer.collectFQTables(queryStmt, context);
+        Map<String, FQTable> fqTableMap = queryStmtPlus.getFqTableMap();
+
+        Optional<OptExpression> optEntirePlan =
+                RboOptimizer.getEntirePlan(queryStmt, context, PlanPiecePattern.getSPJG());
+        if (!optEntirePlan.isPresent()) {
+            return Optional.empty();
+        }
+        OptExpression entirePlan = optEntirePlan.get();
+        ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
+        PlanPiece planPiece =
+                PlanPieceBuilder.createPlanPiece(mvPlus.getMv().getName(), entirePlan, idConverter, fqTableMap);
+        return Optional.of(planPiece);
     }
 
     @VisibleForTesting

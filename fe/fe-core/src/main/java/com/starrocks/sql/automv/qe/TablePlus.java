@@ -17,6 +17,8 @@ package com.starrocks.sql.automv.qe;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
@@ -37,18 +39,16 @@ public class TablePlus {
     private final OlapTable table;
 
     private final Class<?> klass;
-    private final int replicationNum;
     private final List<ColumnPlus> columnPluses;
 
-    private TablePlus(OlapTable table, Class<?> klass, List<ColumnPlus> columnPluses, int replicationNum) {
+    private TablePlus(OlapTable table, Class<?> klass, List<ColumnPlus> columnPluses) {
         this.table = Objects.requireNonNull(table);
         this.klass = Objects.requireNonNull(klass);
         this.columnPluses = Objects.requireNonNull(columnPluses);
-        this.replicationNum = replicationNum;
     }
 
-    public static TablePlus of(OlapTable table, Class<?> klass, List<ColumnPlus> columns, int replicationNum) {
-        return new TablePlus(table, klass, columns, replicationNum);
+    public static TablePlus of(OlapTable table, Class<?> klass, List<ColumnPlus> columns) {
+        return new TablePlus(table, klass, columns);
     }
 
     public OlapTable getTable() {
@@ -57,10 +57,6 @@ public class TablePlus {
 
     public List<ColumnPlus> getColumnPluses() {
         return columnPluses;
-    }
-
-    public int getReplicationNum() {
-        return replicationNum;
     }
 
     public String getCreateTableSql() {
@@ -76,18 +72,38 @@ public class TablePlus {
         printer.newLine().add(")").spaces(1).add("ENGINE=OLAP").newLine();
 
         List<String> key = columns.stream().filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
-        printer.add(table.getKeysType().toSql()).add("(").addItems(", ", key).add(")").newLine();
+        printer.add(table.getKeysType().toSql()).add("(").addItemsBacktickQuoted(", ", key).add(")").newLine();
 
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<String> partitionColumnNames = rangePartitionInfo.getPartitionColumns(table.getIdToColumn())
+                    .stream()
+                    .map(Column::getName)
+                    .collect(Collectors.toList());
+            printer.add("PARTITION BY RANGE (")
+                    .addItemsBacktickQuoted(", ", partitionColumnNames)
+                    .add(")");
+            printer.add("()").newLine();
+        }
         int numBuckets = table.getDefaultDistributionInfo().getBucketNum();
         String bucketKey = table.getDefaultDistributionInfo().getDistributionKey(table.getIdToColumn());
         printer.add("DISTRIBUTED BY HASH(").add(bucketKey).add(")").spaces(1)
                 .add("BUCKETS").spaces(1).add(numBuckets).newLine();
 
         printer.add("PROPERTIES").spaces(1).add("(").newLine();
+        List<PrettyPrinter> propertyItems = table.getProperties().entrySet()
+                .stream()
+                .map(e -> new PrettyPrinter()
+                        .addDoubleQuoted(e.getKey())
+                        .add(" = ")
+                        .addDoubleQuoted(e.getValue()))
+                .collect(Collectors.toList());
         printer.indentEnclose(() -> {
-            printer.addDoubleQuoted("replication_num").add(" = ").addDoubleQuoted(replicationNum);
+            printer.addSuperStepsWithDelNl(",", propertyItems);
         });
         printer.newLine().add(")");
+
         return printer.getResult();
     }
 

@@ -16,10 +16,12 @@ package com.starrocks.sql.automv.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.common.io.LittleEndianDataOutputStream;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.util.ColumnDescription;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.thrift.TRowFormat;
@@ -43,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -137,18 +140,18 @@ public final class ColumnPlus {
         return PrettyPrinter.escapedDoubleQuoted(new Gson().toJson(json));
     }
 
-    private static Timestamp unpackDatetime(ByteBuffer buffer) {
-        return new Timestamp(buffer.getLong());
+    public static Timestamp unpackDatetime(ByteBuffer buffer) {
+        return new Timestamp(TimeUnit.SECONDS.toMillis(buffer.getLong()));
     }
 
-    private static String unpackString(ByteBuffer buffer) {
+    public static String unpackString(ByteBuffer buffer) {
         int length = (int) buffer.getLong();
         byte[] bytes = new byte[length];
         buffer.get(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    private static Void packBigInt(DataOutput dataOut, Object value) {
+    public static Void packBigInt(DataOutput dataOut, Object value) {
         Preconditions.checkArgument(value.getClass().equals(Long.class));
         try {
             dataOut.writeLong(((Long) value));
@@ -161,7 +164,7 @@ public final class ColumnPlus {
     public static Void packDatetime(DataOutput dataOut, Object value) {
         Preconditions.checkArgument(Date.class.isAssignableFrom(value.getClass()));
         try {
-            dataOut.writeLong(((Date) value).getTime());
+            dataOut.writeLong(TimeUnit.MILLISECONDS.toSeconds(((Date) value).getTime()));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -263,6 +266,34 @@ public final class ColumnPlus {
                 }
             }
             return obj;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Map<String, Object> unpackIntoMap(
+            List<Pair<String, Function<ByteBuffer, Object>>> namedUnpackerList,
+            TRowFormat row) {
+        Preconditions.checkArgument(!namedUnpackerList.isEmpty());
+        Preconditions.checkArgument(row != null);
+        Preconditions.checkArgument(row.isSetNull_bits() && row.null_bits.remaining() == namedUnpackerList.size());
+        Preconditions.checkArgument(row.isSetPacked_data());
+
+        ByteBuffer packedData = row.packed_data.order(ByteOrder.LITTLE_ENDIAN);
+        try {
+            Map<String, Object> map = Maps.newHashMap();
+            for (Pair<String, Function<ByteBuffer, Object>> namedUnpacker : namedUnpackerList) {
+                String name = namedUnpacker.first;
+                Function<ByteBuffer, Object> unpacker = namedUnpacker.second;
+                byte nullBit = row.null_bits.get();
+                if (nullBit == 0) {
+                    map.put(name, null);
+                } else {
+                    Object value = unpacker.apply(packedData);
+                    map.put(name, value);
+                }
+            }
+            return map;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

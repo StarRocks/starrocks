@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.generator;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.automv.util.Util;
 
 import java.util.Objects;
@@ -23,8 +24,11 @@ import java.util.regex.Pattern;
 public class MVName {
     private static final String MV_NAME_PREFIX = "_mv_";
     private static final int NAME_LENGTH = 60;
+    @SerializedName(value = "prefix")
     private final String prefix;
+    @SerializedName(value = "createTime")
     private final String createTime;
+    @SerializedName(value = "digest")
     private final String digest;
 
     private MVName(String prefix, String ctime, String digest) {
@@ -36,6 +40,11 @@ public class MVName {
     public static MVName generateFromQuery(String query) {
         String digest = Util.sha1(query);
         return new MVName(MV_NAME_PREFIX, Util.yyyyMMddTHHmmss(), digest);
+    }
+
+    public static MVName generateSpecial(String s) {
+        String digest = Util.sha1(s);
+        return new MVName(MV_NAME_PREFIX, "19700101T000000", digest);
     }
 
     public static Optional<MVName> parse(String s) {

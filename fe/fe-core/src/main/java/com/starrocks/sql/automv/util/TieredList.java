@@ -22,7 +22,6 @@ import com.google.errorprone.annotations.DoNotCall;
 import org.apache.hadoop.util.Lists;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -31,6 +30,7 @@ import java.util.ListIterator;
 import java.util.Objects;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 
 public class TieredList<T> implements List<T> {
@@ -43,9 +43,18 @@ public class TieredList<T> implements List<T> {
     private TieredList(List<T> baseTier, List<T> tier) {
         Preconditions.checkArgument(baseTier.isEmpty() || baseTier instanceof TieredList);
         Preconditions.checkArgument(tier.isEmpty() || tier instanceof ImmutableList);
-        this.baseTier = Objects.requireNonNull(baseTier);
-        this.tier = Objects.requireNonNull(tier);
-        this.numTiers = baseTier.isEmpty() ? 0 : ((TieredList<T>) baseTier).numTiers + 1;
+        if (baseTier instanceof TieredList && ((TieredList<T>) baseTier).numTiers + 1 > 20) {
+            TieredList<T> tieredBaseTier = (TieredList<T>) baseTier;
+            this.baseTier = genesis();
+            this.tier = Stream.concat(tieredBaseTier.untier().stream(), Stream.of(tier))
+                    .flatMap(Collection::stream)
+                    .collect(ImmutableList.toImmutableList());
+            this.numTiers = 1;
+        } else {
+            this.baseTier = Objects.requireNonNull(baseTier);
+            this.tier = Objects.requireNonNull(tier);
+            this.numTiers = baseTier.isEmpty() ? 0 : ((TieredList<T>) baseTier).numTiers + 1;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -75,17 +84,27 @@ public class TieredList<T> implements List<T> {
     }
 
     private List<List<T>> untier() {
-        if (this == GENESIS) {
-            return Lists.newArrayListWithCapacity(numTiers);
-        } else {
-            List<List<T>> tiers = ((TieredList<T>) baseTier).untier();
-            tiers.add(tier);
-            return tiers;
+        List<List<T>> tiers = Lists.newArrayListWithCapacity(numTiers);
+        TieredList<T> currTier = this;
+        while (currTier != GENESIS) {
+            tiers.add(currTier.tier);
+            currTier = (TieredList<T>) currTier.baseTier;
         }
+        Collections.reverse(tiers);
+        return tiers;
+    }
+
+    public TieredList<T> tail(int n) {
+        Preconditions.checkArgument(n >= 0);
+        int numElems = size();
+        if (numElems <= n) {
+            return this;
+        }
+        return TieredList.<T>genesis().concat(untiered().subList(numElems - n, numElems));
     }
 
     public List<T> untiered() {
-        return new ArrayList<>(this);
+        return untier().stream().flatMap(Collection::stream).collect(Collectors.toList());
     }
 
     public TieredList<T> concat(Collection<T> rhs) {
@@ -121,17 +140,23 @@ public class TieredList<T> implements List<T> {
 
     @Override
     public int hashCode() {
-        return Objects.hash(baseTier, tier, numTiers);
+        return Objects.hash(toString());
     }
 
     @Override
     public int size() {
-        return baseTier.size() + tier.size();
+        TieredList<T> currTier = this;
+        int sz = 0;
+        while (currTier != GENESIS) {
+            sz += currTier.tier.size();
+            currTier = (TieredList<T>) currTier.baseTier;
+        }
+        return sz;
     }
 
     @Override
     public boolean isEmpty() {
-        return baseTier.isEmpty() && tier.isEmpty();
+        return this == GENESIS;
     }
 
     @Override

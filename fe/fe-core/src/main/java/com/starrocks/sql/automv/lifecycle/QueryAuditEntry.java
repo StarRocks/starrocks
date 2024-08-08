@@ -51,7 +51,6 @@ public class QueryAuditEntry {
     List<String> candidateMVs;
     @ColumnDescription(type = VARCHAR)
     List<String> hitMvs;
-
     @ColumnDescription(type = DATETIME)
     private Timestamp timestamp;
 

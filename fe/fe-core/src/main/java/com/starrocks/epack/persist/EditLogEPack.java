@@ -20,6 +20,7 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.Map;
@@ -73,6 +74,9 @@ public class EditLogEPack extends EditLog {
         logEdit(OperationTypeEPack.OP_DROP_ROLE_MAPPING, info);
     }
 
+    public void logMVChangeLog(MVChangeLog mvChangeLog) {
+        logEdit(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
+    }
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {

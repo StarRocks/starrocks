@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.lattice;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -41,6 +42,7 @@ import com.starrocks.sql.automv.qe.TablePlus;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.tunespace.PlanPieceInfo;
 import com.starrocks.sql.automv.util.AutoMVUtil;
+import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -62,6 +64,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -782,6 +786,15 @@ public class AutoMVTPCDSTest {
         String name = "query01";
         String sql = TestUtil.getTPCDSQuery(name);
         getStarRocksAssert().withTable(table.getCreateTableSql());
+        TableName tsName =
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "tpcds", table.getTable().getName());
+        while (true) {
+            boolean hasPartitions = MetaUtil.checkTable(tsName, false, (db, tbl) -> !tbl.getPartitions().isEmpty());
+            if (hasPartitions) {
+                break;
+            }
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+        }
         try {
             QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
             QueryStatement queryStmt = stmt.getQueryStatement();

@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.persist;
+package com.starrocks.sql.automv.lifecycle;
 
-import com.starrocks.persist.metablock.SRMetaBlockID;
+@FunctionalInterface
+public interface PostTransferAction {
+    PostTransferAction DO_NOTHING = (mvLifecycle, policy) -> {
+    };
 
-public class SRMetaBlockIDEPack extends SRMetaBlockID {
-    private SRMetaBlockIDEPack(int id) {
-        super(id);
-    }
-
-    public static final SRMetaBlockIDEPack WAREHOUSE_MGR = new SRMetaBlockIDEPack(20001);
-    public static final SRMetaBlockIDEPack SECURITY_POLICY_MGR = new SRMetaBlockIDEPack(20002);
-    public static final SRMetaBlockIDEPack FAILOVER_GROUP_MGR = new SRMetaBlockIDEPack(20003);
-    public static final SRMetaBlockID MV_LIFECYCLE_MGR = new SRMetaBlockIDEPack(20004);
+    void apply(MVLifecycle mvLifecycle, MVPhasePolicy policy);
 }

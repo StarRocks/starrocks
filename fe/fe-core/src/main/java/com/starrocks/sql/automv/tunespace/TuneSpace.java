@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.automv.tunespace;
 
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.sql.automv.qe.TablePlus;
 
 import java.util.Objects;
@@ -44,5 +46,9 @@ public class TuneSpace {
 
     public TablePlus getTable() {
         return table;
+    }
+
+    public TableName getFqTableName() {
+        return new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, tableName);
     }
 }

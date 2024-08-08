@@ -60,6 +60,19 @@ public abstract class Result<T> {
         });
     }
 
+    public <S> Result<S> bind(IgnoreArgsFunction<S> func) {
+        return bind(ignored -> {
+            return func.apply();
+        });
+    }
+
+    public Result<Unit> bind(IgnoreArgsNoReturnFunction func) {
+        return bind(ignored -> {
+            func.apply();
+            return Unit.INSTANCE;
+        });
+    }
+
     public Optional<T> unwrap() {
         if (this instanceof Err) {
             return Optional.empty();
@@ -113,6 +126,16 @@ public abstract class Result<T> {
     @FunctionalInterface
     public interface ThrowableConsumer<T> {
         void consume(T arg) throws Throwable;
+    }
+
+    @FunctionalInterface
+    public interface IgnoreArgsFunction<S> {
+        S apply() throws Throwable;
+    }
+
+    @FunctionalInterface
+    public interface IgnoreArgsNoReturnFunction {
+        void apply() throws Throwable;
     }
 
     public static final class Ok<T> extends Result<T> {

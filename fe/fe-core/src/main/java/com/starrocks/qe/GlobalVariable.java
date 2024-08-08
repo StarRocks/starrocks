@@ -76,6 +76,19 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
 
+    //AutoMV's MVLifecycle
+    public static final String ENABLE_AUTOMV_LIFECYCLE_KEEPER =  "enable_automv_lifecycle_keeper";
+    public static final String AUTOMV_LIFECYCLE_INFANT_ABORTION_MAX_TIME = "automv_lifecycle_infant_abortion_max_time";
+    public static final String AUTOMV_LIFECYCLE_INITIAL_REFRESH_MAX_TIME = "automv_lifecycle_initial_refresh_max_time";
+    public static final String AUTOMV_LIFECYCLE_INTERNSHIP_PERIOD = "automv_lifecycle_internship_period";
+    public static final String AUTOMV_LIFECYCLE_HIT_RATIO_HWM = "automv_lifecycle_hit_ratio_hwm";
+    public static final String AUTOMV_LIFECYCLE_HIT_RATIO_LWM = "automv_lifecycle_hit_ratio_lwm";
+    public static final String AUTOMV_LIFECYCLE_REVIVE_WAITING_MAX_TIME = "automv_lifecycle_revive_waiting_max_time";
+    public static final String AUTOMV_LIFECYCLE_PERFORMANCE_EVALUATION_INTERVAL =
+            "automv_lifecycle_performance_evaluation_interval";
+    public static final String AUTOMV_LIFECYCLE_EXTINCTION_RETENTION_MAX_TIME =
+            "automv_lifecycle_extinction_retention_max_time";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -172,6 +185,26 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN_V2, flag = VariableMgr.GLOBAL,
             alias = ACTIVATE_ALL_ROLES_ON_LOGIN, show = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private static boolean activateAllRolesOnLogin = false;
+
+    // AutoMV's Lifecycle
+    @VariableMgr.VarAttr(name = ENABLE_AUTOMV_LIFECYCLE_KEEPER, flag = VariableMgr.GLOBAL)
+    private static boolean enableAutoMVLifecycleKeeper = false;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_INFANT_ABORTION_MAX_TIME, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleInfantAbortionMaxTime = 3600L;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_INITIAL_REFRESH_MAX_TIME, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleInitialRefreshMaxTime = 7200L;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_INTERNSHIP_PERIOD, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleInternshipPeriod = 259200L;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_HIT_RATIO_HWM, flag = VariableMgr.GLOBAL)
+    private static double autoMVLifecycleHitRatioHwm = 0.5;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_HIT_RATIO_LWM, flag = VariableMgr.GLOBAL)
+    private static double autoMVLifecycleHitRatioLwm = 0.0;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_REVIVE_WAITING_MAX_TIME, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleReviveWaitingMaxTime = 259200L;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_PERFORMANCE_EVALUATION_INTERVAL, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecyclePerformanceEvaluationInterval = 300L;
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_EXTINCTION_RETENTION_MAX_TIME, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleExtinctionRetentionMaxTime = 604800L;
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
@@ -305,6 +338,78 @@ public final class GlobalVariable {
 
     public static void setActivateAllRolesOnLogin(boolean activateAllRolesOnLogin) {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
+    }
+
+    //AutoMV's Lifecycle management
+
+    public static void setEnableAutoMVLifecycleKeeper(boolean value) {
+        enableAutoMVLifecycleKeeper = value;
+    }
+    public static void setAutoMVLifecycleInfantAbortionMaxTime(long value) {
+        autoMVLifecycleInfantAbortionMaxTime = value;
+    }
+
+    public static void setAutoMVLifecycleInitialRefreshMaxTime(long value) {
+        autoMVLifecycleInitialRefreshMaxTime = value;
+    }
+
+    public static void setAutoMVLifecycleInternshipPeriod(long value) {
+        autoMVLifecycleInternshipPeriod = value;
+    }
+
+    public static void setAutoMVLifecycleHitRatioHwm(double value) {
+        autoMVLifecycleHitRatioHwm = value;
+    }
+
+    public static void setAutoMVLifecycleHitRatioLwm(double value) {
+        autoMVLifecycleHitRatioLwm = value;
+    }
+
+    public static void setAutoMVLifecycleReviveWaitingMaxTime(long value) {
+        autoMVLifecycleReviveWaitingMaxTime = value;
+    }
+
+    public static void setAutoMVLifecyclePerformanceEvaluationInterval(long value) {
+        autoMVLifecyclePerformanceEvaluationInterval = value;
+    }
+
+    public static void setAutoMVLifecycleExtinctionRetentionMaxTime(long value) {
+        autoMVLifecycleExtinctionRetentionMaxTime = value;
+    }
+
+    public static boolean isEnableAutoMVLifecycleKeeper() {
+        return enableAutoMVLifecycleKeeper;
+    }
+    public static long getAutoMVLifecycleInfantAbortionMaxTime() {
+        return autoMVLifecycleInfantAbortionMaxTime;
+    }
+
+    public static long getAutoMVLifecycleInitialRefreshMaxTime() {
+        return autoMVLifecycleInitialRefreshMaxTime;
+    }
+
+    public static long getAutoMVLifecycleInternshipPeriod() {
+        return autoMVLifecycleInternshipPeriod;
+    }
+
+    public static double getAutoMVLifecycleHitRatioHwm() {
+        return autoMVLifecycleHitRatioHwm;
+    }
+
+    public static double getAutoMVLifecycleHitRatioLwm() {
+        return autoMVLifecycleHitRatioLwm;
+    }
+
+    public static long getAutoMVLifecycleReviveWaitingMaxTime() {
+        return autoMVLifecycleReviveWaitingMaxTime;
+    }
+
+    public static long getAutoMVLifecyclePerformanceEvaluationInterval() {
+        return autoMVLifecyclePerformanceEvaluationInterval;
+    }
+
+    public static long getAutoMVLifecycleExtinctionRetentionMaxTime() {
+        return autoMVLifecycleExtinctionRetentionMaxTime;
     }
 
     // Don't allow create instance.

@@ -159,6 +159,7 @@ import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
@@ -1150,6 +1151,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_MV_EPOCH_UPDATE: {
                 data = MVEpoch.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationTypeEPack.OP_MV_CHANGE: {
+                data = MVChangeLog.read(in);
                 isRead = true;
                 break;
             }

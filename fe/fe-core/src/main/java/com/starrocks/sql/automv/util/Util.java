@@ -29,6 +29,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -198,5 +199,9 @@ public class Util {
     public static Stream<Operator> getStream(OptExpression optExpression) {
         return Stream.concat(Stream.of(optExpression.getOp()),
                 optExpression.getInputs().stream().flatMap(Util::getStream));
+    }
+
+    public static long timeDiff(long lhsEpochMilliSeconds, long rhsEpochMilliSeconds) {
+        return TimeUnit.MILLISECONDS.toSeconds(lhsEpochMilliSeconds - rhsEpochMilliSeconds);
     }
 }

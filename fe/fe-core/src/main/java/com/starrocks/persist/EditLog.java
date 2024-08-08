@@ -112,6 +112,8 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -1169,6 +1171,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replayEpoch(epoch);
                     break;
                 }
+                case OperationTypeEPack.OP_MV_CHANGE: {
+                    MVChangeLog mvChangeLog = (MVChangeLog) journal.getData();
+                    MVLifecycleManager.getInstance().replayMVChangeLog(mvChangeLog);
+                    break;
+                }
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                     final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
                     globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDrop(info);
@@ -2056,6 +2063,7 @@ public class EditLog {
     public void logMVEpochChange(MVEpoch epoch) {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
+
 
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);

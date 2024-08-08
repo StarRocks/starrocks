@@ -96,9 +96,21 @@ public class TunespaceTest {
                 "  `category` varchar(255) NOT NULL COMMENT \"\",\n" +
                 "  `traits` json NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
-                "PRIMARY KEY(id)\n" +
+                "PRIMARY KEY(`id`, `ts`)\n" +
+                "PARTITION BY RANGE (`ts`)()\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 8\n" +
                 "PROPERTIES (\n" +
+                "  \"compression\" = \"LZ4\",\n" +
+                "  \"dynamic_partition.buckets\" = \"8\",\n" +
+                "  \"dynamic_partition.enable\" = \"true\",\n" +
+                "  \"dynamic_partition.end\" = \"3\",\n" +
+                "  \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                "  \"dynamic_partition.prefix\" = \"p\",\n" +
+                "  \"dynamic_partition.start\" = \"-30\",\n" +
+                "  \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "  \"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                "  \"enable_persistent_index\" = \"true\",\n" +
+                "  \"replicated_storage\" = \"true\",\n" +
                 "  \"replication_num\" = \"1\"\n" +
                 ")";
         Assert.assertEquals(createSql, createSql, expectCreateSql);
@@ -162,9 +174,21 @@ public class TunespaceTest {
                     "  `category` varchar(255) NOT NULL COMMENT \"\",\n" +
                     "  `traits` json NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
-                    "PRIMARY KEY(id)\n" +
+                    "PRIMARY KEY(`id`, `ts`)\n" +
+                    "PARTITION BY RANGE (`ts`)()\n" +
                     "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                     "PROPERTIES (\n" +
+                    "  \"compression\" = \"LZ4\",\n" +
+                    "  \"dynamic_partition.buckets\" = \"10\",\n" +
+                    "  \"dynamic_partition.enable\" = \"true\",\n" +
+                    "  \"dynamic_partition.end\" = \"3\",\n" +
+                    "  \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                    "  \"dynamic_partition.prefix\" = \"p\",\n" +
+                    "  \"dynamic_partition.start\" = \"-30\",\n" +
+                    "  \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                    "  \"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                    "  \"enable_persistent_index\" = \"true\",\n" +
+                    "  \"replicated_storage\" = \"true\",\n" +
                     "  \"replication_num\" = \"1\"\n" +
                     ")");
         };

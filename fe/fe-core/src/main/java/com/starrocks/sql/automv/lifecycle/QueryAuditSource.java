@@ -21,6 +21,7 @@ import com.starrocks.sql.automv.util.PrettyPrinter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -47,7 +48,8 @@ public class QueryAuditSource {
     //       cpuCostNs,
     //       memCostBytes,
     //       candidateMVs,
-    //       hitMvs
+    //       hitMvs,
+    //       timestamp
     //     FROM
     //       starrocks_audit_db__.starrocks_audit_tbl__
     //     WHERE
@@ -58,7 +60,7 @@ public class QueryAuditSource {
     //   )
     // SELECT * FROM audit_tbl
     // [where_clause]
-    public String cookSql(List<String> conjuncts) {
+    public PrettyPrinter cookCteSql() {
 
         PrettyPrinter cteBody = new PrettyPrinter();
         cteBody.add("SELECT").newLine();
@@ -77,7 +79,9 @@ public class QueryAuditSource {
                 "queryType IN (\"query\", \"slow_query\")",
                 "isQuery = 1",
                 "state = \"EOF\"",
-                String.format("coalesce(db,\"\") NOT IN (\"\", \"%s\")", auditDb)
+                String.format("coalesce(db,\"\") NOT IN (\"\", \"%s\")", auditDb),
+                "db NOT LIKE 'automv%'",
+                "db NOT LIKE 'AUTOMV%'"
         );
         cteBody.indentEnclose(() -> {
             cteBody.addItemsWithNlDel("AND ", defaultConjuncts);
@@ -86,7 +90,13 @@ public class QueryAuditSource {
         PrettyPrinter printer = new PrettyPrinter();
         printer.add("WITH audit_tbl AS (").newLine();
         printer.addSuperStepWithIndent(cteBody);
-        printer.newLine().add(")").newLine();
+        printer.newLine().add(")");
+        return printer;
+    }
+
+    public String cookSql(List<String> conjuncts) {
+        PrettyPrinter printer = new PrettyPrinter();
+        printer.addSuperStep(cookCteSql()).newLine();
         printer.add("SELECT * FROM audit_tbl").newLine();
         if (!conjuncts.isEmpty()) {
             printer.add("WHERE").newLine();
@@ -97,10 +107,41 @@ public class QueryAuditSource {
         return printer.getResult();
     }
 
+    public String cookMVHitRatioCollectSql() {
+        PrettyPrinter printer = new PrettyPrinter();
+        printer.addSuperStep(cookCteSql()).newLine();
+        printer.add("SELECT mv, count(1) as count").newLine();
+        printer.add("FROM (").newLine();
+
+        List<String> conditions = Arrays.asList(
+                "hitMvs IS NOT NULL",
+                "hitMvs != 'null'",
+                "length(hitMvs) > 0",
+                "timestamp > days_sub(now(), 7)"
+        );
+        printer.indentEnclose(() -> {
+            printer.add("SELECT unnest AS mv FROM audit_tbl, unnest(split(hitMvs, ','))").newLine();
+            printer.add("WHERE").newLine();
+            printer.indentEnclose(() -> {
+                printer.addItemsWithNlDel("AND ", conditions);
+            });
+        });
+        printer.add(") t0").newLine();
+        printer.add("GROUP BY mv");
+        return printer.getResult();
+    }
+
     public List<QueryAuditEntry> getQueryAuditInfoList(ConnectContext ctx, Supplier<List<String>> conjunctsBuilder) {
         CustomizedQueryExecutor executor = new CustomizedQueryExecutor();
         String sql = cookSql(conjunctsBuilder.get());
         LOG.info("[AUTOMV] SQL={}", sql);
         return executor.query(QueryAuditEntry.class, QueryAuditEntry.getColumns(), ctx, sql);
+    }
+
+    public List<MVHitCountEntry> getMVHitRatio(ConnectContext ctx) {
+        CustomizedQueryExecutor executor = new CustomizedQueryExecutor();
+        String sql = cookMVHitRatioCollectSql();
+        LOG.info("[AUTOMV] MVHitRatioCollectSql={}", sql);
+        return executor.query(MVHitCountEntry.class, MVHitCountEntry.getColumns(), ctx, sql);
     }
 }

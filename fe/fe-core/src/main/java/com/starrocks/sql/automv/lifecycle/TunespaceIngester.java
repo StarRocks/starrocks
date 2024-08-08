@@ -15,13 +15,17 @@
 package com.starrocks.sql.automv.lifecycle;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.qe.CustomizedQueryExecutor;
 import com.starrocks.sql.automv.qe.TunespaceExecutor;
+import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.tunespace.TuneSpace;
+import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.Result;
 import com.starrocks.sql.automv.util.TieredMap;
@@ -29,10 +33,16 @@ import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class TunespaceIngester {
@@ -76,8 +86,23 @@ public class TunespaceIngester {
                 .unwrapOrThrowError();
     }
 
-    public void ingest() {
-        List<QueryAuditEntry> auditInfoList = queryAuditSource.getQueryAuditInfoList(ctx, Collections::emptyList);
+    public void ingest(MVLifecycleManager mgr) {
+
+        boolean brandNewTs = !MetaUtil.hasData(tuneSpace.getFqTableName());
+        Optional<Long> optSinceTs = brandNewTs ? Optional.empty() : mgr.getAuditLatestTimestamp();
+
+        Supplier<String> conditionBuilder = () -> optSinceTs
+                .map(Instant::ofEpochMilli)
+                .map(instant -> instant.atZone(ZoneId.of("UTC")).format(DateUtils.DATE_TIME_FORMATTER_UNIX))
+                .map(s -> new PrettyPrinter().addBacktickQuoted("timestamp").add(">=").addDoubleQuoted(s).getResult())
+                .orElse("`timestamp` >= days_sub(now(), 7)");
+
+        List<QueryAuditEntry> auditInfoList =
+                queryAuditSource.getQueryAuditInfoList(ctx, () -> Collections.singletonList(conditionBuilder.get()));
+        auditInfoList.stream().map(QueryAuditEntry::getTimestamp)
+                .map(Timestamp::getTime).max(Comparator.comparingLong(t -> t))
+                .ifPresent(mgr::updateAuditLatestTimestamp);
+
         List<Optional<Result.Unit>> results = auditInfoList.stream()
                 .map(this::ingest)
                 .collect(Collectors.toList());
@@ -136,11 +161,29 @@ public class TunespaceIngester {
         String newMVSchema = mvSchema.replace(mvName, fqMvName);
         CustomizedQueryExecutor executor = new CustomizedQueryExecutor();
         return Result.wrap(() -> executor.exec(ctx, newMVSchema))
+                .bind(() -> {
+                    MVName name = Objects.requireNonNull(MVName.parse(mvName).orElse(null));
+                    MVLifecycleManager.getInstance().commitCradle(name);
+                })
                 .ifError((ex) -> Log.error("Failed to create MV '{}', schema={}", fqMvName, newMVSchema, ex))
                 .unwrap();
     }
 
-    public List<MVName> listLegacyMVs() {
+    public List<Pair<MVName, MaterializedViewPlus>> listLegacyMVs() {
+        //TODO(by satanson): At present, we only collect legacy MVs recommended by AutoMV
+        // and add them to MVLifecycleManager, in the future, we can:
+        // 1. add expert-recommended MV whose the backbone query can be recognized as a
+        //   SPJG entirely to the MVLifecycleManager;
+        // 2. add all MVs containing other operators to the MVLifecycleManager after
+        //   operators except SJPG are supported by AutoMV.
+        return MetaUtil.listLegacyMVs(null, autoMVDb).stream()
+                .map(mv -> Pair.create(MVName.parse(mv.getFqName().getTbl()), mv))
+                .filter(p -> p.first.isPresent())
+                .map(p -> Pair.create(p.first.get(), p.second))
+                .collect(Collectors.toList());
+    }
+
+    public List<MVName> listLegacyMVNames() {
         Result<Result.Unit> switchDbResult = Result.wrap(() -> ctx.changeCatalogDb(autoMVDb));
         if (switchDbResult.maybeError().isPresent()) {
             LOG.error("Fail to change current database '{}'", autoMVDb, switchDbResult.maybeError().get());
@@ -161,5 +204,16 @@ public class TunespaceIngester {
                                 .map(Optional::get)
                                 .collect(Collectors.toList()))
                 .orElse(Collections.emptyList());
+    }
+
+    public void collectMVHitRatio() {
+        Result.wrap(() -> queryAuditSource.getMVHitRatio(ctx))
+                .ifError(err -> LOG.error("Fail to getMVHitRatio", err))
+                .bind(mvhitRatioList -> {
+                    ConcurrentMap<String, Double> mvHitRatioMap = mvhitRatioList.stream()
+                            .filter(e -> MVName.parse(e.getMv()).isPresent())
+                            .collect(Collectors.toConcurrentMap(MVHitCountEntry::getMv, (e -> (double) e.getCount())));
+                    MVLifecycleManager.getInstance().populateMVHitRatio(mvHitRatioMap);
+                });
     }
 }

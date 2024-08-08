@@ -33,4 +33,7 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_CREATE_FAILOVER_GROUP = 20301;
     public static final short OP_DROP_FAILOVER_GROUP = 20302;
     public static final short OP_UPDATE_FAILOVER_GROUP = 20303;
+
+    // AutoMV
+    public static final short OP_MV_CHANGE = 20401;
 }

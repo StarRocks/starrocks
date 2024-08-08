@@ -15,13 +15,18 @@
 package com.starrocks.sql.automv.tunespace;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.generator.QueryGenerateContext;
@@ -60,7 +65,7 @@ public class PlanPieceInfo {
     private static final long CURRENT_VERSION = 1;
     @ColumnDescription(type = BIGINT, autoIncrement = true, isBucketColumn = true)
     private long id;
-    @ColumnDescription(type = DATETIME)
+    @ColumnDescription(type = DATETIME, isPartitionColumn = true)
     private Timestamp ts;
     @ColumnDescription(type = VARBINARY)
     private String originalQuery;
@@ -87,7 +92,17 @@ public class PlanPieceInfo {
         List<Column> columns =
                 getColumns().stream().map(ColumnPlus::getColumn).collect(ImmutableList.toImmutableList());
 
-        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        List<Column> partitionKey = getColumns().stream().filter(ColumnPlus::isPartitionColumn)
+                .map(ColumnPlus::getColumn)
+                .collect(Collectors.toList());
+
+        PartitionInfo partitionInfo;
+        if (partitionKey.size() == 1 && partitionKey.get(0).getType().isDatetime()) {
+            partitionInfo = new RangePartitionInfo(partitionKey);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
+
         HashDistributionInfo distributionInfo = new HashDistributionInfo();
         distributionInfo.setBucketNum(numBucket);
 
@@ -99,8 +114,24 @@ public class PlanPieceInfo {
 
         OlapTable table = new OlapTable(0xdeadbeef, fqTableName, columns, KeysType.PRIMARY_KEYS,
                 partitionInfo, distributionInfo);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "true");
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "" + replicationNum);
+        properties.put(DynamicPartitionProperty.TIME_UNIT, "DAY");
+        properties.put(DynamicPartitionProperty.START, "-30");
+        properties.put(DynamicPartitionProperty.END, "3");
+        properties.put(DynamicPartitionProperty.ENABLE, "true");
+        properties.put(DynamicPartitionProperty.BUCKETS, "" + numBucket);
+        properties.put(DynamicPartitionProperty.PREFIX, "p");
 
-        return TablePlus.of(table, PlanPieceInfo.class, getColumns(), replicationNum);
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.buildReplicatedStorage();
+        tableProperty.buildEnablePersistentIndex();
+        tableProperty.buildReplicationNum();
+        tableProperty.buildDynamicProperty();
+        table.setTableProperty(tableProperty);
+        return TablePlus.of(table, PlanPieceInfo.class, getColumns());
     }
 
     public static PlanPieceInfo from(AutoMVOptions options, String name, OptExpression subPlan, boolean enableTrace,
@@ -115,14 +146,6 @@ public class PlanPieceInfo {
         }
         planPieceInfo.getTraits().setName(name);
         return planPieceInfo;
-    }
-
-    public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, OptExpression entirePlan,
-                                             Map<String, FQTable> fqTableMap) {
-        ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
-        PlanPiece planPiece =
-                PlanPieceBuilder.createPlanPiece(mvPlus.getMv().getName(), entirePlan, idConverter, fqTableMap);
-        return PlanPieceInfo.fromLegacyMV(mvPlus, planPiece, fqTableMap);
     }
 
     private static PlanPieceInfo from(String originalQuery, String query, PlanPiece piece,
@@ -178,13 +201,12 @@ public class PlanPieceInfo {
         return pieceInfo;
     }
 
-    public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, PlanPiece piece,
-                                             Map<String, FQTable> fqTableMap) {
+    public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, PlanPiece piece) {
         piece = AggregatePolicies.perfectMatch(piece);
         String originalQuery = mvPlus.getCreateMaterializedViewSql();
         QueryGenerateContext context = QueryGenerateContext.of(false, true);
         String query = QueryGenerator.generate(piece, context).getSubquery().getResult();
-        PlanPieceInfo pieceInfo = from(originalQuery, query, piece, fqTableMap);
+        PlanPieceInfo pieceInfo = from(originalQuery, query, piece, piece.getCommonState().getFqTableMap());
         PieceTraits traits = pieceInfo.getTraits();
         traits.setLegacyMV(LegacyMVInfo.from(mvPlus));
         traits.setName(mvPlus.getMv().getName());

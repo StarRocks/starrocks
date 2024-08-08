@@ -18,7 +18,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.MVLifeCycleAutoKeeper;
+import com.starrocks.scheduler.MVLifecycleAutoKeeper;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.qe.CustomizedQueryExecutor;
 import com.starrocks.sql.automv.util.AutoMVUtil;
@@ -40,7 +40,7 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class MVLifeCycleAutoKeeperTest {
+public class MVLifecycleAutoKeeperTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
 
     private static StarRocksAssert getStarRocksAssert() {
@@ -101,7 +101,7 @@ public class MVLifeCycleAutoKeeperTest {
     private Set<String> createMVs(String catalog, String db, String mvDb, List<Pair<String, String>> queryList)
             throws Throwable {
         AutoMVUtil.mockUpCustomizedQueryExecutor(queryList, catalog, db);
-        MVLifeCycleAutoKeeper keeper = new MVLifeCycleAutoKeeper();
+        MVLifecycleAutoKeeper keeper = new MVLifecycleAutoKeeper(new MVLifecycleManager());
         keeper.process(getStarRocksAssert().getCtx());
         return collectMVDigests(mvDb);
     }
@@ -146,6 +146,9 @@ public class MVLifeCycleAutoKeeperTest {
         List<Pair<String, String>> queryList = TestUtil.getSsbLineorderFlatQueryList().stream()
                 .filter(p -> p.first.equals(queryName))
                 .collect(Collectors.toList());
+        if (queryName.equals("Q2.3")) {
+            System.out.println("SATANSON");
+        }
         testHelper("default_catalog", "ssb", "automv_db", queryList);
     }
 

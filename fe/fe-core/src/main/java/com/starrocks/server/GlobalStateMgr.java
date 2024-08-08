@@ -205,7 +205,7 @@ import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
-import com.starrocks.scheduler.MVLifeCycleAutoKeeper;
+import com.starrocks.scheduler.MVLifecycleAutoKeeper;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
@@ -215,6 +215,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.SqlParser;
@@ -475,7 +476,7 @@ public class GlobalStateMgr {
     private final PipeScheduler pipeScheduler;
     private final MVActiveChecker mvActiveChecker;
 
-    private final MVLifeCycleAutoKeeper mvLifeCycleAutoKeeper;
+    private final MVLifecycleAutoKeeper mvLifeCycleAutoKeeper;
     private final ReplicationMgr replicationMgr;
 
     private final KeyMgr keyMgr;
@@ -737,7 +738,7 @@ public class GlobalStateMgr {
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
-        this.mvLifeCycleAutoKeeper = new MVLifeCycleAutoKeeper();
+        this.mvLifeCycleAutoKeeper = new MVLifecycleAutoKeeper(MVLifecycleManager.getInstance());
 
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1032,7 +1033,7 @@ public class GlobalStateMgr {
         return mvActiveChecker;
     }
     
-    public MVLifeCycleAutoKeeper getMvLifeCycleManager() {
+    public MVLifecycleAutoKeeper getMvLifeCycleManager() {
         return mvLifeCycleAutoKeeper;
     }
 
@@ -1573,6 +1574,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                 .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                .put(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, MVLifecycleManager.getInstance()::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1753,6 +1755,7 @@ public class GlobalStateMgr {
                 ((WarehouseManagerEPack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
                 keyMgr.save(dos);
+                MVLifecycleManager.getInstance().save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

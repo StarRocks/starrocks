@@ -39,6 +39,7 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -103,6 +104,12 @@ public class CustomizedQueryExecutor {
 
     public <T> List<T> query(Class<T> klass, List<ColumnPlus> columns, ConnectContext context, String sql) {
         Function<TRowFormat, T> unpacker = row -> ColumnPlus.unpack(klass, columns, row);
+        return query(context, sql).stream().map(unpacker).collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> query(List<Pair<String, Function<ByteBuffer, Object>>> namedUnpackerList,
+                                           ConnectContext context, String sql) {
+        Function<TRowFormat, Map<String, Object>> unpacker = row -> ColumnPlus.unpackIntoMap(namedUnpackerList, row);
         return query(context, sql).stream().map(unpacker).collect(Collectors.toList());
     }
 }

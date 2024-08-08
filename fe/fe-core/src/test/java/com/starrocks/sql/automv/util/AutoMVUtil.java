@@ -33,6 +33,8 @@ import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
+import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.automv.lifecycle.MVHitCountEntry;
 import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
@@ -59,6 +61,9 @@ import org.mockito.Mockito;
 import org.mockito.internal.stubbing.answers.DoesNothing;
 
 import java.io.IOException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.Month;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -126,9 +131,12 @@ public class AutoMVUtil {
                         QueryAuditEntry entry = new QueryAuditEntry();
                         entry.setCatalog(Objects.requireNonNull(catalog));
                         entry.setDb(Objects.requireNonNull(db));
+                        entry.setTimestamp(Timestamp.valueOf(LocalDateTime.of(2024, Month.JANUARY, 1, 12, 34, 56)));
                         entry.setStmt(q.second);
                         return entry;
                     }).collect(Collectors.toList());
+                } else if (MVHitCountEntry.class.equals(klass)) {
+                    return Collections.emptyList();
                 } else {
                     throw new InternalError("Error");
                 }
@@ -150,6 +158,14 @@ public class AutoMVUtil {
             authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(),
                     Mockito.any())).then(DoesNothing.doesNothing());
         }
+    }
+
+    public static void mockMVChangeLogPersistence() {
+        new MockUp<MVChangeLog>() {
+            @Mock
+            public void persist() {
+            }
+        };
     }
 
     public static void configDefaultAutoMV(SessionVariable sv) {

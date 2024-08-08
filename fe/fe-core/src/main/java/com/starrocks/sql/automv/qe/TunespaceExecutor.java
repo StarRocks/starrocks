@@ -28,7 +28,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -129,8 +128,8 @@ public class TunespaceExecutor {
 
             String qName = queryName;
             Supplier<String> nameGenerator = matchEntire || qName.equals("") ?
-                            () -> qName :
-                            Util.nextStringGenerator(qName + ".part.", "");
+                    () -> qName :
+                    Util.nextStringGenerator(qName + ".part.", "");
 
             List<Pair<String, OptExpression>> namedSubPlans = subPlans.stream()
                     .map(subPlan -> Pair.create(nameGenerator.get(), subPlan))
@@ -175,21 +174,12 @@ public class TunespaceExecutor {
             for (MaterializedView mv : mvLists) {
                 TableName fqName = new TableName(db.getCatalogName(), db.getFullName(), mv.getName());
                 MaterializedViewPlus mvPlus = MaterializedViewPlus.of(mv, fqName);
-                String createMvSql = mvPlus.getCreateMaterializedViewSql();
-                StatementBase stmt = RboOptimizer.parseAndAnalyze(context, createMvSql);
-                Preconditions.checkArgument(stmt instanceof CreateMaterializedViewStatement);
-                CreateMaterializedViewStatement createMvStmt = (CreateMaterializedViewStatement) stmt;
-                QueryStatement queryStmt = createMvStmt.getQueryStatement();
-                QueryStatementPlus queryStmtPlus = RboOptimizer.collectFQTables(queryStmt, context);
-                Map<String, FQTable> fqTableMap = queryStmtPlus.getFqTableMap();
-
-                Optional<OptExpression> optEntirePlan =
-                        RboOptimizer.getEntirePlan(queryStmt, context, PlanPiecePattern.getSPJG());
-                if (!optEntirePlan.isPresent()) {
+                Optional<PlanPiece> optPiece = RboOptimizer.getPlanPieceFromLegacyMV(mvPlus, context);
+                if (!optPiece.isPresent()) {
                     continue;
                 }
-                OptExpression entirePlan = optEntirePlan.get();
-                PlanPieceInfo pieceInfo = PlanPieceInfo.fromLegacyMV(mvPlus, entirePlan, fqTableMap);
+                PlanPiece piece = optPiece.get();
+                PlanPieceInfo pieceInfo = PlanPieceInfo.fromLegacyMV(mvPlus, piece);
                 pieceInfos.add(pieceInfo);
 
             }

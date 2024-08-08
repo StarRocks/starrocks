@@ -16,33 +16,42 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.generator.MVName;
+import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
 import com.starrocks.sql.automv.lifecycle.TunespaceIngester;
+import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.TieredMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Set;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
-public class MVLifeCycleAutoKeeper extends FrontendDaemon {
-    private static final Logger LOG = LogManager.getLogger(MVLifeCycleAutoKeeper.class);
+public class MVLifecycleAutoKeeper extends FrontendDaemon {
+    private static final Logger LOG = LogManager.getLogger(MVLifecycleAutoKeeper.class);
+
+    private final MVLifecycleManager mvLifecycleManager;
+
+    public MVLifecycleAutoKeeper(MVLifecycleManager mgr) {
+        mvLifecycleManager = Objects.requireNonNull(mgr);
+    }
 
     @Override
     protected void runAfterCatalogReady() {
         // reset if the interval has been changed
         setInterval(10L * 1000L);
 
-        if (!Config.enable_mv_lifecycle_auto_keeper || FeConstants.runningUnitTest) {
+        if (!GlobalVariable.isEnableAutoMVLifecycleKeeper() || FeConstants.runningUnitTest) {
             return;
         }
 
@@ -68,18 +77,24 @@ public class MVLifeCycleAutoKeeper extends FrontendDaemon {
         String auditDb = "starrocks_audit_db__";
         String auditTbl = "starrocks_audit_tbl__";
         String tsDb = "automv_ts_db__";
-        String tsTbl = "automv_ts_tbl_";
+        String tsTbl = "automv_ts_tbl__";
         String mvDb = "automv_db";
 
         TunespaceIngester ingester = TunespaceIngester.of(ctx, auditDb, auditTbl, tsDb, tsTbl, mvDb);
         ingester.prepare();
-        ingester.ingest();
+        ingester.ingest(mvLifecycleManager);
 
-        Set<String> legacyDigests = ingester.listLegacyMVs().stream()
-                .map(MVName::getDigest).collect(Collectors.toSet());
+        List<Pair<MVName, MaterializedViewPlus>> legacyMVs = ingester.listLegacyMVs();
+        mvLifecycleManager.associateMVWithLifecycle(legacyMVs);
+
+        // TODO(by satanson): At present, two MVs of the identical digest are considered as
+        //  duplicate MVs, however, the digest is computed from the MV's backbone query, so it does not
+        //  contain partition, distribution, short key and etc. information. in reality, users
+        //  maybe create multiple MVs of the identical digest each of which has different short key indexes.
+        //  in the future, multiple MVs of the identical digest would be taken into consideration.
         Predicate<String> needNotToCreate = mvName -> MVName.parse(mvName)
                 .map(MVName::getDigest)
-                .map(legacyDigests::contains)
+                .map(mvLifecycleManager::contains)
                 .orElse(false);
 
         TieredMap<String, String> mvMap = ingester.recommendMVs();
@@ -88,5 +103,7 @@ public class MVLifeCycleAutoKeeper extends FrontendDaemon {
                 .collect(TieredMap.toMap());
 
         ingester.createMVs(newMvMap);
+        ingester.collectMVHitRatio();
+        mvLifecycleManager.scanMVLifecycles();
     }
 }
