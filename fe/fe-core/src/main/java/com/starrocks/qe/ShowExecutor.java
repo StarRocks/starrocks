@@ -54,11 +54,10 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -268,8 +267,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -783,64 +780,16 @@ public class ShowExecutor {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            // create table catalogName.dbName.tableName (
-            StringBuilder createTableSql = new StringBuilder();
-            createTableSql.append("CREATE TABLE ")
-                    .append("`").append(tableName).append("`")
-                    .append(" (\n");
-
-            // Columns
-            List<String> columns = table.getFullSchema().stream().map(
-                    this::toMysqlDDL).collect(Collectors.toList());
-            createTableSql.append(String.join(",\n", columns))
-                    .append("\n)");
-
-            // Partition column names
-            if (table.getType() != JDBC && !table.isUnPartitioned()) {
-                createTableSql.append("\nPARTITION BY ( ")
-                        .append(String.join(", ", table.getPartitionColumnNames()))
-                        .append(" )");
-            }
-
-            // Location
-            String location = null;
-            if (table.isHiveTable() || table.isHudiTable()) {
-                location = ((HiveMetaStoreTable) table).getTableLocation();
-            } else if (table.isIcebergTable()) {
-                location = table.getTableLocation();
-            } else if (table.isDeltalakeTable()) {
-                location = table.getTableLocation();
-            } else if (table.isPaimonTable()) {
-                location = table.getTableLocation();
-            } else if (table instanceof IcebergView) {
-                location = table.getTableLocation();
-            }
-
-            // Comment
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
-            }
-
-            if (!Strings.isNullOrEmpty(location)) {
-                createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
-            }
-
             List<List<String>> rows = Lists.newArrayList();
-            rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
-            return new ShowResultSet(showStmt.getMetaData(), rows);
-        }
-
-        private String toMysqlDDL(Column column) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("  `").append(column.getName()).append("` ");
-            sb.append(column.getType().toSql());
-            sb.append(" DEFAULT NULL");
-
-            if (!Strings.isNullOrEmpty(column.getComment())) {
-                sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+            if (table.isConnectorView()) {
+                String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table);
+                rows.add(Lists.newArrayList(tableName, createViewSql));
+                return new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
+            } else {
+                String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+                rows.add(Lists.newArrayList(tableName, createTableSql));
+                return new ShowResultSet(showStmt.getMetaData(), rows);
             }
-
-            return sb.toString();
         }
 
         @Override
