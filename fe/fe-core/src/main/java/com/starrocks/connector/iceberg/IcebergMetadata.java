@@ -717,9 +717,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         Set<List<String>> scannedPartitions = new HashSet<>();
         PartitionSpec spec = icebergTable.getNativeTable().spec();
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
+        boolean existPartitionTransformedEvolution = ((IcebergTable) table).hasPartitionTransformedEvolution();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
             org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) fileScanTask.file().partition();
-            List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
+            List<String> values = PartitionUtil.getIcebergPartitionValues(
+                    spec, partitionData, existPartitionTransformedEvolution);
 
             if (values.size() != partitionColumns.size()) {
                 // ban partition evolution and non-identify column.
@@ -753,7 +755,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                             partitionField)).getType());
                 }
 
-                if (icebergTable.hasPartitionTransformedEvolution()) {
+                if (existPartitionTransformedEvolution) {
                     srTypes = partitionColumns.stream()
                             .map(Column::getType)
                             .collect(Collectors.toList());
