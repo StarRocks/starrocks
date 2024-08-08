@@ -403,9 +403,10 @@ public class StarRocksIcebergTableScan
     }
 
     private int remoteParallelism() {
-        List<ComputeNode> workers = GlobalStateMgr.getCurrentState().getNodeMgr()
-                .getClusterInfo().getAvailableComputeNodes();
-        return workers.stream().mapToInt(ComputeNode::getCpuCores).sum();
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .backendAndComputeNodeStream()
+                .filter(ComputeNode::isAvailable)
+                .mapToInt(ComputeNode::getCpuCores).sum();
     }
 
     private long totalSize(List<ManifestFile> manifests) {
