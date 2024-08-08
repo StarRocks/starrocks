@@ -115,7 +115,10 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulat
     std::vector<RowsetPtr> input_rowsets;
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
+    bool restrict_segment_count = config::enable_compaction_strict_segment_count_check;
+    int64_t max_segments = config::max_cumulative_compaction_num_singleton_deltas;
     for (uint32_t i = cumulative_point, size = _tablet_metadata->rowsets_size(); i < size; ++i) {
+        bool need_break = false;
         const auto& rowset = _tablet_metadata->rowsets(i);
         if (rowset.has_delete_predicate()) {
             if (!input_rowsets.empty()) {
@@ -125,11 +128,17 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulat
                 continue;
             }
         }
-
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
-
-        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
-        if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
+        size_t segment_limit = 0; // 0 means no limit
+        size_t cur_segment_score = rowset.overlapped() ? rowset.segments_size() : 1;
+        if (segment_num_score + cur_segment_score >= max_segments) {
+            if (restrict_segment_count) {
+                segment_limit = std::min((size_t)max_segments - segment_num_score, cur_segment_score);
+            }
+            need_break = true;
+        }
+        segment_num_score += cur_segment_score;
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, segment_limit));
+        if (need_break) {
             break;
         }
     }
@@ -145,7 +154,10 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_base_ro
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
     for (uint32_t i = 0; i < cumulative_point; ++i) {
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
+        // NOTE: config::enable_strict_compaction_segment_count is not checked here since
+        //       base rowset will never overlap
         if (++segment_num_score >= config::max_base_compaction_num_singleton_deltas) {
             break;
         }
@@ -393,13 +405,24 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
     // But in the old version of compaction, the user may set a large min_cumulative_compaction_num_singleton_deltas
     // to avoid TOO_MANY_VERSION errors, it is unnecessary in size tiered compaction
     if (selected_level->segment_num >= min_compaction_segment_num) {
+        uint32_t segment_num_score = 0;
+        bool restrict_segment_count = config::enable_compaction_strict_segment_count_check;
         int64_t max_segments = config::max_cumulative_compaction_num_singleton_deltas;
         for (auto i : selected_level->rowsets) {
             DCHECK_LT(i, _tablet_metadata->rowsets_size());
-            auto rowset = std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i);
-            max_segments -= rowset->metadata().overlapped() ? rowset->metadata().segments_size() : 1;
-            input_rowsets.emplace_back(std::move(rowset));
-            if (max_segments <= 0) {
+            bool need_break = false;
+            const auto& rowset = _tablet_metadata->rowsets(i);
+            size_t segment_limit = 0; // 0 means no limit
+            size_t cur_segment_score = rowset.overlapped() ? rowset.segments_size() : 1;
+            if (segment_num_score + cur_segment_score >= max_segments) {
+                if (restrict_segment_count) {
+                    segment_limit = std::min((size_t)max_segments - segment_num_score, cur_segment_score);
+                }
+                need_break = true;
+            }
+            segment_num_score += cur_segment_score;
+            input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, segment_limit));
+            if (need_break) {
                 break;
             }
         }
