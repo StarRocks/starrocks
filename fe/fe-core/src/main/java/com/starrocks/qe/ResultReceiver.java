@@ -40,6 +40,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
@@ -124,7 +125,7 @@ public class ResultReceiver {
                 byte[] serialResult = request.getSerializedResult();
                 if (serialResult != null && serialResult.length > 0) {
                     TResultBatch resultBatch = new TResultBatch();
-                    TDeserializer deserializer = new TDeserializer();
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
                     rowBatch.setEos(pResult.eos);
