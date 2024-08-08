@@ -159,6 +159,29 @@ void ArrayColumn::append_default(size_t count) {
     _offsets->append_value_multiple_times(&offset, count);
 }
 
+ColumnPtr ArrayColumn::replicate(const std::vector<uint32_t>& offsets) {
+    auto dest = this->clone_empty();
+    auto dest_size = offsets.size() - 1;
+    DCHECK(this->size() >= dest_size) << "Ths size of the source column is less when duplicating it.";
+    dest->reserve(offsets.back());
+
+    size_t dest_element_size = 0;
+    for (int i = 0; i < dest_size; i++) {
+        dest_element_size += get_element_size(i) * (offsets[i + 1] - offsets[i]);
+    }
+    if (dest_element_size >= MAX_CAPACITY_LIMIT) {
+        throw std::runtime_error("Size of ArrayColumn exceed the limit");
+    }
+    std::string err_msg;
+    for (int i = 0; i < dest_size; ++i) {
+        dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+        if (UNLIKELY(capacity_limit_reached(&err_msg))) {
+            throw std::runtime_error("Size of ArrayColumn exceed the limit");
+        }
+    }
+    return dest;
+}
+
 void ArrayColumn::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
