@@ -494,9 +494,8 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(long warehouseId) {
+    public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService) {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         if (RunMode.isSharedDataMode()) {
             List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
             for (Long cnId : computeNodeIds) {
