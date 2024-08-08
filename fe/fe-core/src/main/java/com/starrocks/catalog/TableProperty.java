@@ -435,17 +435,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionTTL() {
+<<<<<<< HEAD
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
                 String.valueOf(INVALID)));
+=======
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
+>>>>>>> 889a910f0e ([BugFix] Fix partition live number not update (#49437))
         return this;
     }
 
     public TableProperty buildPartitionLiveNumber() {
-        if (partitionTTLNumber != INVALID) {
-            return this;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER));
         }
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
-                String.valueOf(INVALID)));
         return this;
     }
 

@@ -97,4 +97,37 @@ public class TablePropertyTest {
         in.close();
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPartitionTTLNumberSerialization() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "2");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.buildPartitionLiveNumber();
+        tableProperty.buildPartitionTTL();
+        Assert.assertEquals(2, tableProperty.getPartitionTTLNumber());
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        TableProperty newTableProperty = TableProperty.read(in);
+        Assert.assertEquals(2, newTableProperty.getPartitionTTLNumber());
+        in.close();
+
+        // 3. Update again
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "3");
+        newTableProperty.modifyTableProperties(properties);
+        newTableProperty.buildPartitionLiveNumber();
+        newTableProperty.buildPartitionTTL();
+        Assert.assertEquals(3, newTableProperty.getPartitionTTLNumber());
+    }
+>>>>>>> 889a910f0e ([BugFix] Fix partition live number not update (#49437))
 }
