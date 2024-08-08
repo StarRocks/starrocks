@@ -69,15 +69,16 @@ SET GLOBAL enable_scan_datacache=false;
 
 ### 填充规则
 
-自 v3.3.2 起，为了提高 Data Cache 的缓存命中率，先按照如下默认规则填充：
+自 v3.3.2 起，为了提高 Data Cache 的缓存命中率，StarRocks 按照如下规则填充 Data Cache：
 
-* 对于非 SELECT 的查询， 不进行填充。比如 `ANALYZE TABLE`，`INSERT INTO xxx SELECT xx` 等等。
+- 对于非 SELECT 的查询， 不进行填充，比如 `ANALYZE TABLE`，`INSERT INTO SELECT` 等。
+- 扫描一个表的所有分区时，不进行填充。但如果该表仅有一个分区，默认进行填充。
+- 扫描一个表的所有列时，不进行填充。但如果该表仅有一个列，默认进行填充。
+- 对于非 Hive、Paimon、Delta Lake、Hudi 或 Iceberg 的表，不进行填充。
 
-* 对一个表分区全扫的时候，不进行填充。但如果只有一个分区则例外，默认进行填充。
-* 对一个表的所有列扫描的时候，不进行填充。但如果只有一个列则例外，默认进行填充。
-* 对于非 `hive/paimon/delta lake/hudi/iceberg` 的表，不进行填充。
+您可以通过 `EXPLAIN VERBOSE` 命令查看指定查询的具体填充行为。
 
-可以通过 `explain verbose` 来查看本次查询不同表的具体填充行为：
+示例：
 
 ```sql
 mysql> explain verbose select col1 from hudi_table;
@@ -91,9 +92,9 @@ mysql> explain verbose select col1 from hudi_table;
 +-----------------------------------------+
 ```
 
-`dataCacheOptions={populate: false}` 即意味着不填充，因为它是分区全扫的 SQL。
+其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为改查询会扫描全部分区。
 
-可以通过 Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+您还可以通过 Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
 
 ### 填充方式
 
