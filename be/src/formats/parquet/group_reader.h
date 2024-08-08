@@ -93,15 +93,22 @@ public:
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
-    // init used to init column reader, init dict_filter_ctx and devide active/lazy
+    // init used to init column reader, and devide active/lazy
+    // then we can use inited column collect io range.
     Status init();
-    // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                            ColumnIOType type = ColumnIOType::PAGES);
-    void set_end_offset(int64_t value) { _end_offset = value; }
+
+private:
+    void _set_end_offset(int64_t value) { _end_offset = value; }
+
+    // deal_with_pageindex need collect pageindex io range first, it will collect all row groups' io together,
+    // so it should be done in file reader. when reading the current row group, we need first deal_with_pageindex,
+    // and then we can collect io range based on pageindex.
+    Status _deal_with_pageindex();
 
     void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
