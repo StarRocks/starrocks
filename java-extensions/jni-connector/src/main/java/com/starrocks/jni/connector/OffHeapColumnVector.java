@@ -229,6 +229,12 @@ public class OffHeapColumnVector {
             putArrayOffset(elementsAppended, offset, 0);
         }
 
+        if (type.isStruct()) {
+            for (int i = 0; i < childColumns.length; i++) {
+                childColumns[i].appendValue(null);
+            }
+        }
+
         return elementsAppended++;
     }
 
@@ -498,13 +504,6 @@ public class OffHeapColumnVector {
         ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
-            if (type.isStruct()) {
-                List<ColumnValue> nulls = new ArrayList<>();
-                for (int i = 0; i < type.childTypes.size(); i++) {
-                    nulls.add(null);
-                }
-                appendStruct(nulls);
-            }
             return;
         }
 
@@ -627,11 +626,13 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
-            case DATE:
+                sb.append(getUTF8String(i));
+                break;
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
-                sb.append(getUTF8String(i));
+                // using long
+                sb.append(getLong(i));
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -716,6 +717,21 @@ public class OffHeapColumnVector {
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
+                if (type.isStruct()) {
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
+                        throw new RuntimeException(
+                                "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
+                                elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +
+                                ", elementsAppended=" + c.elementsAppended);
+                    }
+                }
             }
         } else {
             checker.check(context + "#data", data);
