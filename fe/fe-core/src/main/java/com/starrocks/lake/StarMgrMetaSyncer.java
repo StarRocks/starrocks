@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -284,7 +285,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     // return true if starmgr shard meta changed
-    private boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
+    @VisibleForTesting
+    public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
@@ -299,6 +301,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .stream()
                     .map(Partition::getSubPartitions)
                     .forEach(physicalPartitions::addAll);
+            table.setShardGroupChanged(false);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -306,13 +309,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             locker.lockDatabase(db, LockType.READ);
             try {
-                if (table.getState() != OlapTable.OlapTableState.NORMAL) {
-                    return false; // table might be in schema change
+                // shard group might be changed by automatic bucket or schema change
+                if (table.hasShardGroupChanged()) {
+                    return false;
                 }
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
-                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                Set<Long> starmgrShardIdsSet = null;
+                if (redundantGroupToShards.get(groupId) != null) {
+                    starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                } else {
+                    List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                    starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                }
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : materializedIndex.getTablets()) {
