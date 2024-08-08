@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTab
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
+import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
@@ -280,7 +281,7 @@ public class Optimizer {
                 .setPlanMemCosts(costs.getMemoryCost());
         OptExpression finalPlan;
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
-            finalPlan = physicalRuleRewrite(rootTaskContext, result);
+            finalPlan = physicalRuleRewrite(connectContext, rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression("final plan after physical rewrite:\n%s", finalPlan);
         }
 
@@ -813,7 +814,7 @@ public class Optimizer {
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
-    private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
+    private OptExpression physicalRuleRewrite(ConnectContext connectContext, TaskContext rootTaskContext, OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
 
         int planCount = result.getPlanCount();
@@ -849,6 +850,7 @@ public class Optimizer {
         }
 
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
+        result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
 
         result.setPlanCount(planCount);
         return result;
