@@ -42,6 +42,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -294,12 +295,13 @@ public:
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
     const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
+    const int64_t allocator_memory_usage() const { return _allocator->memory_usage(); }
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
-            return hash_set_memory_usage() + agg_state_memory_usage();
+            return hash_set_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
-            return hash_map_memory_usage() + agg_state_memory_usage();
+            return hash_map_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
         } else {
             return 0;
         }
@@ -408,6 +410,8 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // used to count heap memory usage of agg states
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
