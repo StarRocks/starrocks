@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # engines
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `engines` 提供有关存储引擎的信息。
 
 `engines` 提供以下字段：

@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # key_column_usage
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `key_column_usage` identifies all columns that are restricted by some unique, primary key, or foreign key constraint.
 
 The following fields are provided in `key_column_usage`:
