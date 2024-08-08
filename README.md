@@ -108,6 +108,8 @@ We welcome all kinds of contributions from the community, individuals and partne
 1. See [Contributing.md](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) to get started.
 2. Set up StarRocks development environment:
 * [IDE Setup](https://docs.starrocks.io/docs/developers/development-environment/ide-setup/) 
+* [Compile StarRocks with Docker](https://docs.starrocks.io/docs/developers/build-starrocks/Build_in_docker/) 
+* [Deploy StarRocks manually](https://docs.starrocks.io/docs/deployment/deploy_manually/) 
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
