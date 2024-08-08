@@ -25,9 +25,11 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from typing import List
 
+import pymysql
 from nose import tools
 from parameterized import parameterized
 from cup import log
@@ -36,6 +38,7 @@ from lib import sr_sql_lib
 from lib import choose_cases
 from lib import sql_annotation
 from lib.sr_sql_lib import self_print
+from lib import *
 
 # model: run case model, True => Record mode
 #    - t: run sql and save result into r dir
@@ -45,7 +48,7 @@ record_mode = os.environ.get("record_mode", "false") == "true"
 case_list = choose_cases.choose_cases(record_mode).case_list
 
 if len(case_list) == 0:
-    print("** INFO: No case! **")
+    self_print(f"{'-' * 60}\n** INFO: No case! **", ColorEnum.RED)
     sys.exit(0)
 
 
@@ -102,7 +105,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """tear down"""
         super().tearDown()
 
-        log.info("[TeadDown begin]: %s" % self.case_info.name)
+        log.info("[TearDown begin]: %s" % self.case_info.name)
 
         for each_db in self.db:
             self.drop_database(each_db)
@@ -123,189 +126,35 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        log.info("[TeadDown end]: %s" % self.case_info.name)
+        log.info("[TearDown end]: %s" % self.case_info.name)
 
-    # -------------------------------------------
-    #         [CASE]
-    # -------------------------------------------
-    @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
-    @sql_annotation.timeout()
-    def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
-        """
-        sql tester
-        Args:
-            case_info:
-                name:       case name
-                file:        case info {table: duplicate, file: A.csv ...}
-                sql:        run sql
-                result:     result
-        """
-        # -------------------------------------------
-        #               [CASE EXECUTE]
-        # -------------------------------------------
-
-        # replace all db_name with each run
-        self.case_info = case_info
-        sql_list = self._init_data(case_info.sql)
-        print("[case name]: ", case_info.name)
-        print("[case file]: ", case_info.file)
-        print("[case db]: ", self.db)
-        print("[case resource: ]: ", self.resource)
-
-        log.info(
-            """
-*********************************************
-Start to run: %s
-*********************************************"""
-            % case_info.name
-        )
-        # record mode, init info
-        if record_mode:
-            self.res_log.append(case_info.info)
-
-        for sql_id, sql in enumerate(sql_list):
-            uncheck = False
-            order = False
-            ori_sql = sql
-            var = None
-
-            if record_mode:
-                self.res_log.append(case_info.ori_sql[sql_id])
-
-            # uncheck flag, owns the highest priority
-            if sql.startswith(sr_sql_lib.UNCHECK_FLAG):
-                uncheck = True
-                sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
-
-            if sql.startswith(sr_sql_lib.TRINO_FLAG):
-                sql = sql[len(sr_sql_lib.TRINO_FLAG):]
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-
-                self_print("[TRINO]: %s" % sql)
-                log.info("[%s] TRINO: %s" % (sql_id, sql))
-                actual_res = self.trino_execute_sql(sql)
-
-                if record_mode:
-                    self.treatment_record_res(sql, actual_res)
-
-                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-                # pretreatment actual res
-                actual_res, actual_res_log = self.pretreatment_res(actual_res)
-
-            elif sql.startswith(sr_sql_lib.SPARK_FLAG):
-                sql = sql[len(sr_sql_lib.SPARK_FLAG):]
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-
-                self_print("[SPARK]: %s" % sql)
-                log.info("[%s] SPARK: %s" % (sql_id, sql))
-                actual_res = self.spark_execute_sql(sql)
-
-                if record_mode:
-                    self.treatment_record_res(sql, actual_res)
-
-                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-                # pretreatment actual res
-                actual_res, actual_res_log = self.pretreatment_res(actual_res)
-
-            elif sql.startswith(sr_sql_lib.HIVE_FLAG):
-                sql = sql[len(sr_sql_lib.HIVE_FLAG):]
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-
-                self_print("[HIVE]: %s" % sql)
-                log.info("[%s] HIVE: %s" % (sql_id, sql))
-                actual_res = self.hive_execute_sql(sql)
-
-                if record_mode:
-                    self.treatment_record_res(sql, actual_res)
-
-                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-                # pretreatment actual res
-                actual_res, actual_res_log = self.pretreatment_res(actual_res)
-
-            # execute command in files
-            elif sql.startswith(sr_sql_lib.SHELL_FLAG):
-                sql = sql[len(sr_sql_lib.SHELL_FLAG):]
-
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-                self_print("[SHELL]: %s" % sql)
-                log.info("[%s] SHELL: %s" % (sql_id, sql))
-                actual_res = self.execute_shell(sql)
-
-                if record_mode:
-                    self.record_shell_res(sql, actual_res)
-
-            elif sql.startswith(sr_sql_lib.FUNCTION_FLAG):
-                # function invoke
-                sql = sql[len(sr_sql_lib.FUNCTION_FLAG):]
-
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-                self_print("[FUNCTION]: %s" % sql)
-                log.info("[%s] FUNCTION: %s" % (sql_id, sql))
-                actual_res = eval("self.%s" % sql)
-
-                if record_mode:
-                    self.record_function_res(sql, actual_res)
-            else:
-                # sql
-                log.info("[%s] SQL: %s" % (sql_id, sql))
-
-                # order flag
-                if sql.startswith(sr_sql_lib.ORDER_FLAG):
-                    order = True
-                    sql = sql[len(sr_sql_lib.ORDER_FLAG):]
-
-                # analyse var set
-                var, sql = self.analyse_var(sql)
-
-                actual_res = self.execute_sql(sql)
-                self_print("[SQL]: %s" % sql)
-
-                if record_mode:
-                    self.treatment_record_res(sql, actual_res)
-
-                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-                # pretreatment actual res
-                actual_res, actual_res_log = self.pretreatment_res(actual_res)
-
-            if not record_mode and not uncheck:
-                # check mode only work in validating mode
-                # pretreatment expect res
-                expect_res = case_info.result[sql_id]
-                expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
-
-                log.info("[%s.result]: \n\t- [exp]: %s\n\t- [act]: %s" % (sql_id, expect_res_for_log, actual_res))
-
-                # -------------------------------------------
-                #               [CHECKER]
-                # -------------------------------------------
-                self.check(sql_id, sql, expect_res, actual_res, order, ori_sql)
-
-            # set variable dynamically
-            if var:
-                self.__setattr__(var, actual_res)
-
-    def _init_data(self, sql_list: List[str]) -> List[str]:
+    def _init_data(self, sql_list: List) -> List:
         self.db = list()
         self.resource = list()
 
         sql_list = self._replace_uuid_variables(sql_list)
 
         for sql in sql_list:
-            db_name = self._get_db_name(sql)
-            if len(db_name) > 0:
-                self.db.append(db_name)
-            resource_name = self._get_resource_name(sql)
-            if len(resource_name) > 0:
-                self.resource.append(resource_name)
+
+            if isinstance(sql, str):
+                db_name = self._get_db_name(sql)
+                if len(db_name) > 0:
+                    self.db.append(db_name)
+                resource_name = self._get_resource_name(sql)
+                if len(resource_name) > 0:
+                    self.resource.append(resource_name)
+            elif isinstance(sql, dict):
+                tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
+
+                for each_sql in sql["stat"]:
+                    db_name = self._get_db_name(each_sql)
+                    if len(db_name) > 0:
+                        self.db.append(db_name)
+                    resource_name = self._get_resource_name(each_sql)
+                    if len(resource_name) > 0:
+                        self.resource.append(resource_name)
+            else:
+                tools.ok_(False, "Init data error!")
 
         self._clear_db_and_resource_if_exists()
 
@@ -328,34 +177,67 @@ Start to run: %s
         self.db.append(db_name)
         self.execute_sql("CREATE DATABASE %s;" % db_name)
         self.execute_sql("USE %s;" % db_name)
-        print("[SQL]: CREATE DATABASE %s;" % db_name)
-        print("[SQL]: USE %s;" % db_name)
+        self_print("[SQL]: CREATE DATABASE %s;" % db_name)
+        self_print("[SQL]: USE %s;" % db_name)
 
     def _check_db_unique(self):
         all_db_dict = dict()
         for case in case_list:
             sql_list = self._replace_uuid_variables(case.sql)
             for sql in sql_list:
-                db_name = self._get_db_name(sql)
-                if len(db_name) > 0:
-                    all_db_dict.setdefault(db_name, set()).add(case.name)
+                if isinstance(sql, str):
+                    db_name = self._get_db_name(sql)
+                    if len(db_name) > 0:
+                        all_db_dict.setdefault(db_name, set()).add(case.name)
+                elif isinstance(sql, dict):
+                    tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
+
+                    for each_sql in sql["stat"]:
+                        db_name = self._get_db_name(each_sql)
+                        if len(db_name) > 0:
+                            all_db_dict.setdefault(db_name, set()).add(case.name)
+                else:
+                    tools.ok_(False, "Check db uniqueness error!")
+
         error_info_dict = {db: list(cases) for db, cases in all_db_dict.items() if len(cases) > 1}
         tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
 
     @staticmethod
-    def _replace_uuid_variables(sql_list: List[str]) -> List[str]:
+    def _replace_uuid_variables(sql_list: List) -> List:
         ret = list()
         variable_dict = dict()
         for sql in sql_list:
-            uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
-            for each_uuid in uuid_vars:
-                if each_uuid not in variable_dict:
-                    variable_dict[each_uuid] = uuid.uuid4().hex
+
+            if isinstance(sql, str):
+                uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
+                for each_uuid in uuid_vars:
+                    if each_uuid not in variable_dict:
+                        variable_dict[each_uuid] = uuid.uuid4().hex
+            elif isinstance(sql, dict):
+                tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
+
+                for each_sql in sql["stat"]:
+                    uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_sql)
+                    for each_uuid in uuid_vars:
+                        if each_uuid not in variable_dict:
+                            variable_dict[each_uuid] = uuid.uuid4().hex
+            else:
+                tools.ok_(False, "Replace uuid error!")
 
         for sql in sql_list:
-            for each_var in variable_dict:
-                sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
-            ret.append(sql)
+            if isinstance(sql, str):
+                for each_var in variable_dict:
+                    sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
+                ret.append(sql)
+            elif isinstance(sql, dict):
+                tmp_stat = []
+                for each_sql in sql["stat"]:
+                    for each_var in variable_dict:
+                        each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
+                    tmp_stat.append(each_sql)
+                sql["stat"] = tmp_stat
+                ret.append(sql)
+
         return ret
 
     @staticmethod
@@ -371,3 +253,96 @@ Start to run: %s
         if "CREATE EXTERNAL RESOURCE" in sql.upper():
             matches = re.findall(r'CREATE EXTERNAL RESOURCE \"?([a-zA-Z0-9_-]+)\"?', sql, flags=re.IGNORECASE)
         return matches[0] if len(matches) > 0 else ""
+
+    # -------------------------------------------
+    #         [CASE]
+    # -------------------------------------------
+    @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
+    @sql_annotation.timeout()
+    def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
+        """
+        sql tester
+        Args:
+            case_info:
+                name:       case name
+                file:        case info {table: duplicate, file: A.csv ...}
+                sql:        run sql
+                result:     result
+        """
+        # -------------------------------------------
+        #               [CASE EXECUTE]
+        # -------------------------------------------
+
+        # replace all db_name with each run
+        self.case_info = case_info
+        self_print("-" * 60)
+        self_print(f"[case name]: {case_info.name}", ColorEnum.GREEN, bold=True)
+        self_print(f"[case file]: {case_info.file}", ColorEnum.GREEN, bold=True)
+        self_print("-" * 60)
+
+        sql_list = self._init_data(case_info.sql)
+
+        self_print(f"\t → case db: {self.db}")
+        self_print(f"\t → case resource: {self.resource}")
+
+        log.info(
+            """
+*********************************************
+Start to run: %s
+*********************************************"""
+            % case_info.name
+        )
+        # record mode, init info
+        if record_mode:
+            self.res_log.append(case_info.info)
+
+        for sql_id, sql in enumerate(sql_list):
+            uncheck = False
+            order = False
+            ori_sql = sql
+            var = None
+
+            if isinstance(sql, str):
+
+                if record_mode:
+                    self.res_log.append(case_info.ori_sql[sql_id])
+
+                # uncheck flag, owns the highest priority
+                if sql.startswith(sr_sql_lib.UNCHECK_FLAG):
+                    uncheck = True
+                    sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
+
+                actual_res, actual_res_log, var = self.execute_single_statement(sql, sql_id, record_mode)
+
+                if not record_mode and not uncheck:
+                    # check mode only work in validating mode
+                    # pretreatment expect res
+                    expect_res = case_info.result[sql_id]
+                    expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
+
+                    log.info(f"""[{sql_id}.result]: 
+    - [exp]: {expect_res_for_log}
+    - [act]: {actual_res}""")
+
+                    # -------------------------------------------
+                    #               [CHECKER]
+                    # -------------------------------------------
+                    self.check(sql_id, sql, expect_res, actual_res, order, ori_sql)
+
+            elif isinstance(sql, dict):
+                # loop statement, check loop type
+                tools.eq_(sql["type"], sr_sql_lib.LOOP_FLAG, f"Statement Type error {json.dumps(sql)}")
+
+                # loop properties
+                loop_timeout = sql["prop"]["timeout"]
+                loop_interval = sql["prop"]["interval"]
+                loop_desc = sql["prop"]["desc"]
+
+                self_print(f"[LOOP] start: {loop_desc}...", color=ColorEnum.CYAN, logout=True)
+                if record_mode:
+                    self.res_log.append("".join(sql["ori"]))
+
+                loop_check_res = self.execute_loop_statement(sql["stat"], sql_id, loop_timeout, loop_interval)
+
+                self_print(f"[LOOP] end!", color=ColorEnum.CYAN, logout=True)
+                tools.ok_(loop_check_res, f"Loop checker fail: {''.join(sql['ori'])}!")

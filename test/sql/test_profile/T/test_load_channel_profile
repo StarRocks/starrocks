@@ -14,13 +14,21 @@ CREATE MATERIALIZED VIEW `mv1` AS
 SELECT `v1`, SUM(`v2`) FROM `t0`
 GROUP BY `v1`;
 
-function: wait_materialized_view_finish()
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 10, "desc": "wait alter table finish"}
+  result=SHOW ALTER MATERIALIZED VIEW;
+  CHECK: to_array(${result})[-1][8] == "FINISHED"
+} END LOOP
 
 CREATE MATERIALIZED VIEW `mv2` AS
 SELECT `v1`, MAX(`v3`) FROM `t0`
 GROUP BY `v1`;
 
-function: wait_materialized_view_finish()
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 10, "desc": "wait alter table finish2"}
+  result=SHOW ALTER MATERIALIZED VIEW;
+  CHECK: to_array(${result})[-1][8] == "FINISHED"
+} END LOOP
 
 INSERT INTO `t0` (v1, v2, v3) values
     (1, 1, 1),

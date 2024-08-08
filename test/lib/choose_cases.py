@@ -36,11 +36,8 @@ from nose import tools
 
 from lib import skip
 from lib import sr_sql_lib
-from lib.sr_sql_lib import RESULT_FLAG, UNCHECK_FLAG
-from lib.sr_sql_lib import RESULT_END_FLAT
-from lib.sr_sql_lib import SHELL_FLAG
-from lib.sr_sql_lib import FUNCTION_FLAG
-from lib.sr_sql_lib import NAME_FLAG
+from lib import *
+
 
 CASE_DIR = "sql"
 
@@ -161,6 +158,56 @@ class ChooseCase(object):
 
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
+
+        def __read_single_stat_and_result(_line_content, _line_id, _stat_list, _res_list, _is_in_loop, _loop_stat_list = []):
+            this_line_res = []
+            this_line_command = [_line_content]
+            _line_id += 1
+
+            if _line_content.startswith(UNCHECK_FLAG):
+                _line_content = _line_content[len(UNCHECK_FLAG):]
+
+            if _line_content.startswith(SHELL_FLAG) or _line_content.startswith(FUNCTION_FLAG):
+                # shell/function only support 1 line
+                pass
+            elif _is_in_loop and _line_content.startswith(CHECK_FLAG):
+                # check statement in loop
+                pass
+            else:
+                # SQL lines
+                if _line_content.endswith(";"):
+                    # SQL end with ;, also 1 line
+                    pass
+                else:
+                    # SQL support lines, read the SQL lines
+                    while _line_id < len(f_lines):
+                        _line_content = f_lines[_line_id].rstrip("\n")
+                        _line_id += 1
+                        if not _line_content.startswith("--"):
+                            this_line_command.append(_line_content)
+                            if _line_content.endswith(";"):
+                                # not the end of SQL
+                                break
+
+            # SQL result
+            if _line_id < len(f_lines) and f_lines[_line_id].startswith(RESULT_FLAG):
+                while _line_id < len(f_lines):
+                    _line_content = f_lines[_line_id].rstrip("\n")
+                    this_line_res.append(_line_content)
+                    _line_id += 1
+
+                    if _line_content.startswith(RESULT_END_FLAT):
+                        break
+
+            if _is_in_loop:
+                # loop list
+                _loop_stat_list.append("\n".join(this_line_command))
+            else:
+                _stat_list.append("\n".join(this_line_command))
+                _res_list.append("\n".join(this_line_res[1:-1] if len(this_line_res) > 0 else []))
+
+            return _line_id
+
         with open(file, "r") as f:
             f_lines = f.readlines()
 
@@ -178,6 +225,8 @@ class ChooseCase(object):
         tags = []
         tmp_sql = []
         tmp_res = []
+        tmp_loop_stat = []
+        in_loop_flag = False
 
         while line_id < len(f_lines):
             line_content = f_lines[line_id].rstrip("\n")
@@ -189,6 +238,10 @@ class ChooseCase(object):
 
             # line of case info: name/attrs...
             if line_content.startswith(NAME_FLAG):
+
+                # check loop finished
+                tools.ok_(not in_loop_flag, "LOOP FORMAT ERROR!")
+
                 # save previous case
                 if len(tmp_sql) > 0:
                     if case_regex is not None and not re.compile(case_regex).search(name):
@@ -220,48 +273,59 @@ class ChooseCase(object):
 
             elif line_content.startswith(RESULT_FLAG) or line_content.startswith(RESULT_END_FLAT):
                 # 1st line of case can't be result
-                tools.assert_true(False, "case file illegal: file: %s, line: %s" % (file, line_id))
-            else:
-                # 1st line of command, SQL/SHELL/FUNCTION
-                this_line_res = []
-                this_line_command = [line_content]
+                tools.ok_(False, "case file illegal: file: %s, line: %s" % (file, line_id))
+            elif line_content.startswith(LOOP_FLAG):
+                l_loop_line = line_id
+
+                # loop -- end loop
+                if re.compile(f'{LOOP_FLAG}(\\s)*{{(\\s)*').fullmatch(line_content):
+                    in_loop_flag = True
+                else:
+                    tools.ok_(False, "Case file loop struct illegal: file: %s, line: %s" % (file, line_id))
+
+                line_id += 1
+                tmp_loop_stat.clear()
+                tmp_loop_prop = {}
+
+                # fetch property json
+                if f_lines[line_id].strip().startswith(PROPERTY_FLAG):
+                    prop_str = f_lines[line_id].strip().lstrip(PROPERTY_FLAG)
+                    try:
+                        tmp_loop_prop = json.loads(prop_str)
+                    except Exception:
+                        raise AssertionError("Loop property's format must be json: %s" % prop_str)
+                    tmp_loop_prop.setdefault("interval", 10)
+                    tmp_loop_prop.setdefault("timeout", 60)
+                    tmp_loop_prop.setdefault("desc", "LOOP STATEMENT")
+
+                    line_id += 1
+
+                while (line_id < len(f_lines)
+                       and not re.compile(f'}}(\\s)*{END_LOOP_FLAG}').fullmatch(f_lines[line_id].strip())):
+                    # read loop stats, unnecessary to record result
+                    line_content = f_lines[line_id].strip()
+                    line_id = __read_single_stat_and_result(line_content, line_id, tmp_sql, tmp_res, in_loop_flag, tmp_loop_stat)
+                tools.assert_less(line_id, len(f_lines), "LOOP FORMAT ERROR!")
+
+                # reach the end loop line
+                in_loop_flag = False
+                r_loop_line = line_id
+
+                tools.assert_greater(len(tmp_loop_stat), 0, "LOOP FORMAT ERROR(EMPTY)!")
+                tmp_sql.append({
+                    "type": LOOP_FLAG,
+                    "stat": tmp_loop_stat,
+                    "prop": tmp_loop_prop,
+                    "ori": f_lines[l_loop_line: r_loop_line+1]
+                })
+                tmp_res.append(None)
                 line_id += 1
 
-                if line_content.startswith(UNCHECK_FLAG):
-                    line_content = line_content[len(UNCHECK_FLAG):]
+            else:
+                # 1st line of command, SQL/SHELL/FUNCTION
+                line_id = __read_single_stat_and_result(line_content, line_id, tmp_sql, tmp_res, in_loop_flag)
 
-                if line_content.startswith(SHELL_FLAG) or line_content.startswith(FUNCTION_FLAG):
-                    # shell/function only support 1 line
-                    pass
-                else:
-                    # SQL lines
-                    if line_content.endswith(";"):
-                        # SQL end with ;, also 1 line
-                        pass
-                    else:
-                        # SQL support lines, read the SQL lines
-                        while line_id < len(f_lines):
-                            line_content = f_lines[line_id].rstrip("\n")
-                            line_id += 1
-                            if not line_content.startswith("--"):
-                                this_line_command.append(line_content)
-                                if line_content.endswith(";"):
-                                    # not the end of SQL
-                                    break
-
-                # SQL result
-                if line_id < len(f_lines) and f_lines[line_id].startswith(RESULT_FLAG):
-                    while line_id < len(f_lines):
-                        line_content = f_lines[line_id].rstrip("\n")
-                        this_line_res.append(line_content)
-                        line_id += 1
-
-                        if line_content.startswith(RESULT_END_FLAT):
-                            break
-
-                tmp_sql.append("\n".join(this_line_command))
-                tmp_res.append("\n".join(this_line_res[1:-1] if len(this_line_res) > 0 else []))
-
+        tools.ok_(not in_loop_flag, "LOOP FORMAT ERROR!")
         if len(tmp_sql) > 0:
             if case_regex is not None and not re.compile(case_regex).search(name):
                 # case name don't match regex

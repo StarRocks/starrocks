@@ -15,9 +15,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###########################################################################
+import json
+from enum import Enum
 
 from cup import log
 from timeout_decorator import timeout, TimeoutError
+
+RESULT_FLAG = "-- result:"
+RESULT_END_FLAT = "-- !result"
+SHELL_FLAG = "shell: "
+TRINO_FLAG = "trino: "
+SPARK_FLAG = "spark: "
+HIVE_FLAG = "hive: "
+FUNCTION_FLAG = "function: "
+NAME_FLAG = "-- name: "
+UNCHECK_FLAG = "[UC]"
+ORDER_FLAG = "[ORDER]"
+REGEX_FLAG = "[REGEX]"
+
+# loop -- end loop
+LOOP_FLAG = "LOOP"
+END_LOOP_FLAG = "END LOOP"
+CHECK_FLAG = "CHECK: "
+PROPERTY_FLAG = "PROPERTY: "
+
 
 def close_conn(conn, conn_type):
     log.info(f"Try to close {conn_type} connection...")
@@ -29,7 +50,36 @@ def close_conn(conn, conn_type):
 
     log.info(f"Close {conn_type} connection success!")
 
+
 @timeout(10)
 def __close_conn(conn):
     conn.close()
 
+
+class ColorEnum(Enum):
+    """ text color """
+
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    CYAN = 36
+
+
+def to_array(ori_str, line_separator="\n", separator="\t"):
+    """ to array """
+    res_list = []
+    if ori_str:
+        line_list = ori_str.split(line_separator)
+        for each_line in line_list:
+            res_list.append(each_line.split(separator))
+
+    return res_list
+
+
+def to_json(ori_str):
+    """ to json """
+    json_res = {}
+    if ori_str:
+        json_res = json.loads(ori_str)
+
+    return json_res
