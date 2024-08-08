@@ -324,19 +324,7 @@ public class IcebergTable extends Table {
         }
         return nativeTable;
     }
-<<<<<<< HEAD
 
-    public long getRefreshSnapshotTime() {
-        return refreshSnapshotTime;
-    }
-
-    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
-        this.refreshSnapshotTime = refreshSnapshotTime;
-    }
-
-=======
-    
->>>>>>> 4855c19b37 ([Enhancement] desc iceberg table with transform type (#49094))
     public void setIdentifierFieldIds(Set<Integer> identifierFieldIds) {
         this.identifierFieldIds = identifierFieldIds;
     }

@@ -51,12 +51,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-=======
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
->>>>>>> 4855c19b37 ([Enhancement] desc iceberg table with transform type (#49094))
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -64,11 +60,7 @@ import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-<<<<<<< HEAD
-=======
 import static java.lang.String.format;
-import static org.apache.iceberg.view.ViewProperties.COMMENT;
->>>>>>> 4855c19b37 ([Enhancement] desc iceberg table with transform type (#49094))
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
@@ -308,53 +300,6 @@ public class IcebergApiConverter {
 
         return tableProperties.build();
     }
-<<<<<<< HEAD
-=======
-
-    public static List<ManifestFile> filterManifests(List<ManifestFile> manifests,
-                                               org.apache.iceberg.Table table, Expression filter) {
-        Map<Integer, ManifestEvaluator> evalCache = specCache(table, filter);
-
-        return manifests.stream()
-                .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
-                .filter(manifest -> evalCache.get(manifest.partitionSpecId()).eval(manifest))
-                .collect(Collectors.toList());
-    }
-
-    private static Map<Integer, ManifestEvaluator> specCache(org.apache.iceberg.Table table, Expression filter) {
-        Map<Integer, ManifestEvaluator> cache = new ConcurrentHashMap<>();
-
-        for (Map.Entry<Integer, PartitionSpec> entry : table.specs().entrySet()) {
-            Integer spedId = entry.getKey();
-            PartitionSpec spec = entry.getValue();
-
-            Expression projection = Projections.inclusive(spec, false).project(filter);
-            ManifestEvaluator evaluator = ManifestEvaluator.forPartitionFilter(projection, spec, false);
-
-            cache.put(spedId, evaluator);
-        }
-        return cache;
-    }
-
-    public static boolean mayHaveEqualityDeletes(Snapshot snapshot) {
-        String count = snapshot.summary().get(SnapshotSummary.TOTAL_EQ_DELETES_PROP);
-        return count == null || !count.equals("0");
-    }
-
-    public static IcebergView toView(String catalogName, String dbName, View icebergView) {
-        SQLViewRepresentation sqlView = icebergView.sqlFor("starrocks");
-        String comment = icebergView.properties().get(COMMENT);
-        List<Column> columns = toFullSchemas(icebergView.schema());
-        ViewVersion currentVersion = icebergView.currentVersion();
-        String defaultCatalogName = currentVersion.defaultCatalog();
-        String defaultDbName = currentVersion.defaultNamespace().level(0);
-        String viewName = icebergView.name();
-        String location = icebergView.location();
-        IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location);
-        view.setComment(comment);
-        return view;
-    }
 
     public static List<String> toPartitionFields(PartitionSpec spec) {
         return spec.fields().stream()
@@ -389,5 +334,4 @@ public class IcebergApiConverter {
 
         throw new StarRocksConnectorException("Unsupported partition transform: " + field);
     }
->>>>>>> 4855c19b37 ([Enhancement] desc iceberg table with transform type (#49094))
 }
