@@ -95,8 +95,8 @@ public interface ConnectorMetadata {
     /**
      * Return all partition names of the table.
      *
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
+     * @param databaseName      the name of the database
+     * @param tableName         the name of the table
      * @param tableVersionRange table version range in the query
      * @return a list of partition names
      */
@@ -153,24 +153,11 @@ public interface ConnectorMetadata {
      * It is mainly used to generate ScanRange for scheduling.
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
-     * 2. Get file scan tasks for iceberg metadata by query predicate.
-     *
-     * @param table
-     * @param partitionKeys selected partition columns
-     * @param tableVersionRange table version range in the query
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param fieldNames all selected columns (including partition columns)
-     * @param limit scan limit nums if needed
+     * 2. Get file scan tasks for iceberg/deltalake metadata by query predicate.
      *
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                    TableVersionRange tableVersionRange, ScalarOperator predicate,
-                                                    List<String> fieldNames, long limit) {
-        return Lists.newArrayList();
-    }
-
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+    default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList();
     }
 
@@ -180,6 +167,7 @@ public interface ConnectorMetadata {
 
     /**
      * Get table meta serialized specification
+     *
      * @param dbName
      * @param tableName
      * @param snapshotId
@@ -193,7 +181,6 @@ public interface ConnectorMetadata {
         return null;
     }
 
-
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
@@ -201,14 +188,13 @@ public interface ConnectorMetadata {
     /**
      * Get statistics for the table.
      *
-     * @param session       optimizer context
+     * @param session           optimizer context
      * @param table
-     * @param columns       selected columns
-     * @param partitionKeys selected partition keys
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param limit scan limit if needed, default value is -1
+     * @param columns           selected columns
+     * @param partitionKeys     selected partition keys
+     * @param predicate         used to filter metadata for iceberg, etc
+     * @param limit             scan limit if needed, default value is -1
      * @param tableVersionRange table version range in the query
-     *
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,

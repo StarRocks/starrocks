@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -29,6 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
@@ -174,7 +174,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
-        Statistics statistics =  replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+        Statistics statistics = replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
         Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = statistics.getColumnStatistics();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatisticMap.entrySet()) {
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
@@ -189,7 +189,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList(MOCKED_FILES);
     }
 

@@ -50,6 +50,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -766,20 +767,6 @@ public class MetadataMgr {
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1, TableVersionRange.empty());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getRemoteFileInfos(table, partitionNames);
-            } catch (Exception e) {
-                LOG.error("Failed to list partition file's metadata on catalog [{}], table [{}]",
-                        table.getCatalogName(), table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
-    }
-
     public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
@@ -794,39 +781,30 @@ public class MetadataMgr {
         return new ArrayList<>();
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, TableVersionRange.empty(), null, null, -1);
-    }
-
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange version, ScalarOperator predicate, List<String> fieldNames,
-                                                   long limit) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemoteFiles(table, params);
             } catch (Exception e) {
-                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+                return connectorMetadata.get().getPartitions(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;
             }
         }
-        return partitions.build();
+        return new ArrayList<>();
     }
 
     public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,

@@ -17,10 +17,10 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import mockit.Expectations;
 import mockit.Mock;
@@ -259,8 +258,8 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
-                                       @Mocked ReadBuilder readBuilder)
+    public void testGetRemoteFiles(@Mocked FileStoreTable paimonNativeTable,
+                                   @Mocked ReadBuilder readBuilder)
             throws Catalog.TableNotExistException {
         new MockUp<PaimonMetadata>() {
             @Mock
@@ -280,8 +279,8 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null,
-                TableVersionRange.empty(), null, requiredNames, -1);
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
@@ -409,9 +408,7 @@ public class PaimonMetadataTest {
     public void testPrunePaimonPartition() {
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                           TableVersionRange versionRange, ScalarOperator predicate,
-                                                           List<String> fieldNames, long limit) {
+            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
                         .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
