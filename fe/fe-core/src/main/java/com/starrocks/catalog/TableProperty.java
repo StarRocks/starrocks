@@ -435,6 +435,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionTTL() {
+        if (partitionTTLNumber != INVALID) {
+            return this;
+        }
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
                 String.valueOf(INVALID)));
         return this;
