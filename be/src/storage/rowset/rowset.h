@@ -375,6 +375,8 @@ public:
 
     Status verify();
 
+    size_t segment_memory_usage();
+
 protected:
     friend class RowsetFactory;
 

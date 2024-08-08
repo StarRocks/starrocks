@@ -287,6 +287,7 @@ set(EXEC_FILES
         ./storage/rowset/cast_column_iterator_test.cpp
         ./storage/rowset/series_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
+        ./storage/rowset/metadata_cache_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
