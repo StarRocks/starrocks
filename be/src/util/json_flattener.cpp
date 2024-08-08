@@ -831,7 +831,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             continue;
         }
         // leaf node
-        DCHECK(iter->second->op == JsonFlatPath::OP_INCLUDE);
+        DCHECK(iter->second->op == JsonFlatPath::OP_INCLUDE || iter->second->op == JsonFlatPath::OP_ROOT);
         builder->add(k, v);
     }
     for (auto& [child_name, child] : root->children) {
@@ -1099,7 +1099,7 @@ void HyperJsonTransformer::init_compaction_task(JsonColumn* column) {
             std::vector<std::string> p;
             std::vector<LogicalType> t;
             for (auto& index : fk.dst_index) {
-                p.emplace_back(all_flat_paths[index]);
+                all_flat_paths.emplace_back(_dst_paths[index]);
                 p.emplace_back(_dst_paths[index]);
                 t.emplace_back(_dst_types[index]);
             }
