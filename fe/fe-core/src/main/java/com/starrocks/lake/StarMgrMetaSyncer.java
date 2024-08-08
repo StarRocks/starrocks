@@ -15,8 +15,12 @@
 
 package com.starrocks.lake;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
+=======
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
 import com.google.common.base.Preconditions;
 import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
@@ -268,8 +272,14 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     // return true if starmgr shard meta changed
+<<<<<<< HEAD
     private boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+=======
+    @VisibleForTesting
+    public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+>>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         db.readLock();
@@ -282,6 +292,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .stream()
                     .map(Partition::getSubPartitions)
                     .forEach(physicalPartitions::addAll);
+            table.setShardGroupChanged(false);
         } finally {
             db.readUnlock();
         }
@@ -289,13 +300,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             db.readLock();
             try {
-                if (table.getState() != OlapTable.OlapTableState.NORMAL) {
-                    return false; // table might be in schema change
+                // shard group might be changed by automatic bucket or schema change
+                if (table.hasShardGroupChanged()) {
+                    return false;
                 }
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
-                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                Set<Long> starmgrShardIdsSet = null;
+                if (redundantGroupToShards.get(groupId) != null) {
+                    starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                } else {
+                    List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                    starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                }
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : materializedIndex.getTablets()) {

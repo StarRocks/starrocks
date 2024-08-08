@@ -1687,11 +1687,17 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Long id = GlobalStateMgr.getCurrentState().getNextId();
+<<<<<<< HEAD
         long shardGroupId = 0;
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
+=======
+        // physical partitions in the same logical partition use the same shard_group_id,
+        // so that the shards of this logical partition are more evenly distributed.
+        long shardGroupId = partition.getShardGroupId();
+>>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
 
         PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
                 id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
@@ -1771,6 +1777,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 // add sub partition
                 partition.addSubPartition(subPartition);
             }
+
+            olapTable.setShardGroupChanged(true);
 
             // add partition log
             addSubPartitionLog(db, olapTable, partition, subPartitions);
