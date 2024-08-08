@@ -140,6 +140,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -272,6 +273,14 @@ public class OlapTable extends Table {
 
     private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+    protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
+
+    // The flag is used to indicate whether the table shard group has changed.
+    public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
+
+>>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -393,6 +402,39 @@ public class OlapTable extends Table {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
+        Partition temp = tempPartitions.getPartition(tempPartitionName);
+        if (temp != null) {
+            Partition p = getPartition(sourcePartitionName);
+            if (p != null) {
+                doubleWritePartitions.put(p.getId(), temp.getId());
+            } else {
+                LOG.warn("partition {} does not exist", sourcePartitionName);
+            }
+        } else {
+            LOG.warn("partition {} does not exist", tempPartitionName);
+        }
+    }
+
+    public void clearDoubleWritePartition() {
+        doubleWritePartitions.clear();
+    }
+
+    public Map<Long, Long> getDoubleWritePartitions() {
+        return doubleWritePartitions;
+    }
+
+    public boolean hasShardGroupChanged() {
+        return isShardGroupChanged.get();
+    }
+
+    public void setShardGroupChanged(boolean isShardGroupChanged) {
+        this.isShardGroupChanged.set(isShardGroupChanged);
+    }
+
+>>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
     public BinlogConfig getCurBinlogConfig() {
         if (tableProperty != null) {
             return tableProperty.getBinlogConfig();
@@ -474,6 +516,7 @@ public class OlapTable extends Table {
 
     public void setState(OlapTableState state) {
         this.state = state;
+        setShardGroupChanged(true);
     }
 
     public OlapTableState getState() {
