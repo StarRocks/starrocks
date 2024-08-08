@@ -158,22 +158,6 @@ public class OlapDeleteJob extends DeleteJob {
                                 long backendId = replica.getBackendId();
                                 countDownLatch.addMark(backendId, tabletId);
 
-<<<<<<< HEAD
-                            // create push task for each replica
-                            PushTask pushTask = new PushTask(null,
-                                    replica.getBackendId(), db.getId(), olapTable.getId(),
-                                    partition.getId(), indexId,
-                                    tabletId, replicaId, schemaHash,
-                                    -1, 0,
-                                    -1, type, conditions,
-                                    TPriority.NORMAL,
-                                    TTaskType.REALTIME_PUSH,
-                                    getTransactionId(),
-                                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
-                                            .getNextTransactionId(), columnsDesc);
-                            pushTask.setIsSchemaChanging(false);
-                            pushTask.setCountDownLatch(countDownLatch);
-=======
                                 // create push task for each replica
                                 PushTask pushTask = new PushTask(null,
                                         replica.getBackendId(), db.getId(), olapTable.getId(),
@@ -184,11 +168,10 @@ public class OlapDeleteJob extends DeleteJob {
                                         TPriority.NORMAL,
                                         TTaskType.REALTIME_PUSH,
                                         getTransactionId(),
-                                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                                                 .getNextTransactionId(), columnsDesc);
                                 pushTask.setIsSchemaChanging(false);
                                 pushTask.setCountDownLatch(countDownLatch);
->>>>>>> 0897002e1e ([BugFix] Fix auto bucket delete job (#49125))
 
                                 if (AgentTaskQueue.addTask(pushTask)) {
                                     batchTask.addTask(pushTask);

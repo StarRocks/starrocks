@@ -86,26 +86,15 @@ public class Utils {
             throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
-<<<<<<< HEAD
-            for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
-                for (Tablet tablet : index.getTablets()) {
-                    Long beId = chooseBackend((LakeTablet) tablet);
-                    if (beId == null) {
-                        throw new NoAliveBackendException("no alive backend");
-                    }
-                    groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
-=======
             for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalParition.getMaterializedIndices(indexState)) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
-                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
-                                warehouseId, (LakeTablet) tablet);
-                        if (computeNode == null) {
+                        Long beId = chooseBackend((LakeTablet) tablet);
+                        if (beId == null) {
                             throw new NoAliveBackendException("no alive backend");
                         }
-                        groupMap.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                        groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
                     }
->>>>>>> 0897002e1e ([BugFix] Fix auto bucket delete job (#49125))
                 }
             }
         }

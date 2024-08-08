@@ -447,8 +447,6 @@ select k, v1 from t;
 2021-01-01	3
 2021-01-03	1
 2021-01-03	2
-<<<<<<< HEAD
-=======
 -- !result
 
 -- name: test_delete
@@ -494,5 +492,4 @@ delete from t where k = 1;
 -- !result
 select * from t;
 -- result:
->>>>>>> 0897002e1e ([BugFix] Fix auto bucket delete job (#49125))
 -- !result
