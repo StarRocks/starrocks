@@ -219,9 +219,12 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+    // TODO(stephen): we should refactor this part to be compatible with cases of different transform result types
+    //  in the same partition column.
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
-        return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
+        return (!isV2Format() && getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
+                (isV2Format() && getNativeTable().spec().specId() > 0);
     }
 
     public void resetSnapshot() {
