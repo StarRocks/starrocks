@@ -161,11 +161,11 @@ public class ProcProfileCollector extends FrontendDaemon {
             }
         }
 
-        //sort file by time desc
+        //sort file by time asc
         validFiles.sort((f1, f2) -> {
             String comparableName1 = getTimePart(f1.getName());
             String comparableName2 = getTimePart(f2.getName());
-            return -(comparableName1.compareTo(comparableName2));
+            return comparableName1.compareTo(comparableName2);
         });
 
         Calendar calendar = Calendar.getInstance();
@@ -178,6 +178,8 @@ public class ProcProfileCollector extends FrontendDaemon {
                     || sizeReserved > Config.proc_profile_file_retained_size_bytes) {
                 sizeReserved -= file.length();
                 file.delete();
+            } else {
+                break;
             }
         }
     }
