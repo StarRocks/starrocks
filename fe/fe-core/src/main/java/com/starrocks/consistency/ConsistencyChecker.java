@@ -66,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConsistencyChecker extends FrontendDaemon {
@@ -92,6 +93,10 @@ public class ConsistencyChecker extends FrontendDaemon {
     private int startTime;
     private int endTime;
     private long lastTabletMetaCheckTime = 0;
+
+    // Record the id of the table being created and ignore the check of the tablet of the table being created
+    // to avoid deleting its tablets from TabletInvertedIndex by mistake.
+    private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
         super("consistency checker");
@@ -135,7 +140,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private void checkTabletMetaConsistency() {
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableCounters);
     }
 
     @Override
@@ -454,5 +459,19 @@ public class ConsistencyChecker extends FrontendDaemon {
             CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
             addJob(job);
         }
+    }
+
+    public void addCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
+    }
+
+    public void deleteCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> {
+            if (v == null || v <= 1) {
+                return null;
+            } else {
+                return v - 1;
+            }
+        });
     }
 }
