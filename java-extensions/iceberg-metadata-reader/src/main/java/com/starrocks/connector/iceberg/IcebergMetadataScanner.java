@@ -22,7 +22,6 @@ import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.jni.connector.ColumnValue;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileContent;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
@@ -31,8 +30,6 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -45,7 +42,6 @@ import static org.apache.iceberg.util.ByteBuffers.toByteArray;
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
 public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanner.class);
 
     protected static final List<String> SCAN_COLUMNS =
             ImmutableList.of(
@@ -89,8 +85,6 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
-    protected static final int DATA_FILE = 0;
-    protected static final int DELETE_FILE = 1;
     private final String manifestBean;
     private final String predicateInfo;
     private final boolean loadColumnStats;
@@ -180,7 +174,7 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
     private Object get(String columnName, ContentFile<?> file) {
         switch (columnName) {
             case "content":
-                return file.content() == FileContent.DATA ? DATA_FILE : DELETE_FILE;
+                return file.content().id();
             case "file_path":
                 return file.path().toString();
             case "file_format":
