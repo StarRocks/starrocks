@@ -1351,10 +1351,17 @@ public class AstToStringBuilder {
                 .append("\n)");
 
         // Partition column names
+        List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY ( ")
-                    .append(String.join(", ", table.getPartitionColumnNames()))
-                    .append(" )");
+            createTableSql.append("\nPARTITION BY (");
+
+            if (!table.isIcebergTable()) {
+                partitionNames = table.getPartitionColumnNames();
+            } else {
+                partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+            }
+
+            createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
         // Location

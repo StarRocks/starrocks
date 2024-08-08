@@ -45,6 +45,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
@@ -283,6 +284,11 @@ public class IcebergTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    public List<String> getPartitionColumnNamesWithTransform() {
+        PartitionSpec partitionSpec = getNativeTable().spec();
+        return IcebergApiConverter.toPartitionFields(partitionSpec);
+    }
+
     @Override
     public String getTableIdentifier() {
         String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
@@ -318,6 +324,7 @@ public class IcebergTable extends Table {
         }
         return nativeTable;
     }
+<<<<<<< HEAD
 
     public long getRefreshSnapshotTime() {
         return refreshSnapshotTime;
@@ -327,6 +334,9 @@ public class IcebergTable extends Table {
         this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
+=======
+    
+>>>>>>> 4855c19b37 ([Enhancement] desc iceberg table with transform type (#49094))
     public void setIdentifierFieldIds(Set<Integer> identifierFieldIds) {
         this.identifierFieldIds = identifierFieldIds;
     }
