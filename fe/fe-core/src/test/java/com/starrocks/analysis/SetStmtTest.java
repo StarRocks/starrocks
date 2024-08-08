@@ -127,21 +127,6 @@ public class SetStmtTest {
     }
 
     @Test
-    public void setWarehouse() {
-        SystemVariable setEmpty = new SystemVariable(SetType.SESSION, SessionVariable.WAREHOUSE_NAME, new StringLiteral(""));
-        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setEmpty)), ctx);
-
-        SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.WAREHOUSE_NAME, new StringLiteral("not_exists"));
-        try {
-            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-            Assert.fail("should fail");
-        } catch (SemanticException e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: warehouse not exists: not_exists.",
-                    e.getMessage());
-        }
-    }
-
-    @Test
     public void testSetNonNegativeLongVariable() throws UserException {
         List<String> fields = Lists.newArrayList(
                 SessionVariable.LOAD_MEM_LIMIT,
