@@ -66,7 +66,7 @@ public class DeltaLakeMetadataTest {
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
 
         HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore,
-                new Configuration());
+                new Configuration(), new DeltaLakeCatalogProperties(Maps.newHashMap()));
         DeltaMetastoreOperations deltaOps = new DeltaMetastoreOperations(
                 CachingDeltaLakeMetastore.createQueryLevelInstance(hmsBackedDeltaMetastore, 10000), false,
                 MetastoreType.HMS);
@@ -96,8 +96,7 @@ public class DeltaLakeMetadataTest {
         new MockUp<DeltaUtils>() {
             @Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
                         "s3://bucket/path/to/table", null, 0);
@@ -185,7 +184,7 @@ public class DeltaLakeMetadataTest {
         new MockUp<DeltaUtils>() {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Configuration configuration, long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, "path/to/table", null, 0);
             }
