@@ -388,14 +388,11 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                     // validate table
                     long tableId = tabletMeta.getTableId();
-<<<<<<< HEAD
-                    com.starrocks.catalog.Table table = database.getTable(tableId);
-=======
                     if (creatingTableIds.containsKey(tableId)) {
                         continue;
                     }
-                    com.starrocks.catalog.Table table = db.getTable(tableId);
->>>>>>> 44199b8d16 ([BugFix] Fix ConsistencyChecker error dropping tablet if creating table takes too long (#49010))
+
+                    com.starrocks.catalog.Table table = database.getTable(tableId);
                     if (table == null) {
                         table = recycleBin.getTable(dbId, tableId);
                         if (table != null) {
