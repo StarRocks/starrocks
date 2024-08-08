@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.3
 
+:::warning
+
+After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+
+:::
+
 ## 3.3.2
 
 Release date: August 8, 2024
