@@ -115,8 +115,15 @@ public class TablePropertyTest {
 
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TableProperty readTableProperty = TableProperty.read(in);
-        Assert.assertEquals(2, readTableProperty.getPartitionTTLNumber());
+        TableProperty newTableProperty = TableProperty.read(in);
+        Assert.assertEquals(2, newTableProperty.getPartitionTTLNumber());
         in.close();
+
+        // 3. Update again
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "3");
+        newTableProperty.modifyTableProperties(properties);
+        newTableProperty.buildPartitionLiveNumber();
+        newTableProperty.buildPartitionTTL();
+        Assert.assertEquals(3, newTableProperty.getPartitionTTLNumber());
     }
 }
