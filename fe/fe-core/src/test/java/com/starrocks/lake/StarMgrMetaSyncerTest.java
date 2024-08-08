@@ -626,4 +626,109 @@ public class StarMgrMetaSyncerTest {
 
         Config.meta_sync_force_delete_shard_meta = false;
     }
+
+    @Test
+    public void testSyncTableMetaInternal() throws Exception {
+        long dbId = 100;
+        long tableId = 1000;
+        List<Long> shards = new ArrayList<>();
+        Database db = new Database(dbId, "db");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Database getDb(long id) {
+                return db;
+            }
+
+            @Mock
+            public List<Long> getDbIds() {
+                return Lists.newArrayList(dbId);
+            }
+        };
+
+        List<Column> baseSchema = new ArrayList<>();
+        KeysType keysType = KeysType.AGG_KEYS;
+        PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+        DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+        Table table = new LakeTable(tableId, "bbb", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
+            }
+
+            @Mock
+            public Table getTable(long tableId) {
+                return table;
+            }
+
+            @Mock
+            public List<Table> getTables() {
+                return Lists.newArrayList(table);
+            }
+        };
+
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public List<Tablet> getTablets() {
+                List<Tablet> tablets = new ArrayList<>();
+                tablets.add(new LakeTablet(111));
+                tablets.add(new LakeTablet(222));
+                tablets.add(new LakeTablet(333));
+                return tablets;
+            }
+        };
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getShardGroupId() {
+                return 444;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                return shards;
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                shards.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isLakeColocateTable(long tableId) {
+                return true;
+            }
+
+            @Mock
+            public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
+                                                      GroupId expectGroupId) throws DdlException {
+                return;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return null;
+            }
+        };
+
+        shards.clear();
+        shards.add(111L);
+        shards.add(222L);
+        shards.add(333L);
+        starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
+        Assert.assertEquals(3, shards.size());
+    }
 }
