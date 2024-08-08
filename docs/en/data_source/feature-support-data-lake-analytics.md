@@ -86,17 +86,17 @@ Hive Catalog's support for Hive Metastore (HMS) and AWS Glue mostly overlaps exc
 The performance of metadata retrieval largely depends on the performance of the user's HMS or HDFS NameNode. Please consider all factors and base your judgment on test results.
 
 - **[Default and Recommended] Best performance with a tolerance of minute-level data inconsistency**
-  - **Configuration**: Enable automatic incremental update by setting the catalog property `enable_hms_events_incremental_sync` to `true`. Data updated within 10 minutes (by default) is not visible. Old data will be returned to queries within this duration.
+  - **Configuration**: You can use the default setting. Data updated within 10 minutes (by default) is not visible. Old data will be returned to queries within this duration.
   - **Advantage**: Best query performance.
   - **Disadvantage**: Data inconsistency caused by latency.
   - **Supported Version(s)**: v2.5.5+ (Disabled by default in v2.5 and enabled by default in v3.0+)
 - **Instant visibility of newly loaded data (files) without manual refresh**
-  - **Configuration**: Enable automatic incremental update by setting the catalog property `enable_hms_events_incremental_sync` to `true`, and disable the cache for the metadata of the underlying data files by setting `enable_remote_file_cache` to `false`.
+  - **Configuration**: Disable the cache for the metadata of the underlying data files by setting the catalog property `enable_remote_file_cache` to `false`.
   - **Advantage**: Visibility of file changes with no delay.
   - **Disadvantage**: Lower performance when the file metadata cache is disabled. Each query must access the file list.
   - **Supported Version(s)**: v2.5.5+
 - **Instant visibility of partition changes without manual refresh**
-  - **Configuration**: Enable automatic incremental update by setting the catalog property `enable_hms_events_incremental_sync` to `true`, and disable the cache for the Hive partition names by setting `enable_cache_list_names` to `false`.
+  - **Configuration**: Disable the cache for the Hive partition names by setting the catalog property `enable_cache_list_names` to `false`.
   - **Advantage**: Visibility of partition changes with no delay
   - **Disadvantage**: Lower performance when the partition name cache is disabled. Each query must access the partition list.
   - **Supported Version(s)**: v2.5.5+
@@ -185,7 +185,7 @@ Please note that the default value of the session variable `enable_iceberg_metad
 
 ### Iceberg views
 
-StarRocks supports querying Iceberg views from v3.3.0 onwards.
+StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only Iceberg views created through StarRocks are supported.
 
 :::note
 

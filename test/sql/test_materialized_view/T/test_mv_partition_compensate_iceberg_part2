@@ -1,4 +1,4 @@
--- name: test_mv_partition_compensate_iceberg_part2
+-- name: test_mv_partition_compensate_iceberg_part2 @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (

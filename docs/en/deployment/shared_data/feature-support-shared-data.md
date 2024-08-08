@@ -5,9 +5,13 @@ sidebar_label: "Feature Support"
 
 # Feature Support: Shared-data Clusters
 
+:::tip
+Each of the features below lists the version number that they were added in. If you are deploying a new cluster please deploy the latest patch release of version 3.2 or higher.
+:::
+
 ## Overview
 
-Introduced in v3.0, the shared-data cluster of StarRocks features a disaggregated storage and compute architecture. It allows data to be stored in remote storage, leading to lower storage costs, optimized resource isolation, and better service elasticity compared to a shared-nothing cluster.
+Shared-data StarRocks clusters feature a disaggregated storage and compute architecture. This allows data to be stored in remote storage, leading to lower storage costs, optimized resource isolation, and better service elasticity compared to a shared-nothing cluster.
 
 This document outlines the feature support for shared-data clusters, covering deployment methods, storage configurations, caching mechanisms, Compaction, Primary Key table functionalities, and performance test results.
 
@@ -203,7 +207,7 @@ The cluster used in the test includes one FE node and five CN/BE nodes. The hard
 | **VM provider**       | Alibaba Cloud ECS   |
 | --------------------- | ------------------- |
 | **FE node**           | 8 Core 32 GB Memory |
-| **CN/****BE node**    | 8 Core 64 GB Memory |
+| **CN/BE node**        | 8 Core 64 GB Memory |
 | **Network bandwidth** | 8 Gbits/s           |
 | **Disk**              | ESSD                |
 
@@ -214,6 +218,12 @@ StarRocks v3.3.0
 ### Dataset
 
 SSB 1TB dataset
+
+:::note
+
+The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements).
+
+:::
 
 ### Test Results
 

@@ -1186,6 +1186,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
         List<FieldSchema> cols = Lists.newArrayList();
         cols.add(new FieldSchema("age", "int", null));
+        cols.add(new FieldSchema("name", "string", null));
         StorageDescriptor sd =
                 new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
                         "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
@@ -1321,16 +1322,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
         List<FieldSchema> cols = Lists.newArrayList();
         cols.add(new FieldSchema("r_regionkey", "int", null));
-        cols.add(new FieldSchema("r_name", "string", null));
-        cols.add(new FieldSchema("r_comment", "string", null));
         StorageDescriptor sd =
                 new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
                         -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
         CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
         regionStats.put("r_regionkey", new ColumnStatistic(0, 4, 0, 4, 5));
-        regionStats.put("r_name", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 6.8, 5));
-        regionStats.put("r_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 66, 5));
 
         Table region =
                 new Table("normal_table", "datacache_db", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,

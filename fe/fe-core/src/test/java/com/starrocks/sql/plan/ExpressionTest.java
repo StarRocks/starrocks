@@ -689,6 +689,8 @@ public class ExpressionTest extends PlanTestBase {
                 "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 32> : minutes_add(31: expr, 90)\n" +
+                "  |  <slot 33> : 31: expr != '2020-01-01 00:00:00'\n" +
                 "  |  <slot 22> : array_sort(4: array_agg)\n" +
                 "  |  <slot 23> : array_sortby(5: array_agg, 4: array_agg)\n" +
                 "  |  <slot 24> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
@@ -742,6 +744,34 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  <slot 6> : 2: c1\n" +
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
                 "CAST(<slot 4> AS SMALLINT) + 1, [1]))"));
+    }
+
+    @Test
+    public void testReuseIndependentExprInLambdaFunction() throws Exception {
+        starRocksAssert.withTable("create table if not exists test_reuse_lambda_expr (k bigint, v array<bigint>) " +
+                "duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');");
+        String sql = "select array_map((arg0, arg1) -> arg0 + arg1 + array_length(`v`), `v`, `v`) from test_reuse_lambda_expr";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 6> : array_length(2: v)\n" +
+                "  |  <slot 7> : CAST(6: array_length AS BIGINT)");
+
+        sql = "select array_length(array_map((arg0, arg1) -> " +
+                "arg0 + arg1 + array_length(`v`) + array_length(array_filter((arg0) -> length(arg0) > 4, `v`)),`v`,`v`)) " +
+                "from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 7> : array_length(2: v)\n" +
+                "  |  <slot 8> : CAST(7: array_length AS BIGINT)\n" +
+                "  |  <slot 9> : array_map(<slot 5> -> length(CAST(<slot 5> AS VARCHAR)) > 4, 2: v)\n" +
+                "  |  <slot 10> : array_filter(2: v, 9: array_map)\n" +
+                "  |  <slot 11> : array_length(10: array_filter)\n" +
+                "  |  <slot 12> : CAST(11: array_length AS BIGINT)");
+
+        sql = "select k, array_filter(x -> x > k + 10, `v`) from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 5> : 1: k + 10");
     }
 
     @Test

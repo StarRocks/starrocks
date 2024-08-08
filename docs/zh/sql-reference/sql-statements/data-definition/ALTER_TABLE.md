@@ -9,7 +9,7 @@ displayed_sidebar: "Chinese"
 
 该语句用于修改已有表，包括：
 
-- [修改表名、分区名、索引名](#rename-对名称进行修改)
+- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
@@ -35,7 +35,7 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
@@ -82,6 +82,22 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
 
+#### 修改列名（RENAME COLUMN）
+
+自 v3.3.2 起，StarRocks 支持修改列名。
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- 在将某列由 A 重命名为 B 后，不支持继续增加 A 列。
+- 在列名变更后，基于该列创建的物化视图将不再生效，您需要根据新的列名重新创建。
+
+:::
+
 ### 修改表的注释（3.1 版本起）
 
 语法：
@@ -96,7 +112,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 ### 操作 partition 相关语法
 
-#### 增加分区 (ADD PARTITION)
+#### 增加分区 (ADD PARTITION(S))
 
 增加分区时支持使用 Range 分区和 List 分区。
 
@@ -190,24 +206,41 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
     );
     ```
 
-#### 删除分区 (DROP PARTITION)
+#### 删除分区 (DROP PARTITION(S))
 
-语法：
+删除单个分区：
 
 ```sql
--- 2.0之前版本
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>;
--- 2.0及之后版本
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-注意：
+批量删除分区（自 v3.3.1 起支持）：
 
-1. 使用分区方式的表至少要保留一个分区。
-2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句。
-3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+```
+
+关于 `multi_range_partitions` 的说明：
+
+- `multi_range_partitions` 仅适用于 Range 分区。
+- 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
+- 仅支持基于单个分区键的分区。
+
+:::note
+
+- 分区表需要至少要保留一个分区。
+- 如果未指定 FORCE 关键字，您可以通过 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句恢复一定时间范围内（默认 1 天）删除的分区。
+- 如果指定了 FORCE 关键字，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+
+:::
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
@@ -956,6 +989,14 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ALTER TABLE example_db.my_table
     DROP COLUMN col2
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
+    ```
+
+13. 批量修改字段数据类型。
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
     ```
 
 14. STRUCT 类型增删字段。

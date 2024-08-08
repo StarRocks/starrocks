@@ -166,6 +166,11 @@ The following procedures are performed on the BE instances.
 > **NOTE**
 >
 > A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
+> If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
+
+      ```YAML
+      default_replication_num = 1
+      ```
 
 ## Step 3: (Optional) Start the CN service
 

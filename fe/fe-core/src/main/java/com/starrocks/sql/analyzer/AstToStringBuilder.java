@@ -1347,7 +1347,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
-            return "DICTIONARY_GET";
+            return node.toSql();
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {
