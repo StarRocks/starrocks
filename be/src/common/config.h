@@ -1367,5 +1367,7 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
 
 } // namespace starrocks::config

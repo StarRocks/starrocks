@@ -71,3 +71,4 @@ RUN ARCH=`uname -m` ; if [[ $ARCH == "aarch64" ]] ; then DOWNLOAD_URL=http://cdn
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
 ENV JAVA_HOME=/usr/lib/jvm/java-11
 ENV MAVEN_HOME=${MAVEN_INSTALL_HOME}
+ENV LANG=en_US.utf8

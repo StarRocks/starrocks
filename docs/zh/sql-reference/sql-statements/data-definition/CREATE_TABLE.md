@@ -655,6 +655,22 @@ PROPERTIES (
 
 如不指定数据压缩算法，StarRocks 默认使用 LZ4。
 
+自 v3.3.2 起，StarRocks 支持在建表时指定 ZSTD 压缩格式的压缩级别。
+
+语法：
+
+```sql
+PROPERTIES ("compression" = "zstd(<compression_level>)")
+```
+
+`compression_level`：ZSTD 压缩格式的压缩级别。类型：Integer。范围：[1,22]。默认值：`3`（推荐）。数字越大，压缩率越高。压缩级别越高，压缩和解压的耗时越大。
+
+示例：
+
+```sql
+PROPERTIES ("compression" = "zstd(3)")
+```
+
 关于如何选择合适的数据压缩算法，请参阅[数据压缩](../../../table_design/data_compression.md)。
 
 #### 设置数据导入安全等级

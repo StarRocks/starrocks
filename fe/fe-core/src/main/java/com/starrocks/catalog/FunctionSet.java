@@ -639,6 +639,12 @@ public class FunctionSet {
                     .add()
                     .build();
 
+    // Contains all non-deterministic functions both time and non-time functions.
+    public static final Set<String> allNonDeterministicFunctions = ImmutableSet.<String>builder()
+            .addAll(nonDeterministicFunctions)
+            .addAll(nonDeterministicTimeFunctions)
+            .build();
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)

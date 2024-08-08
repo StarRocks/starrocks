@@ -36,33 +36,22 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -70,15 +59,12 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -91,7 +77,6 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,10 +86,8 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
-import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.QueryStatement;
@@ -112,19 +95,12 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
-import org.threeten.extra.PeriodDuration;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -157,56 +133,6 @@ public class AlterJobMgr {
         schemaChangeHandler.setStop();
         materializedViewHandler.setStop();
         clusterHandler.setStop();
-    }
-
-    public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
-            throws DdlException, AnalysisException {
-        String tableName = stmt.getBaseIndexName();
-        // check db
-        String dbName = stmt.getDBName();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-        // check cluster capacity
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-        // check db quota
-        db.checkQuota();
-
-        Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-            throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
-        }
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                throw new DdlException("create materialized failed. table:" + tableName + " not exist");
-            }
-            if (table.isCloudNativeTable()) {
-                throw new DdlException("Creating synchronous materialized view(rollup) is not supported in " +
-                        "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
-                        "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
-                        "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details.");
-            }
-            if (!table.isOlapTable()) {
-                throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
-                        table.getType().name() + " table[" + tableName + "]");
-            }
-            OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                throw new DdlException(
-                        "Do not support create materialized view on primary key table[" + tableName + "]");
-            }
-            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
-                throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
-                        "please start to create materialized view after insert overwrite");
-            }
-            olapTable.checkStableAndNormal();
-
-            materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
     }
 
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
@@ -696,125 +622,6 @@ public class AlterJobMgr {
         }
     }
 
-    public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
-        return clusterHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
-    }
-
-    /**
-     * Batch update partitions' properties
-     * caller should hold the db lock
-     */
-    public void modifyPartitionsProperty(Database db,
-                                         OlapTable olapTable,
-                                         List<String> partitionNames,
-                                         Map<String, String> properties)
-            throws DdlException, AnalysisException {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
-        if (olapTable.getState() != OlapTableState.NORMAL) {
-            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
-        }
-
-        for (String partitionName : partitionNames) {
-            Partition partition = olapTable.getPartition(partitionName);
-            if (partition == null) {
-                throw new DdlException(
-                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
-            }
-        }
-
-        boolean hasInMemory = false;
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            hasInMemory = true;
-        }
-
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        // get value from properties here
-        // 1. data property
-        PeriodDuration periodDuration = null;
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-            if (!partitionInfo.isRangePartition()) {
-                throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
-            }
-            if (Strings.isNotBlank(storageCoolDownTTL)) {
-                periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
-            }
-        }
-        DataProperty newDataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
-        // 2. replication num
-        short newReplicationNum =
-                PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);
-        // 3. in memory
-        boolean newInMemory = PropertyAnalyzer.analyzeBooleanProp(properties,
-                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-        // 4. tablet type
-        TTabletType tTabletType =
-                PropertyAnalyzer.analyzeTabletType(properties);
-
-        // modify meta here
-        for (String partitionName : partitionNames) {
-            Partition partition = olapTable.getPartition(partitionName);
-            // 1. date property
-
-            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                continue;
-            }
-
-            if (newDataProperty != null) {
-                // for storage_cooldown_ttl
-                if (periodDuration != null) {
-                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
-                    PartitionKey partitionKey = range.upperEndpoint();
-                    if (partitionKey.isMaxValue()) {
-                        newDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
-                    } else {
-                        String stringUpperValue = partitionKey.getKeys().get(0).getStringValue();
-                        DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
-                        LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
-                        LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
-                        long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
-                        newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
-                    }
-                }
-                partitionInfo.setDataProperty(partition.getId(), newDataProperty);
-            }
-            // 2. replication num
-            if (newReplicationNum != (short) -1) {
-                if (colocateTableIndex.isColocateTable(olapTable.getId())) {
-                    throw new DdlException(
-                            "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
-                }
-                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
-                // update default replication num if this table is unpartitioned table
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    olapTable.setReplicationNum(newReplicationNum);
-                }
-            }
-            // 3. in memory
-            boolean oldInMemory = partitionInfo.getIsInMemory(partition.getId());
-            if (hasInMemory && (newInMemory != oldInMemory)) {
-                partitionInfo.setIsInMemory(partition.getId(), newInMemory);
-            }
-            // 4. tablet type
-            if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
-                partitionInfo.setTabletType(partition.getId(), tTabletType);
-            }
-            ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
-            modifyPartitionInfos.add(info);
-        }
-
-        // log here
-        BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
-        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
-    }
-
     public void replayModifyPartition(ModifyPartitionInfo info) {
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getDbId());
         OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
@@ -844,11 +651,11 @@ public class AlterJobMgr {
         return this.schemaChangeHandler;
     }
 
-    public AlterHandler getMaterializedViewHandler() {
+    public MaterializedViewHandler getMaterializedViewHandler() {
         return this.materializedViewHandler;
     }
 
-    public AlterHandler getClusterHandler() {
+    public SystemHandler getClusterHandler() {
         return this.clusterHandler;
     }
 

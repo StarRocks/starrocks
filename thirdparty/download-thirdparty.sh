@@ -247,11 +247,13 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
     touch $PATCHED_MARK
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -415,6 +417,7 @@ cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
+    patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
     touch $PATCHED_MARK
 fi
 cd -

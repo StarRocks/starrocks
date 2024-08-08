@@ -9,7 +9,7 @@ displayed_sidebar: "Chinese"
 
 该语句用于修改已有表，包括：
 
-- [修改表名、分区名、索引名](#rename-对名称进行修改)
+- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
@@ -35,7 +35,7 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
@@ -82,6 +82,22 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
 
+#### 修改列名（RENAME COLUMN）
+
+自 v3.3.2 起，StarRocks 支持修改列名。
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- 在将某列由 A 重命名为 B 后，不支持继续增加 A 列。
+- 在列名变更后，基于该列创建的物化视图将不再生效，您需要根据新的列名重新创建。
+
+:::
+
 ### 修改表的注释（3.1 版本起）
 
 语法：
@@ -96,7 +112,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 ### 操作 partition 相关语法
 
-#### 增加分区 (ADD PARTITION)
+#### 增加分区 (ADD PARTITION(S))
 
 增加分区时支持使用 Range 分区和 List 分区。
 
@@ -190,24 +206,41 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
     );
     ```
 
-#### 删除分区 (DROP PARTITION)
+#### 删除分区 (DROP PARTITION(S))
 
-语法：
+删除单个分区：
 
 ```sql
--- 2.0之前版本
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>;
--- 2.0及之后版本
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-注意：
+批量删除分区（自 v3.3.1 起支持）：
 
-1. 使用分区方式的表至少要保留一个分区。
-2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句。
-3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+```
+
+关于 `multi_range_partitions` 的说明：
+
+- `multi_range_partitions` 仅适用于 Range 分区。
+- 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
+- 仅支持基于单个分区键的分区。
+
+:::note
+
+- 分区表需要至少要保留一个分区。
+- 如果未指定 FORCE 关键字，您可以通过 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句恢复一定时间范围内（默认 1 天）删除的分区。
+- 如果指定了 FORCE 关键字，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+
+:::
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
@@ -524,6 +557,39 @@ DISTRIBUTED BY HASH(order_id);
 ```SQL
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
+
+#### STRUCT 类型列增删字段（MODIFY COLUMN ADD/DROP FIELD）
+
+自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型列增删字段。该字段可以为嵌套 STRUCT 类型或存在于 ARRAY 类型中。
+
+语法：
+
+```sql
+-- 增加字段
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> ADD FIELD <field_name>  <field_type> [AFTER <prior_field_name> |FIRST]
+
+-- 删除字段
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> DROP FIELD <field_name>
+```
+
+参数：
+
+- `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
+- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_name` 决定，无需手动指定。
+
+有关示例，参考 [示例 - Column -14](#column)。
+
+:::note
+
+- 目前仅支持存算一体集群。
+- 对应表必须开启 `fast_schema_evolution`。
+- 不支持向 MAP 类型中的 STRUCT 增删字段。
+- 新增字段不支持指定默认值，Nullable 等属性。默认为 Nullable，默认值为 null。
+- 使用该功能后，不支持直接将集群降级至不具备该功能的版本。
+
+:::
 
 ### 操作 rollup index 语法
 
@@ -923,6 +989,128 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ALTER TABLE example_db.my_table
     DROP COLUMN col2
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
+    ```
+
+13. 批量修改字段数据类型。
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
+14. STRUCT 类型增删字段。
+
+    **准备工作**：建表并导入数据
+
+    ```sql
+    CREATE TABLE struct_test(
+        c0 INT,
+        c1 STRUCT<v1 INT, v2 STRUCT<v4 INT, v5 INT>, v3 INT>,
+        c2 STRUCT<v1 INT, v2 ARRAY<STRUCT<v3 INT, v4 STRUCT<v5 INT, v6 INT>>>>
+    )
+    DUPLICATE KEY(c0)
+    DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+    PROPERTIES (
+        "fast_schema_evolution" = "true"
+    );
+    INSERT INTO struct_test VALUES (
+        1, 
+        ROW(1, ROW(2, 3), 4), 
+        ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
+    );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 向 STRUCT 类型列添加新字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v4 INT AFTER v2;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 向嵌套 STRUCT 类型添加字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v2.v6 INT FIRST;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 向 Array 类型中的 STRUCT 类型添加字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 ADD FIELD v2.[*].v7 INT AFTER v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 删除 STRUCT 类型列中的字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 删除嵌套 STRUCT 类型中的字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v2.v4;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - 删除 Array 类型中的 STRUCT 类型的字段。
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 DROP FIELD v2.[*].v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
 ### Table property

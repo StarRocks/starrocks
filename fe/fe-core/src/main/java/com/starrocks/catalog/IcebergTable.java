@@ -40,6 +40,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
@@ -218,9 +219,12 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+    // TODO(stephen): we should refactor this part to be compatible with cases of different transform result types
+    //  in the same partition column.
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
-        return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
+        return (!isV2Format() && getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
+                (isV2Format() && getNativeTable().spec().specId() > 0);
     }
 
     public void resetSnapshot() {
@@ -274,6 +278,11 @@ public class IcebergTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    public List<String> getPartitionColumnNamesWithTransform() {
+        PartitionSpec partitionSpec = getNativeTable().spec();
+        return IcebergApiConverter.toPartitionFields(partitionSpec);
+    }
+
     @Override
     public String getTableIdentifier() {
         String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
@@ -309,7 +318,7 @@ public class IcebergTable extends Table {
         }
         return nativeTable;
     }
-
+    
     public void setIdentifierFieldIds(Set<Integer> identifierFieldIds) {
         this.identifierFieldIds = identifierFieldIds;
     }
