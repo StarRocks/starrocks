@@ -119,19 +119,18 @@ public class KeyMgr {
                 } else {
                     // check masterkey not changed
                     EncryptionKey masterKey = idToKey.get(DEFAULT_MASTER_KYE_ID);
-                    if (!masterKey.toSpec().equals(masterKeyFromConfig.toSpec())) {
-                        // masterKey changed
-                        String msg = String.format("default_master_key changed meta:%s config:%s", masterKey.toSpec(),
-                                masterKeyFromConfig.toSpec());
-                        LOG.error(msg);
-                        System.exit(1);
-                    }
+                    Preconditions.checkState(masterKey.equals(masterKeyFromConfig),
+                            "default_master_key changed meta:%s config:%s", masterKey.toSpec(),
+                            masterKeyFromConfig.toSpec());
                 }
                 if (idToKey.size() == 1) {
                     // setup first KEK
                     generateNewKEK();
                 }
             }
+        } catch (Exception e) {
+            LOG.fatal("init default master key failed, will exit.", e);
+            System.exit(-1);
         } finally {
             keysLock.writeLock().unlock();
         }
@@ -175,14 +174,16 @@ public class KeyMgr {
     }
 
     public EncryptionKey create(EncryptionKeyPB pb) {
+        EncryptionKey key;
         switch (pb.type) {
             case NORMAL_KEY:
-                NormalKey key = new NormalKey();
-                key.fromPB(pb, this);
-                return key;
+                key = new NormalKey();
+                break;
             default:
                 throw new IllegalStateException("Unexpected EncryptionKeyTypePB value: " + pb.type);
         }
+        key.fromPB(pb, this);
+        return key;
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
@@ -192,12 +193,8 @@ public class KeyMgr {
             LOG.info("loading {} keys", cnt);
             for (int i = 0; i < cnt; i++) {
                 EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
-                switch (pb.type) {
-                    case NORMAL_KEY:
-                        NormalKey key = new NormalKey();
-                        key.fromPB(pb, this);
-                        idToKey.put(key.id, key);
-                }
+                EncryptionKey key = create(pb);
+                idToKey.put(key.id, key);
             }
             if (MetricRepo.hasInit) {
                 MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
