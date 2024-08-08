@@ -1684,6 +1684,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             for (PhysicalPartition subPartition : subPartitions) {
                 // add sub partition
                 partition.addSubPartition(subPartition);
+                olapTable.addPhysicalPartition(subPartition);
             }
 
             olapTable.setShardGroupChanged(true);
@@ -1704,6 +1705,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             Partition partition = olapTable.getPartition(info.getPartitionId());
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
+            olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
                 // add to inverted index
