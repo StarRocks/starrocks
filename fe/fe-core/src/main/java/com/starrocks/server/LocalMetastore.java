@@ -4210,6 +4210,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         GlobalStateMgr.getCurrentState().getEditLog().logModifyMutableBucketNum(info);
     }
 
+    public void modifyTableEnableLoadProfile(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildEnableLoadProfile();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyEnableLoadProfile(info);
+    }
+
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
@@ -4243,6 +4260,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             modifyTableMutableBucketNum(db, table, properties);
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            modifyTableEnableLoadProfile(db, table, properties);
         }
     }
 
