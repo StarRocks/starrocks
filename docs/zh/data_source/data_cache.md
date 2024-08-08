@@ -92,7 +92,7 @@ mysql> explain verbose select col1 from hudi_table;
 +-----------------------------------------+
 ```
 
-其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为改查询会扫描全部分区。
+其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为该查询会扫描全部分区。
 
 您还可以通过 Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
 
