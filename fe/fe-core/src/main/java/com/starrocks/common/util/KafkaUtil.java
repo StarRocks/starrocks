@@ -186,16 +186,36 @@ public class KafkaUtil {
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
-                request.timeout = Config.routine_load_kafka_timeout_second;
-                Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
-                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                    throw new UserException(
-                            "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                } else {
-                    return result;
+                int retryTimes = 0;
+                while (true) {
+                    request.timeout = Config.routine_load_kafka_timeout_second;
+                    Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
+                    PProxyResult result;
+                    try {
+                        result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
+                        // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
+                        // We use the error message to identify the type of exception.
+                        if (e.getMessage().contains("Ocurrs time out")) {
+                            // When getting kafka info timed out, we tried again three times.
+                            if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
+                                                                            Config.routine_load_task_timeout_second) {
+                                throw e;
+                            }
+                            continue;
+                        } else {
+                            throw e;
+                        }
+                    }
+                    TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
+                    if (code != TStatusCode.OK) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        throw new UserException(
+                                "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                    } else {
+                        return result;
+                    }
                 }
             } catch (InterruptedException ie) {
                 LOG.warn("got interrupted exception when sending proxy request to " + address);
