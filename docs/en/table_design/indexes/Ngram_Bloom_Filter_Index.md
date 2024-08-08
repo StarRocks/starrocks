@@ -47,9 +47,9 @@ N-gram bloom filter index-related parameters:
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | `index_name`       | Yes          | The name of the index. Index names must be unique within a table. |
 | `column_name`      | Yes          | The name of the column for which the index is created. Only a single column name can be specified. In the example above, it is `k2`. |
-| `gram_num`         | Yes          | The length of a substring after the string in the indexed column is tokenized. In the example above, `gram_num` is `4`. |
+| `gram_num`         | NO          | The length of a substring after the string in the indexed column is tokenized.The default value is 2. |
 | `bloom_filter_fpp` | No           | The false positive possibility of the Bloom filter, ranging from 0.0001 to 0.05. The default value is 0.05. A smaller value provides better filtering but incurs greater storage overhead. |
-| `case_sensitive`   |  No          | Whether this index is case-sensitive or not. Default value is `case_sensitive`. |
+| `case_sensitive`   |  No          | Whether this index is case-sensitive or not. Default value is `true`. |
 | `COMMENT`          | No           | Index comment. |
 
 For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
