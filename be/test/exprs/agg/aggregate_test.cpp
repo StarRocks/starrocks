@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -23,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/group_concat.h"
@@ -65,12 +67,19 @@ public:
     void SetUp() override {
         utils = new FunctionUtils();
         ctx = utils->get_fn_ctx();
+        _allocator = std::make_unique<CountingAllocatorWithHook>();
+        tls_agg_state_allocator = _allocator.get();
     }
-    void TearDown() override { delete utils; }
+    void TearDown() override {
+        delete utils;
+        tls_agg_state_allocator = nullptr;
+        _allocator.reset();
+    }
 
 private:
     FunctionUtils* utils{};
     FunctionContext* ctx{};
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
 };
 
 class ManagedAggrState {
