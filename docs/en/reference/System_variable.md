@@ -507,11 +507,14 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false
 * **Introduced in**: v2.5
 
-### enable_populate_datacache
+### populate_datacache_mode
 
-* **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: true
-* **Introduced in**: v2.5
+* **Description**: Specifies the population behavior of Data Cache when reading data blocks from external storage systems. Valid values:
+  * `auto` (default): the system automatically caches data selectively based on the population rule.
+  * `always`: Always cache the data.
+  * `never`: Never cache the data.
+* **Default**: auto
+* **Introduced in**: v3.3.2
 
 ### enable_datacache_io_adaptor
 
