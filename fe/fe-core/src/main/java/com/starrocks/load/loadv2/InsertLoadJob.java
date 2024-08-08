@@ -262,4 +262,8 @@ public class InsertLoadJob extends LoadJob {
     public void setEstimateScanRow(long rows) {
         this.estimateScanRow = rows;
     }
+
+    public void setTransactionId(long txnId) {
+        this.transactionId = txnId;
+    }
 }
