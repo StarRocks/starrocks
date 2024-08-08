@@ -1196,6 +1196,32 @@ TEST_P(CSVScannerTest, test_flexible_column_mapping) {
     EXPECT_EQ("[10, NULL, 'grapefruit', '2021-02-19', 'grapefruit', NULL]", chunk->debug_row(2));
 }
 
+TEST_P(CSVScannerTest, test_skip_headers) {
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_path("./be/test/exec/test_data/csv_scanner/small.csv");
+    range.__set_num_of_columns_from_file(0);
+    ranges.push_back(range);
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->__set_row_delimiter('\n');
+    // there are only 2 rows within file small.csv
+    // if we set skip first 3 line, we expect to get a clear error message
+    params->__set_skip_header(3);
+    params->__set_column_separator(',');
+    params->__set_enclose('"');
+    params->__set_escape('\\');
+
+    auto scanner = create_csv_scanner({}, ranges, params);
+    EXPECT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    auto st = scanner->get_schema(&schema);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(0, schema.size());
+    EXPECT_EQ(st.to_string(false),
+              "End of file: The parameter 'skip_header' is set to 3, but there are only 2 rows in the csv file");
+}
+
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTrimSpaceTest, Values(true));
 
