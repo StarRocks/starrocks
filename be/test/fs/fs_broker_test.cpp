@@ -74,6 +74,7 @@ public:
             response.__set_statusCode(TBrokerOperationStatusCode::OK);
         } else {
             response.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
+            response.__set_message("File not exist");
         }
     }
 
@@ -95,6 +96,7 @@ public:
             _readers[fd.low] = std::move(res).value();
         } else if (res.status().is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
+            response.opStatus.__set_message("File not exist");
         } else {
             // I don't know how real broker handle this case, just return an non-OK status here.
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_ARGUMENT);
@@ -326,8 +328,13 @@ TEST_F(EnvBrokerTest, test_open_non_exist_file) {
 
     // Check the specific (mocked) error code is meaningless, because
     // I don't know what it is.
-    ASSERT_FALSE(_fs.new_sequential_file(url).ok());
-    ASSERT_FALSE(_fs.new_random_access_file(url).ok());
+    auto st = _fs.new_sequential_file(url);
+    ASSERT_TRUE(st.status().is_not_found());
+    ASSERT_EQ("Broker file not found, error=File not exist, broker=127.0.0.1", st.status().message());
+
+    auto st2 = _fs.new_random_access_file(url);
+    ASSERT_TRUE(st2.status().is_not_found());
+    ASSERT_EQ("Broker file not found, error=File not exist, broker=127.0.0.1", st2.status().message());
 }
 
 // NOLINTNEXTLINE
@@ -407,7 +414,9 @@ TEST_F(EnvBrokerTest, test_write_exist_file) {
 TEST_F(EnvBrokerTest, test_delete_file) {
     const std::string path = "/tmp/1.txt";
 
-    ASSERT_FALSE(_fs.delete_file(path).ok());
+    auto st = _fs.delete_file(path);
+    ASSERT_TRUE(st.is_not_found());
+    ASSERT_EQ("Broker file not found, error=File not exist, broker=127.0.0.1", st.message());
 
     ASSERT_OK(_fs_mem->create_file(path));
     ASSERT_OK(_fs_mem->append_file(path, "file content"));
