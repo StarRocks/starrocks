@@ -177,6 +177,63 @@ void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk
     }
 }
 
+<<<<<<< HEAD
+=======
+Status CSVScanner::_init_reader() {
+    if (_curr_reader == nullptr && ++_curr_file_index < _scan_range.ranges.size()) {
+        std::shared_ptr<SequentialFile> file;
+        const TBrokerRangeDesc& range_desc = _scan_range.ranges[_curr_file_index];
+        Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to create sequential files. status: " << st.to_string();
+            return st;
+        }
+
+        _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
+        _curr_reader->set_counter(_counter);
+        if (_scan_range.ranges[_curr_file_index].size > 0 &&
+            _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
+            // Does not set limit for compressed file.
+            _curr_reader->set_limit(_scan_range.ranges[_curr_file_index].size);
+        }
+        if (_scan_range.ranges[_curr_file_index].start_offset > 0) {
+            // Skip the first record started from |start_offset|.
+            auto status = file->skip(_scan_range.ranges[_curr_file_index].start_offset);
+            if (status.is_time_out()) {
+                // open this file next time
+                --_curr_file_index;
+                _curr_reader.reset();
+                return status;
+            }
+            CSVReader::Record dummy;
+            RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+        }
+
+        if (_parse_options.skip_header) {
+            for (int64_t i = 0; i < _parse_options.skip_header; i++) {
+                CSVReader::Record dummy;
+                auto st = _curr_reader->next_record(&dummy);
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        auto err_msg = fmt::format(
+                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                                _parse_options.skip_header, i);
+
+                        return Status::EndOfFile(err_msg);
+                    } else {
+                        return st;
+                    }
+                }
+            }
+        }
+        return Status::OK();
+    } else if (_curr_reader == nullptr) {
+        return Status::EndOfFile("CSVScanner");
+    }
+    return Status::OK();
+}
+
+>>>>>>> 51ce589e6e ([Enhancement] Provide clear error message if skip_headers is set in select from files option (#49503))
 StatusOr<ChunkPtr> CSVScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
 
