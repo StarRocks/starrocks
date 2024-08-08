@@ -701,8 +701,11 @@ void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
     if (ctx != nullptr) {
         ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
-        ctx->update_pred_filter_stats(_plan_node_id,
-                                      _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+
         if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
             int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
             int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
