@@ -15,7 +15,6 @@
 package com.starrocks.rpc;
 
 import com.starrocks.common.Config;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TConfiguration;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -27,18 +26,22 @@ import org.apache.thrift.transport.TTransport;
 
 public class ConfigurableTProtocolFactory {
 
-    public static TProtocolFactory getTProtocolFactory(String protocol) {
+    public static TProtocolFactory getTProtocolFactory(ConfigurableSerDesFactory.Protocol protocol) {
         TProtocolFactory factory;
         TConfiguration configuration = buildTConfiguration();
-        if (StringUtils.equalsIgnoreCase(protocol, "compact")) {
-            factory = new ConfigurableTCompactFactory(configuration);
-        } else if (StringUtils.equalsIgnoreCase(protocol, "json")) {
-            factory = new ConfigurableTJsonFactory(configuration);
-        } else if (StringUtils.equalsIgnoreCase(protocol, "simple_json")) {
-            factory = new ConfigurableTSimpleJSONFactory(configuration);
-        } else {
-            // default binary
-            factory = new ConfigurableTBinaryFactory(configuration);
+        switch (protocol) {
+            case JSON:
+                factory = new ConfigurableTJsonFactory(configuration);
+                break;
+            case SIMPLE_JSON:
+                factory = new ConfigurableTSimpleJSONFactory(configuration);
+                break;
+            case COMPACT:
+                factory = new ConfigurableTCompactFactory(configuration);
+                break;
+            default:
+                factory = new ConfigurableTBinaryFactory(configuration);
+                break;
         }
         return factory;
     }

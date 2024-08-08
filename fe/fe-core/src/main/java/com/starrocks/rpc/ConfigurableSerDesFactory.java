@@ -22,19 +22,37 @@ import org.apache.thrift.transport.TTransportException;
 public class ConfigurableSerDesFactory {
 
     public static TSerializer getTSerializer() throws TTransportException {
-        return getTSerializer("binary");
+        return getTSerializer(Protocol.BINARY.name());
     }
 
     public static TSerializer getTSerializer(String protocol) throws TTransportException {
-        TProtocolFactory factory = ConfigurableTProtocolFactory.getTProtocolFactory(protocol);
+        Protocol p = Protocol.getProtocol(protocol);
+        TProtocolFactory factory = ConfigurableTProtocolFactory.getTProtocolFactory(p);
         return new TSerializer(factory);
     }
     public static TDeserializer getTDeserializer() throws TTransportException {
-        return getTDeserializer("binary");
+        return getTDeserializer(Protocol.BINARY.name());
     }
 
     public static TDeserializer getTDeserializer(String protocol) throws TTransportException {
-        TProtocolFactory factory = ConfigurableTProtocolFactory.getTProtocolFactory(protocol);
+        Protocol p = Protocol.getProtocol(protocol);
+        TProtocolFactory factory = ConfigurableTProtocolFactory.getTProtocolFactory(p);
         return new TDeserializer(factory);
+    }
+
+    public enum Protocol {
+        BINARY,
+        COMPACT,
+        JSON,
+        SIMPLE_JSON;
+
+        public static Protocol getProtocol(String name) {
+            for (Protocol protocol : Protocol.values()) {
+                if (protocol.name().equalsIgnoreCase(name)) {
+                    return protocol;
+                }
+            }
+            return BINARY;
+        }
     }
 }

@@ -1408,10 +1408,21 @@ CONF_mInt32(config_vector_index_build_concurrency, "8");
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "0");
 
-CONF_mInt32(thrift_max_message_size, "1073741824"); // 1 GB
+// When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
+// The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
+// This will cause FE to fail during deserialization when the returned result set is larger than 100M. Therefore,
+// we set a default value of 1G and the maximum configurable value is 2G.
+CONF_mInt32(thrift_max_message_size, "1073741824");
 
+// MaxFrameSize limits the size of one frame of data for the TFramedTransport. Since all implementations currently send
+// messages in one frame only if TFramedTransport is used, this value may interfere with MaxMessageSize.
+// In the case of an conflict, the smaller value of the two is used (see remark below). The default value is called
+// DEFAULT_MAX_FRAME_SIZE and has a value of 16384000 bytes. This value is used consistently across all Thrift libraries,
+// so we use the same value with the old version.
 CONF_mInt32(thrift_max_frame_size, "16384000");
 
+// The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
+// allows for structures nested up to 64 levels deep.
 CONF_mInt32(thrift_max_recursion_depth, "64");
 
 } // namespace starrocks::config

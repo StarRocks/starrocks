@@ -65,6 +65,8 @@ import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
+
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
 // 1. MD5 digest: semantically-equivalent Fragments always produce the same MD5 digest.
@@ -231,7 +233,7 @@ public class FragmentNormalizer {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
         try {
-            TSerializer ser = ConfigurableSerDesFactory.getTSerializer("simple_json");
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
