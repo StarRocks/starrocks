@@ -60,7 +60,7 @@ static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress&
     case TBrokerOperationStatusCode::OK:
         return Status::OK();
     case TBrokerOperationStatusCode::END_OF_FILE:
-        return Status::EndOfFile(st.message);
+        return Status::EndOfFile(fmt::format("error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::NOT_AUTHORIZED:
         return Status::IOError(fmt::format("No broker permission, error={}, broker={}", st.message, broker.hostname));
     case TBrokerOperationStatusCode::DUPLICATE_REQUEST:
