@@ -1,4 +1,4 @@
--- name: test_configure
+-- name: test_configure @sequential
 admin set frontend config ("thrift_max_message_size"="10485760");
 -- result:
 []
