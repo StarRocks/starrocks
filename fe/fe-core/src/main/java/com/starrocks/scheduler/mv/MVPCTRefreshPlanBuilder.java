@@ -31,6 +31,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -44,7 +45,6 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,8 +106,8 @@ public class MVPCTRefreshPlanBuilder {
         Set<String> uniqueTableNames = tableRelations.keySet().stream().collect(Collectors.toSet());
         int numOfPushDownIntoTables = 0;
         boolean hasGenerateNonPushDownPredicates = false;
-        boolean isEnableMVRefreshQueryRewrite = isEnableMVRefreshQueryRewrite(mvContext.getCtx(),
-                mvRefBaseTablePartitionSlotRefs.keySet());
+        SessionVariable sessionVariable = mvContext.getCtx().getSessionVariable();
+        boolean isEnableMVRefreshQueryRewrite = sessionVariable.isEnableMaterializedViewRewriteForInsert();
         for (String tblName : uniqueTableNames) {
             // skip to generate partition predicate for non-ref base tables
             if (!refTableRefreshPartitions.containsKey(tblName)) {
@@ -208,18 +208,6 @@ public class MVPCTRefreshPlanBuilder {
             new QueryAnalyzer(mvContext.getCtx()).analyze(newQueryStatement);
         }
         return insertStmt;
-    }
-
-    private boolean isEnableMVRefreshQueryRewrite(ConnectContext ctx,
-                                                  Set<Table> baseTables) {
-        if (!ctx.getSessionVariable().isEnableMaterializedViewRewriteForInsert()) {
-            return false;
-        }
-
-        Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(ctx, 1, baseTables);
-        LOG.info("Refresh mv {} with related mvs: {}", mv.getName(), relatedMvs);
-        // only enable mv rewrite when there are more than one related mvs
-        return relatedMvs.size() > 1;
     }
 
     private boolean pushDownPartitionPredicates(Table table,
