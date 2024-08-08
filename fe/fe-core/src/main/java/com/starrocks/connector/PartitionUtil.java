@@ -747,13 +747,14 @@ public class PartitionUtil {
         return ICEBERG_DEFAULT_PARTITION;
     }
 
-    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec,
+                                                         StructLike partition,
+                                                         boolean existPartitionTransformedEvolution) {
         PartitionData partitionData = (PartitionData) partition;
         List<String> partitionValues = new ArrayList<>();
-        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
         for (int i = 0; i < spec.fields().size(); i++) {
             PartitionField partitionField = spec.fields().get(i);
-            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) ||
+            if ((!partitionField.transform().isIdentity() && existPartitionTransformedEvolution) ||
                     (partitionField.transform().isVoid() && partitionData.get(i) == null)) {
                 continue;
             }
