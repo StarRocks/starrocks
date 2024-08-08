@@ -90,6 +90,28 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
+// Cast Json to struct<ANY>
+class CastJsonToStruct final : public Expr {
+public:
+    CastJsonToStruct(const TExprNode& node,
+                     TypeDescriptor type_desc,
+                     std::vector<std::unique_ptr<Expr>> field_casts)
+            : Expr(node),
+              _cast_to_type_desc(std::move(type_desc)),
+              _field_casts(std::move(field_casts)) {}
+
+    CastJsonToStruct(const CastJsonToStruct& rhs) : Expr(rhs) {}
+
+    ~CastJsonToStruct() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToStruct(*this)); }
+
+private:
+    TypeDescriptor _cast_to_type_desc;
+    std::vector<std::unique_ptr<Expr>> _field_casts;
+};
+
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>
