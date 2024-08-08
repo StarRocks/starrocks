@@ -70,6 +70,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -272,7 +273,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
             partitions.add(partition);
             short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-            partitionReplicaNum.put(partition.getId(), replicationNum);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                partitionReplicaNum.put(physicalPartition.getId(), replicationNum);
+            }
         }
 
         // check conditions
