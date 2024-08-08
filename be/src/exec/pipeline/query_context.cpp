@@ -229,8 +229,10 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
         }
     }
     for (const auto& [node_id, exec_stats] : _node_exec_stats) {
-        query_statistic->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
-                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+        query_statistic->add_exec_stats_item(
+                node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
+                exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
+                exec_stats->rf_filter_rows.exchange(0));
     }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;

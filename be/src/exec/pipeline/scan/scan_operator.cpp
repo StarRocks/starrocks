@@ -248,7 +248,6 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
-    update_exec_stats(state);
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
     set_buffer_finished();
