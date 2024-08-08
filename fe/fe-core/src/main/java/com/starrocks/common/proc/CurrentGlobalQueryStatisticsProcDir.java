@@ -43,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /*
  * show proc "/global_current_queries"
@@ -69,12 +70,12 @@ public class CurrentGlobalQueryStatisticsProcDir implements ProcDirInterface {
         final BaseProcResult result = new BaseProcResult();
         result.setNames(CurrentQueryStatisticsProcDir.TITLE_NAMES.asList());
         List<QueryStatisticsInfo> queryInfos = QueryStatisticsInfo.makeListFromMetricsAndMgrs();
-        List<QueryStatisticsInfo> otherQueryInfos = GlobalStateMgr.getCurrentState()
-                .getQueryStatisticsInfoFromOtherFEs();
+        List<QueryStatisticsInfo> otherQueryInfos = GlobalStateMgr.getCurrentState().getQueryStatisticsInfoFromOtherFEs();
 
-        queryInfos.addAll(otherQueryInfos);
+        List<QueryStatisticsInfo> allInfos = Stream.concat(queryInfos.stream(), otherQueryInfos.stream())
+                .collect(Collectors.toList());
 
-        List<List<String>> sortedRowData = queryInfos
+        List<List<String>> sortedRowData = allInfos
                 .stream()
                 .map(QueryStatisticsInfo::formatToList)
                 .collect(Collectors.toList());

@@ -62,7 +62,6 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsInfo;
-import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
@@ -1095,8 +1094,9 @@ public class NodeMgr {
             }
 
             try {
-                TGetQueryStatisticsResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 Config.thrift_rpc_timeout_ms,
                                 Config.thrift_rpc_retry_times,
                                 client -> client.getQueryStatistics(request));
