@@ -245,6 +245,7 @@ public class RuleSet {
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
                 MergeLimitDirectRule.JDBC_SCAN,
+                MergeLimitDirectRule.ICEBERG_METADATA_SCAN,
                 MergeLimitDirectRule.WINDOW,
                 MergeLimitDirectRule.INTERSECT,
                 MergeLimitDirectRule.EXCEPT,
