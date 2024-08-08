@@ -1330,6 +1330,10 @@ public class OlapTable extends Table {
         }
     }
 
+    public void addPhysicalPartition(PhysicalPartition physicalPartition) {
+        physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
+    }
+
     // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {

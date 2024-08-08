@@ -1011,6 +1011,7 @@ public class RestoreJob extends AbstractJob {
                 physicalPartition.setIdForRestore(newPhysicalPartId);
                 physicalPartition.setParentId(newPartId);
                 remotePart.addSubPartition(physicalPartition);
+                remoteTbl.addPhysicalPartition(physicalPartition);
             }
             // save version info for creating replicas
             long visibleVersion = physicalPartition.getVisibleVersion();
