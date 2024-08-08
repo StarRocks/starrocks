@@ -275,8 +275,11 @@ public class OlapTable extends Table {
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
+    // Both the following two flags are used by StarMgrMetaSyncer
     // The flag is used to indicate whether the table shard group has changed.
     public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
+    // The flag is used to indicate whether the table is doing automatic bucketing.
+    public AtomicBoolean isAutomaticBucketing = new AtomicBoolean(false);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -429,6 +432,14 @@ public class OlapTable extends Table {
         this.isShardGroupChanged.set(isShardGroupChanged);
     }
 
+    public boolean isAutomaticBucketing() {
+        return isAutomaticBucketing.get();
+    }
+
+    public void setAutomaticBucketing(boolean isAutomaticBucketing) {
+        this.isAutomaticBucketing.set(isAutomaticBucketing);
+    }
+
     public BinlogConfig getCurBinlogConfig() {
         if (tableProperty != null) {
             return tableProperty.getBinlogConfig();
@@ -510,7 +521,6 @@ public class OlapTable extends Table {
 
     public void setState(OlapTableState state) {
         this.state = state;
-        setShardGroupChanged(true);
     }
 
     public OlapTableState getState() {
