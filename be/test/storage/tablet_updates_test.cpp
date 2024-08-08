@@ -1201,7 +1201,7 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index) {
+void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index, bool show_status) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
@@ -1234,6 +1234,12 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
     EXPECT_TRUE(best_tablet->verify().ok());
+
+    if (show_status) {
+        std::string json_result;
+        best_tablet->updates()->get_compaction_status(&json_result);
+        EXPECT_TRUE(json_result.find("\"last_version\": \"4_1\"") != std::string::npos);
+    }
 }
 
 // NOLINTNEXTLINE
@@ -3711,6 +3717,10 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     _tablet->updates()->reset_error();
     _tablet->updates()->check_for_apply();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
+}
+
+TEST_F(TabletUpdatesTest, test_get_compaction_status) {
+    test_horizontal_compaction(false, true);
 }
 
 } // namespace starrocks
