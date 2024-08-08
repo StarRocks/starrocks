@@ -192,6 +192,15 @@ FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
+Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges) {
+    int64_t dummy_offset = 0;
+    for (auto& r : _row_group_readers) {
+        r->collect_io_ranges(io_ranges, &dummy_offset, ColumnIOType::PAGE_INDEX);
+        r->collect_io_ranges(io_ranges, &dummy_offset, ColumnIOType::PAGES);
+    }
+    return Status::OK();
+}
+
 Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());

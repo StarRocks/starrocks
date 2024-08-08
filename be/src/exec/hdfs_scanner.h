@@ -333,6 +333,28 @@ struct HdfsScannerContext {
     void merge_split_tasks();
 };
 
+struct OpenFileOptions {
+    FileSystem* fs = nullptr;
+    std::string path;
+    int64_t file_size = -1;
+    HdfsScanStats* fs_stats = nullptr;
+    HdfsScanStats* app_stats = nullptr;
+
+    // for datacache
+    bool use_datacache = false;
+    bool use_cache_select = false;
+    int64_t modification_time = 0;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int32_t datacache_evict_probability = 0;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+
+    // for compressed text file
+    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
+};
+
 class HdfsScanner {
 public:
     HdfsScanner() = default;
@@ -363,7 +385,10 @@ public:
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:
-    Status open_random_access_file();
+    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
+            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+    virtual Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
