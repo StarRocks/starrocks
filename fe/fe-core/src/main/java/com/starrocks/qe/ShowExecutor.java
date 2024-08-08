@@ -326,26 +326,31 @@ public class ShowExecutor {
                             continue;
                         }
 
-                        AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
-                        mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = MvUtils.getTableChecked(baseTableInfo);
-                            // TODO: external table should check table action after AuthorizationManager support it.
-                            if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
-                                try {
-                                    Authorizer.checkTableAction(context.getCurrentUserIdentity(),
-                                            context.getCurrentRoleIds(), baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableName(),
-                                            PrivilegeType.SELECT);
-                                } catch (AccessDeniedException e) {
-                                    baseTableHasPrivilege.set(false);
-                                }
-                            }
-                        });
-                        if (!baseTableHasPrivilege.get()) {
-                            continue;
-                        }
-
                         try {
+                            AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                            mvTable.getBaseTableInfos().stream()
+                                    .forEach(baseTableInfo -> {
+                                        // skip if base table not existed
+                                        Optional<Table> baseTableOpt = MvUtils.getTable(baseTableInfo);
+                                        if (baseTableOpt.isEmpty()) {
+                                            return;
+                                        }
+                                        Table baseTable = baseTableOpt.get();
+                                        // TODO: external table should check table action after AuthorizationManager support it.
+                                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
+                                            try {
+                                                Authorizer.checkTableAction(context.getCurrentUserIdentity(),
+                                                        context.getCurrentRoleIds(), baseTableInfo.getDbName(),
+                                                        baseTableInfo.getTableName(),
+                                                        PrivilegeType.SELECT);
+                                            } catch (AccessDeniedException e) {
+                                                baseTableHasPrivilege.set(false);
+                                            }
+                                        }
+                                    });
+                            if (!baseTableHasPrivilege.get()) {
+                                continue;
+                            }
                             Authorizer.checkAnyActionOnMaterializedView(context.getCurrentUserIdentity(),
                                     context.getCurrentRoleIds(), new TableName(db.getFullName(), mvTable.getName()));
                         } catch (AccessDeniedException e) {
