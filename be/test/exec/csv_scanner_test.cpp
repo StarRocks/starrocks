@@ -1062,6 +1062,161 @@ TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     (void)fs::remove(log_file_path);
 }
 
+<<<<<<< HEAD
+=======
+TEST_P(CSVScannerTest, test_get_schema) {
+    {
+        // sample 1 row
+        std::vector<std::pair<std::string, LogicalType>> expected_schema = {
+                {"$1", TYPE_BIGINT}, {"$2", TYPE_DOUBLE}, {"$3", TYPE_DOUBLE}, {"$4", TYPE_BOOLEAN}};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file23");
+        range.__set_num_of_columns_from_file(0);
+        ranges.push_back(range);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_schema_sample_file_row_count(1);
+        auto scanner = create_csv_scanner({}, ranges, params);
+        EXPECT_OK(scanner->open());
+        std::vector<SlotDescriptor> schema;
+        EXPECT_OK(scanner->get_schema(&schema));
+        EXPECT_EQ(expected_schema.size(), schema.size());
+
+        for (size_t i = 0; i < schema.size(); i++) {
+            EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+            EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
+        }
+    }
+
+    {
+        // sample 2 row
+        std::vector<std::pair<std::string, LogicalType>> expected_schema = {{"$1", TYPE_BIGINT},
+                                                                            {"$2", TYPE_VARCHAR},
+                                                                            {"$3", TYPE_VARCHAR},
+                                                                            {"$4", TYPE_VARCHAR},
+                                                                            {"$5", TYPE_BOOLEAN}};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file23");
+        range.__set_num_of_columns_from_file(0);
+        ranges.push_back(range);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_schema_sample_file_row_count(2);
+        auto scanner = create_csv_scanner({}, ranges, params);
+        EXPECT_OK(scanner->open());
+        std::vector<SlotDescriptor> schema;
+        EXPECT_OK(scanner->get_schema(&schema));
+        EXPECT_EQ(expected_schema.size(), schema.size());
+
+        for (size_t i = 0; i < schema.size(); i++) {
+            EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+            EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
+        }
+    }
+
+    {
+        // sample 1 row, skip header 1, enclose ", escape "\"
+        std::vector<std::pair<std::string, LogicalType>> expected_schema = {
+                {"$1", TYPE_BIGINT}, {"$2", TYPE_VARCHAR}, {"$3", TYPE_DOUBLE}, {"$4", TYPE_BOOLEAN}};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file23");
+        range.__set_num_of_columns_from_file(0);
+        ranges.push_back(range);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_skip_header(1);
+        params->__set_enclose('"');
+        params->__set_escape('\\');
+        params->__set_schema_sample_file_row_count(1);
+        auto scanner = create_csv_scanner({}, ranges, params);
+        EXPECT_OK(scanner->open());
+        std::vector<SlotDescriptor> schema;
+        EXPECT_OK(scanner->get_schema(&schema));
+        EXPECT_EQ(expected_schema.size(), schema.size());
+
+        for (size_t i = 0; i < schema.size(); i++) {
+            EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+            EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
+        }
+    }
+}
+
+TEST_P(CSVScannerTest, test_flexible_column_mapping) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_VARCHAR);
+    // not existing column
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_start_offset(0);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file1");
+    range.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range);
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->__set_row_delimiter('\n');
+    params->__set_column_separator('|');
+    params->__set_flexible_column_mapping(true);
+    auto scanner = create_csv_scanner(types, ranges, params);
+    scanner->use_v2(_use_v2);
+    EXPECT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    EXPECT_OK(res.status());
+
+    ChunkPtr chunk = res.value();
+    EXPECT_EQ(6, chunk->num_columns());
+    EXPECT_EQ(3, chunk->num_rows());
+
+    EXPECT_EQ("[1, 1.1, 'apple', '2020-01-01', 'apple', NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[-1, -0.1, 'banana', '1998-09-01', 'banana', NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[10, NULL, 'grapefruit', '2021-02-19', 'grapefruit', NULL]", chunk->debug_row(2));
+}
+
+TEST_P(CSVScannerTest, test_skip_headers) {
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_path("./be/test/exec/test_data/csv_scanner/small.csv");
+    range.__set_num_of_columns_from_file(0);
+    ranges.push_back(range);
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->__set_row_delimiter('\n');
+    // there are only 2 rows within file small.csv
+    // if we set skip first 3 line, we expect to get a clear error message
+    params->__set_skip_header(3);
+    params->__set_column_separator(',');
+    params->__set_enclose('"');
+    params->__set_escape('\\');
+
+    auto scanner = create_csv_scanner({}, ranges, params);
+    EXPECT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    auto st = scanner->get_schema(&schema);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(0, schema.size());
+    EXPECT_EQ(st.to_string(false),
+              "End of file: The parameter 'skip_header' is set to 3, but there are only 2 rows in the csv file");
+}
+
+>>>>>>> 51ce589e6e ([Enhancement] Provide clear error message if skip_headers is set in select from files option (#49503))
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTrimSpaceTest, Values(true));
 
