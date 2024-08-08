@@ -122,9 +122,6 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
-<<<<<<< HEAD
-static void failure_writer(const char* data, size_t size) {
-=======
 static void dontdump_unused_pages() {
     static bool start_dump = false;
     if (!start_dump) {
@@ -143,7 +140,6 @@ static void failure_writer(const char* data, int size) {
     if (config::enable_core_file_size_optimization) {
         dontdump_unused_pages();
     }
->>>>>>> b30d08d97c ([Enhancement] BE support don't dump retain pages of jemalloc (#48851))
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
