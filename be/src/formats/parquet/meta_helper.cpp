@@ -118,32 +118,59 @@ void IcebergMetaHelper::_init_field_mapping() {
     }
 }
 
-bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field,
-                                       const TIcebergSchemaField* field_schema) const {
+bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                                       const TypeDescriptor* type_descriptor) const {
     // only check for complex type now
     // if complex type has none valid subfield, we will treat this struct type as invalid type.
     if (!parquet_field->type.is_complex_type()) {
         return true;
     }
 
-    bool has_valid_child = false;
-
-    std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_iceberg_schema{};
-    for (const auto& field : field_schema->children) {
-        field_id_2_iceberg_schema.emplace(field.field_id, &field);
+    if (parquet_field->type.type != type_descriptor->type) {
+        // complex type mismatched
+        return false;
     }
 
-    // start to check struct type
-    for (const auto& child_parquet_field : parquet_field->children) {
-        auto it = field_id_2_iceberg_schema.find(child_parquet_field.field_id);
-        if (it == field_id_2_iceberg_schema.end()) {
-            continue;
+    bool has_valid_child = false;
+
+    if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
+        for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
+            if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
+                               &type_descriptor->children[idx])) {
+                has_valid_child = true;
+                break;
+            }
+        }
+    } else if (parquet_field->type.is_struct_type()) {
+        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_iceberg_schema{};
+        std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
+        for (const auto& field : field_schema->children) {
+            field_id_2_iceberg_schema.emplace(field.field_id, &field);
+            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
+                if (type_descriptor->field_names[i] == field.name) {
+                    field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
+                    break;
+                }
+            }
         }
 
-        // is compelx type, recursive check it's children
-        if (_is_valid_type(&child_parquet_field, it->second)) {
-            has_valid_child = true;
-            break;
+        // start to check struct type
+        for (const auto& child_parquet_field : parquet_field->children) {
+            auto it = field_id_2_iceberg_schema.find(child_parquet_field.field_id);
+            if (it == field_id_2_iceberg_schema.end()) {
+                continue;
+            }
+
+            auto it_td = field_id_2_type.find(child_parquet_field.field_id);
+            if (it_td == field_id_2_type.end()) {
+                continue;
+            }
+
+            // is compelx type, recursive check it's children
+            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+                has_valid_child = true;
+                break;
+            }
         }
     }
 
@@ -186,7 +213,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
         // check is type is invalid
-        if (!_is_valid_type(parquet_field, iceberg_it->second)) {
+        if (!_is_valid_type(parquet_field, iceberg_it->second, &materialized_column.slot_desc->type())) {
             continue;
         }
 
