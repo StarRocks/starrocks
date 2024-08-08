@@ -340,13 +340,12 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     public void invalidateTable(String dbName, String tableName, Table table) {
-        String tableLocation;
         if (table == null) {
-            LOG.warn("table [{}.{}] origin location is null", dbName, tableName);
+            LOG.warn("table [{}.{}] is null", dbName, tableName);
             try {
                 table = metastore.getTable(dbName, tableName);
             } catch (Exception e) {
-                LOG.error("Can't get table location from cache or hive metastore. ignore it");
+                LOG.error("Can't get table from cache or hive metastore. ignore it");
                 return;
             }
         }
