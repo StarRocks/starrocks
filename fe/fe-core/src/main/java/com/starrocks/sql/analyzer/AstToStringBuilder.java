@@ -1484,7 +1484,7 @@ public class AstToStringBuilder {
         if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
-                || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == JDBC
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
@@ -1678,7 +1678,7 @@ public class AstToStringBuilder {
             sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
-        } else if (table.getType() == Table.TableType.JDBC) {
+        } else if (table.getType() == JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;
             addTableComment(sb, table);
 
@@ -1763,10 +1763,17 @@ public class AstToStringBuilder {
                 .append("\n)");
 
         // Partition column names
+        List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY ( ")
-                    .append(String.join(", ", table.getPartitionColumnNames()))
-                    .append(" )");
+            createTableSql.append("\nPARTITION BY (");
+
+            if (!table.isIcebergTable()) {
+                partitionNames = table.getPartitionColumnNames();
+            } else {
+                partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+            }
+
+            createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
         // Location
