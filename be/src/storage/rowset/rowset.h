@@ -228,8 +228,9 @@ public:
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
     int64_t num_rows() const override { return rowset_meta()->num_rows(); }
+    int64_t num_rows_upt() const { return rowset_meta()->num_rows_upt(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
-    size_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
+    int64_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
