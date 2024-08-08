@@ -3095,4 +3095,15 @@ public class Config extends ConfigBase {
     
     @ConfField
     public static boolean enable_alter_struct_column = true;
+
+    // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
+    // large bytes to being deserialized successfully. So we give a 1G default value here.
+    @ConfField(mutable = true)
+    public static int thrift_max_message_size = 1024 * 1024 * 1024;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_frame_size = 16384000;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_recursion_depth = 64;
 }
