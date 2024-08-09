@@ -862,7 +862,8 @@ public class BackupJob extends AbstractJob {
         try {
             info.add(Joiner.on(", ").join(unfinishedTaskIds.entrySet()));
             info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
-                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    e -> "[ task id: " + e.getKey() + " -> " + "finished part:" + e.getValue().first + "/" +
+                    " total number of subtasks:" + e.getValue().second + "]").collect(
                     Collectors.toList())));
             info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
                     + "]").collect(Collectors.toList())));
