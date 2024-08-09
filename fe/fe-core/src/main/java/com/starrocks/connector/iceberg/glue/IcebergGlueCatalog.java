@@ -40,6 +40,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,6 +72,12 @@ public class IcebergGlueCatalog implements IcebergCatalog {
     public IcebergCatalogType getIcebergCatalogType() {
         return IcebergCatalogType.GLUE_CATALOG;
     }
+
+    @Override
+    public void clear() throws IOException {
+        delegate.close();
+    }
+
 
     @Override
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {

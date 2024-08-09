@@ -151,4 +151,8 @@ public interface IcebergCatalog extends MemoryTrackable {
     default Map<String, Object> loadNamespaceMetadata(String dbName) {
         return new HashMap<>();
     }
+
+    default void clear() throws IOException {
+
+    }
 }
