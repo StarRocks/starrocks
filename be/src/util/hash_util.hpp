@@ -34,8 +34,6 @@
 
 #pragma once
 
-#include "column/column_hash.h"
-#include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 
@@ -344,25 +342,6 @@ struct ModuloOp {
 // we weed to ensure that l is randomly and uniformly distributed in [0, 2^32]
 struct ReduceOp {
     uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
-};
-
-template <LogicalType LT, enum PhmapSeed seed>
-struct PhmapHashFuncSelector {
-    std::size_t operator()(RunTimeCppType<LT> value) const {
-        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>){
-            return Hash128WithSeed<seed>(value);
-        } else if constexpr (lt_is_fixedlength<LT>) {
-            return StdHashWithSeed<RunTimeCppType<LT>, seed>(value);
-        } else if constexpr (lt_is_string<LT>){
-            return SliceHashWithSeed<seed>(value);
-        } else {
-            assert(false);
-        }
-    }
-
-    constexpr bool is_supported() {
-        return lt_is_fixedlength<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>;
-    }
 };
 
 } // namespace starrocks
