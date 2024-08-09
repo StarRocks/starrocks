@@ -1044,7 +1044,7 @@ public final class SparkDpp implements java.io.Serializable {
         return fileGroupDataframe;
     }
 
-    private Dataset<Row> loadDataFromHiveTable(SparkSession spark,
+    private Dataset<Row> loadDataFromExternalTable(SparkSession spark,
                                                String hiveDbTableName,
                                                EtlJobConfig.EtlIndex baseIndex,
                                                EtlJobConfig.EtlFileGroup fileGroup,
@@ -1249,8 +1249,8 @@ public final class SparkDpp implements java.io.Serializable {
                             long currentSize = fileGroupDataframe.count();
                             unselectedRowAcc.add(originalSize - currentSize);
                         }
-                    } else if (sourceType == EtlJobConfig.SourceType.HIVE) {
-                        fileGroupDataframe = loadDataFromHiveTable(spark, fileGroup.dppHiveDbTableName, baseIndex,
+                    } else if (sourceType == EtlJobConfig.SourceType.HIVE || sourceType == EtlJobConfig.SourceType.HUDI) {
+                        fileGroupDataframe = loadDataFromExternalTable(spark, fileGroup.dppExternalDbTableName, baseIndex,
                                 fileGroup, dstTableSchema, dictBitmapColumnSet);
                     } else {
                         throw new RuntimeException("Unknown source type: " + sourceType.name());

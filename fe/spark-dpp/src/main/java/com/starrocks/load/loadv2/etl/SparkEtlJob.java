@@ -56,7 +56,7 @@ public class SparkEtlJob {
 
     private String jobConfigFilePath;
     private EtlJobConfig etlJobConfig;
-    private Set<Long> hiveSourceTables;
+    private Set<Long> externalSourceTables;
     private Map<Long, Set<String>> tableToBitmapDictColumns;
     private Map<Long, Set<String>> tableToBitmapBinaryColumns;
     private SparkSession spark;
@@ -64,7 +64,7 @@ public class SparkEtlJob {
     private SparkEtlJob(String jobConfigFilePath) {
         this.jobConfigFilePath = jobConfigFilePath;
         this.etlJobConfig = null;
-        this.hiveSourceTables = Sets.newHashSet();
+        this.externalSourceTables = Sets.newHashSet();
         this.tableToBitmapDictColumns = Maps.newHashMap();
         this.tableToBitmapBinaryColumns = Maps.newHashMap();
     }
@@ -103,13 +103,14 @@ public class SparkEtlJob {
      */
     private void checkConfig() throws Exception {
         for (Map.Entry<Long, EtlTable> entry : etlJobConfig.tables.entrySet()) {
-            boolean isHiveSource = false;
+            boolean isExternalSource = false;
             Set<String> bitmapDictColumns = Sets.newHashSet();
             Set<String> bitmapBinaryColumns = Sets.newHashSet();
 
             for (EtlFileGroup fileGroup : entry.getValue().fileGroups) {
-                if (fileGroup.sourceType == EtlJobConfig.SourceType.HIVE) {
-                    isHiveSource = true;
+                if (fileGroup.sourceType == EtlJobConfig.SourceType.HIVE
+                        || fileGroup.sourceType == EtlJobConfig.SourceType.HUDI) {
+                    isExternalSource = true;
                 }
                 Map<String, EtlColumnMapping> newColumnMappings = Maps.newHashMap();
                 for (Map.Entry<String, EtlColumnMapping> mappingEntry : fileGroup.columnMappings.entrySet()) {
@@ -130,8 +131,8 @@ public class SparkEtlJob {
                 // reset new columnMappings
                 fileGroup.columnMappings = newColumnMappings;
             }
-            if (isHiveSource) {
-                hiveSourceTables.add(entry.getKey());
+            if (isExternalSource) {
+                externalSourceTables.add(entry.getKey());
             }
             if (!bitmapDictColumns.isEmpty()) {
                 tableToBitmapDictColumns.put(entry.getKey(), bitmapDictColumns);
@@ -140,12 +141,12 @@ public class SparkEtlJob {
                 tableToBitmapBinaryColumns.put(entry.getKey(), bitmapBinaryColumns);
             }
         }
-        LOG.info("init hiveSourceTables: " + hiveSourceTables + ", tableToBitmapDictColumns: " +
+        LOG.info("init externalSourceTables: " + externalSourceTables + ", tableToBitmapDictColumns: " +
                 tableToBitmapDictColumns);
 
         // spark etl must have only one table with bitmap type column to process.
-        if (hiveSourceTables.size() > 1 || tableToBitmapDictColumns.size() > 1) {
-            throw new Exception("spark etl job must have only one hive table with bitmap type column to process");
+        if (externalSourceTables.size() > 1 || tableToBitmapDictColumns.size() > 1) {
+            throw new Exception("spark etl job must have only one hive or hudi table with bitmap type column to process");
         }
     }
 
@@ -165,15 +166,15 @@ public class SparkEtlJob {
         // hive db and tables
         EtlFileGroup fileGroup = table.fileGroups.get(0);
         List<String> intermediateTableColumnList = fileGroup.fileFieldNames;
-        String sourceHiveDBTableName = fileGroup.hiveDbTableName;
-        String starrocksHiveDB = sourceHiveDBTableName.split("\\.")[0];
+        String sourceExternalDBTableName = fileGroup.externalDbTableName;
+        String starrocksExternalDB = sourceExternalDBTableName.split("\\.")[0];
         String taskId = etlJobConfig.outputPath.substring(etlJobConfig.outputPath.lastIndexOf("/") + 1);
         String globalDictTableName = String.format(EtlJobConfig.GLOBAL_DICT_TABLE_NAME, tableId);
         String dorisGlobalDictTableName = String.format(EtlJobConfig.DORIS_GLOBAL_DICT_TABLE_NAME, tableId);
         String distinctKeyTableName = String.format(EtlJobConfig.DISTINCT_KEY_TABLE_NAME, tableId, taskId);
-        String starrocksIntermediateHiveTable =
-                String.format(EtlJobConfig.STARROCKS_INTERMEDIATE_HIVE_TABLE_NAME, tableId, taskId);
-        String sourceHiveFilter = fileGroup.where;
+        String starrocksIntermediateExternalTable =
+                String.format(EtlJobConfig.STARROCKS_INTERMEDIATE_EXTERNAL_TABLE_NAME, tableId, taskId);
+        String sourceExternalFilter = fileGroup.where;
 
         // others
         List<String> mapSideJoinColumns = Lists.newArrayList();
@@ -183,31 +184,31 @@ public class SparkEtlJob {
 
         LOG.info("global dict builder args, dictColumnMap: " + dictColumnMap
                 + ", intermediateTableColumnList: " + intermediateTableColumnList
-                + ", sourceHiveDBTableName: " + sourceHiveDBTableName
-                + ", sourceHiveFilter: " + sourceHiveFilter
+                + ", sourceExternalDBTableName: " + sourceExternalDBTableName
+                + ", sourceExternalFilter: " + sourceExternalFilter
                 + ", distinctKeyTableName: " + distinctKeyTableName
                 + ", globalDictTableName: " + globalDictTableName
-                + ", starrocksIntermediateHiveTable: " + starrocksIntermediateHiveTable);
+                + ", starrocksIntermediateExternalTable: " + starrocksIntermediateExternalTable);
         try {
             GlobalDictBuilder globalDictBuilder = new GlobalDictBuilder(
-                    dictColumnMap, intermediateTableColumnList, mapSideJoinColumns, sourceHiveDBTableName,
-                    sourceHiveFilter, starrocksHiveDB, distinctKeyTableName, globalDictTableName,
-                    starrocksIntermediateHiveTable,
+                    dictColumnMap, intermediateTableColumnList, mapSideJoinColumns, sourceExternalDBTableName,
+                    sourceExternalFilter, starrocksExternalDB, distinctKeyTableName, globalDictTableName,
+                    starrocksIntermediateExternalTable,
                     buildConcurrency, veryHighCardinalityColumn, veryHighCardinalityColumnSplitNum, spark);
             globalDictBuilder.checkGlobalDictTableName(dorisGlobalDictTableName);
-            globalDictBuilder.createHiveIntermediateTable();
+            globalDictBuilder.createExternalIntermediateTable();
             globalDictBuilder.extractDistinctColumn();
             globalDictBuilder.buildGlobalDict();
-            globalDictBuilder.encodeStarRocksIntermediateHiveTable();
+            globalDictBuilder.encodeStarRocksIntermediateExternalTable();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
 
-        return String.format("%s.%s", starrocksHiveDB, starrocksIntermediateHiveTable);
+        return String.format("%s.%s", starrocksExternalDB, starrocksIntermediateExternalTable);
     }
 
     private void processData() throws Exception {
-        if (!hiveSourceTables.isEmpty()) {
+        if (!externalSourceTables.isEmpty()) {
             // only one table
             long tableId = -1;
             EtlTable table = null;
@@ -221,16 +222,16 @@ public class SparkEtlJob {
             if (table == null) {
                 throw new SparkDppException("invalid etl job config");
             }
-            // init hive configs like metastore service
+            // init hive or hudi configs like metastore service
             EtlFileGroup fileGroup = table.fileGroups.get(0);
-            initSparkConfigs(fileGroup.hiveTableProperties);
-            fileGroup.dppHiveDbTableName = fileGroup.hiveDbTableName;
+            initSparkConfigs(fileGroup.externalTableProperties);
+            fileGroup.dppExternalDbTableName = fileGroup.externalDbTableName;
 
-            // build global dict and encode source hive table if has bitmap dict columns
+            // build global dict and encode source hive or hudi table if has bitmap dict columns
             if (!tableToBitmapDictColumns.isEmpty() && tableToBitmapDictColumns.containsKey(tableId)) {
-                String starrocksIntermediateHiveDbTableName = buildGlobalDictAndEncodeSourceTable(table, tableId);
-                // set with starrocksIntermediateHiveDbTable
-                fileGroup.dppHiveDbTableName = starrocksIntermediateHiveDbTableName;
+                String starrocksIntermediateExternalDbTableName = buildGlobalDictAndEncodeSourceTable(table, tableId);
+                // set with starrocksIntermediateExternalDbTable
+                fileGroup.dppExternalDbTableName = starrocksIntermediateExternalDbTableName;
             }
         }
 

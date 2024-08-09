@@ -36,13 +36,18 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -64,6 +69,8 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlIndex;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
+import com.starrocks.mysql.privilege.MockedAuth;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -77,12 +84,19 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
 
 public class SparkLoadPendingTaskTest {
+    @Mocked
+    private ConnectContext ctx;
+    @Before
+    public void setUp() {
+        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+    }
 
     @Test
     public void testExecuteTask(@Injectable SparkLoadJob sparkLoadJob,
@@ -410,6 +424,154 @@ public class SparkLoadPendingTaskTest {
         etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(1, etlPartitions.size());
         Assert.assertEquals(partition3Id, etlPartitions.get(0).partitionId);
+    }
+
+
+    @Test
+    public void testLoadFromHudiTable(@Injectable SparkLoadJob sparkLoadJob,
+                                      @Injectable SparkResource resource,
+                                      @Injectable BrokerDesc brokerDesc,
+                                      @Mocked GlobalStateMgr globalStateMgr,
+                                      @Mocked Database database,
+                                      @Mocked OlapTable olapTable,
+                                      @Mocked HudiTable hudiTable)
+            throws LoadException, AnalysisException, DdlException {
+        long databaseId = 0L;
+        long tableId = 1L;
+        long hudiTableId = 10L;
+
+        // sr table schema
+        Column idColumn = new Column("id", Type.INT);
+        Column nameColumn = new Column("name", ScalarType.createVarchar(60));
+        Column dtColumn = new Column("dt", Type.DATE);
+        // dt is partition column, id is distribution column
+        List<Column> srColumns = Lists.newArrayList(idColumn, nameColumn, dtColumn);
+
+        // hudi table schema
+        Column hudiIdColumn = new Column("hudi_id", Type.INT);
+        Column hudiNameColumn = new Column("hudi_name", ScalarType.createVarchar(60));
+        Column hudiDtColumn = new Column("hudi_dt", Type.DATE);
+        List<Column> hudiColumns = Lists.newArrayList(hudiIdColumn, hudiNameColumn, hudiDtColumn);
+
+        // make indexes
+        // indexes
+        Map<Long, List<Column>> indexIdToSchema = Maps.newHashMap();
+        long indexId = 3L;
+        indexIdToSchema.put(indexId, Lists.newArrayList(hudiIdColumn));
+
+        // make distribution info
+        int distributionColumnIndex = 0;
+        DistributionInfo distributionInfo =
+                new HashDistributionInfo(3, Lists.newArrayList(srColumns.get(distributionColumnIndex)));
+
+        // make partition info
+        int partitionColumnIndex = 2;
+        RangePartitionInfo partitionInfo =
+                new RangePartitionInfo(Lists.newArrayList(srColumns.get(partitionColumnIndex)));
+
+        // set (`id` = `hudi_id`, `name` = `hudi_name`)
+        SlotRef idSlotRef = new SlotRef(null, "id");
+        SlotRef hudiIdSlotRef = new SlotRef(null, "hudi_id");
+        BinaryPredicate idPredicate = new BinaryPredicate(
+                BinaryType.EQ,
+                idSlotRef,
+                hudiIdSlotRef);
+
+        SlotRef nameSlotRef = new SlotRef(null, "name");
+        SlotRef hudiNameSlotRef = new SlotRef(null, "hudi_name");
+        BinaryPredicate namePredicate = new BinaryPredicate(
+                BinaryType.EQ,
+                nameSlotRef,
+                hudiNameSlotRef);
+
+        // where `dt` = '2024-05-10
+        SlotRef slotRefWhere = new SlotRef(null, "dt");
+        DateLiteral dateLiteral = new DateLiteral(2024L, 5L, 10L);
+        BinaryPredicate predicateWhere = new BinaryPredicate(
+                BinaryType.EQ,
+                slotRefWhere,
+                dateLiteral
+        );
+
+        // create partition
+        long partitionId = 2L;
+        Partition partition = new Partition(partitionId, "p20240510", null, distributionInfo);
+
+        // create temporary partition
+        long tempPartitionId = 6L;
+        Partition tempPartition = new Partition(tempPartitionId, "temp_p20240510", null, distributionInfo);
+
+        List<Partition> partitions = Lists.newArrayList(partition);
+
+
+        // make partition desc
+        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("2024-05-10")));
+        SingleRangePartitionDesc rangePartitionDesc = new SingleRangePartitionDesc(false, "p20240510", partitionKeyDesc, null);
+        rangePartitionDesc.analyze(1, null);
+        partitionInfo.handleNewSinglePartitionDesc(rangePartitionDesc, partitionId, false);
+
+        // make temporary partition desc
+        PartitionKeyDesc tempPartitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("2024-05-10")));
+        SingleRangePartitionDesc tempRangePartitionDesc = new SingleRangePartitionDesc(
+                false, "temp_p20240510", tempPartitionKeyDesc, null);
+        tempRangePartitionDesc.analyze(1, null);
+        partitionInfo.handleNewSinglePartitionDesc(tempRangePartitionDesc, tempPartitionId, true);
+
+        PartitionNames tempPartitionNames = new PartitionNames(true, Lists.newArrayList("temp_p20240510"));
+        DataDescription desc = new DataDescription("olapTable", tempPartitionNames, "hudiTable",
+                false, Lists.newArrayList(idPredicate, namePredicate), predicateWhere);
+        desc.analyze("testDb");
+        new Expectations() {
+            {
+                globalStateMgr.getDb(databaseId);
+                result = database;
+
+                database.getTable(tableId);
+                result = olapTable;
+
+                olapTable.getBaseSchema();
+                result = srColumns;
+
+                olapTable.getPartitionInfo();
+                result = partitionInfo;
+
+                olapTable.getDefaultDistributionInfo();
+                result = distributionInfo;
+            }
+        };
+
+        // file group
+        Map<BrokerFileGroupAggInfo.FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
+        List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
+
+
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        brokerFileGroups.add(brokerFileGroup);
+        BrokerFileGroupAggInfo.FileGroupAggKey aggKey = new BrokerFileGroupAggInfo.FileGroupAggKey(
+                tableId, Lists.newArrayList(tempPartitionId));
+        aggKeyToFileGroups.put(aggKey, brokerFileGroups);
+
+        // create pending task
+        SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, aggKeyToFileGroups, resource, brokerDesc);
+        task.init();
+
+        EtlJobConfig etlJobConfig = Deencapsulation.getField(task, "etlJobConfig");
+        Assert.assertTrue(etlJobConfig != null);
+        Map<Long, EtlTable> idToEtlTable = etlJobConfig.tables;
+        EtlTable etlTable = idToEtlTable.get(tableId);
+
+        // check partitions
+        EtlPartitionInfo etlPartitionInfo = etlTable.partitionInfo;
+        Assert.assertEquals("RANGE", etlPartitionInfo.partitionType);
+        List<String> partitionColumns = etlPartitionInfo.partitionColumnRefs;
+        Assert.assertEquals(1, partitionColumns.size());
+        Assert.assertEquals(srColumns.get(partitionColumnIndex).getName(), partitionColumns.get(0));
+        List<String> distributionColumns = etlPartitionInfo.distributionColumnRefs;
+        Assert.assertEquals(1, distributionColumns.size());
+        Assert.assertEquals(srColumns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
+        List<EtlPartition> etlPartitions = etlPartitionInfo.partitions;
+        Assert.assertEquals(1, etlPartitions.size());
+        Assert.assertEquals(tempPartitionId, etlPartitions.get(0).partitionId);
     }
 
 }

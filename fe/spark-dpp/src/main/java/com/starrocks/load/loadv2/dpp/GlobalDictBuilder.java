@@ -45,20 +45,20 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 /**
- * used for build hive global dict and encode source hive table
+ * used for build hive or hudi global dict and encode source hive or hudi table
  * <p>
- * input: a source hive table
- * output: a intermediate hive table whose distinct column is encode with int value
+ * input: a source hive or hudi table
+ * output: a intermediate hive or hudi table whose distinct column is encode with int value
  * <p>
  * usage example
- * step1,create a intermediate hive table
- * GlobalDictBuilder.createHiveIntermediateTable()
+ * step1,create a intermediate hive or hudi table
+ * GlobalDictBuilder.createExternalIntermediateTable()
  * step2, get distinct column's value
  * GlobalDictBuilder.extractDistinctColumn()
  * step3, build global dict
  * GlobalDictBuilder.buildGlobalDict()
  * step4, encode intermediate hive table with global dict
- * GlobalDictBuilder.encodeStarRocksIntermediateHiveTable()
+ * GlobalDictBuilder.encodeStarRocksIntermediateExternalTable()
  */
 
 public class GlobalDictBuilder {
@@ -75,21 +75,21 @@ public class GlobalDictBuilder {
     // intermediate table columns in current spark load job
     private List<String> intermediateTableColumnList;
 
-    // distinct columns which need to use map join to solve data skew in encodeStarRocksIntermediateHiveTable()
+    // distinct columns which need to use map join to solve data skew in encodeStarRocksIntermediateExternalTable()
     // we needn't to specify it until data skew happends
     private List<String> mapSideJoinColumns;
 
-    // hive table datasource,format is db.table
-    private String sourceHiveDBTableName;
-    // user-specified filter when query sourceHiveDBTable
-    private String sourceHiveFilter;
-    // intermediate hive table to store the distinct value of distinct column
+    // hive or hudi table datasource,format is db.table
+    private String sourceExternalDBTableName;
+    // user-specified filter when query sourceExternalDBTable
+    private String sourceExternalFilter;
+    // intermediate hive or hudi table to store the distinct value of distinct column
     private String distinctKeyTableName;
-    // current starrocks table's global dict hive table
+    // current starrocks table's global dict hive or hudi table
     private String globalDictTableName;
 
     // used for next step to read
-    private String starrocksIntermediateHiveTable;
+    private String starrocksIntermediateExternalTable;
     private SparkSession spark;
 
     // key=starrocks column name,value=column type
@@ -108,12 +108,12 @@ public class GlobalDictBuilder {
     public GlobalDictBuilder(MultiValueMap dictColumn,
                              List<String> intermediateTableColumnList,
                              List<String> mapSideJoinColumns,
-                             String sourceHiveDBTableName,
-                             String sourceHiveFilter,
-                             String starrocksHiveDB,
+                             String sourceExternalDBTableName,
+                             String sourceExternalFilter,
+                             String starrocksExternalDB,
                              String distinctKeyTableName,
                              String globalDictTableName,
-                             String starrocksIntermediateHiveTable,
+                             String starrocksIntermediateExternalTable,
                              int buildConcurrency,
                              List<String> veryHighCardinalityColumn,
                              int veryHighCardinalityColumnSplitNum,
@@ -121,17 +121,17 @@ public class GlobalDictBuilder {
         this.dictColumn = dictColumn;
         this.intermediateTableColumnList = intermediateTableColumnList;
         this.mapSideJoinColumns = mapSideJoinColumns;
-        this.sourceHiveDBTableName = sourceHiveDBTableName;
-        this.sourceHiveFilter = sourceHiveFilter;
+        this.sourceExternalDBTableName = sourceExternalDBTableName;
+        this.sourceExternalFilter = sourceExternalFilter;
         this.distinctKeyTableName = distinctKeyTableName;
         this.globalDictTableName = globalDictTableName;
-        this.starrocksIntermediateHiveTable = starrocksIntermediateHiveTable;
+        this.starrocksIntermediateExternalTable = starrocksIntermediateExternalTable;
         this.spark = spark;
         this.pool = Executors.newFixedThreadPool(buildConcurrency < 0 ? 1 : buildConcurrency);
         this.veryHighCardinalityColumn = veryHighCardinalityColumn;
         this.veryHighCardinalityColumnSplitNum = veryHighCardinalityColumnSplitNum;
 
-        spark.sql("use " + starrocksHiveDB);
+        spark.sql("use " + starrocksExternalDB);
     }
 
     /**
@@ -148,32 +148,32 @@ public class GlobalDictBuilder {
         LOG.info("global dict table name: " + globalDictTableName);
     }
 
-    public void createHiveIntermediateTable() throws AnalysisException {
-        Map<String, String> sourceHiveTableColumn = spark.catalog()
-                .listColumns(sourceHiveDBTableName)
+    public void createExternalIntermediateTable() throws AnalysisException {
+        Map<String, String> sourceExternalTableColumn = spark.catalog()
+                .listColumns(sourceExternalDBTableName)
                 .collectAsList()
                 .stream().collect(Collectors.toMap(Column::name, Column::dataType));
 
-        Map<String, String> sourceHiveTableColumnInLowercase = new HashMap<>();
-        for (Map.Entry<String, String> entry : sourceHiveTableColumn.entrySet()) {
-            sourceHiveTableColumnInLowercase.put(entry.getKey().toLowerCase(), entry.getValue().toLowerCase());
+        Map<String, String> sourceExternalTableColumnInLowercase = new HashMap<>();
+        for (Map.Entry<String, String> entry : sourceExternalTableColumn.entrySet()) {
+            sourceExternalTableColumnInLowercase.put(entry.getKey().toLowerCase(), entry.getValue().toLowerCase());
         }
 
-        // check and get starrocks column type in hive
+        // check and get starrocks column type in hive or hudi
         intermediateTableColumnList.stream().map(String::toLowerCase).forEach(columnName -> {
-            String columnType = sourceHiveTableColumnInLowercase.get(columnName);
+            String columnType = sourceExternalTableColumnInLowercase.get(columnName);
             if (StringUtils.isEmpty(columnType)) {
-                throw new RuntimeException(String.format("starrocks column %s not in source hive table", columnName));
+                throw new RuntimeException(String.format("starrocks column %s not in source hive or hudi table", columnName));
             }
             starrocksColumnNameTypeMap.put(columnName, columnType);
         });
 
-        spark.sql(String.format("drop table if exists %s ", starrocksIntermediateHiveTable));
-        // create IntermediateHiveTable
-        spark.sql(getCreateIntermediateHiveTableSql());
+        spark.sql(String.format("drop table if exists %s ", starrocksIntermediateExternalTable));
+        // create IntermediateExternalTable
+        spark.sql(getCreateIntermediateExternalTableSql());
 
-        // insert data to IntermediateHiveTable
-        spark.sql(getInsertIntermediateHiveTableSql());
+        // insert data to IntermediateExternalTable
+        spark.sql(getInsertIntermediateExternalTableSql());
     }
 
     public void extractDistinctColumn() {
@@ -186,7 +186,7 @@ public class GlobalDictBuilder {
         // so we don't need to extract distinct value of column in valueSet
         for (Object column : dictColumn.keySet()) {
             workerList.add(() -> {
-                spark.sql(getInsertDistinctKeyTableSql(column.toString(), starrocksIntermediateHiveTable));
+                spark.sql(getInsertDistinctKeyTableSql(column.toString(), starrocksIntermediateExternalTable));
             });
         }
 
@@ -194,8 +194,8 @@ public class GlobalDictBuilder {
     }
 
     public void buildGlobalDict() throws ExecutionException, InterruptedException {
-        // create global dict hive table
-        spark.sql(getCreateGlobalDictHiveTableSql());
+        // create global dict hive or hudi table
+        spark.sql(getCreateGlobalDictExternalTableSql());
 
         List<GlobalDictBuildWorker> globalDictBuildWorkers = new ArrayList<>();
         for (Object distinctColumnNameOrigin : dictColumn.keySet()) {
@@ -237,17 +237,17 @@ public class GlobalDictBuilder {
         submitWorker(globalDictBuildWorkers);
     }
 
-    // encode starrocksIntermediateHiveTable's distinct column
-    public void encodeStarRocksIntermediateHiveTable() {
+    // encode starrocksIntermediateExternalTable's distinct column
+    public void encodeStarRocksIntermediateExternalTable() {
         for (Object distinctColumnObj : dictColumn.keySet()) {
-            spark.sql(getEncodeStarRocksIntermediateHiveTableSql(distinctColumnObj.toString(),
+            spark.sql(getEncodeStarRocksIntermediateExternalTableSql(distinctColumnObj.toString(),
                     (ArrayList) dictColumn.get(distinctColumnObj.toString())));
         }
     }
 
-    private String getCreateIntermediateHiveTableSql() {
+    private String getCreateIntermediateExternalTableSql() {
         StringBuilder sql = new StringBuilder();
-        sql.append("create table if not exists " + starrocksIntermediateHiveTable + " ( ");
+        sql.append("create table if not exists " + starrocksIntermediateExternalTable + " ( ");
 
         Set<String> allDictColumn = new HashSet<>();
         allDictColumn.addAll(dictColumn.keySet());
@@ -263,16 +263,16 @@ public class GlobalDictBuilder {
         return sql.deleteCharAt(sql.length() - 1).append(" )").append(" stored as sequencefile ").toString();
     }
 
-    private String getInsertIntermediateHiveTableSql() {
+    private String getInsertIntermediateExternalTableSql() {
         StringBuilder sql = new StringBuilder();
-        sql.append("insert overwrite table ").append(starrocksIntermediateHiveTable).append(" select ");
+        sql.append("insert overwrite table ").append(starrocksIntermediateExternalTable).append(" select ");
         intermediateTableColumnList.stream().forEach(columnName -> {
             sql.append(columnName).append(" ,");
         });
         sql.deleteCharAt(sql.length() - 1)
-                .append(" from ").append(sourceHiveDBTableName);
-        if (!StringUtils.isEmpty(sourceHiveFilter)) {
-            sql.append(" where ").append(sourceHiveFilter);
+                .append(" from ").append(sourceExternalDBTableName);
+        if (!StringUtils.isEmpty(sourceExternalFilter)) {
+            sql.append(" where ").append(sourceExternalFilter);
         }
         return sql.toString();
     }
@@ -282,17 +282,17 @@ public class GlobalDictBuilder {
                 "(dict_key string) partitioned by (dict_column string) stored as sequencefile ";
     }
 
-    private String getInsertDistinctKeyTableSql(String distinctColumnName, String sourceHiveTable) {
+    private String getInsertDistinctKeyTableSql(String distinctColumnName, String sourceExternalTable) {
         StringBuilder sql = new StringBuilder();
         sql.append("insert overwrite table ").append(distinctKeyTableName)
                 .append(" partition(dict_column='").append(distinctColumnName).append("')")
                 .append(" select ").append(distinctColumnName)
-                .append(" from ").append(sourceHiveTable)
+                .append(" from ").append(sourceExternalTable)
                 .append(" group by ").append(distinctColumnName);
         return sql.toString();
     }
 
-    private String getCreateGlobalDictHiveTableSql() {
+    private String getCreateGlobalDictExternalTableSql() {
         return "create table if not exists " + globalDictTableName
                 + "(dict_key string, dict_value bigint) partitioned by(dict_column string) stored as sequencefile ";
     }
@@ -379,9 +379,9 @@ public class GlobalDictBuilder {
 
     }
 
-    private String getEncodeStarRocksIntermediateHiveTableSql(String dictColumn, List<String> childColumn) {
+    private String getEncodeStarRocksIntermediateExternalTableSql(String dictColumn, List<String> childColumn) {
         StringBuilder sql = new StringBuilder();
-        sql.append("insert overwrite table ").append(starrocksIntermediateHiveTable).append(" select ");
+        sql.append("insert overwrite table ").append(starrocksIntermediateExternalTable).append(" select ");
         // using map join to solve distinct column data skew
         // here is a spark sql hint
         if (mapSideJoinColumns.size() != 0 && mapSideJoinColumns.contains(dictColumn)) {
@@ -394,15 +394,15 @@ public class GlobalDictBuilder {
             } else if (childColumn != null && childColumn.contains(columnName)) {
                 sql.append(String.format(" if(%s is null, null, t.dict_value) ", columnName)).append(" ,");
             } else {
-                sql.append(starrocksIntermediateHiveTable).append(".").append(columnName).append(" ,");
+                sql.append(starrocksIntermediateExternalTable).append(".").append(columnName).append(" ,");
             }
         });
         sql.deleteCharAt(sql.length() - 1)
                 .append(" from ")
-                .append(starrocksIntermediateHiveTable)
+                .append(starrocksIntermediateExternalTable)
                 .append(" LEFT OUTER JOIN ( select dict_key,dict_value from ").append(globalDictTableName)
                 .append(" where dict_column='").append(dictColumn).append("' ) t on ")
-                .append(starrocksIntermediateHiveTable).append(".").append(dictColumn)
+                .append(starrocksIntermediateExternalTable).append(".").append(dictColumn)
                 .append(" = t.dict_key ");
         return sql.toString();
     }

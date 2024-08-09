@@ -47,6 +47,7 @@ import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -241,8 +242,8 @@ public class BrokerFileGroup implements Writable {
             if (srcTable == null) {
                 throw new DdlException("Unknown table " + srcTableName + " in database " + db.getOriginName());
             }
-            if (!(srcTable instanceof HiveTable)) {
-                throw new DdlException("Source table " + srcTableName + " is not HiveTable");
+            if (!(srcTable instanceof HiveTable) && !(srcTable instanceof HudiTable)) {
+                throw new DdlException("Source table " + srcTableName + " is not HiveTable or HudiTable");
             }
 
             // get columns that will be read from hive table

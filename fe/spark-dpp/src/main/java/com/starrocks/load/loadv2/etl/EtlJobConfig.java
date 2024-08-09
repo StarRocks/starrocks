@@ -136,7 +136,7 @@ public class EtlJobConfig implements Serializable {
     // Compatible with old global dict table name in previous version
     public static final String DORIS_GLOBAL_DICT_TABLE_NAME = "doris_global_dict_table_%d";
     public static final String DISTINCT_KEY_TABLE_NAME = "starrocks_distinct_key_table_%d_%s";
-    public static final String STARROCKS_INTERMEDIATE_HIVE_TABLE_NAME = "starrocks_intermediate_hive_table_%d_%s";
+    public static final String STARROCKS_INTERMEDIATE_EXTERNAL_TABLE_NAME = "starrocks_intermediate_external_table_%d_%s";
 
     // hdfsEtlPath/jobs/dbId/loadLabel/PendingTaskSignature
     private static final String ETL_OUTPUT_PATH_FORMAT = "%s/jobs/%d/%s/%d";
@@ -262,7 +262,8 @@ public class EtlJobConfig implements Serializable {
 
     public enum SourceType {
         FILE,
-        HIVE
+        HIVE,
+        HUDI
     }
 
     public static class EtlTable implements Serializable {
@@ -503,14 +504,14 @@ public class EtlJobConfig implements Serializable {
         public String where;
         @SerializedName(value = "partitions")
         public List<Long> partitions;
-        @SerializedName(value = "hiveDbTableName")
-        public String hiveDbTableName;
-        @SerializedName(value = "hiveTableProperties")
-        public Map<String, String> hiveTableProperties;
+        @SerializedName(value = "externalDbTableName")
+        public String externalDbTableName;
+        @SerializedName(value = "externalTableProperties")
+        public Map<String, String> externalTableProperties;
 
         // hive db table used in dpp, not serialized
-        // set with hiveDbTableName (no bitmap column) or IntermediateHiveTable (created by global dict builder) in spark etl job
-        public String dppHiveDbTableName;
+        // set with externalDbTableName (no bitmap column) or IntermediateHiveTable (created by global dict builder) in spark etl job
+        public String dppExternalDbTableName;
 
         // for data infile path
         public EtlFileGroup(SourceType sourceType, List<String> filePaths, List<String> fileFieldNames,
@@ -531,13 +532,13 @@ public class EtlJobConfig implements Serializable {
         }
 
         // for data from table
-        public EtlFileGroup(SourceType sourceType, List<String> fileFieldNames, String hiveDbTableName,
-                            Map<String, String> hiveTableProperties, boolean isNegative,
+        public EtlFileGroup(SourceType sourceType, List<String> fileFieldNames, String externalDbTableName,
+                            Map<String, String> externalTableProperties, boolean isNegative,
                             Map<String, EtlColumnMapping> columnMappings, String where, List<Long> partitions) {
             this.sourceType = sourceType;
             this.fileFieldNames = fileFieldNames;
-            this.hiveDbTableName = hiveDbTableName;
-            this.hiveTableProperties = hiveTableProperties;
+            this.externalDbTableName = externalDbTableName;
+            this.externalTableProperties = externalTableProperties;
             this.isNegative = isNegative;
             this.columnMappings = columnMappings;
             this.where = where;
@@ -558,8 +559,8 @@ public class EtlJobConfig implements Serializable {
                     ", columnMappings=" + columnMappings +
                     ", where='" + where + '\'' +
                     ", partitions=" + partitions +
-                    ", hiveDbTableName='" + hiveDbTableName + '\'' +
-                    ", hiveTableProperties=" + hiveTableProperties +
+                    ", externalDbTableName='" + externalDbTableName + '\'' +
+                    ", externalTableProperties=" + externalTableProperties +
                     '}';
         }
     }

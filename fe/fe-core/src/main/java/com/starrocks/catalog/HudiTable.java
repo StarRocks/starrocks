@@ -81,6 +81,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     public static final String MOR_RT_INPUT_FORMAT = "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat";
     public static final String MOR_RT_INPUT_FORMAT_LEGACY = "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat";
 
+    public static final String HUDI_METASTORE_URIS = "hive.metastore.uris";
+
     public enum HudiTableType {
         COW, MOR, UNKNOWN
     }
@@ -153,6 +155,22 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     public String getTableName() {
         return hiveTableName;
     }
+
+    public String getHudiDbTable() {
+        return String.format("%s.%s", hiveDbName, hiveTableName);
+    }
+
+    public Map<String, String> getHudiProperties() {
+        // The user may alter the resource properties
+        // So we do this to get the fresh properties
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+        if (resource != null) {
+            HudiResource hudiResource = (HudiResource) resource;
+            hudiProperties.put(HUDI_METASTORE_URIS, hudiResource.getHiveMetastoreURIs());
+        }
+        return hudiProperties;
+    }
+
 
     @Override
     public String getUUID() {

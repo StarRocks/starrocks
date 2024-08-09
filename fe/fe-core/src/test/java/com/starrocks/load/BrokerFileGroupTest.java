@@ -26,6 +26,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
@@ -54,6 +55,8 @@ public class BrokerFileGroupTest {
     private OlapTable olapTable;
     @Mocked
     private HiveTable hiveTable;
+    @Mocked
+    private HudiTable hudiTable;
     private static StarRocksAssert starRocksAssert;
 
 
@@ -150,6 +153,52 @@ public class BrokerFileGroupTest {
                 hiveTable.getBaseSchema();
                 result = Lists.newArrayList(k1, k2, k4);
                 hiveTable.getId();
+                result = 10;
+            }
+        };
+
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parse(db, desc);
+        Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
+        Assert.assertEquals(10, fileGroup.getSrcTableId());
+    }
+
+
+    @Test
+    public void testParseHudiTable() throws UserException {
+        // k1 = bitmap_dict(k1)
+        SlotRef slotRef1 = new SlotRef(null, "k1");
+        List<Expr> params1 = Lists.newArrayList(slotRef1);
+        BinaryPredicate predicate1 = new BinaryPredicate(BinaryType.EQ, slotRef1,
+                new FunctionCallExpr("bitmap_dict", params1));
+
+        // k3 = k2 + 1
+        SlotRef slotRef2 = new SlotRef(null, "k2");
+        SlotRef slotRef3 = new SlotRef(null, "k3");
+        BinaryPredicate predicate2 = new BinaryPredicate(
+                BinaryType.EQ, slotRef3,
+                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, slotRef2, new IntLiteral(1, Type.INT)));
+        DataDescription desc = new DataDescription("olapTable", null, "hudiTable", false,
+                Lists.newArrayList(predicate1, predicate2), null);
+        desc.analyze("testDb");
+
+        // schema
+        Column k1 = new Column("k1", Type.BITMAP);
+        Column k2 = new Column("k2", Type.INT);
+        Column k3 = new Column("k3", Type.INT);
+        Column k4 = new Column("k4", Type.INT);
+
+        new Expectations() {
+            {
+                db.getTable("olapTable");
+                result = olapTable;
+                db.getTable("hudiTable");
+                result = hudiTable;
+                olapTable.getBaseSchema();
+                result = Lists.newArrayList(k3, k1);
+                hudiTable.getBaseSchema();
+                result = Lists.newArrayList(k1, k2, k4);
+                hudiTable.getId();
                 result = 10;
             }
         };
