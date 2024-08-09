@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include <glog/logging.h>
+#include <numeric>
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "common/config.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -190,7 +193,10 @@ struct ArrayAggAggregateStateV2 {
     void update(const Column& column, size_t index, size_t offset, size_t count) {
         data_columns[index]->append(column, offset, count);
     }
-    void update_nulls(size_t index, size_t count) { data_columns[index]->append_nulls(count); }
+
+    void update_nulls(size_t index, size_t count) {
+        data_columns[index]->append_nulls(count);
+    }
 
     bool check_overflow(FunctionContext* ctx) const {
         std::string err_msg;
@@ -270,6 +276,74 @@ public:
             }
             this->data(state).update(*data_col, i, tmp_row_num, 1);
         }
+    }
+
+    void update_memory_usage(FunctionContext* ctx, const Column** input, size_t updated_rows) const {
+        int64_t mem_usage = 0;
+        for (auto i = 0;i < ctx->get_num_args();i++) {
+            mem_usage += input[i]->container_memory_usage();
+        }
+        mem_usage *= (updated_rows / input[0]->size());
+        ctx->add_mem_usage(mem_usage);
+    }
+
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            update(ctx, columns, states[i] + state_offset, i);
+        }
+        update_memory_usage(ctx, columns, chunk_size);
+    }
+
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        size_t updated_rows = 0;
+        for (size_t i = 0; i < chunk_size; i++) {
+            // TODO: optimize with simd ?
+            if (filter[i] == 0) {
+                update(ctx, columns, states[i] + state_offset, i);
+                updated_rows++;
+            }
+        }
+        update_memory_usage(ctx, columns, updated_rows);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            update(ctx, columns, state, i);
+        }
+        update_memory_usage(ctx, columns, chunk_size);
+    }
+
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                     AggDataPtr* states) const override {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            merge(ctx, column, states[i] + state_offset, i);
+        }
+        update_memory_usage(ctx, &column, chunk_size);
+    }
+
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        size_t updated_rows = 0;
+        for (size_t i = 0; i < chunk_size; i++) {
+            // TODO: optimize with simd ?
+            if (filter[i] == 0) {
+                merge(ctx, column, states[i] + state_offset, i);
+                updated_rows ++;
+            }
+        }
+        update_memory_usage(ctx, &column, updated_rows);
+    }
+
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
+                                  size_t size) const override {
+        for (size_t i = start; i < start + size; ++i) {
+            merge(ctx, input, state, i);
+        }
+        update_memory_usage(ctx, &input, size);
+        
     }
 
     // struct and array elements aren't be null, as they consist from several columns
