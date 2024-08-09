@@ -21,14 +21,10 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TExplainLevel;
-import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -123,20 +119,6 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
     @After
     public void after() throws Exception {
         cleanupEphemeralMVs(starRocksAssert, startCaseTime);
-    }
-
-    protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
-        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
-
-        for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
-        }
-    }
-
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
     }
 
     @Test

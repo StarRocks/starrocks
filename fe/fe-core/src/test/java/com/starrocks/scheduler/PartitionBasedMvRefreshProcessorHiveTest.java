@@ -23,7 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.Config;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -34,7 +34,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -62,6 +61,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        Config.enable_mv_refresh_query_rewrite = false;
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
                         "    k1 date,\n" +
@@ -135,20 +135,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
     @After
     public void after() throws Exception {
         cleanupEphemeralMVs(starRocksAssert, startCaseTime);
-    }
-
-    protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
-        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
-
-        for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
-        }
-    }
-
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
     }
 
     @Test
