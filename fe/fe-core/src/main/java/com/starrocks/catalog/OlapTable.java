@@ -54,12 +54,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -88,18 +88,27 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -2903,6 +2912,7 @@ public class OlapTable extends Table {
     @Override
     public void onReload() {
         analyzePartitionInfo();
+        analyzeRollupIndexMeta();
         tryToAssignIndexId();
     }
 
@@ -2961,6 +2971,51 @@ public class OlapTable extends Table {
                 SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
                         column.getType(), column.isAllowNull());
                 slotRefs.get(0).setDesc(slotDescriptor);
+            }
+        }
+    }
+
+    /**
+     * Analyze defined expr of columns in rollup index meta.
+     */
+    private void analyzeRollupIndexMeta() {
+        if (indexIdToMeta.size() <= 1) {
+            return;
+        }
+        TableName tableName = new TableName(null, getName());
+        ConnectContext session = new ConnectContext();
+        Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
+        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
+            if (indexMeta.getIndexId() == baseIndexId) {
+                continue;
+            }
+            List<Column> columns = indexMeta.getSchema();
+            // Note: Add this try-catch block to avoid the failure of analyzing rollup index meta since this
+            // method will be called in replay method.
+            // And the failure of analyzing rollup index meta will only affect the associated synchronized mvs and
+            // will not affect the whole system.
+            try {
+                for (Column column : columns) {
+                    Expr definedExpr = column.getDefineExpr();
+                    if (definedExpr == null) {
+                        continue;
+                    }
+                    if (visitorOpt.isEmpty()) {
+                        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
+                                session, this, tableName);
+                        visitorOpt = Optional.of(visitor);
+                    }
+                    Preconditions.checkArgument(visitorOpt.isPresent(), "visitor should not be null");
+                    definedExpr.accept(visitorOpt.get(), null);
+                    ExpressionAnalyzer.analyzeExpression(definedExpr, new AnalyzeState(),
+                            new Scope(RelationId.anonymous(),
+                                    new RelationFields(this.getBaseSchema().stream()
+                                            .map(col -> new Field(col.getName(), col.getType(),
+                                                    tableName, null))
+                                            .collect(Collectors.toList()))), session);
+                }
+            } catch (Exception e) {
+                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexId(), getName(), e);
             }
         }
     }
