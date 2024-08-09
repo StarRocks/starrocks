@@ -113,7 +113,7 @@ jobs:
           fi
 
       - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v3
+        uses: mikepenz/action-junit-report@v4
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
@@ -318,12 +318,20 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             mkdir java-extensions && cd java-extensions
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
             tar zxf java_extension_ut_report.tar.gz
+          elif [[ "${BASE_REF}" == "main" ]]; then
+            rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+            export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+            export PATH=$JAVA_HOME/bin:$PATH;
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover /var/local/env/java_extension_empty_coverage --github-token ${{ secrets.GITHUB_TOKEN }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
+              --module "Java-Extensions"
           fi
 
       - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v3
+        uses: mikepenz/action-junit-report@v4
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
@@ -346,7 +354,7 @@ jobs:
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
+            --cover ${code_path}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
             --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
             -d ${code_path}/diff.txt -dt file --module "Java-Extensions"
           rm -rf coverchecker
@@ -416,22 +424,15 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
+      bucket_prefix: ${{ needs.INFO.outputs.bucket_prefix }}
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: INFO
-        id: info
-        run: |
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
       - name: Download Admit XML
         id: download-admit-xml
-        env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+
         run: |
           mkdir admit-result && cd admit-result
           oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/Admit-XML/${PR_NUMBER}/
