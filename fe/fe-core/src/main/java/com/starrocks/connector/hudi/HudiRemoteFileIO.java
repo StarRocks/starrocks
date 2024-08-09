@@ -69,7 +69,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(configuration);
             HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().enable(true).build();
             HoodieTableMetaClient metaClient =
-                    HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.hudiTableLocation).build();
+                    HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.table.getTableLocation()).build();
             // metaClient.reloadActiveTimeline();
             HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
             Option<HoodieInstant> lastInstant = timeline.lastInstant();
@@ -87,7 +87,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
     @Override
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
         RemoteFileScanContext scanContext = pathKey.getScanContext();
-        String tableLocation = scanContext.hudiTableLocation;
+        String tableLocation = scanContext.table.getTableLocation();
         if (tableLocation == null) {
             throw new StarRocksConnectorException("Missing hudi table base location on %s", pathKey);
         }
