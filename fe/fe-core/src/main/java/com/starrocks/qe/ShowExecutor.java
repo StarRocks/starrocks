@@ -425,6 +425,7 @@ public class ShowExecutor {
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         List<List<String>> userAuthInfos = Lists.newArrayList();
 
+<<<<<<< HEAD
         Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
         if (showAuthenticationStmt.isAll()) {
             authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
@@ -437,6 +438,102 @@ public class ShowExecutor {
                 userAuthenticationInfo =
                         authenticationManager.getUserAuthenticationInfoByUserIdentity(
                                 showAuthenticationStmt.getUserIdent());
+=======
+        public static ShowExecutor.ShowExecutorVisitor getInstance() {
+            return INSTANCE;
+        }
+
+        protected ShowExecutorVisitor() {
+        }
+
+        @Override
+        public ShowResultSet visitShowStatement(ShowStmt statement, ConnectContext context) {
+            return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
+            String dbName = statement.getDb();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+
+            List<MaterializedView> materializedViews = Lists.newArrayList();
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                PatternMatcher matcher = null;
+                if (statement.getPattern() != null) {
+                    matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                            CaseSensibility.TABLE.getCaseSensibility());
+                }
+
+                for (Table table : db.getTables()) {
+                    if (table.isMaterializedView()) {
+                        MaterializedView mvTable = (MaterializedView) table;
+                        if (matcher != null && !matcher.match(mvTable.getName())) {
+                            continue;
+                        }
+
+                        try {
+                            AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                            mvTable.getBaseTableInfos().stream()
+                                    .forEach(baseTableInfo -> {
+                                        // skip if base table not existed
+                                        Optional<Table> baseTableOpt = MvUtils.getTable(baseTableInfo);
+                                        if (baseTableOpt.isEmpty()) {
+                                            return;
+                                        }
+                                        Table baseTable = baseTableOpt.get();
+                                        // TODO: external table should check table action after AuthorizationManager support it.
+                                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
+                                            try {
+                                                Authorizer.checkTableAction(context.getCurrentUserIdentity(),
+                                                        context.getCurrentRoleIds(), baseTableInfo.getDbName(),
+                                                        baseTableInfo.getTableName(),
+                                                        PrivilegeType.SELECT);
+                                            } catch (AccessDeniedException e) {
+                                                baseTableHasPrivilege.set(false);
+                                            }
+                                        }
+                                    });
+                            if (!baseTableHasPrivilege.get()) {
+                                continue;
+                            }
+                            Authorizer.checkAnyActionOnMaterializedView(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), mvTable.getName()));
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
+                        materializedViews.add(mvTable);
+                    } else if (Table.TableType.OLAP == table.getType()) {
+                        OlapTable olapTable = (OlapTable) table;
+                        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
+                        long baseIdx = olapTable.getBaseIndexId();
+                        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                            if (baseIdx == mvMeta.getIndexId()) {
+                                continue;
+                            }
+                            if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
+                                continue;
+                            }
+                            singleTableMVs.add(Pair.create(olapTable, mvMeta));
+                        }
+                    }
+                }
+
+                List<ShowMaterializedViewStatus> mvStatusList =
+                        listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+                List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
+                        .collect(Collectors.toList());
+                return new ShowResultSet(statement.getMetaData(), rowSets);
+            } catch (Exception e) {
+                LOG.warn("listMaterializedViews failed:", e);
+                throw e;
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+>>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
             }
             authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
         }
