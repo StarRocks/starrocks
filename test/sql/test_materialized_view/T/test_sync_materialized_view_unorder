@@ -1,0 +1,65 @@
+-- name: test_sync_materialized_view_unorder
+
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+
+CREATE TABLE t1 (
+    k1 string NOT NULL,
+    k2 string,
+    k3 DECIMAL(34,0),
+    k4 DATE NOT NULL,
+    v1 BIGINT sum DEFAULT "0"
+)
+AGGREGATE KEY(k1,  k2, k3,  k4)
+DISTRIBUTED BY HASH(k4);
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+
+-- case1: with unordered columns
+CREATE MATERIALIZED VIEW test_mv1 as 
+SELECT a.k3, DATE_FORMAT(a.k4, '%Y-%m') AS month, sum(a.v1) AS cnt FROM t1 a WHERE a.k2 = 'a' GROUP BY a.k3, DATE_FORMAT(a.k4, '%Y-%m');
+
+function: wait_materialized_view_finish()
+
+function: print_hit_materialized_view('SELECT k3, DATE_FORMAT(k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1  WHERE k2 = "a" GROUP BY k3, DATE_FORMAT(k4, "%Y-%m");', 'test_mv1')
+select count(1) from test_mv1 [_SYNC_MV_];
+SELECT k3, DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY k3, DATE_FORMAT(k4, '%Y-%m');
+
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+ALTER TABLE t1 COMPACT;
+select sleep(10);
+
+function: print_hit_materialized_view('SELECT k3, DATE_FORMAT(k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1  WHERE k2 = "a" GROUP BY k3, DATE_FORMAT(k4, "%Y-%m");', 'test_mv1')
+function: print_hit_materialized_view('SELECT a.k3, DATE_FORMAT(a.k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1 a WHERE k2 = "a" GROUP BY a.k3, DATE_FORMAT(a.k4, "%Y-%m");', 'test_mv1')
+select count(1) from test_mv1 [_SYNC_MV_];
+SELECT k3, DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY k3, DATE_FORMAT(k4, '%Y-%m');
+SELECT a.k3, DATE_FORMAT(a.k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1 a WHERE k2 = 'a' GROUP BY a.k3, DATE_FORMAT(a.k4, '%Y-%m');
+set enable_sync_materialized_view_rewrite=false;
+SELECT k3, DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY k3, DATE_FORMAT(k4, '%Y-%m');
+drop materialized view test_mv1;
+set enable_sync_materialized_view_rewrite=true;
+
+-- case2: with unordered columns
+CREATE MATERIALIZED VIEW test_mv1 as 
+SELECT DATE_FORMAT(a.k4, '%Y-%m') AS month, sum(a.v1) AS cnt FROM t1 a WHERE a.k2 = 'a' GROUP BY DATE_FORMAT(a.k4, '%Y-%m');
+
+function: wait_materialized_view_finish()
+function: print_hit_materialized_view('SELECT DATE_FORMAT(k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1  WHERE k2 = "a" GROUP BY DATE_FORMAT(k4, "%Y-%m");', 'test_mv1')
+function: print_hit_materialized_view('SELECT DATE_FORMAT(a.k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1 a WHERE k2 = "a" GROUP BY DATE_FORMAT(a.k4, "%Y-%m");', 'test_mv1')
+select count(1) from test_mv1 [_SYNC_MV_];
+SELECT DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY DATE_FORMAT(k4, '%Y-%m');
+
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1), ('100', NULL, NULL, '2024-08-08', 2), ('200', 'a', 11.00, '2024-08-06', 1);
+ALTER TABLE t1 COMPACT;
+select sleep(10);
+
+function: print_hit_materialized_view('SELECT DATE_FORMAT(k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1  WHERE k2 = "a" GROUP BY DATE_FORMAT(k4, "%Y-%m");', 'test_mv1')
+function: print_hit_materialized_view('SELECT DATE_FORMAT(a.k4, "%Y-%m") AS month, sum(v1) AS cnt FROM t1 a WHERE k2 = "a" GROUP BY DATE_FORMAT(a.k4, "%Y-%m");', 'test_mv1')
+select count(1) from test_mv1 [_SYNC_MV_];
+SELECT DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY DATE_FORMAT(k4, '%Y-%m');
+SELECT DATE_FORMAT(a.k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1 a WHERE k2 = 'a' GROUP BY DATE_FORMAT(a.k4, '%Y-%m');
+set enable_sync_materialized_view_rewrite=false;
+SELECT DATE_FORMAT(k4, '%Y-%m') AS month, sum(v1) AS cnt FROM t1  WHERE k2 = 'a' GROUP BY DATE_FORMAT(k4, '%Y-%m');
+set enable_sync_materialized_view_rewrite=true;
