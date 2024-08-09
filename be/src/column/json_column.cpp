@@ -476,10 +476,12 @@ std::string JsonColumn::debug_flat_paths() const {
     }
     std::ostringstream ss;
     ss << "[";
-    for (size_t i = 0; i < _flat_column_paths.size() - 1; i++) {
-        ss << _flat_column_paths[i] << ", ";
+    size_t i = 0;
+    for (; i < _flat_column_paths.size() - 1; i++) {
+        ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << "), ";
     }
-    ss << _flat_column_paths.back() << "]";
+    ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << ")";
+    ss << (has_remain() ? "]" : "}");
     return ss.str();
 }
 } // namespace starrocks
