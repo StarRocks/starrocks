@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -360,6 +361,11 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isTrimspace() {
         return csvFormat.isTrimspace();
+    }
+
+    @VisibleForTesting
+    void setFilePaths(List<String> filePaths) {
+        this.filePaths = filePaths;
     }
 
     @Override
