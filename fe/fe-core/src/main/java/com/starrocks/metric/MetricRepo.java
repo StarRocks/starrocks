@@ -45,6 +45,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
@@ -825,6 +826,23 @@ public final class MetricRepo {
             for (Table table : db.getTables()) {
                 long tableId = table.getId();
                 String tableName = table.getName();
+
+                if (table.isNativeTableOrMaterializedView()) {
+                    // table size metrics
+                    GaugeMetric<Long> tableSizeBytesTotal = new GaugeMetric<Long>("table_size_bytes",
+                            MetricUnit.BYTES, "total size of table in bytes") {
+                        @Override
+                        public Long getValue() {
+                            OlapTable olapTable = (OlapTable) table;
+                            return olapTable.getDataSize();
+                        }
+                    };
+                    tableSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(tableSizeBytesTotal);
+                }
+
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 for (Metric m : entity.getMetrics()) {
                     if (minifyTableMetrics && (null == m.getValue() ||
@@ -857,6 +875,16 @@ public final class MetricRepo {
             tableNum.setValue(db.getTableNumber());
             tableNum.addLabel(new MetricLabel("db_name", dbName));
             visitor.visit(tableNum);
+
+            GaugeMetric<Long> dbSizeBytesTotal = new GaugeMetric<Long>("db_size_bytes",
+                    MetricUnit.BYTES, "total size of db in bytes") {
+                @Override
+                public Long getValue() {
+                    return db.getUsedDataQuotaWithLock();
+                }
+            };
+            dbSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName));
+            visitor.visit(dbSizeBytesTotal);
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);
