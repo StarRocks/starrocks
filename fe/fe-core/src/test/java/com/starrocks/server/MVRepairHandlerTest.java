@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
@@ -74,8 +75,8 @@ public class MVRepairHandlerTest {
                 PartitionRepairInfo partitionRepairInfo = partitionRepairInfos.get(0);
                 Assert.assertEquals(partition.getId(), partitionRepairInfo.getPartitionId());
                 Assert.assertEquals(partition.getName(), partitionRepairInfo.getPartitionName());
-                Assert.assertEquals(100, partitionRepairInfo.getVersion());
-                Assert.assertEquals(100, partitionRepairInfo.getVersionTime());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersion());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersionTime());
             }
         };
 

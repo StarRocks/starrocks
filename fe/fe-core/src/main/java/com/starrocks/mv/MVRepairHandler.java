@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.server;
+package com.starrocks.mv;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -21,6 +21,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -30,42 +31,43 @@ import java.util.Map;
 
 public interface MVRepairHandler {
 
-    public class PartitionRepairInfo {
-        private long partitionId; // partition id
-        private String partitionName; // partition name
-        private long version; // partition visible version
-        private long versionTime; // partition visible version time
+    class PartitionRepairInfo {
+        private final long partitionId; // partition id
+        private final String partitionName; // partition name
+        private final long lastVersion; // last commit partition visible version
+        private final long newVersion; // new commit partition visible version
+        private final long newVersionTime; // new commit partition visible version time
+
+        public PartitionRepairInfo(long partitionId,
+                                   String partitionName,
+                                   long lastVersion,
+                                   long newVersion,
+                                   long newVersionTime) {
+            this.partitionId = partitionId;
+            this.partitionName = partitionName;
+            this.newVersion = newVersion;
+            this.newVersionTime = newVersionTime;
+            this.lastVersion = lastVersion;
+        }
 
         public long getPartitionId() {
             return partitionId;
-        }
-
-        public void setPartitionId(long partitionId) {
-            this.partitionId = partitionId;
         }
 
         public String getPartitionName() {
             return partitionName;
         }
 
-        public void setPartitionName(String partitionName) {
-            this.partitionName = partitionName;
+        public long getNewVersion() {
+            return newVersion;
         }
 
-        public long getVersion() {
-            return version;
+        public long getNewVersionTime() {
+            return newVersionTime;
         }
 
-        public void setVersion(long version) {
-            this.version = version;
-        }
-
-        public long getVersionTime() {
-            return versionTime;
-        }
-
-        public void setVersionTime(long versionTime) {
-            this.versionTime = versionTime;
+        public long getLastVersion() {
+            return lastVersion;
         }
     }
 
@@ -96,7 +98,7 @@ public interface MVRepairHandler {
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
@@ -104,15 +106,16 @@ public interface MVRepairHandler {
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
                     }
-                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo();
-                    partitionRepairInfo.setPartitionId(partitionId);
-                    partitionRepairInfo.setPartitionName(partition.getName());
-                    partitionRepairInfo.setVersion(partitionCommitInfo.getVersion());
-                    partitionRepairInfo.setVersionTime(partitionCommitInfo.getVersionTime());
+                    // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
+                    //  version.
+                    // TODO: we may add last version time to check mv's version map with base table's version time.
+                    PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),
+                            partition.getName(), partitionCommitInfo.getVersion()  - 1,
+                            partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
             }
 
             if (partitionRepairInfos.isEmpty()) {
