@@ -75,6 +75,9 @@ public class Projection {
     public ColumnRefSet getUsedColumns() {
         final ColumnRefSet usedColumns = new ColumnRefSet();
         columnRefMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        commonSubOperatorMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        // remove some of columnRefMap's used columns which are from commonSubOperatorMap's output column
+        commonSubOperatorMap.keySet().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
         return usedColumns;
     }
 
@@ -152,5 +155,19 @@ public class Projection {
     @Override
     public String toString() {
         return columnRefMap.values().toString();
+    }
+
+    public Projection deepClone() {
+        Map<ColumnRefOperator, ScalarOperator> clonedColumnRefMap = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+            clonedColumnRefMap.put(entry.getKey(), entry.getValue());
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> clonedCommonSubOperatorMap = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMap.entrySet()) {
+            clonedCommonSubOperatorMap.put(entry.getKey(), entry.getValue());
+        }
+
+        return new Projection(clonedColumnRefMap, clonedCommonSubOperatorMap, needReuseLambdaDependentExpr);
     }
 }

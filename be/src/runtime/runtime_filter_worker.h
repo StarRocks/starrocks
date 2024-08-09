@@ -91,6 +91,7 @@ public:
               current_size(other.current_size),
               max_size(other.max_size),
               stop(other.stop),
+              is_skew_join(other.is_skew_join),
               recv_first_filter_ts(other.recv_first_filter_ts),
               recv_last_filter_ts(other.recv_last_filter_ts),
               broadcast_filter_ts(other.broadcast_filter_ts) {}

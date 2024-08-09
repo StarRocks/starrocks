@@ -2651,19 +2651,8 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
-            List<DistributionCol> columns = spec.getShuffleColumns();
-            Preconditions.checkState(!columns.isEmpty());
-
-            List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (DistributionCol column : columns) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
-            }
-            return shuffleColumns;
-        }
-
         private List<Expr> getShuffleExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
-            List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec);
+            List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec, columnRefFactory);
             return shuffleColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3891,7 +3880,7 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distributionSpec.getType())) {
                 List<ColumnRefOperator> partitionColumns =
-                        getShuffleColumns((HashDistributionSpec) distributionSpec);
+                        getShuffleColumns((HashDistributionSpec) distributionSpec, columnRefFactory);
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3915,6 +3904,18 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
+        }
+
+        public static List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec,
+                                                                ColumnRefFactory columnRefFactory) {
+            List<DistributionCol> columns = spec.getShuffleColumns();
+            Preconditions.checkState(!columns.isEmpty());
+
+            List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
+            for (DistributionCol column : columns) {
+                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
+            }
+            return shuffleColumns;
         }
     }
 }
