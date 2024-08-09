@@ -98,6 +98,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
@@ -131,6 +132,7 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -644,9 +646,12 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
         }
-
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
+        if (isAddExtraFilterOperator(session.getSessionVariable(), node)) {
+            LogicalFilterOperator filterOperator = new LogicalFilterOperator(partitionPredicate);
+            scanBuilder = scanBuilder.withNewRoot(filterOperator);
+        }
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
@@ -654,6 +659,53 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, List.of());
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether to generate extra filter operators for table relation which it's only used in mv refresh insert stmt.
+     */
+    private boolean isAddExtraFilterOperator(SessionVariable sessionVariable, TableRelation node) {
+        if (!sessionVariable.isEnableMaterializedViewRewriteForInsert()) {
+            return false;
+        }
+        if (node.getPartitionNames() != null && !CollectionUtils.isEmpty(node.getPartitionNames().getPartitionNames())) {
+            return false;
+        }
+        if (node.getPartitionPredicate() == null) {
+            return false;
+        }
+        return true;
+    }
+
+    private Optional<ConnectorTableVersion> resolveQueryPeriod(Optional<Expr> version, QueryPeriod.PeriodType type) {
+        if (version.isEmpty()) {
+            return Optional.empty();
+        }
+        ScalarOperator result;
+        try {
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+            ExpressionAnalyzer.analyzeExpression(version.get(), new AnalyzeState(), scope, session);
+            ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+            result = SqlToScalarOperatorTranslator.translate(version.get(), expressionMapping, new ColumnRefFactory());
+        } catch (Exception e) {
+            throw new SemanticException("Failed to resolve query period [type: %s, value: %s]. msg: %s",
+                    type.toString(), version.get().toString(), e.getMessage());
+        }
+
+        if (!(result instanceof ConstantOperator)) {
+            if (version.get() instanceof FunctionCallExpr) {
+                throw new SemanticException("Invalid datetime function: [type: %s, value: %s]. " +
+                        "The function requirement must be inferred in frontend.", type.toString(), version.get().toString());
+            } else {
+                throw new SemanticException("Invalid version value. [type: %s, value: %s]",
+                        type.toString(), version.get().toString());
+            }
+        }
+        PointerType pointerType = type == QueryPeriod.PeriodType.TIMESTAMP ? PointerType.TEMPORAL : PointerType.VERSION;
+        return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
+    }
+
+>>>>>>> 4b4db3181a ([Enhancement] Support mv refresh to use materialized view rewrite by enable_mv_refresh_query_rewrite config (#45338))
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
         if (!cteContext.hasRegisteredCte(node.getCteMouldId())) {
