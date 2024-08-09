@@ -1196,7 +1196,10 @@ public class ConnectContext {
             row.add(state.toString());
             // Info
             String stmt = "";
-            if (executor != null) {
+            if (executor != null && command.toString() == 'Sleep') {
+                stmt = "";
+            }
+            else {
                 stmt = executor.getOriginStmtInString();
                 // refers to https://mariadb.com/kb/en/show-processlist/
                 // `show full processlist` will output full SQL
