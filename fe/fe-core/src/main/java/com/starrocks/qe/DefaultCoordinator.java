@@ -1144,10 +1144,15 @@ public class DefaultCoordinator extends Coordinator {
     // build execution profile  from every BE's report
     @Override
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
-        if (isShortCircuit) {
-            return shortCircuitExecutor.buildQueryProfile(needMerge);
+        lock();
+        try {
+            if (isShortCircuit) {
+                return shortCircuitExecutor.buildQueryProfile(needMerge);
+            }
+            return queryProfile.buildQueryProfile(needMerge);
+        } finally {
+            unlock();
         }
-        return queryProfile.buildQueryProfile(needMerge);
     }
 
     /**
