@@ -317,17 +317,15 @@ public class InformationSchemaDataSourceTest {
             }
         };
 
-        //        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
-        //                .explainContains("     constant exprs: ",
-        //                                "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' |
-        //                                'SUCCESS' | NULL " +
-        //                                        "| 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00'
-        //                                        " +
-        //                                        "| 0 | NULL | '0%' | '' | NULL\n");
-        //        starRocksAssert.query("select state, error_message" +
-        //                        " from information_schema.task_runs where task_name = 't_1024' ")
-        //                .explainContains("     constant exprs: ",
-        //                        "'SUCCESS' | NULL");
+        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
+                                "NULL | 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00' | 0 | " +
+                                "NULL | '0%' | '' | NULL");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'SUCCESS' | NULL");
         starRocksAssert.query("select count(task_name) " +
                         " from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
