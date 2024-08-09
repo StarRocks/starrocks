@@ -266,11 +266,9 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (PhmapHashFuncSelector<LT, PhmapSeed1>::is_supported()) {
-            _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
-        } else {
-            assert(false);
-        }
+        static_assert(PhmapHashFuncSelector<LT, PhmapSeed1>::is_supported());
+
+        _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
     }
 
 private:
