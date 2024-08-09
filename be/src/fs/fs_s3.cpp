@@ -18,6 +18,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
@@ -74,6 +75,8 @@ public:
     using ClientConfiguration = Aws::Client::ClientConfiguration;
     using S3Client = Aws::S3::S3Client;
     using S3ClientPtr = std::shared_ptr<S3Client>;
+    using ClientConfigurationPtr = std::shared_ptr<ClientConfiguration>;
+    using AWSCloudConfigurationPtr = std::shared_ptr<AWSCloudConfiguration>;
 
     static S3ClientFactory& instance() {
         static S3ClientFactory obj;
@@ -110,11 +113,14 @@ private:
 
     class ClientCacheKey {
     public:
-        ClientConfiguration config;
-        AWSCloudConfiguration aws_cloud_configuration;
+        ClientConfigurationPtr config;
+        AWSCloudConfigurationPtr aws_cloud_configuration;
 
         bool operator==(const ClientCacheKey& rhs) const {
-            return config == rhs.config && aws_cloud_configuration == rhs.aws_cloud_configuration;
+            if (config && rhs.config && aws_cloud_configuration && rhs.aws_cloud_configuration) {
+                return *config == *(rhs.config) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
+            }
+            return !config && !rhs.config && !aws_cloud_configuration && !rhs.aws_cloud_configuration;
         }
     };
 
@@ -171,6 +177,12 @@ void S3ClientFactory::close() {
     }
 }
 
+// clang-format: off
+static const std::vector<Aws::String> retryable_errors = {
+        // tos qps limit ExceptionName
+        "ExceedAccountQPSLimit", "ExceedAccountRateLimit", "ExceedBucketQPSLimit", "ExceedBucketRateLimit"};
+// clang-format: on
+
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
     const AWSCloudConfiguration aws_cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
 
@@ -198,7 +210,9 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
 
-    ClientCacheKey client_cache_key{config, aws_cloud_configuration};
+    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
+    auto aws_config = std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration);
+    ClientCacheKey client_cache_key{client_conf, aws_config};
     {
         // Duplicate code for cache s3 client
         std::lock_guard l(_lock);
@@ -209,6 +223,10 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
 
+    config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
+            retryable_errors,
+            /* maxRetries = */ config::object_storage_max_retries,
+            /* scaleFactor = */ config::object_storage_retry_scale_factor);
     S3ClientPtr client = std::make_shared<Aws::S3::S3Client>(
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
@@ -229,8 +247,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
-
-    ClientCacheKey client_cache_key{config, AWSCloudConfiguration{}};
+    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
+    ClientCacheKey client_cache_key{client_conf, std::make_shared<AWSCloudConfiguration>()};
     for (size_t i = 0; i < _items; i++) {
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
@@ -248,8 +266,24 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
             secret_access_key = hdfs_properties->secret_key;
         }
     } else {
-        access_key_id = config::object_storage_access_key_id;
-        secret_access_key = config::object_storage_secret_access_key;
+        // resolve path sytle
+        auto it = opts._fs_options.find("fs.s3a.path.style.access");
+        if (it != opts._fs_options.end()) {
+            path_style_access = it->second.compare("true") == 0 ? true : false;
+        }
+        // resolve ak,sk
+        it = opts._fs_options.find("fs.s3a.access.key");
+        if (it != opts._fs_options.end()) {
+            access_key_id = it->second;
+        } else {
+            access_key_id = config::object_storage_access_key_id;
+        }
+        it = opts._fs_options.find("fs.s3a.secret.key");
+        if (it != opts._fs_options.end()) {
+            secret_access_key = it->second;
+        } else {
+            secret_access_key = config::object_storage_secret_access_key;
+        }
     }
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
@@ -309,19 +343,53 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
             config.maxConnections = config::object_storage_max_connection;
         }
     } else {
-        if (!uri.endpoint().empty()) {
-            config.endpointOverride = uri.endpoint();
+        // resolve endpoint
+        auto it = opts._fs_options.find("fs.s3a.endpoint");
+        if (it != opts._fs_options.end() && !it->second.empty()) {
+            config.endpointOverride = it->second;
         } else if (!config::object_storage_endpoint.empty()) {
             config.endpointOverride = config::object_storage_endpoint;
+        }
+        // resolve region
+        it = opts._fs_options.find("fs.s3a.endpoint.region");
+        if (it != opts._fs_options.end() && !it->second.empty()) {
+            config.region = it->second;
+        } else if (!config::object_storage_region.empty()) {
+            config.region = config::object_storage_region;
+        }
+        // resolve ssl
+        it = opts._fs_options.find("fs.s3a.connection.ssl.enabled");
+        if (it != opts._fs_options.end()) {
+            if (it->second.compare("true") == 0) {
+                config.scheme = Aws::Http::Scheme::HTTPS;
+            } else {
+                config.scheme = Aws::Http::Scheme::HTTP;
+            }
         } else if (config::object_storage_endpoint_use_https) {
             config.scheme = Aws::Http::Scheme::HTTPS;
         } else {
             config.scheme = Aws::Http::Scheme::HTTP;
         }
-        if (!config::object_storage_region.empty()) {
-            config.region = config::object_storage_region;
-        }
         config.maxConnections = config::object_storage_max_connection;
+        // resolve retry
+        int64_t s3client_max_retries = config::object_storage_max_retries;
+        it = opts._fs_options.find("fs.s3a.retry.limit");
+        if (it != opts._fs_options.end() && !it->second.empty()) {
+            s3client_max_retries = std::stoi(it->second);
+        }
+        int64_t s3client_retry_scale_factor = config::object_storage_request_timeout_ms;
+        it = opts._fs_options.find("fs.s3a.retry.interval");
+        if (it != opts._fs_options.end() && !it->second.empty()) {
+            s3client_retry_scale_factor = std::stoi(it->second);
+        }
+        config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
+                retryable_errors,
+                /* maxRetries = */ s3client_max_retries,
+                /* scaleFactor = */ s3client_retry_scale_factor);
+    }
+
+    if (!uri.endpoint().empty()) {
+        config.endpointOverride = uri.endpoint();
     }
     if (config::object_storage_connect_timeout_ms > 0) {
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
@@ -330,6 +398,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
     if (config::object_storage_request_timeout_ms >= 0) {
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
+
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
@@ -423,6 +492,20 @@ private:
     FSOptions _options;
 };
 
+static int64_t read_ahead_size_from_options(FSOptions& options) {
+    int64_t read_ahead_size = 64 * 1024; // default value is 64KB
+    auto it = options._fs_options.find("fs.s3a.readahead.range");
+    if (it != options._fs_options.end() && !it->second.empty()) {
+        try {
+            read_ahead_size = std::stoi(it->second);
+        } catch (std::logic_error const&) {
+            LOG_EVERY_N(WARNING, 10) << " Can not convert config fs.s3a.readahead.range's value to int : "
+                                     << it->second;
+        }
+    }
+    return read_ahead_size;
+}
+
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                  const std::string& path) {
     S3URI uri;
@@ -430,7 +513,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    auto read_ahead_size = read_ahead_size_from_options(_options);
+    auto input_stream =
+            std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
     return RandomAccessFile::from(std::move(input_stream), path, false, opts.encryption_info);
 }
 
@@ -441,7 +526,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    auto read_ahead_size = read_ahead_size_from_options(_options);
+    auto input_stream =
+            std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
     if (file_info.size.has_value()) {
         input_stream->set_size(file_info.size.value());
     }
@@ -455,7 +542,10 @@ StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(cons
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    auto read_ahead_size = read_ahead_size_from_options(_options);
+    auto input_stream =
+            std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+
     return SequentialFile::from(std::move(input_stream), path, opts.encryption_info);
 }
 

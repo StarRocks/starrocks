@@ -149,10 +149,11 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+    READER_BYPASS_QUERY = 5,
 };
 
 inline bool is_query(ReaderType reader_type) {
-    return reader_type == READER_QUERY;
+    return reader_type == READER_QUERY || reader_type == READER_BYPASS_QUERY;
 }
 
 inline bool is_compaction(ReaderType reader_type) {
