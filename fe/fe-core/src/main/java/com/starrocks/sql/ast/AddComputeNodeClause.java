@@ -18,15 +18,12 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 public class AddComputeNodeClause extends ComputeNodeClause {
 
-    public AddComputeNodeClause(List<String> hostPorts) {
-        this(hostPorts, NodePosition.ZERO);
-    }
-
-    public AddComputeNodeClause(List<String> hostPorts, NodePosition pos) {
-        super(hostPorts, pos);
+    public AddComputeNodeClause(List<String> hostPorts, NodePosition pos, Map<String, String> properties) {
+        super(hostPorts, pos, properties);
     }
 
     @Override

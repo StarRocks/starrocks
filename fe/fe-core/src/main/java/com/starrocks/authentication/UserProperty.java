@@ -16,6 +16,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
@@ -37,9 +38,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 // UserProperty is a class that represents the properties that are identified.
 public class UserProperty {
@@ -51,10 +55,13 @@ public class UserProperty {
     // In order to keep consistent with database, we support user to set session.catalog = xxx or catalog = yyy
     public static final String PROP_CATALOG = SessionVariable.CATALOG;
     public static final String PROP_SESSION_PREFIX = "session.";
+    public static final String PROP_LABELS_LOCATION = "labels.location";
 
     public static final long MAX_CONN_DEFAULT_VALUE = 1024;
     public static final String CATALOG_DEFAULT_VALUE = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     public static final String DATABASE_DEFAULT_VALUE = "";
+    public static final Set<String> LABELS_LOCATION_DEFAULT_VALUE = 
+                                          Sets.newHashSet(Arrays.asList(SessionVariable.DEFAULT_USER_LABELS_LOCATION));
 
     // If the values is empty, we remove the key from the session variables.
     public static final String EMPTY_VALUE = "";
@@ -70,6 +77,9 @@ public class UserProperty {
 
     @SerializedName(value = "s")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    
+    @SerializedName("l")
+    private Set<String> labelsLocation = LABELS_LOCATION_DEFAULT_VALUE;
 
     public void update(String userName, List<Pair<String, String>> properties) throws DdlException {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -108,6 +118,9 @@ public class UserProperty {
                     checkSessionVariable(sessionKey, value);
                     setSessionVariable(sessionKey, value);
                 }
+            } else if (key.equalsIgnoreCase(PROP_LABELS_LOCATION)) {
+                Set<String> newLabelsLocation = checkLabelsLocation(value);
+                setLabelsLocation(newLabelsLocation);
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -139,6 +152,9 @@ public class UserProperty {
                     } else {
                         setSessionVariable(sessionKey, value);
                     }
+                } else if (key.equalsIgnoreCase(PROP_LABELS_LOCATION)) {
+                    Set<String> labelsLocation = checkLabelsLocation(value);
+                    setLabelsLocation(labelsLocation);
                 }
             } catch (Exception e) {
                 // we should never throw an exception when replaying journal
@@ -313,5 +329,27 @@ public class UserProperty {
 
     private void setMaxConn(long value) {
         maxConn = value;
+    }
+    
+    private Set<String> checkLabelsLocation(String value) throws DdlException {
+        if (value.equalsIgnoreCase(EMPTY_VALUE)) {
+            return LABELS_LOCATION_DEFAULT_VALUE;
+        }
+        //allowed format : "a:b" "a:b,c:d"
+        String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)(?:,\\s*([a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*))*";
+        if (!Pattern.compile(regex).matcher(value).matches()) {
+            throw new DdlException("invalid location format: " + value +
+                      ", should be like: 'key:val' or 'key1:val1,key2:val2'");
+        }
+        Set<String> newLabelsLocation = Sets.newHashSet(Arrays.asList(value.split(",")));
+        return newLabelsLocation;
+    }
+    
+    public void setLabelsLocation(Set<String> labelsLocation) {
+        this.labelsLocation = labelsLocation;
+    }
+
+    public Set<String> getLabelsLocation() {
+        return labelsLocation;
     }
 }

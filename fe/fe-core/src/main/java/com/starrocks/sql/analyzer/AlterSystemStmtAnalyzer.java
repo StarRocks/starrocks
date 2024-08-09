@@ -81,6 +81,37 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
     }
 
     @Override
+    public Void visitAddComputeNodeClause(AddComputeNodeClause clause, ConnectContext context) {
+        for (String hostPort : clause.getHostPorts()) {
+            SystemInfoService.validateHostAndPort(hostPort, false);
+        }
+        analyzeComputeNodeProperties(clause.getProperties());
+        visitComputeNodeClause(clause, context);
+        return null;
+    }
+
+    private void analyzeComputeNodeProperties(Map<String, String> properties) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String propKey = entry.getKey();
+            if (propKey.equals(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                String propVal = entry.getValue();
+                if (propVal.isEmpty()) {
+                    continue;
+                }
+                // Support single level location label for now
+                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)";
+                if (!Pattern.compile(regex).matcher(propVal).matches()) {
+                    throw new SemanticException("invalid location format: " + propVal +
+                            ", should be like: 'key:val'");
+                }
+            } else {
+                throw new SemanticException("invalid property: " + propKey +
+                        ", should be: " + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            }
+        }
+    }
+
+    @Override
     public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
         List<Pair<String, Integer>> hostPortPairs = new ArrayList<>();
         for (String hostPort : backendClause.getHostPortsUnResolved()) {

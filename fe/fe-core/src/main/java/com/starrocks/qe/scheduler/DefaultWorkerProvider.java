@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,9 +35,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,12 +97,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                      boolean preferComputeNode, int numUsedComputeNodes,
                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                      long warehouseId) {
+            Set<String> locations = getLabelsLocation();
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, warehouseId);
+                                         computationFragmentSchedulingPolicy, locations, warehouseId);
 
-            ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+            ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend(locations));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToBackend size={}", idToBackend.size());
@@ -322,15 +326,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                   int numUsedComputeNodes,
                                   ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                  long warehouseId) {
+                                  Set<String> locations, long warehouseId) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
         //get CN and BE from systemInfoService
         ImmutableMap<Long, ComputeNode> idToComputeNode
-                = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
+                = ImmutableMap.copyOf(systemInfoService.getIdComputeNode(locations));
         ImmutableMap<Long, ComputeNode> idToBackend
-                = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+                = ImmutableMap.copyOf(systemInfoService.getIdToBackend(locations));
 
         //add CN and BE to Node Pool
         if (numUsedComputeNodes <= 0) {
@@ -385,5 +389,21 @@ public class DefaultWorkerProvider implements WorkerProvider {
                         .filter(entry -> isWorkerAvailable(entry.getValue()))
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
         );
+    }
+
+    private static Set<String> getLabelsLocation() {
+        ConnectContext ctx = ConnectContext.get();
+        String user = null;
+        try {
+            user = ctx.getCurrentUserIdentity().getUser();
+        } catch (Exception e) {
+            if (user == null) {
+                return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
+            } else {
+                LOG.info("fail to get user info, msg: {}", e.getMessage());
+            }
+        }
+        Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
+        return locations;
     }
 }

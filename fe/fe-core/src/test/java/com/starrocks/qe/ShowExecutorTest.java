@@ -908,8 +908,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("1.00 %", resultSet.getString(16));
         Assert.assertEquals("3.0 %", resultSet.getString(17));
         Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18));
-        Assert.assertEquals("OK", resultSet.getString(20));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(24));
+        Assert.assertEquals("OK", resultSet.getString(21));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(25));
     }
 
     @Test
