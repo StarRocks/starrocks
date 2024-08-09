@@ -98,8 +98,8 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
-     --with-tenann
-                        build with vector index tenann library
+     --without-tenann
+                        build without vector index tenann library
 
   Eg.
     $0                                           build all
@@ -132,7 +132,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
-  -l 'with-tenann' \
+  -l 'without-tenann' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -156,7 +156,7 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=OFF
+WITH_TENANN=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -176,10 +176,6 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-fi
-
-if [[ -z ${WITH_TENANN} ]]; then
-  WITH_TENANN=ON
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -244,7 +240,7 @@ else
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
-            --with-tenann) WITH_TENANN=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
