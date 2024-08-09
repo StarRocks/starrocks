@@ -2926,6 +2926,10 @@ public class Config extends ConfigBase {
             "default")
     public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
 
+    @ConfField(mutable = true, comment = "Whether enable to rewrite query in mv refresh or not so it can use " +
+            "query the rewritten mv directly rather than original base table to improve query performance.")
+    public static boolean enable_mv_refresh_query_rewrite = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
