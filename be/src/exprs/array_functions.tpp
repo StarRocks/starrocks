@@ -258,12 +258,53 @@ private:
     }
 };
 
+template <typename HashSet>
+struct ArrayOverlapState {
+    bool left_is_not_null_const = false;
+    bool right_is_not_null_const = false;
+    bool has_overlapping = false;
+    bool has_null = false;
+    std::unique_ptr<HashSet> hash_set;
+};
+
 template <LogicalType LT>
 class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using HashFunc = PhmapHashFuncSelector<LT, PhmapSeed1>;
     using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
+
+    static Status prepare(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
+        if (scope != FunctionContext::FRAGMENT_LOCAL) {
+            return Status::OK();
+        }
+
+        auto* state = new ArrayOverlapState<HashSet>();
+        ctx->set_function_state(scope, state);
+
+        if (!ctx->is_notnull_constant_column(0) && !ctx->is_notnull_constant_column(1)) {
+            return Status::OK();
+        }
+
+        if (ctx->is_notnull_constant_column(1)) {
+            state->right_is_not_null_const = true;
+            state->hash_set = std::make_unique<HashSet>();
+            _put_array_to_hash_set(ctx->get_constant_column(1)->get(0).get_array(),
+                                   state->hash_set.get(), &state->has_null);
+        }
+
+        if (ctx->is_notnull_constant_column(0)) {
+            state->left_is_not_null_const = true;
+            if (state->right_is_not_null_const) {
+                state->has_overlapping = _check_exist(*state->hash_set, ctx->get_constant_column(0)->get(0),
+                                                      state->has_null, 0);
+            } else {
+                state->hash_set = std::make_unique<HashSet>();
+                _put_array_to_hash_set(ctx->get_constant_column(0)->get(0).get_array(),
+                                       state->hash_set.get(), &state->has_null);
+            }
+        }
+    }
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -312,6 +353,33 @@ private:
         }
 
         return result_column;
+    }
+
+    static void _put_array_to_hash_set(const DatumArray& array, HashSet* hash_set, bool* has_null) {
+        *has_null = false;
+        for (const auto& item : array) {
+            if (item.is_null()) {
+                *has_null = true;
+            } else {
+                hash_set->emplace(item.get<CppType>());
+            }
+        }
+    }
+
+    static bool _check_exist(const HashSet& hash_set, const ArrayColumn& column, bool has_null, size_t index) {
+        const auto& items = column.get(index).get<DatumArray>();
+        for (const auto& item : items) {
+            if (item.is_null()) {
+                if (has_null) {
+                    return true;
+                }
+            } else {
+                if (hash_set.contains(item.get<CppType>())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static void _array_overlap_item(const std::vector<ArrayColumn*>& columns, size_t index, HashSet* hash_set,
