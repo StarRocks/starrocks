@@ -67,12 +67,6 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendSer
     try {
         callback(client);
         return Status::OK();
-    } catch (apache::thrift::protocol::TProtocolException& e) {
-        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
-            ss << "FE RPC response parsing failure, address=" << address << ".The FE may be busy, please retry later";
-        } else {
-            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
-        }
     } catch (apache::thrift::TException& e) {
         ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
     }
