@@ -286,11 +286,14 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                             open();
                             return null;
                         });
-                String delegationTokenPropString = "DelegationTokenForHiveMetaStoreServer";
-                String delegationTokenStr = getDelegationToken(proxyUser, proxyUser);
-                SecurityUtils.setTokenStr(UserGroupInformation.getCurrentUser(), delegationTokenStr,
-                        delegationTokenPropString);
-                MetastoreConf.setVar(this.conf, ConfVars.TOKEN_SIGNATURE, delegationTokenPropString);
+                boolean useSasl = MetastoreConf.getBoolVar(conf, ConfVars.USE_THRIFT_SASL);
+                if (useSasl) {
+                    String delegationTokenPropString = "DelegationTokenForHiveMetaStoreServer";
+                    String delegationTokenStr = getDelegationToken(proxyUser, proxyUser);
+                    SecurityUtils.setTokenStr(UserGroupInformation.getCurrentUser(), delegationTokenStr,
+                            delegationTokenPropString);
+                    MetastoreConf.setVar(this.conf, ConfVars.TOKEN_SIGNATURE, delegationTokenPropString);
+                }
                 close();
             } catch (Exception e) {
                 LOG.error("Error while setting delegation token for " + proxyUser, e);
