@@ -582,6 +582,8 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
 Status OlapScanConjunctsManager::build_olap_filters() {
     olap_filters.clear();
 
+    // False alert from clang-tidy-14
+    // NOLINTNEXTLINE(performance-for-range-copy)
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
         std::visit([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);

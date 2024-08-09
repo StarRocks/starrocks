@@ -69,12 +69,12 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     auto num_rows = keys[0]->size();
     auto& found = values.found;
     auto& result_chunk = values.result_chunk;
-    found.resize(num_rows, 0);
+    found.resize(num_rows, false);
     result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
     for (size_t i = 0; i < num_rows; i++) {
         auto key_row = _convert_columns_to_key(keys, i);
         if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
-            found[i] = 1;
+            found[i] = true;
             RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
         }
     }
@@ -105,7 +105,7 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
 
     auto& found = values.found;
     auto& result_chunk = values.result_chunk;
-    found.resize(num_rows, 0);
+    found.resize(num_rows, false);
     result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
     VLOG_ROW << "selection size:" << selection.size() << ", num_rows:" << num_rows
              << ", num_columns:" << result_chunk->num_columns();
@@ -114,7 +114,7 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
             auto key_row = _convert_columns_to_key(keys, i);
             if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
                 VLOG_ROW << "append key with selection";
-                found[i] = 1;
+                found[i] = true;
                 RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
             } else {
                 VLOG_ROW << "append null without selection";

@@ -14,6 +14,8 @@
 
 #include "util/misc.h"
 
+#include <utility>
+
 #include "util/await.h"
 
 namespace starrocks {
@@ -24,10 +26,10 @@ static constexpr int sleep_interval = 100 * 1000; // 100ms
 static constexpr int sleep_interval = 1 * 1000 * 1000; // 1 seconds
 #endif
 
-void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition) {
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition) {
     Awaitility await;
     await.timeout(sleep_secs * 1000LL * 1000LL).interval(sleep_interval);
-    await.until(stop_condition);
+    await.until(std::move(stop_condition));
 }
 
 } // namespace starrocks

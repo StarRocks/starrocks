@@ -14,6 +14,8 @@
 
 #include "exec/tablet_sink_sender.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
@@ -27,7 +29,7 @@ TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToT
                                    std::unordered_map<int64_t, NodeChannel*> node_channels,
                                    std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                                    TWriteQuorumType::type write_quorum_type, int num_repicas)
-        : _load_id(load_id),
+        : _load_id(std::move(std::move(load_id))),
           _txn_id(txn_id),
           _index_id_to_tablet_be_map(std::move(index_id_to_tablet_be_map)),
           _vectorized_partition(vectorized_partition),

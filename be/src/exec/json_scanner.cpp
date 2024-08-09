@@ -315,7 +315,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(type_descs),
+          _type_descs(std::move(std::move(type_descs))),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;

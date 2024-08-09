@@ -33,10 +33,10 @@ struct CSVWriterOptions : FileWriterOptions {
 class CSVFileWriter final : public FileWriter {
 public:
     CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
-                  const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
+                  std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  TCompressionType::type compression_type, const std::shared_ptr<CSVWriterOptions>& writer_options,
-                  const std::function<void()> rollback_action);
+                  TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
+                  std::function<void()> rollback_action);
 
     ~CSVFileWriter() override;
 
@@ -68,8 +68,7 @@ private:
 class CSVFileWriterFactory : public FileWriterFactory {
 public:
     CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
-                         const std::map<std::string, std::string>& options,
-                         const std::vector<std::string>& column_names,
+                         std::map<std::string, std::string> options, std::vector<std::string> column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors, RuntimeState* runtime_state);
 

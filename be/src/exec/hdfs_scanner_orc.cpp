@@ -354,7 +354,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_end = scan_range->length + scan_start;
 
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
-        auto stripeInfo = reader->getStripeInOrcFormat(idx);
+        const auto& stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
 
         if (offset >= scan_start && offset < scan_end) {

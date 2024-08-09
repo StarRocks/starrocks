@@ -33,7 +33,7 @@ public:
 
     Status prepare();
 
-    Status append_chunk(ChunkPtr chunk, std::atomic_bool* terminate_flag = nullptr);
+    Status append_chunk(const ChunkPtr& chunk, std::atomic_bool* terminate_flag = nullptr);
 
     bool need_input();
 

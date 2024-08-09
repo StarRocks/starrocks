@@ -43,15 +43,6 @@ namespace starrocks {
 
 __thread Trace* Trace::threadlocal_trace_;
 
-Trace::Trace()
-
-{
-    // We expect small allocations from our Arena so no need to have
-    // a large arena component. Small allocations are more likely to
-    // come out of thread cache and be fast.
-    // arena_->SetMaxBufferSize(4096);
-}
-
 // Struct which precedes each entry in the trace.
 struct TraceEntry {
     MicrosecondsInt64 timestamp_micros;

@@ -20,10 +20,9 @@
 
 #include "util/random.h"
 
-#include <limits.h>
-#include <stdint.h>
-#include <string.h>
-
+#include <climits>
+#include <cstdint>
+#include <cstring>
 #include <thread>
 #include <utility>
 

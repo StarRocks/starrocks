@@ -903,7 +903,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
         std::vector<std::tuple<TUnit::type, std::string, std::string>> level_ordered_counters;
         for (const auto& level_counters : all_level_counters) {
             for (const auto& [name, pair] : level_counters) {
-                level_ordered_counters.emplace_back(std::make_tuple(pair.first, name, pair.second));
+                level_ordered_counters.emplace_back(pair.first, name, pair.second);
             }
         }
 

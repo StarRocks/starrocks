@@ -96,7 +96,7 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
             case 4: {
                 // tracking message
                 if (info.__isset.urls) {
-                    for (auto url : info.urls) {
+                    for (const auto& url : info.urls) {
                         _fill_tracking_msg(url);
                     }
                     std::stringstream ss;

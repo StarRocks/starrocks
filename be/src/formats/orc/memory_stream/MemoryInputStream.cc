@@ -16,6 +16,6 @@
 
 namespace starrocks {
 
-MemoryInputStream::~MemoryInputStream() {}
+MemoryInputStream::~MemoryInputStream() = default;
 
 } // namespace starrocks

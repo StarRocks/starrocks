@@ -22,7 +22,7 @@ namespace starrocks {
 
 static const int64_t kDefaultMinInterval = 10 * 1000; // 10ms
 
-bool Awaitility::until(condition_fun cond) {
+bool Awaitility::until(const condition_fun& cond) {
     if (_timeout <= 0) {
         return cond();
     }

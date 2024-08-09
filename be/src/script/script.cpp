@@ -134,7 +134,7 @@ std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
         return ret;
     }
@@ -157,7 +157,7 @@ std::string exec(const std::string& cmd) {
 }
 
 static std::string exec_whitelist(const std::string& cmd) {
-    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    static std::regex legal_cmd(R"((ls|cat|head|tail|grep|free|echo)[^<>\|;`\\]*)");
     std::cmatch m;
     if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
         return "illegal cmd";
