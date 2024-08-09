@@ -260,8 +260,8 @@ private:
 
 template <typename HashSet>
 struct ArrayOverlapState {
-    bool left_is_not_null_const = false;
-    bool right_is_not_null_const = false;
+    bool left_is_notnull_const = false;
+    bool right_is_notnull_const = false;
     bool has_overlapping = false;
     bool has_null = false;
     std::unique_ptr<HashSet> hash_set;
@@ -287,43 +287,103 @@ public:
         }
 
         if (ctx->is_notnull_constant_column(1)) {
-            state->right_is_not_null_const = true;
+            state->right_is_notnull_const = true;
             state->hash_set = std::make_unique<HashSet>();
-            _put_array_to_hash_set(ctx->get_constant_column(1)->get(0).get_array(),
-                                   state->hash_set.get(), &state->has_null);
+            _put_array_to_hash_set(ctx->get_constant_column(1)->get(0).get_array(), state->hash_set.get(),
+                                   &state->has_null);
         }
 
         if (ctx->is_notnull_constant_column(0)) {
-            state->left_is_not_null_const = true;
-            if (state->right_is_not_null_const) {
-                state->has_overlapping = _check_exist(*state->hash_set, ctx->get_constant_column(0)->get(0),
-                                                      state->has_null, 0);
+            state->left_is_notnull_const = true;
+            if (state->right_is_notnull_const) {
+                state->has_overlapping =
+                        _check_exist(*state->hash_set, ctx->get_constant_column(0), state->has_null, 0);
             } else {
                 state->hash_set = std::make_unique<HashSet>();
-                _put_array_to_hash_set(ctx->get_constant_column(0)->get(0).get_array(),
-                                       state->hash_set.get(), &state->has_null);
+                _put_array_to_hash_set(ctx->get_constant_column(0)->get(0).get_array(), state->hash_set.get(),
+                                       &state->has_null);
             }
         }
     }
 
-    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+    static Status close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            auto* state = reinterpret_cast<ArrayOverlapState<HashSet>*>(
+                    ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+            delete state;
+        }
+
+        return Status::OK();
+    }
+
+    static StatusOr<ColumnPtr> process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
         static_assert(PhmapHashFuncSelector<LT, PhmapSeed1>::is_supported());
 
-        return _array_overlap(columns);
+        auto* state =
+                reinterpret_cast<ArrayOverlapState<HashSet>*>(ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        if (UNLIKELY(state == nullptr)) {
+            return Status::InternalError("array_overloap get state failed");
+        }
+
+        bool is_nullable = columns[0]->is_nullable() || columns[1]->is_nullable();
+        auto chunk_size = columns[0]->size();
+
+        if (state->left_is_notnull_const && state->right_is_notnull_const) {
+            ColumnPtr result_column;
+            if (state->has_overlapping) {
+                result_column = ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, chunk_size);
+            } else {
+                result_column = ColumnHelper::create_const_column<TYPE_BOOLEAN>(0, chunk_size);
+            }
+            if (is_nullable) {
+                result_column = ColumnHelper::cast_to_nullable_column(result_column);
+            }
+            return result_column;
+        } else if (state->left_is_notnull_const) {
+            return _array_overlap_const(*state, columns[1]);
+        } else if (state->right_is_notnull_const) {
+            return _array_overlap_const(*state, columns[0]);
+        } else {
+            return _array_overlap(columns);
+        }
     }
 
 private:
-    static ColumnPtr _array_overlap(const Columns& original_columns) {
-        size_t chunk_size = original_columns[0]->size();
-        auto result_column = BooleanColumn::create(chunk_size, 0);
-        Columns columns;
-        for (const auto& col : original_columns) {
-            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(chunk_size, col));
+    static ColumnPtr _array_overlap_const(const ArrayOverlapState<HashSet>& state, const ColumnPtr& column) {
+        size_t chunk_size = column->size();
+        auto result_data_column = BooleanColumn::create(chunk_size, 0);
+        auto& result_data = result_data_column->get_data();
+        NullColumnPtr result_null_column;
+
+        const ArrayColumn* src_data_column = nullptr;
+        bool is_nullable = false;
+
+        if (column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(column.get());
+            src_data_column = ColumnHelper::as_raw_column<ArrayColumn>(src_nullable_column->data_column());
+            result_null_column = ColumnHelper::as_column<NullColumn>(src_nullable_column->null_column()->clone());
+            is_nullable = true;
+        } else {
+            src_data_column = ColumnHelper::as_raw_column<ArrayColumn>(column);
         }
 
+        for (size_t i = 0; i < chunk_size; i++) {
+            result_data[i] = _check_exist(*state.hash_set, *src_data_column, state.has_null, i);
+        }
+
+        if (is_nullable) {
+            return NullableColumn::create(result_data_column, result_null_column);
+        } else {
+            return result_data_column;
+        }
+    }
+
+    static ColumnPtr _array_overlap(const Columns& columns) {
+        size_t chunk_size = columns[0]->size();
+        auto result_column = BooleanColumn::create(chunk_size, 0);
+
         bool is_nullable = false;
-        bool has_null = false;
         std::vector<ArrayColumn*> src_columns;
         src_columns.reserve(columns.size());
         NullColumnPtr null_result = NullColumn::create();
@@ -332,7 +392,6 @@ private:
         for (const auto& column : columns) {
             if (column->is_nullable()) {
                 is_nullable = true;
-                has_null = (column->has_null() || has_null);
                 const auto* src_nullable_column = down_cast<const NullableColumn*>(column.get());
                 src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
                 null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
