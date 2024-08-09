@@ -349,11 +349,11 @@ template <LogicalType LT, PhmapSeed seed>
 struct PhmapHashFuncSelector {
     std::size_t operator()(const RunTimeCppType<LT>& value) const {
         if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
-            return Hash128WithSeed<seed>(value);
+            return Hash128WithSeed<seed>()(value);
         } else if constexpr (lt_is_fixedlength<LT>) {
-            return StdHashWithSeed<RunTimeCppType<LT>, seed>(value);
+            return StdHashWithSeed<RunTimeCppType<LT>, seed>()(value);
         } else if constexpr (lt_is_string<LT>) {
-            return SliceHashWithSeed<seed>(value);
+            return SliceHashWithSeed<seed>()(value);
         } else {
             assert(false);
         }
