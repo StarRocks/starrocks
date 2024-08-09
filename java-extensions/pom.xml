@@ -42,6 +42,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
+        <avro.version>1.11.3</avro.version>
     </properties>
 
     <dependencyManagement>

@@ -47,7 +47,7 @@ public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
                 if (fieldData == null) {
                     appendData(i, null);
                 } else {
-                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
                     appendData(i, fieldValue);
                 }
             }
