@@ -23,18 +23,15 @@
 #include <vector>
 
 #include "block_cache/block_cache.h"
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/function_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace tparquet {
 class ColumnMetaData;
@@ -80,6 +77,8 @@ public:
     Status get_next(ChunkPtr* chunk);
 
     FileMetaData* get_file_metadata();
+
+    Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
 private:
     int _chunk_size;

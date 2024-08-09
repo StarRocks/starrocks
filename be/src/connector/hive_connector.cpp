@@ -17,6 +17,7 @@
 #include <filesystem>
 
 #include "connector/hive_chunk_sink.h"
+#include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -98,6 +99,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     _use_datacache = config::datacache_enable && BlockCache::instance()->available();
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
+    }
+    if (_use_datacache && state->query_options().__isset.enable_cache_select) {
+        _enable_cache_select = state->query_options().enable_cache_select;
     }
     if (hdfs_scan_node.__isset.datacache_options &&
         hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
@@ -617,8 +621,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
                                                             .scan_node = &hdfs_scan_node};
-
-    if (_use_partition_column_value_only) {
+    if (_enable_cache_select) {
+        scanner = new CacheSelectScanner();
+    } else if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
@@ -644,7 +649,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
-        std::string msg = fmt::format("unsupported hdfs file format: {}", format);
+        std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }

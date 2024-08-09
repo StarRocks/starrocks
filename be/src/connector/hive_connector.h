@@ -110,6 +110,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
+    bool _enable_cache_select = false;
     bool _enable_populate_datacache = false;
     bool _enable_datacache_aync_populate_mode = false;
     bool _enable_datacache_io_adaptor = false;
