@@ -482,8 +482,10 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "map_from_arrays([1,2,3], ['a','b','c']))");
 
         sql = "select transform_values(map(array [1, 2, 3], array ['a', 'b', 'c']), (k, v) -> k * k);";
-        assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:CAST(<slot 2> AS SMALLINT) * " +
-                "CAST(<slot 2> AS SMALLINT)}, map_from_arrays([1,2,3], ['a','b','c']))");
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 6> * <slot 6>}\n" +
+                "        lambda common expressions:{<slot 6> <-> CAST(<slot 2> AS SMALLINT)}\n" +
+                "        , map_from_arrays([1,2,3], ['a','b','c']))");
     }
 
     @Test
