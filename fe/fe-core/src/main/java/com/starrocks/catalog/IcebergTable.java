@@ -29,6 +29,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -49,7 +50,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
-import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -366,7 +366,7 @@ public class IcebergTable extends Table {
             // partition info may be very big, and it is the same in plan fragment send to every be.
             // extract and serialize it as a string, will get better performance(about 3x in test).
             try {
-                TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+                TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
                 byte[] bytes = serializer.serialize(tPartitionMap);
                 byte[] compressedBytes = Util.compress(bytes);
                 TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();

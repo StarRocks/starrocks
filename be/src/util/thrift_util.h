@@ -45,6 +45,7 @@
 #include <sstream>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -151,7 +152,11 @@ template <class T>
     // transport. TMemoryBuffer is not const-safe, although we use it in
     // a const-safe way, so we have to explicitly cast away the const.
     std::shared_ptr<apache::thrift::transport::TMemoryBuffer> tmem_transport(
-            new apache::thrift::transport::TMemoryBuffer(const_cast<uint8_t*>(buf), *len));
+            new apache::thrift::transport::TMemoryBuffer(
+                    const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE,
+                    std::make_shared<apache::thrift::TConfiguration>(config::thrift_max_message_size,
+                                                                     config::thrift_max_frame_size,
+                                                                     config::thrift_max_recursion_depth)));
     std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, type);
 
     try {

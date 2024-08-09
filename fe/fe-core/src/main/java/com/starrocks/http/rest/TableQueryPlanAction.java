@@ -55,6 +55,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -319,7 +320,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
         String opaquedQueryPlan;
         try {
-            TSerializer serializer = new TSerializer();
+            TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
             byte[] queryPlanStream = serializer.serialize(tQueryPlanInfo);
             opaquedQueryPlan = Base64.getEncoder().encodeToString(queryPlanStream);
         } catch (TException e) {
