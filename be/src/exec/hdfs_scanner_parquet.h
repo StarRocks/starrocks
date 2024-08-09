@@ -34,6 +34,7 @@ public:
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
+    void update_v2_builder_counter(RuntimeProfile* parent_profile, HdfsScanStats& app_stats, HdfsScanStats& fs_stats);
     std::set<int64_t> _need_skip_rowids;
 };
 
