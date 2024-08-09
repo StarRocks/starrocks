@@ -14,8 +14,13 @@
 
 package com.starrocks.service;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -24,17 +29,22 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 
 public class InformationSchemaDataSourceTest {
@@ -284,5 +294,68 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("3", props.get("dynamic_partition.end"));
         Assert.assertEquals("p", props.get("dynamic_partition.prefix"));
         Assert.assertEquals("1", props.get("replication_num"));
+    }
+
+    @Test
+    public void testTaskRunsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1') ");
+        starRocksAssert.ddl("submit task t_1024 as insert into t1 select * from t1");
+
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName("t_1024");
+        taskRun.setState(Constants.TaskRunState.SUCCESS);
+        taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setProcessStartTime(
+                DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        new MockUp<TaskManager>() {
+            @Mock
+            public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
+                return Lists.newArrayList(taskRun);
+            }
+        };
+
+        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
+                                "NULL | 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00' | 0 | " +
+                                "NULL | '0%' | '' | NULL");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'SUCCESS' | NULL");
+        starRocksAssert.query("select count(task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'t_1024'");
+        starRocksAssert.query("select count(error_code) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: \n         0\n");
+        starRocksAssert.query("select count(*) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "NULL");
+        starRocksAssert.query("select count(distinct task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "'t_1024'");
+        starRocksAssert.query("select error_code + 1, error_message + 'haha' " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "0 | NULL");
+
+        // Not supported
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name='t_1024' or task_name='t_1025' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where error_message > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where state = 'SUCCESS' ")
+                .explainContains("SCAN SCHEMA");
     }
 }
