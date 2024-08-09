@@ -1383,6 +1383,6 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 // 6. query_rpc_thread_pool
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "storage_page_cache")
+CONF_mString(try_release_resource_before_core_dump, "storage_page_cache");
 
 } // namespace starrocks::config
