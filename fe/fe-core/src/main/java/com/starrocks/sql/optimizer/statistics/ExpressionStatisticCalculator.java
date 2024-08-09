@@ -242,6 +242,7 @@ public class ExpressionStatisticCalculator {
                 }
                 case FunctionSet.NOW:
                 case FunctionSet.CURRENT_TIMESTAMP:
+                case FunctionSet.TO_UNIXTIME_MILLISECONDS:
                 case FunctionSet.UNIX_TIMESTAMP:
                     minValue = LocalDateTime.now().atZone(ZoneId.systemDefault()).toEpochSecond();
                     maxValue = minValue;

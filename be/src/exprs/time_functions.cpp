@@ -26,6 +26,7 @@
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -1337,7 +1338,7 @@ DEFINE_TIME_BINARY_FN(milliseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGI
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
  */
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
@@ -1358,12 +1359,22 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* con
         DateTimeValue tv(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
-            result.append_null();
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+            } else {
+                timestamp = timestamp < 0 ? 0 : timestamp;
+                timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
+                result.append(timestamp);
+            }
         } else {
-            timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
-            result.append(timestamp);
+            if (!tv.unix_timestamp_ms(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+            } else {
+                timestamp = timestamp < 0 ? 0 : timestamp;
+                timestamp = timestamp > MAX_UNIX_TIMESTAMP * 1000 ? 0 : timestamp;
+                result.append(timestamp);
+            }
         }
     }
 
@@ -1371,17 +1382,17 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* con
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_64(FunctionContext* context, const Columns& columns) {
-    return _t_to_unix_from_datetime<TYPE_BIGINT>(context, columns);
+    return _t_to_unix_from_datetime<TYPE_BIGINT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_32(FunctionContext* context, const Columns& columns) {
-    return _t_to_unix_from_datetime<TYPE_INT>(context, columns);
+    return _t_to_unix_from_datetime<TYPE_INT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 
 /*
  * definition for to_unix operators(SQL TYPE: DATE)
  */
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
@@ -1402,12 +1413,22 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context
         DateTimeValue tv(TIME_DATE, year, month, day, 0, 0, 0, 0);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
-            result.append_null();
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+            } else {
+                timestamp = timestamp < 0 ? 0 : timestamp;
+                timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
+                result.append(timestamp);
+            }
         } else {
-            timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
-            result.append(timestamp);
+            if (!tv.unix_timestamp_ms(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+            } else {
+                timestamp = timestamp < 0 ? 0 : timestamp;
+                timestamp = timestamp > MAX_UNIX_TIMESTAMP * 1000 ? 0 : timestamp;
+                result.append(timestamp);
+            }
         }
     }
 
@@ -1415,13 +1436,13 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date_64(FunctionContext* context, const Columns& columns) {
-    return _t_to_unix_from_date<TYPE_BIGINT>(context, columns);
+    return _t_to_unix_from_date<TYPE_BIGINT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date_32(FunctionContext* context, const Columns& columns) {
-    return _t_to_unix_from_date<TYPE_INT>(context, columns);
+    return _t_to_unix_from_date<TYPE_INT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(FunctionContext* context,
                                                                         const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -1450,13 +1471,24 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(Function
             continue;
         }
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+                continue;
+            }
+        } else {
+            if (!tv.unix_timestamp_ms(&timestamp, context->state()->timezone_obj())) {
+                result.append_null();
+                continue;
+            }
         }
 
         timestamp = timestamp < 0 ? 0 : timestamp;
-        timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
+        } else {
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP * 1000 ? 0 : timestamp;
+        }
         result.append(timestamp);
     }
 
@@ -1465,12 +1497,12 @@ StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(Function
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_64(FunctionContext* context,
                                                                         const Columns& columns) {
-    return _t_to_unix_from_datetime_with_format<TYPE_BIGINT>(context, columns);
+    return _t_to_unix_from_datetime_with_format<TYPE_BIGINT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(FunctionContext* context,
                                                                         const Columns& columns) {
-    return _t_to_unix_from_datetime_with_format<TYPE_INT>(context, columns);
+    return _t_to_unix_from_datetime_with_format<TYPE_INT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
@@ -1531,7 +1563,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, bool DATETIME_KEEP_MILLISECOND>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
@@ -1547,14 +1579,21 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
             continue;
         }
 
-        auto date = data_column.value(row) / 1000;
-        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+        int64_t date = data_column.value(row);
+        int64_t second = date / 1000;
+        int64_t microsecond;
+        if constexpr (DATETIME_KEEP_MILLISECOND) {
+            microsecond = date % 1000 * 1000;
+        } else {
+            microsecond = 0;
+        }
+        if (second < 0 || second > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(second, microsecond, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1566,16 +1605,29 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_bigint_to_datetime(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_int_to_datetime(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
+StatusOr<ColumnPtr> TimeFunctions::from_unix_bigint_to_datetime_ms(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT, false>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_bigint_to_datetime_milliseconds(FunctionContext* context,
+                                                                             const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT, true>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_float_to_datetime_ms(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_FLOAT, true>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_double_to_datetime_ms(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_DOUBLE, true>(context, columns);
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
@@ -1637,7 +1689,7 @@ Status TimeFunctions::from_unix_close(FunctionContext* context, FunctionContext:
     return Status::OK();
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
@@ -1654,15 +1706,25 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
             continue;
         }
 
-        auto date = data_column.value(row);
+        // convert double, float and int64_t to int64_t
+        int64_t date = data_column.value(row);
+        int64_t second;
+        int64_t microsecond;
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            second = date;
+            microsecond = 0;
+        } else {
+            second = date / 1000;
+            microsecond = date % 1000 * 1000;
+        }
         auto format = format_column.value(row);
-        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
+        if (second < 0 || second > MAX_UNIX_TIMESTAMP || format.empty()) {
             result.append_null();
             continue;
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(second, microsecond, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1685,7 +1747,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                                   const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
@@ -1702,14 +1764,24 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
             continue;
         }
 
-        auto date = data_column.value(row);
-        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+        // convert double, float and int64_t to int64_t
+        int64_t date = data_column.value(row);
+        int64_t second;
+        int64_t microsecond;
+        if constexpr (TIMESTAMP_UNIT_TYPE == TimeFunctions::TimeUnitType::Second) {
+            second = date;
+            microsecond = 0;
+        } else {
+            second = date / 1000;
+            microsecond = date % 1000 * 1000;
+        }
+        if (second < 0 || second > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(second, microsecond, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1725,25 +1797,53 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, TimeFunctions::TimeUnitType TIMESTAMP_UNIT_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* context,
                                                             const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state->const_format) {
         std::string format_content = state->format_content;
-        return _t_from_unix_with_format_const<TIMESTAMP_TYPE>(format_content, context, columns);
+        return _t_from_unix_with_format_const<TIMESTAMP_TYPE, TIMESTAMP_UNIT_TYPE>(format_content, context, columns);
     }
-    return _t_from_unix_with_format_general<TIMESTAMP_TYPE>(context, columns);
+    return _t_from_unix_with_format_general<TIMESTAMP_TYPE, TIMESTAMP_UNIT_TYPE>(context, columns);
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_64(FunctionContext* context,
-                                                                        const starrocks::Columns& columns) {
-    return _t_from_unix_with_format<TYPE_BIGINT>(context, columns);
+StatusOr<ColumnPtr> TimeFunctions::from_unix_bigint_to_datetime_with_format(FunctionContext* context,
+                                                                            const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_BIGINT, TimeFunctions::TimeUnitType::Second>(context, columns);
 }
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(FunctionContext* context,
-                                                                        const starrocks::Columns& columns) {
-    return _t_from_unix_with_format<TYPE_INT>(context, columns);
+StatusOr<ColumnPtr> TimeFunctions::from_unix_int_to_datetime_with_format(FunctionContext* context,
+                                                                         const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_INT, TimeFunctions::TimeUnitType::Second>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_bigint_to_datetime_ms_with_format(FunctionContext* context,
+                                                                               const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_BIGINT, TimeFunctions::TimeUnitType::MilliSecond>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_float_to_datetime_ms_with_format(FunctionContext* context,
+                                                                              const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_FLOAT, TimeFunctions::TimeUnitType::MilliSecond>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_double_to_datetime_ms_with_format(FunctionContext* context,
+                                                                               const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_DOUBLE, TimeFunctions::TimeUnitType::MilliSecond>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unixtime_milliseconds_datetime(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_datetime<TYPE_BIGINT, TimeFunctions::TimeUnitType::MilliSecond>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unixtime_milliseconds_date(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_date<TYPE_BIGINT, TimeFunctions::TimeUnitType::MilliSecond>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unixtime_milliseconds_format(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_datetime_with_format<TYPE_BIGINT, TimeFunctions::TimeUnitType::MilliSecond>(context,
+                                                                                                       columns);
 }
 
 /*

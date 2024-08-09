@@ -62,6 +62,15 @@ public:
     TExprNode expr_node;
 
 private:
+    template <typename ColumnType>
+    void fromUnixToDatetime(StatusOr<ColumnPtr> (*time_func)(FunctionContext*, const Columns&));
+
+    template <typename ColumnType>
+    void fromUnixToDatetimeWithFormat(StatusOr<ColumnPtr> (*time_func)(FunctionContext*, const Columns&));
+
+    template <typename ColumnType, typename LiteralType>
+    void fromUnixToDatetimeMsWithFormat(StatusOr<ColumnPtr> (*time_func)(FunctionContext*, const Columns&));
+
     std::shared_ptr<RuntimeState> _state;
     std::shared_ptr<FunctionUtils> _utils;
 };
@@ -1211,18 +1220,114 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetimeWithFormat) {
     }
 }
 
-TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
+TEST_F(TimeFunctionsTest, toUnixtimeMillisecondsDatetime) {
     {
         Columns columns;
-        //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
-        auto tc1 = Int32Column::create();
-        tc1->append(1565080737);
-        tc1->append(1565080797);
-        tc1->append(1565084337);
+
+        auto tc1 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(1000, 1, 1, 16, 0, 0, 999000));
+        tc1->append(TimestampValue::create(1970, 1, 1, 16, 0, 0, 999000));
+        tc1->append(TimestampValue::create(2019, 8, 6, 1, 38, 57, 1));
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_32(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unixtime_milliseconds_datetime(_utils->get_fn_ctx(), columns).value();
+
+        ASSERT_TRUE(result->is_numeric());
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(24 * 60 * 60 * 1000LL + 999, v->get_data()[1]);
+        ASSERT_EQ(1565080737LL * 1000, v->get_data()[2]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, toUnixtimeMillisecondsDate) {
+    {
+        Columns columns;
+
+        auto tc1 = DateColumn::create();
+        tc1->append(DateValue::create(1970, 1, 1));
+        tc1->append(DateValue::create(1970, 1, 2));
+
+        columns.emplace_back(tc1);
+
+        ColumnPtr result = TimeFunctions::to_unixtime_milliseconds_date(_utils->get_fn_ctx(), columns).value();
+
+        ASSERT_TRUE(result->is_numeric());
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(8 * 60 * 60 * 1000, v->get_data()[0]);
+        ASSERT_EQ(32 * 60 * 60 * 1000, v->get_data()[1]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, toUnixtimeMillisecondsWithFormat) {
+    {
+        Columns columns;
+        //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+        auto tc1 = BinaryColumn::create();
+        tc1->append("2019-08-06 01:38:57");
+        tc1->append("2019-08-06 01:38:58");
+        tc1->append("2019-08-06 01:38:58.123456");
+        auto tc2 = BinaryColumn::create();
+        tc2->append("%Y-%m-%d %H:%i:%S");
+        tc2->append("%Y-%m-%d %H:%i:%S");
+        tc2->append("%Y-%m-%d %H:%i:%S.%f");
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::to_unixtime_milliseconds_format(_utils->get_fn_ctx(), columns).value();
+
+        ASSERT_TRUE(result->is_numeric());
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(1565080737000LL, v->get_data()[0]);
+        ASSERT_EQ(1565080738000LL, v->get_data()[1]);
+        ASSERT_EQ(1565080738123LL, v->get_data()[2]);
+    }
+}
+
+template <typename ColumnType>
+void TimeFunctionsTest::fromUnixToDatetime(StatusOr<ColumnPtr> (*time_func)(FunctionContext*, const Columns&)) {
+    Columns columns;
+    //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+    auto tc1 = ColumnType::create();
+    tc1->append(1565080737);
+    tc1->append(1565080797);
+    tc1->append(1565084337);
+    tc1->append(-1);
+
+    columns.emplace_back(tc1);
+
+    ColumnPtr result = time_func(_utils->get_fn_ctx(), columns).value();
+
+    //ASSERT_TRUE(result->is_numeric());
+
+    auto v = ColumnHelper::cast_to_nullable_column(result);
+    ASSERT_EQ("2019-08-06 01:38:57", v->get(0).get_slice().to_string());
+    ASSERT_EQ("2019-08-06 01:39:57", v->get(1).get_slice().to_string());
+    ASSERT_EQ("2019-08-06 02:38:57", v->get(2).get_slice().to_string());
+    ASSERT_TRUE(v->is_null(3));
+}
+
+TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
+    fromUnixToDatetime<Int32Column>(TimeFunctions::from_unix_int_to_datetime);
+    fromUnixToDatetime<Int64Column>(TimeFunctions::from_unix_bigint_to_datetime);
+}
+
+TEST_F(TimeFunctionsTest, fromUnixBigIntToDatetimeMs) {
+    {
+        Columns columns;
+        auto tc1 = Int64Column::create();
+        tc1->append(1565080737123LL);
+        tc1->append(1565080797000LL);
+        tc1->append(1565084337456LL);
+
+        columns.emplace_back(tc1);
+
+        ColumnPtr result = TimeFunctions::from_unix_bigint_to_datetime_ms(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -1233,41 +1338,177 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
     }
 }
 
-TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
+TEST_F(TimeFunctionsTest, fromUnixBigIntToDatetimeMilliseconds) {
     {
         Columns columns;
-        //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
-        auto tc1 = Int32Column::create();
-        tc1->append(24 * 60 * 60);
-        tc1->append(61 + 24 * 60 * 60);
-        tc1->append(3789 + 24 * 60 * 60);
-        auto tc2 = BinaryColumn::create();
-        tc2->append("%Y-%m-%d %H:%i:%S");
-        tc2->append("%Y-%m-%d %H:%i:%S");
-        tc2->append("%Y-%m-%d %H:%i:%S");
+        auto tc1 = Int64Column::create();
+        tc1->append(1565080737123);
+        tc1->append(1565080797000);
+        tc1->append(1565084337456);
 
         columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
 
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
-                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result =
+                TimeFunctions::from_unix_bigint_to_datetime_milliseconds(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("1970-01-01 16:00:00", v->get_data()[0]);
-        ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
-        ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
-
-        ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
-                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ASSERT_EQ("2019-08-06 01:38:57.123000", v->get_data()[0]);
+        // 0 microsecond is ignored.
+        ASSERT_EQ("2019-08-06 01:39:57", v->get_data()[1]);
+        ASSERT_EQ("2019-08-06 02:38:57.456000", v->get_data()[2]);
     }
+}
+
+TEST_F(TimeFunctionsTest, fromUnixFloatToDatetimeMs) {
+    {
+        Columns columns;
+        //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+        auto tc1 = FloatColumn::create();
+        // float is not precise enough.
+        tc1->append(37.123 * 1000);
+        tc1->append(97.000 * 1000);
+        tc1->append(37.456 * 1000);
+        tc1->append(37.456777 * 1000);
+
+        columns.emplace_back(tc1);
+
+        ColumnPtr result = TimeFunctions::from_unix_float_to_datetime_ms(_utils->get_fn_ctx(), columns).value();
+
+        //ASSERT_TRUE(result->is_numeric());
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ("1969-12-31 16:00:37.123000", v->get_data()[0]);
+        // 0 microsecond is ignored.
+        ASSERT_EQ("1969-12-31 16:01:37", v->get_data()[1]);
+        ASSERT_EQ("1969-12-31 16:00:37.456000", v->get_data()[2]);
+        // microsecond part is discard.
+        ASSERT_EQ("1969-12-31 16:00:37.456000", v->get_data()[3]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, fromUnixDoubleToDatetimeMs) {
+    {
+        Columns columns;
+        //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+        auto tc1 = DoubleColumn::create();
+        tc1->append(1565080737.123 * 1000);
+        tc1->append(1565080797.000 * 1000);
+        tc1->append(1565084337.456 * 1000);
+        tc1->append(1565084337.456777 * 1000);
+
+        columns.emplace_back(tc1);
+
+        ColumnPtr result = TimeFunctions::from_unix_double_to_datetime_ms(_utils->get_fn_ctx(), columns).value();
+
+        //ASSERT_TRUE(result->is_numeric());
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ("2019-08-06 01:38:57.123000", v->get_data()[0]);
+        // 0 microsecond is ignored.
+        ASSERT_EQ("2019-08-06 01:39:57", v->get_data()[1]);
+        ASSERT_EQ("2019-08-06 02:38:57.456000", v->get_data()[2]);
+        // microsecond part is discard.
+        ASSERT_EQ("2019-08-06 02:38:57.456000", v->get_data()[3]);
+    }
+}
+
+template <typename ColumnType>
+void TimeFunctionsTest::fromUnixToDatetimeWithFormat(StatusOr<ColumnPtr> (*time_func)(FunctionContext*,
+                                                                                      const Columns&)) {
+    Columns columns;
+    //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+    auto tc1 = ColumnType::create();
+    tc1->append(24 * 60 * 60);
+    tc1->append(61 + 24 * 60 * 60);
+    tc1->append(3789 + 24 * 60 * 60);
+    auto tc2 = BinaryColumn::create();
+    tc2->append("%Y-%m-%d %H:%i:%S");
+    tc2->append("%Y-%m-%d %H:%i:%S");
+    tc2->append("%Y-%m-%d %H:%i:%S");
+
+    columns.emplace_back(tc1);
+    columns.emplace_back(tc2);
+
+    _utils->get_fn_ctx()->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+
+    ColumnPtr result = time_func(_utils->get_fn_ctx(), columns).value();
+
+    //ASSERT_TRUE(result->is_numeric());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    ASSERT_EQ("1970-01-01 16:00:00", v->get_data()[0]);
+    ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
+    ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
+
+    ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+template <typename ColumnType, typename LiteralType>
+void TimeFunctionsTest::fromUnixToDatetimeMsWithFormat(StatusOr<ColumnPtr> (*time_func)(FunctionContext*,
+                                                                                        const Columns&)) {
+    Columns columns;
+    //     ASSERT_EQ(1565080737, TimestampFunctions::to_unix(ctx, StringVal("2019-08-06 01:38:57"), "%Y-%m-%d %H:%i:%S").val);
+    auto tc1 = ColumnType::create();
+    tc1->append((LiteralType)((24 * 60 * 60) * 1000));
+    tc1->append((LiteralType)((24 * 60 * 60) * 1000 + 999));
+    tc1->append((LiteralType)((61 + 24 * 60 * 60) * 1000));
+    tc1->append((LiteralType)((61 + 24 * 60 * 60) * 1000 + 888));
+    tc1->append((LiteralType)((3789 + 24 * 60 * 60) * 1000));
+    tc1->append((LiteralType)((3789 + 24 * 60 * 60) * 1000 + 777));
+    auto tc2 = BinaryColumn::create();
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+    tc2->append("%Y-%m-%d %H:%i:%S.%f");
+
+    columns.emplace_back(tc1);
+    columns.emplace_back(tc2);
+
+    _utils->get_fn_ctx()->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+
+    ColumnPtr result = time_func(_utils->get_fn_ctx(), columns).value();
+
+    //ASSERT_TRUE(result->is_numeric());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    ASSERT_EQ("1970-01-01 16:00:00.000000", v->get_data()[0]);
+    if constexpr (std::is_same_v<ColumnType, FloatColumn>) {
+        // float is not precise
+        ASSERT_EQ("1970-01-01 16:00:01.000000", v->get_data()[1]);
+        ASSERT_EQ("1970-01-01 17:03:09.776000", v->get_data()[5]);
+    } else {
+        ASSERT_EQ("1970-01-01 16:00:00.999000", v->get_data()[1]);
+        ASSERT_EQ("1970-01-01 17:03:09.777000", v->get_data()[5]);
+    }
+    ASSERT_EQ("1970-01-01 16:01:01.000000", v->get_data()[2]);
+    ASSERT_EQ("1970-01-01 16:01:01.888000", v->get_data()[3]);
+    ASSERT_EQ("1970-01-01 17:03:09.000000", v->get_data()[4]);
+
+    ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
+    fromUnixToDatetimeWithFormat<Int32Column>(TimeFunctions::from_unix_int_to_datetime_with_format);
+    fromUnixToDatetimeWithFormat<Int64Column>(TimeFunctions::from_unix_bigint_to_datetime_with_format);
+    fromUnixToDatetimeMsWithFormat<Int64Column, int64_t>(TimeFunctions::from_unix_bigint_to_datetime_ms_with_format);
+    fromUnixToDatetimeMsWithFormat<FloatColumn, double>(TimeFunctions::from_unix_float_to_datetime_ms_with_format);
+    fromUnixToDatetimeMsWithFormat<DoubleColumn, double>(TimeFunctions::from_unix_double_to_datetime_ms_with_format);
 }
 
 TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
@@ -1289,7 +1530,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_int_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -1314,7 +1555,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_int_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
         ASSERT_TRUE(result->only_null());
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)

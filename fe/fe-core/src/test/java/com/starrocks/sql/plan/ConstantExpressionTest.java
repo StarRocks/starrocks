@@ -169,6 +169,34 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "1");
 
         testFragmentPlanContainsConstExpr(
+                "select unix_timestamp(\"1970-01-01 08:00:01\");",
+                "1");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds(\"1970-01-01 08:00:01\");",
+                "1000");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds(\"1970-01-01 08:00:01.000000\");",
+                "1000");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds(\"1970-01-01 08:00:01.123000\");",
+                "1123");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds(\"1970-01-01 08:00:01.123444\");",
+                "1123");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds(\"1970-01-01 08:00:01.123999\");",
+                "1123");
+
+        testFragmentPlanContainsConstExpr(
+                "select to_unixtime_milliseconds('2007-12-01 00:30:19.123000');",
+                "1196440219123");
+
+        testFragmentPlanContainsConstExpr(
                 "select now();",
                 "");
 

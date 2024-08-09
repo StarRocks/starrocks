@@ -79,6 +79,9 @@ public class DateUtilsTest {
                 String datetime3 = "2024-01-27 21:06:01";
                 LocalDateTime lt3 = DateUtils.parseStrictDateTime(datetime3);
                 Assert.assertEquals(lt3.toString(), "2024-01-27T21:06:01");
+                String datetime4 = "2024-01-27 21:06:01.000000";
+                LocalDateTime lt4 = DateUtils.parseStrictDateTime(datetime4);
+                Assert.assertEquals(lt4.toString(), "2024-01-27T21:06:01");
             }
 
         } catch (Exception e) {

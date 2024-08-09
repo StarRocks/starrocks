@@ -331,28 +331,56 @@ TEST_F(DateTimeValueTest, from_unixtime) {
 TEST_F(DateTimeValueTest, unix_timestamp) {
     DateTimeValue value;
     int64_t timestamp;
+
     value.from_date_int64(19691231);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(-115200, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(-115200'000, timestamp);
+
     value.from_date_int64(19700101);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(0 - 28800, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(0 - 28800'000, timestamp);
+
     value.from_date_int64(19700102);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(86400 - 28800, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ((86400 - 28800) * 1000, timestamp);
+
     value.from_date_int64(19880201000000);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(570672000 - 28800, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ((570672000ULL - 28800) * 1000ULL, timestamp);
+
     value.from_date_int64(20380119);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(2147472000 - 28800, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ((2147472000ULL - 28800) * 1000ULL, timestamp);
+
     value.from_date_int64(20380120);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(2147529600, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(2147529600'000ULL, timestamp);
 
     value.from_date_int64(10000101);
     value.unix_timestamp(&timestamp, TimezoneUtils::default_time_zone);
     ASSERT_EQ(-30610252800, timestamp);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(-30610252800'000ULL, timestamp);
+
+    // discard the microseconds part
+    value.from_unixtime(123, 888888, TimezoneUtils::default_time_zone);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(123888, timestamp);
+    value.from_unixtime(123, 888111, TimezoneUtils::default_time_zone);
+    value.unix_timestamp_ms(&timestamp, TimezoneUtils::default_time_zone);
+    ASSERT_EQ(123888, timestamp);
 }
 
 // Calculate format
