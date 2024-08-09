@@ -644,7 +644,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
-        std::string msg = fmt::format("unsupported hdfs file format: {}", format);
+        std::string msg = fmt::format("table {}.{} has unsupported hdfs file format: {}", _hive_table->database(),
+                                      _hive_table->name(), format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
