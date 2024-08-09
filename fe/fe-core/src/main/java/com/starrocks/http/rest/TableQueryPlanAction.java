@@ -90,7 +90,10 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
 /**
  * This class responsible for parse the sql and generate the query plan fragment for a (only one) table{@see OlapTable}
@@ -127,7 +130,6 @@ public class TableQueryPlanAction extends RestBaseAction {
                     || Strings.isNullOrEmpty(tableName)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
             }
-            String sql;
             if (Strings.isNullOrEmpty(postContent)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                         "POST body must contains [sql] root object");
@@ -139,13 +141,25 @@ public class TableQueryPlanAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                         "malformed json [ " + postContent + " ]");
             }
-            sql = jsonObject.optString("sql");
+            String sql = jsonObject.optString("sql");
             if (Strings.isNullOrEmpty(sql)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                         "POST body must contains [sql] root object");
             }
-            LOG.info("receive SQL statement [{}] from external service [ user [{}]] for database [{}] table [{}]",
-                    sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
+            Optional<UUID> sessionId = Optional.ofNullable(jsonObject.optString("session_id", null))
+                    .map(str -> {
+                        try {
+                            return UUID.fromString(str);
+                        } catch (IllegalArgumentException e) {
+                            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
+                                    "malformed session id [ " + str + " ]");
+                        }
+                    });
+            if (sessionId.isPresent()) {
+                ConnectContext.get().setSessionId(sessionId.get());
+            }
+            LOG.info("receive SQL statement [{}] from external service [ user [{}] session [{}]] for database [{}] table [{}]",
+                    sql, ConnectContext.get().getCurrentUserIdentity(), sessionId.orElse(null), dbName, tableName);
 
             // check privilege for select, otherwise return HTTP 401
             Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
@@ -159,10 +173,17 @@ public class TableQueryPlanAction extends RestBaseAction {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(tableName);
+                Table table = null;
+                if (sessionId.isPresent()) {
+                    table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTemporaryTable(
+                            sessionId.get(), DEFAULT_INTERNAL_CATALOG_NAME, db.getId(), tableName);
+                }
+                if (table == null) {
+                    table = db.getTable(tableName);
+                }
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
-                            "Table [" + tableName + "] " + "does not exists");
+                            "Table [" + tableName + "] does not exists");
                 }
                 // just only support OlapTable, CloudNativeTable and MaterializedView, ignore others such as ESTable
                 if (!table.isNativeTableOrMaterializedView()) {

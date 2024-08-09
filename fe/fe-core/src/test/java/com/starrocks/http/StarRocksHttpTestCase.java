@@ -100,6 +100,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -116,6 +117,7 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
+    protected static final String TEMP_TABLE_NAME = "testTempTbl";
     protected static final String ES_TABLE_NAME = "es_table";
 
     protected static long testBackendId1 = 1000;
@@ -126,6 +128,7 @@ public abstract class StarRocksHttpTestCase {
     protected static long testReplicaId2 = 2001;
     protected static long testReplicaId3 = 2002;
 
+    protected static UUID testSessionId = UUID.randomUUID();
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
     protected static long testPartitionId = 201L;
@@ -347,8 +350,14 @@ public abstract class StarRocksHttpTestCase {
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
 
+        TemporaryTableMgr temporaryTableMgr = new TemporaryTableMgr();
+        OlapTable tempTable = newTable(TEMP_TABLE_NAME);
+        tempTable.setSessionId(testSessionId);
+        db.registerTableUnlocked(tempTable);
+        temporaryTableMgr.addTemporaryTable(testSessionId, testDbId, TEMP_TABLE_NAME, testTableId);
+
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
 
         new Expectations(globalStateMgr) {
             {
@@ -399,6 +408,10 @@ public abstract class StarRocksHttpTestCase {
                 metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
                 minTimes = 0;
                 result = newEmptyTable;
+
+                metadataMgr.getTemporaryTable(testSessionId, "default_catalog", testDbId, TEMP_TABLE_NAME);
+                minTimes = 0;
+                result = tempTable;
             }
         };
         ;
