@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/schema_chunk_source.h"
 
 #include <boost/algorithm/string.hpp>
+#include <mutex>
 
 #include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
@@ -81,7 +82,13 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     }
     _accumulator.set_desired_size(state->chunk_size());
 
-    return _schema_scanner->start(state);
+    return {};
+}
+
+Status SchemaChunkSource::start(RuntimeState* state) {
+    Status st = Status::OK();
+    std::call_once(_start_once, [&]() { st = _schema_scanner->start(state); });
+    return st;
 }
 
 void SchemaChunkSource::close(RuntimeState* state) {}
