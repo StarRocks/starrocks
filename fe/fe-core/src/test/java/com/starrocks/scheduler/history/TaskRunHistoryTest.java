@@ -51,7 +51,7 @@ public class TaskRunHistoryTest {
                 "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0," +
                 "\"state\":\"PENDING\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false," +
                 "\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
-                "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0,\"executeOption\":{\"priority\":0," +
+                "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0,\"executeOption\":{\"priority\":-1," +
                 "\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}", json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
@@ -77,7 +77,7 @@ public class TaskRunHistoryTest {
                         "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\"," +
                         "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
                         "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
-                        "\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true," +
+                        "\"processStartTime\":0,\"executeOption\":{\"priority\":-1,\"isMergeRedundant\":true," +
                         "\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}')");
             }
         };
@@ -231,7 +231,7 @@ public class TaskRunHistoryTest {
                                 "\"state\":\"SUCCESS\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false," +
                                 "\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
                                 "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
-                                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false," +
+                                "\"executeOption\":{\"priority\":-1,\"isMergeRedundant\":true,\"isManual\":false," +
                                 "\"isSync\":false,\"isReplay\":false}}}')");
 
             }
