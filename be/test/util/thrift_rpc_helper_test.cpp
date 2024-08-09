@@ -41,8 +41,8 @@ TEST_F(ThriftRpcHelperTest, fe_rpc_impl) {
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
-                "Rpc error: FE RPC response parsing failure, address=TNetworkAddress(hostname=127.0.0.1, "
-                "port=9020).The FE may be busy, please retry later",
+                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=9020), reason=invalid "
+                "TType",
                 st.to_string());
     }
     {
