@@ -1,0 +1,5 @@
+-- name: test_cast_array_to_string
+select cast([ as string);
+-- result:
+None
+-- !result

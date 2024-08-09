@@ -376,17 +376,27 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count)\n" +
+                "  6:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(4: count)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (update serialize)\n" +
+                "  5:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: count(2: split)\n" +
+                "  |  output: sum(4: count)\n" +
                 "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(CAST(2: split AS CHAR))\n" +
+                "  |  group by: 3: expr, 5: cast\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 2> : 2: split\n" +
+                "  |  <slot 3> : 3: expr\n" +
+                "  |  <slot 5> : CAST(murmur_hash3_32(CAST(2: split AS VARCHAR)) % 512 AS SMALLINT)\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 2: split, 3: expr\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 3: expr, 2: split\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : split('a,b,c', ',')\n" +
