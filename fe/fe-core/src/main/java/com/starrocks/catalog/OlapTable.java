@@ -2965,7 +2965,7 @@ public class OlapTable extends Table {
                     if (definedExpr == null) {
                         continue;
                     }
-                    if (visitorOpt.isEmpty()) {
+                    if (!visitorOpt.isPresent()) {
                         SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
                                 session, this, tableName);
                         visitorOpt = Optional.of(visitor);
