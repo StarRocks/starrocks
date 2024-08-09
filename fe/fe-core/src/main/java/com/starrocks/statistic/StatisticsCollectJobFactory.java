@@ -30,6 +30,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.lang3.StringUtils;
@@ -44,6 +45,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobFactory {
@@ -120,6 +122,35 @@ public class StatisticsCollectJobFactory {
             return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                     StatsConstants.AnalyzeType.FULL, scheduleType, properties);
         }
+    }
+
+    private static boolean checkMatchStatisticExcludePattern(AnalyzeJob job, Database db, Table table) {
+        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
+        if (StringUtils.isNotBlank(regex)) {
+            Pattern checkRegex = Pattern.compile(regex);
+            String name = db.getFullName() + "." + table.getName();
+            if (checkRegex.matcher(name).find()) {
+                LOG.info("statistics job exclude pattern {}, hit table: {}", regex, name);
+                return true;
+            }
+        }
+
+        if (StringUtils.isNotBlank(Config.statistic_exclude_pattern_identifier)) {
+            try {
+                Pattern checkRegex = Pattern.compile(Config.statistic_exclude_pattern_identifier);
+                String name = db.getFullName() + "." + table.getName();
+                if (checkRegex.matcher(name).find()) {
+                    LOG.info("statistic_exclude_pattern_identifier is {}, hit table: {}",
+                            Config.statistic_exclude_pattern_identifier, name);
+                    return true;
+                }
+            } catch (PatternSyntaxException e) {
+                throw new SemanticException("statistic_exclude_pattern_list set pattern %s is error, msg: %s",
+                        Config.statistic_exclude_pattern_identifier, e.getMessage());
+            }
+        }
+
+        return false;
     }
 
     public static List<StatisticsCollectJob> buildExternalStatisticsCollectJob(ExternalAnalyzeJob externalAnalyzeJob) {
@@ -235,14 +266,9 @@ public class StatisticsCollectJobFactory {
             return;
         }
 
-        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
-        if (StringUtils.isNotBlank(regex)) {
-            Pattern checkRegex = Pattern.compile(regex);
-            String name = db.getFullName() + "." + table.getName();
-            if (checkRegex.matcher(name).find()) {
-                LOG.info("statistics job exclude pattern {}, hit table: {}", regex, name);
-                return;
-            }
+        boolean isRegexMatch = checkMatchStatisticExcludePattern(job, db, table);
+        if (isRegexMatch) {
+            return;
         }
 
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
@@ -374,15 +400,9 @@ public class StatisticsCollectJobFactory {
             return;
         }
 
-        // check job exclude db.table
-        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
-        if (StringUtils.isNotBlank(regex)) {
-            Pattern checkRegex = Pattern.compile(regex);
-            String name = db.getFullName() + "." + table.getName();
-            if (checkRegex.matcher(name).find()) {
-                LOG.debug("statistics job exclude pattern {}, hit table: {}", regex, name);
-                return;
-            }
+        boolean isRegexMatch = checkMatchStatisticExcludePattern(job, db, table);
+        if (isRegexMatch) {
+            return;
         }
 
         BasicStatsMeta basicStatsMeta =
