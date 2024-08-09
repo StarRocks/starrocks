@@ -40,6 +40,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_approx();
     register_others();
     register_retract_functions();
+    register_regression();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
