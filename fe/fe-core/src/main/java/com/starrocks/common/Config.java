@@ -3049,10 +3049,8 @@ public class Config extends ConfigBase {
     public static boolean enable_colocate_restore = false;
     
     @ConfField
-<<<<<<< HEAD
     public static boolean enable_alter_struct_column = false;
-=======
-    public static boolean enable_alter_struct_column = true;
+
 
     // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
     // large bytes to being deserialized successfully. So we give a 1G default value here.
@@ -3064,5 +3062,4 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int thrift_max_recursion_depth = 64;
->>>>>>> 0dce561790 ([BugFix] add thrift max_message_size configuration (#49523))
 }
