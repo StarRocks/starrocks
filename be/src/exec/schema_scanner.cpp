@@ -44,6 +44,7 @@
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
 #include "exec/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/schema_scanner/schema_schemata_scanner.h"
+#include "exec/schema_scanner/schema_servers_scanner.h"
 #include "exec/schema_scanner/schema_stream_loads_scanner.h"
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
@@ -213,6 +214,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_BACKENDS:
+        return std::make_unique<SchemaServersScanner>(TServerType::BACKEND);
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
