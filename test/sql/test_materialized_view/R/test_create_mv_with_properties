@@ -55,6 +55,34 @@ SELECT COUNT(1) FROM test_mv1;
 -- result:
 12
 -- !result
+ALTER MATERIALIZED VIEW test_mv1 SET ("task_priority" = "20");
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 SET ("task_retry_attempts" = "10");
+-- result:
+-- !result
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+-- result:
+test_mv1	CREATE MATERIALIZED VIEW `test_mv1` (`dt`, `sum(num)`)
+PARTITION BY (`dt`)
+DISTRIBUTED BY RANDOM
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replicated_storage" = "true",
+"task_priority" = "20",
+"task_retry_attempts" = "10",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+)
+AS SELECT `t1`.`dt`, sum(`t1`.`num`) AS `sum(num)`
+FROM `test_create_mv_with_properties`.`t1`
+GROUP BY `t1`.`dt`;
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(1) FROM test_mv1;
+-- result:
+12
+-- !result
 DROP MATERIALIZED VIEW test_mv1;
 -- result:
 -- !result
@@ -79,6 +107,32 @@ REFRESH DEFERRED ASYNC
 PROPERTIES (
 "replicated_storage" = "true",
 "event_trigger_delay_period" = "1 minute",
+"task_priority" = "100",
+"task_retry_attempts" = "3",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+)
+AS SELECT `t1`.`dt`, sum(`t1`.`num`) AS `sum(num)`
+FROM `test_create_mv_with_properties`.`t1`
+GROUP BY `t1`.`dt`;
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(1) FROM test_mv1;
+-- result:
+12
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 SET ("event_trigger_delay_period" = "5 minute");
+-- result:
+-- !result
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+-- result:
+test_mv1	CREATE MATERIALIZED VIEW `test_mv1` (`dt`, `sum(num)`)
+PARTITION BY (`dt`)
+DISTRIBUTED BY RANDOM
+REFRESH DEFERRED ASYNC
+PROPERTIES (
+"replicated_storage" = "true",
+"event_trigger_delay_period" = "5 minute",
 "task_priority" = "100",
 "task_retry_attempts" = "3",
 "replication_num" = "1",

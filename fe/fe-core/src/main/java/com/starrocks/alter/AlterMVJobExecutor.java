@@ -105,6 +105,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         Pair<String, PeriodDuration> eventTriggerDelayPeriod = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
+            if (!materializedView.getRefreshScheme().isEventTriggered()) {
+                throw new SemanticException(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD + " property " +
+                        "is only supported for event triggered materialized view");
+            }
             eventTriggerDelayPeriod = PropertyAnalyzer.analyzeEventTriggerDelayPeriod(properties);
             properties.remove(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD);
         }

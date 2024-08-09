@@ -181,6 +181,10 @@ public class TaskRun implements Comparable<TaskRun> {
      * Next time to trigger the event =  last finished time + event trigger delay period.
      */
     public long getNextEventTriggerTime() {
+        // if this task run is sync-mode task, no needs to delay.
+        if (executeOption != null && (executeOption.getIsSync() || executeOption.isManual())) {
+            return 0L;
+        }
         return this.taskLastFinishedTime + this.eventTriggerDelayPeriod * 1000;
     }
 

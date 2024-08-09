@@ -443,7 +443,8 @@ public class PropertyAnalyzer {
                 throw new SemanticException("Task retry attempts: " + e.getMessage());
             }
             if (taskRetryAttemps < 0 || taskRetryAttemps > MAX_RETRY_ATTEMPT_TIMES) {
-                throw new SemanticException("Illegal task retry attempts: " + taskRetryAttemps);
+                throw new SemanticException("Illegal task retry attempts: " + taskRetryAttemps + ", should be in range [0, " +
+                        MAX_RETRY_ATTEMPT_TIMES + "]");
             }
             return taskRetryAttemps;
         } else {
@@ -461,7 +462,8 @@ public class PropertyAnalyzer {
             }
             if (taskPriority < Constants.TaskRunPriority.LOWEST.value() ||
                     taskPriority > Constants.TaskRunPriority.HIGHEST.value()) {
-                throw new SemanticException("Illegal task priority: " + taskPriority);
+                throw new SemanticException("Illegal task priority: " + taskPriority + ", should be in range [" +
+                        Constants.TaskRunPriority.LOWEST.value() + ", " + Constants.TaskRunPriority.HIGHEST.value() + "]");
             }
             return taskPriority;
         } else {
@@ -1643,7 +1645,7 @@ public class PropertyAnalyzer {
             // event_trigger_initial_period
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
                 MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-                if (!refreshScheme.getAsyncRefreshContext().isEventTriggered()) {
+                if (!refreshScheme.isEventTriggered()) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD
                             + " is only supported by event-triggered task");
                 }

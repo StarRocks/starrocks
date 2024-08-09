@@ -4824,6 +4824,7 @@ public class CreateMaterializedViewTest {
                 "GROUP BY `t1`.`c_1_0`;", sql);
         taskRun = TaskRunBuilder.newBuilder(mvTask).build();
         Assert.assertEquals(30, taskRun.getTaskPriority());
+        starRocksAssert.dropMaterializedView("test_mv1");
    }
 
     @Test
@@ -4853,7 +4854,7 @@ public class CreateMaterializedViewTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(mvTask).build();
         Assert.assertEquals(3, taskRun.getTaskRetryAttempts());
 
-        // alter materialized view with task_priority
+        // alter materialized view with task_retry_attempts
         starRocksAssert.ddl("alter materialized view test_mv1 set('task_retry_attempts'='2') ");
         sql = starRocksAssert.showCreateTable("show create table test_mv1");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
@@ -4870,11 +4871,12 @@ public class CreateMaterializedViewTest {
                 "GROUP BY `t1`.`c_1_0`;", sql);
         taskRun = TaskRunBuilder.newBuilder(mvTask).build();
         Assert.assertEquals(2, taskRun.getTaskRetryAttempts());
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 
     @Test
     public void testMVWithEventTriggerDelayPeriod() throws Exception {
-        // create materialized view with task_retry_attempts
+        // create materialized view with event_trigger_delay_period
         starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
                 "refresh async\n" +
                 "properties('event_trigger_delay_period' = '10 minute')\n" +
@@ -4899,7 +4901,7 @@ public class CreateMaterializedViewTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(mvTask).build();
         Assert.assertEquals(600, taskRun.getEventTriggerDelayPeriod());
 
-        // alter materialized view with task_priority
+        // alter materialized view with event_trigger_delay_period
         starRocksAssert.ddl("alter materialized view test_mv1 set('event_trigger_delay_period'='3 minute') ");
         sql = starRocksAssert.showCreateTable("show create table test_mv1");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
@@ -4916,5 +4918,79 @@ public class CreateMaterializedViewTest {
                 "GROUP BY `t1`.`c_1_0`;", sql);
         taskRun = TaskRunBuilder.newBuilder(mvTask).build();
         Assert.assertEquals(180, taskRun.getEventTriggerDelayPeriod());
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testMVWithTaskRetryAttemptsBadCase() {
+        // create materialized view with task_retry_attempts
+        try {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                    "refresh async\n" +
+                    "properties('task_retry_attempts' = '300')\n" +
+                    "as select c_1_0, count(1) from t1 group by c_1_0");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Illegal task retry attempts: 300, should be in range [0, 30]."));
+        }
+    }
+
+    @Test
+    public void testMVWithPriorityBadCase() {
+        // create materialized view with task_priority
+        try {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                    "refresh async\n" +
+                    "properties('task_priority' = '200')\n" +
+                    "as select c_1_0, count(1) from t1 group by c_1_0");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Illegal task priority: 200, should be in range [0, 100]."));
+        }
+    }
+
+    @Test
+    public void testMVWithEventTriggerDelayPeriodBadCase1() {
+        // create materialized view with task_retry_attempts
+        try {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                    "refresh manual \n" +
+                    "properties('event_trigger_delay_period' = '10 minute')\n" +
+                    "as select c_1_0, count(1) from t1 group by c_1_0");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Invalid parameter event_trigger_delay_period is only " +
+                    "supported by event-triggered task."));
+        }
+
+        // create materialized view with task_retry_attempts
+        try {
+            LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                    "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                    "') EVERY(INTERVAL 3 minute)\n" +
+                    "properties('event_trigger_delay_period' = '10 minute')\n" +
+                    "as select c_1_0, count(1) from t1 group by c_1_0");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Invalid parameter event_trigger_delay_period is only " +
+                    "supported by event-triggered task."));
+        }
+    }
+
+    @Test
+    public void testMVWithEventTriggerDelayPeriodBadCase2() throws Exception {
+        // create materialized view with task_retry_attempts
+        try {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                    "refresh manual \n" +
+                    "as select c_1_0, count(1) from t1 group by c_1_0");
+            starRocksAssert.ddl("alter materialized view test_mv1 set('event_trigger_delay_period'='3 minute') ");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("event_trigger_delay_period property is only supported for " +
+                    "event triggered materialized view"));
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 }

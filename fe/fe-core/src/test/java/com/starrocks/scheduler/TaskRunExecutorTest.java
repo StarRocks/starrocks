@@ -32,8 +32,6 @@ import org.junit.Test;
 import java.util.List;
 
 public class TaskRunExecutorTest {
-
-    private static final int N = 100;
     private static ConnectContext connectContext;
 
     @Before
