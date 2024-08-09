@@ -58,6 +58,7 @@ public:
     Status append_chunk(Chunk* chunk, RuntimeState* state);
     Status init();
     Status close(RuntimeState* state);
+    Status rollback(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
@@ -76,7 +77,7 @@ private:
     Status close_current_writer(RuntimeState* state);
 
 private:
-    std::unique_ptr<FileSystem> _fs;
+    std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
