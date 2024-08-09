@@ -83,12 +83,16 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class RoutineLoadManagerTest {
 
@@ -292,7 +296,7 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
-        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -314,8 +318,8 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
-        long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
+        long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -323,26 +327,69 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID) > 0));
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
         for (int i = 0; i < Config.max_routine_load_task_num_per_be; i++) {
             es2.submit(() -> {
-                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
-                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L, 1L);
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L, 2L);
             });
         }
         es2.shutdown();
         es2.awaitTermination(1, TimeUnit.HOURS);
         Assert.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
+    }
+
+    @Test
+    public void testTakeBeTaskSlotWithJobs() throws Exception {
+        Config.max_routine_load_task_num_per_be = 1000;
+        List<Long> beIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = beIds;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        routineLoadManager.updateBeTaskSlot();
+        
+        List<Integer> jobIDs = IntStream.rangeClosed(1, 100).boxed().collect(Collectors.toList());
+        
+        Collections.shuffle(jobIDs);
+        for (long jobID : jobIDs) {
+            for (long taskId = 0; taskId < 3; taskId++) {
+                long beId = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobID);
+            }
+        }
+
+        Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(5, nodeToJobs.size());
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            long total = 0;
+            for (long jobId : nodeToJobs.get(beId)) {
+                total += jobId;
+                routineLoadManager.takeNodeById(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobId, beId);
+            }
+            LOG.warn("beId: {}, total: {}", beId, total);
+        }
+        for (long beId : nodeToJobs.keySet()) {
+            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            Assert.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
+        }
+        Config.max_routine_load_task_num_per_be = 16;
     }
 
     @Test
