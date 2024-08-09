@@ -501,11 +501,14 @@ SELECT /*+ SET_VAR
 * 默认值：false
 * 引入版本：v2.5
 
-### enable_populate_datacache（2.5 及以后）
+### populate_datacache_mode
 
-* 描述：StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。默认值为 `true`。如果只想读取，不进行缓存，可以将该参数设置为 `false`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
-* 默认值：true
-* 引入版本：v2.5
+* 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
+  * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
+  * `always`：总是缓存数据。 
+  * `never` 永不缓存数据。
+* 默认值：auto
+* 引入版本：v3.3.2
 
 ### enable_datacache_io_adaptor
 
