@@ -52,6 +52,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -1073,8 +1074,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         int idToPartitionSize = reader.readInt();
         for (int i = 0; i < idToPartitionSize; ++i) {
-            RecyclePartitionInfo recycleRangePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
-            idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
+            RecyclePartitionInfo recyclePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
+            if (recyclePartitionInfo instanceof IForwardCompatibleObject) {
+                // ignore the future unknown partition type inherited from RecyclePartitionInfoV2
+                // NOTE: the unknown type shall be registered in GsonUtils.java under RecyclePartitionInfoV2.class
+                //  with (ForwardCompatibleRecyclePartitionInfoV2.class, "realTypeName")
+                LOG.warn("Ignore unknown partition type(partitionId: {}) from the future version!",
+                        recyclePartitionInfo.getPartition().getId());
+                continue;
+            }
+            idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
         }
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {

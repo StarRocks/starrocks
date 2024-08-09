@@ -687,6 +687,10 @@ public class AlterJobMgr {
         int schemaChangeJobSize = reader.readJson(int.class);
         for (int i = 0; i != schemaChangeJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof ForwardCompatibleAlterJobV2Object) {
+                LOG.warn("Ignore unknown job(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             schemaChangeHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
