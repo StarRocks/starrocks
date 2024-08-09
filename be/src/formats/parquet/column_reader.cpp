@@ -305,7 +305,7 @@ void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedI
     const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
     if (type == ColumnIOType::PAGES) {
         const tparquet::ColumnMetaData& column_metadata = column.meta_data;
-        if (_offset_index_ctx != nullptr) {
+        if (_offset_index_ctx != nullptr && !_offset_index_ctx->page_selected.empty()) {
             // add dict page
             if (column_metadata.__isset.dictionary_page_offset) {
                 auto r = io::SharedBufferedInputStream::IORange(
