@@ -441,8 +441,13 @@ bool JsonColumn::capacity_limit_reached(std::string* msg) const {
 }
 
 void JsonColumn::check_or_die() const {
-    DCHECK(_flat_column_paths.size() == _flat_columns.size());
-    DCHECK(_flat_column_types.size() == _flat_columns.size());
+    if (has_remain()) {
+        DCHECK(_flat_column_paths.size() + 1 == _flat_columns.size());
+        DCHECK(_flat_column_types.size() + 1 == _flat_columns.size());
+    } else {
+        DCHECK(_flat_column_paths.size() == _flat_columns.size());
+        DCHECK(_flat_column_types.size() == _flat_columns.size());
+    }
     if (!_flat_columns.empty()) {
         size_t rows = _flat_columns[0]->size();
         for (size_t i = 0; i < _flat_columns.size() - 1; i++) {

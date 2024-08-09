@@ -66,21 +66,27 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     DCHECK(_flat_types.empty());
     DCHECK(_flat_writers.empty());
 
-    auto st = _flat_column(&column);
-    if (st.ok()) {
-        _is_flat = true;
-        RETURN_IF_ERROR(_init_flat_writers());
-        return _write_flat_column();
+    if (column.is_nullable()) {
+        auto nullable = down_cast<const NullableColumn*>(&column);
+        DCHECK(!down_cast<const JsonColumn*>(nullable->data_column().get())->is_flat_json());
     } else {
-        _is_flat = false;
-        return _json_writer->append(column);
+        DCHECK(!down_cast<const JsonColumn*>(&column)->is_flat_json());
     }
+
+    // schema change will reuse column, must copy in there.
+    _json_datas.emplace_back(column.clone());
+    _estimate_size += column.byte_size();
+    return Status::OK();
 }
 
-Status FlatJsonColumnWriter::_flat_column(const Column* json_data) {
+Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
-    deriver.derived({json_data});
+    std::vector<const Column*> vc;
+    for (const auto& js : json_datas) {
+        vc.emplace_back(js.get());
+    }
+    deriver.derived(vc);
 
     _flat_paths = deriver.flat_paths();
     _flat_types = deriver.flat_types();
@@ -91,25 +97,33 @@ Status FlatJsonColumnWriter::_flat_column(const Column* json_data) {
     }
 
     JsonFlattener flattener(deriver);
-    flattener.flatten(json_data);
-    _flat_columns = flattener.mutable_result();
 
-    // recode null column in 1st
-    if (_json_meta->is_nullable()) {
-        auto nulls = NullColumn::create();
-        uint8_t IS_NULL = 1;
-        uint8_t NOT_NULL = 0;
-        if (json_data->only_null()) {
-            nulls->append_value_multiple_times(&IS_NULL, json_data->size());
-        } else if (json_data->is_nullable()) {
-            auto* nullable_column = down_cast<const NullableColumn*>(json_data);
-            auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
-            nulls->append(*nl, 0, nl->size());
-        } else {
-            nulls->append_value_multiple_times(&NOT_NULL, json_data->size());
+    RETURN_IF_ERROR(_init_flat_writers());
+    for (auto& col : json_datas) {
+        auto* json_data = col.get();
+        flattener.flatten(json_data);
+        _flat_columns = flattener.mutable_result();
+
+        // recode null column in 1st
+        if (_json_meta->is_nullable()) {
+            auto nulls = NullColumn::create();
+            uint8_t IS_NULL = 1;
+            uint8_t NOT_NULL = 0;
+            if (json_data->only_null()) {
+                nulls->append_value_multiple_times(&IS_NULL, json_data->size());
+            } else if (json_data->is_nullable()) {
+                auto* nullable_column = down_cast<const NullableColumn*>(json_data);
+                auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
+                nulls->append(*nl, 0, nl->size());
+            } else {
+                nulls->append_value_multiple_times(&NOT_NULL, json_data->size());
+            }
+
+            _flat_columns.insert(_flat_columns.begin(), nulls);
         }
-
-        _flat_columns.insert(_flat_columns.begin(), nulls);
+        RETURN_IF_ERROR(_write_flat_column());
+        _flat_columns.clear();
+        col->resize_uninitialized(0); // release after write
     }
     return Status::OK();
 }
@@ -180,14 +194,18 @@ Status FlatJsonColumnWriter::_write_flat_column() {
 }
 
 Status FlatJsonColumnWriter::finish() {
-    DCHECK(_is_flat ? !_flat_writers.empty() : _flat_writers.empty());
-    // flat datas
-    for (size_t i = 0; i < _flat_columns.size(); i++) {
-        RETURN_IF_ERROR(_flat_writers[i]->finish());
-        VLOG(8) << "flush flat json: " << _flat_paths[i];
+    auto st = _flat_column(_json_datas);
+    _is_flat = st.ok();
+    if (!st.ok()) {
+        for (auto& col : _json_datas) {
+            RETURN_IF_ERROR(_json_writer->append(*col));
+        }
     }
-
-    _flat_columns.clear();
+    _json_datas.clear(); // release after write
+    // flat datas
+    for (size_t i = 0; i < _flat_writers.size(); i++) {
+        RETURN_IF_ERROR(_flat_writers[i]->finish());
+    }
     return _json_writer->finish();
 }
 
@@ -200,13 +218,7 @@ ordinal_t FlatJsonColumnWriter::get_next_rowid() const {
 }
 
 uint64_t FlatJsonColumnWriter::estimate_buffer_size() {
-    DCHECK(_is_flat ? !_flat_writers.empty() : _flat_writers.empty());
-    uint64_t size = 0;
-    for (auto& w : _flat_writers) {
-        size += w->estimate_buffer_size();
-    }
-    size += _json_writer->estimate_buffer_size();
-    return size;
+    return _estimate_size;
 }
 
 uint64_t FlatJsonColumnWriter::total_mem_footprint() const {
