@@ -93,11 +93,6 @@ public class IcebergPartitionsTable extends MetadataTable {
     }
 
     @Override
-    public boolean isPartitioned() {
-        return getColumn("partition") != null;
-    }
-
-    @Override
     public boolean supportBuildPlan() {
         return true;
     }
