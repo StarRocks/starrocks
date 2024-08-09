@@ -283,6 +283,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    LOG(INFO) << "update op name: " << curr_op->get_name() << ", plan_node_id " << curr_op->get_plan_node_id();
+                    LOG(INFO) << "push row value: " << curr_op->_push_row_num_counter->value();
+                    LOG(INFO) << "pull row value: " << curr_op->_pull_row_num_counter->value();
                     curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
@@ -373,6 +376,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    LOG(INFO) << "update op name: " << curr_op->get_name() << ", plan_node_id " << curr_op->get_plan_node_id();
+                    LOG(INFO) << "push row value: " << curr_op->_push_row_num_counter->value();
+                    LOG(INFO) << "pull row value: " << curr_op->_pull_row_num_counter->value();
                     curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
