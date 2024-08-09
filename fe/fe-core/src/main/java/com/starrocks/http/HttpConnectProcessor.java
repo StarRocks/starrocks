@@ -137,7 +137,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
         this.handleQuery();
         ctx.setStartTime();
 
