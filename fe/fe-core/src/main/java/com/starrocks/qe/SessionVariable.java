@@ -629,10 +629,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
+    public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+    public static final String ENABLE_PARTITION_PRUNE_FOR_SIMPLE_AGG = "enable_partition_prune_for_simple_agg";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -1490,6 +1492,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    @VarAttr(name = ENABLE_REWRITE_PARTITION_COLUMN_MINMAX)
+    private boolean enableRewritePartitionColumnMinMax = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
     private boolean enableRewriteSimpleAggToHdfsScan = false;
@@ -3727,6 +3732,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteSimpleAggToMetaScan() {
         return this.enableRewriteSimpleAggToMetaScan;
+    }
+
+    public boolean isEnableRewritePartitionColumnMinMax() {
+        return enableRewritePartitionColumnMinMax;
     }
 
     public void setEnableRewriteSimpleAggToHdfsScan(boolean v) {

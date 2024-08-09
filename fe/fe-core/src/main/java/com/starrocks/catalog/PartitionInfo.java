@@ -42,6 +42,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -237,6 +238,16 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
 
     public int getPartitionColumnsSize() {
         return 0;
+    }
+
+    /**
+     * Return the sorted partitions based on partition value
+     * 1. RANGE: sorted by the range
+     * 2. LIST: sorted by the list value
+     * 3. EXPR: sorted by the expression value
+     */
+    public List<Long> getSortedPartitions(boolean asc) {
+        throw new NotImplementedException("not reachable");
     }
 
     @Override
