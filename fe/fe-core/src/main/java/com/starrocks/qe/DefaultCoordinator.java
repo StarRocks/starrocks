@@ -902,9 +902,14 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private boolean isInternalCancel(PPlanFragmentCancelReason cancelReason) {
+        return cancelReason.equals(PPlanFragmentCancelReason.LIMIT_REACH) ||
+                cancelReason.equals(PPlanFragmentCancelReason.QUERY_FINISHED);
+    }
+
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-        if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
+        if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
         if (null != receiver) {
@@ -915,7 +920,7 @@ public class DefaultCoordinator extends Coordinator {
         } else {
             cancelRemoteFragmentsAsync(cancelReason);
         }
-        if (cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
+        if (!isInternalCancel(cancelReason)) {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
