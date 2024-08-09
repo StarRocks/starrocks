@@ -151,11 +151,11 @@ public final class GlobalVariable {
 
     // Effective iff it is non-negative.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_HIGH_WATER, flag = VariableMgr.GLOBAL)
-    private static int queryQueueDriverHighWater = -1;
+    private static int queryQueueDriverHighWater = 0;
 
     // Effective iff it is non-negative.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_LOW_WATER, flag = VariableMgr.GLOBAL)
-    private static int queryQueueDriverLowWater = -1;
+    private static int queryQueueDriverLowWater = 0;
 
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_LIMIT, flag = VariableMgr.GLOBAL)
