@@ -116,4 +116,17 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, Runti
     }
 }
 
+bool AggregateBaseNode::_grouping_exprs_spillable() const {
+    if (!_tnode.agg_node.__isset.grouping_exprs) {
+        return true;
+    }
+
+    for (const auto& expr : _tnode.agg_node.grouping_exprs) {
+        if (!expr.nodes.empty() && !TypeDescriptor::from_thrift(expr.nodes.at(0).type).support_orderby()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace starrocks
