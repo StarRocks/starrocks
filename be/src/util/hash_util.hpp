@@ -136,7 +136,9 @@ public:
     static const uint32_t MURMUR3_32_SEED = 104729;
     static const uint64_t XXHASH3_64_SEED = 0;
 
-    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
+    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) {
+        return (x << r) | (x >> (32 - r));
+    }
 
     ALWAYS_INLINE static uint32_t fmix32(uint32_t h) {
         h ^= h >> 16;
@@ -346,16 +348,19 @@ struct ReduceOp {
 
 template <LogicalType LT, enum PhmapSeed seed>
 struct PhmapHashFuncSelector {
-    using func = typename std::conditional_t<
-            lt_is_largeint<LT> || lt_is_decimal128<LT>, Hash128WithSeed<seed>,
-            std::conditional_t<lt_is_fixedlength<LT>, StdHashWithSeed<RunTimeCppType<LT>, seed>,
-                    std::conditional_t<lt_is_string<LT>, SliceHashWithSeed<seed>, void>>>;
-
     std::size_t operator()(RunTimeCppType<LT> value) const {
-        return func(value);
+        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>){
+            return Hash128WithSeed<seed>(value);
+        } else if constexpr (lt_is_fixedlength<LT>) {
+            return StdHashWithSeed<RunTimeCppType<LT>, seed>(value);
+        } else if constexpr (lt_is_string<LT>){
+            return SliceHashWithSeed<seed>(value);
+        } else {
+            assert(false);
+        }
     }
 
-    static constexpr bool is_supported() {
+    constexpr bool is_supported() {
         return lt_is_fixedlength<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>;
     }
 };
