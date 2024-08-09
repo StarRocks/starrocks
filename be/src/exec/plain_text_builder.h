@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "exec/file_builder.h"
 
@@ -34,6 +35,8 @@ class FileWriter;
 struct PlainTextBuilderOptions {
     std::string column_terminated_by;
     std::string line_terminated_by;
+    std::vector<std::string> column_names;
+    bool print_header;
 };
 
 class PlainTextBuilder final : public FileBuilder {
