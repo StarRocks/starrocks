@@ -34,12 +34,15 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
@@ -249,5 +252,23 @@ public class ConnectContextTest {
 
         ctx.setCurrentWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
+    }
+
+    @Test
+    public void testGetNormalizedErrorCode() {
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setState(new QueryState());
+        Status status = new Status(new TStatus(TStatusCode.MEM_LIMIT_EXCEEDED));
+
+        {
+            ctx.setErrorCodeOnce(status.getErrorCodeString());
+            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            Assert.assertEquals("MEM_LIMIT_EXCEEDED", ctx.getNormalizedErrorCode());
+        }
+
+        {
+            ctx.resetErrorCode();
+            Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
+        }
     }
 }
