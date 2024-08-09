@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -86,14 +87,14 @@ public class Task implements Writable {
     private long eventTriggerDelayPeriod = 0L;
 
     @SerializedName("taskRetryAttempts")
-    private int taskRetryAttempts = -1;
+    private int taskRetryAttempts = TableProperty.INVALID;
 
     @SerializedName("taskPriority")
-    private int taskPriority = -1;
+    private int taskPriority = TableProperty.INVALID;
 
     // last finish time of the task
     @SerializedName("lastLastFinishTime")
-    private volatile long lastLastFinishTime = -1;
+    private volatile long lastLastFinishTime = TableProperty.INVALID;
 
     public Task() {}
 

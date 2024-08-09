@@ -55,6 +55,10 @@ public class TaskRunBuilder {
         if (task.getTaskPriority() != INVALID) {
             taskRun.setTaskPriority(task.getTaskPriority());
         }
+        // execution's priority is higher than task's priority
+        if (executeOption != null && executeOption.getPriority() != INVALID) {
+            taskRun.setTaskPriority(executeOption.getPriority());
+        }
         if (task.getTaskRetryAttempts() != INVALID) {
             taskRun.setTaskRetryAttempts(task.getTaskRetryAttempts());
         }
