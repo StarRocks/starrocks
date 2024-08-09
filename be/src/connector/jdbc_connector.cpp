@@ -51,6 +51,10 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
                                 const std::vector<std::string>& filters, int64_t limit) {
     std::ostringstream oss;
     oss << "SELECT";
+    if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
+        oss << fmt::format(" TOP({}) ", limit);
+        limit = -1;
+    }
     for (size_t i = 0; i < columns.size(); i++) {
         oss << (i == 0 ? "" : ",") << " " << columns[i];
     }
