@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
@@ -46,6 +48,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static io.delta.kernel.internal.checkpoints.Checkpointer.LAST_CHECKPOINT_FILE_NAME;
 import static java.lang.String.format;
 
@@ -67,25 +70,27 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
     }
 
     public static List<JsonNode> readJsonFile(String filePath, Configuration hadoopConf) throws IOException {
-        Path readFilePath = new Path(filePath);
-        FileSystem fs = readFilePath.getFileSystem(hadoopConf);
-        FSDataInputStream stream = null;
-        BufferedReader fileReader;
-        try {
-            stream = fs.open(readFilePath);
-            fileReader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            Utils.closeCloseablesSilently(stream); // close it avoid leaking resources
-            throw e;
-        }
-        List<JsonNode> jsonNodeList = Lists.newArrayList();
-        String readline;
-        while ((readline = fileReader.readLine()) != null) {
-            jsonNodeList.add(parseJsonToJsonNode(readline));
-        }
+        try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DeltaLakeJsonHandler.readParseJsonFile")) {
+            Path readFilePath = new Path(filePath);
+            FileSystem fs = readFilePath.getFileSystem(hadoopConf);
+            FSDataInputStream stream = null;
+            BufferedReader fileReader;
+            try {
+                stream = fs.open(readFilePath);
+                fileReader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                Utils.closeCloseablesSilently(stream); // close it avoid leaking resources
+                throw e;
+            }
+            List<JsonNode> jsonNodeList = Lists.newArrayList();
+            String readline;
+            while ((readline = fileReader.readLine()) != null) {
+                jsonNodeList.add(parseJsonToJsonNode(readline));
+            }
 
-        Utils.closeCloseables(fileReader);
-        return jsonNodeList;
+            Utils.closeCloseables(fileReader);
+            return jsonNodeList;
+        }
     }
 
     @Override
@@ -132,24 +137,26 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
 
             @Override
             public ColumnarBatch next() {
-                if (!hasNextToConsume()) {
-                    throw new NoSuchElementException();
+                try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DeltaLakeJsonHandler.JsonToColumnarBatch")) {
+                    if (!hasNextToConsume()) {
+                        throw new NoSuchElementException();
+                    }
+
+                    List<Row> rows = new ArrayList<>();
+                    int currentBatchSize = 0;
+                    do {
+                        // hasNext already reads the next file and keeps it in member variable `cachedJsonList`
+                        JsonNode jsonNode = currentReadJsonList.get(currentReadLine);
+                        Row row = new io.delta.kernel.defaults.internal.data.DefaultJsonRow(
+                                (ObjectNode) jsonNode, physicalSchema);
+                        rows.add(row);
+                        currentBatchSize++;
+                        currentReadLine++;
+                    } while (currentBatchSize < maxBatchSize && hasNext());
+
+                    return new io.delta.kernel.defaults.internal.data.DefaultRowBasedColumnarBatch(
+                            physicalSchema, rows);
                 }
-
-                List<Row> rows = new ArrayList<>();
-                int currentBatchSize = 0;
-                do {
-                    // hasNext already reads the next file and keeps it in member variable `cachedJsonList`
-                    JsonNode jsonNode = currentReadJsonList.get(currentReadLine);
-                    Row row = new io.delta.kernel.defaults.internal.data.DefaultJsonRow(
-                            (ObjectNode) jsonNode, physicalSchema);
-                    rows.add(row);
-                    currentBatchSize++;
-                    currentReadLine++;
-                } while (currentBatchSize < maxBatchSize && hasNext());
-
-                return new io.delta.kernel.defaults.internal.data.DefaultRowBasedColumnarBatch(
-                        physicalSchema, rows);
             }
 
             private void tryGetNextFileJson() throws ExecutionException, IOException {
