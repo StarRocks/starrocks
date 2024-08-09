@@ -67,6 +67,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
@@ -137,7 +138,6 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -301,7 +301,6 @@ import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
-import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
@@ -843,58 +842,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
         LOG.debug("get show task run request: {}", params);
-        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
-        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
-        result.setTask_runs(tasksResult);
-
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        }
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
-
-        for (TaskRunStatus status : taskRunList) {
-            if (status.getDbName() == null) {
-                LOG.warn("Ignore the task status because db information is incorrect: " + status);
-                continue;
-            }
-
-            try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        status.getDbName());
-            } catch (AccessDeniedException e) {
-                continue;
-            }
-
-            String taskName = status.getTaskName();
-            TTaskRunInfo info = new TTaskRunInfo();
-            info.setQuery_id(status.getQueryId());
-            info.setTask_name(taskName);
-            info.setCreate_time(status.getCreateTime() / 1000);
-            info.setFinish_time(status.getFinishTime() / 1000);
-            info.setState(status.getState().toString());
-            info.setCatalog(status.getCatalogName());
-            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
-            try {
-                // NOTE: use task's definition to display task-run's definition here
-                Task task = taskManager.getTaskWithoutLock(taskName);
-                if (task != null) {
-                    info.setDefinition(task.getDefinition());
-                }
-            } catch (Exception e) {
-                LOG.warn("Get taskName {} definition failed: {}", taskName, e);
-            }
-            info.setError_code(status.getErrorCode());
-            info.setError_message(status.getErrorMessage());
-            info.setExpire_time(status.getExpireTime() / 1000);
-            info.setProgress(status.getProgress() + "%");
-            info.setExtra_message(status.getExtraMessage());
-            info.setProperties(status.getPropertiesJson());
-            tasksResult.add(info);
-        }
-        return result;
+        return TaskRunsSystemTable.query(params);
     }
 
     @Override
