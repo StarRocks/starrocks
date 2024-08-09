@@ -333,6 +333,15 @@ public:
         }
     }
 
+    static Column* get_null_column(const Column* column) {
+        if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column().get();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
