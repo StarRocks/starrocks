@@ -15,8 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <tuple>
-#include <unordered_map>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
