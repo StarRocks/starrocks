@@ -180,6 +180,10 @@ public class OlapScanNode extends ScanNode {
 
     private boolean usePkIndex = false;
 
+    private long gtid = 0;
+
+    private Map<Long, Long> scanPartitionVersions = Maps.newHashMap();
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -189,6 +193,10 @@ public class OlapScanNode extends ScanNode {
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
         this(id, desc, planNodeName);
         this.warehouseId = warehouseId;
+    }
+
+    public Map<Long, Long> getScanPartitionVersions() {
+        return scanPartitionVersions;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -493,6 +501,7 @@ public class OlapScanNode extends ScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = physicalPartition.getVisibleVersion();
+        scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());

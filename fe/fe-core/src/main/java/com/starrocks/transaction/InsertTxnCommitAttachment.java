@@ -26,6 +26,12 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
     private long loadedRows;
 
+    @SerializedName("isVersionOverwrite")
+    private boolean isVersionOverwrite = false;
+
+    @SerializedName("partitionVersion")
+    private long partitionVersion;
+
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
@@ -35,8 +41,22 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = loadedRows;
     }
 
+    public InsertTxnCommitAttachment(long loadedRows, long partitionVersion) {
+        this(loadedRows);
+        this.isVersionOverwrite = true;
+        this.partitionVersion = partitionVersion;
+    }
+
     public long getLoadedRows() {
         return loadedRows;
+    }
+
+    public boolean getIsVersionOverwrite() {
+        return isVersionOverwrite;
+    }
+
+    public long getPartitionVersion() {
+        return partitionVersion;
     }
 
     @Override
@@ -52,5 +72,7 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         InsertTxnCommitAttachment insertTxnCommitAttachment =
                 GsonUtils.GSON.fromJson(s, InsertTxnCommitAttachment.class);
         this.loadedRows = insertTxnCommitAttachment.getLoadedRows();
+        this.isVersionOverwrite = insertTxnCommitAttachment.getIsVersionOverwrite();
+        this.partitionVersion = insertTxnCommitAttachment.getPartitionVersion();
     }
 }

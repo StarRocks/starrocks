@@ -261,6 +261,40 @@ public class OlapTableSink extends DataSink {
         if (canUseColocateMVIndex(dstTable)) {
             tSink.setEnable_colocate_mv_index(true);
         }
+
+        Map<Long, Long> doubleWritePartitions = dstTable.getDoubleWritePartitions();
+        if (!doubleWritePartitions.isEmpty()) {
+            List<Long> doubleWritePartitionIds = new ArrayList<>();
+            for (Long partitionId : partitionIds) {
+                if (doubleWritePartitions.containsKey(partitionId)) {
+                    doubleWritePartitionIds.add(doubleWritePartitions.get(partitionId));
+                }
+            }
+
+            if (!doubleWritePartitionIds.isEmpty()) {
+                TOlapTableSink tSink2 = new TOlapTableSink(tSink);
+                tSink2.unsetPartition();
+                tSink2.unsetLocation();
+                TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
+                        enableAutomaticPartition, automaticBucketSize, doubleWritePartitionIds);
+                tSink2.setPartition(partitionParam2);
+                tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, warehouseId));
+                tSink2.setIgnore_out_of_partition(true);
+
+                TDataSink tDataSink2 = new TDataSink();
+                tDataSink2.setType(TDataSinkType.OLAP_TABLE_SINK);
+                tDataSink2.setOlap_table_sink(tSink2);
+
+                TDataSink newDataSink = new TDataSink(TDataSinkType.MULTI_OLAP_TABLE_SINK);
+                tDataSink.setSink_id(0);
+                newDataSink.addToMulti_olap_table_sinks(tDataSink);
+                tDataSink2.setSink_id(1);
+                newDataSink.addToMulti_olap_table_sinks(tDataSink2);
+                tDataSink = newDataSink;
+            }
+        }
+
+        LOG.debug("tDataSink: {}", tDataSink);
     }
 
     @Override

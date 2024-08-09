@@ -151,7 +151,8 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+                         bool is_version_overwrite = false, bool is_double_write = false);
 
     // should only called by UpdateManager's apply thread
     void do_apply();

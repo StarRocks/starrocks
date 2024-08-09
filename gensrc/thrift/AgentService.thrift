@@ -319,6 +319,8 @@ struct TPartitionVersionInfo {
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
     4: optional TBinlogConfig binlog_config
+    5: optional i64 gtid
+    6: optional bool is_double_write
 }
 
 struct TMoveDirReq {
@@ -346,6 +348,8 @@ struct TPublishVersionRequest {
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
     7: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
+    8: optional i64 gtid
+    9: optional bool is_version_overwrite = false
 }
 
 struct TClearAlterTaskRequest {

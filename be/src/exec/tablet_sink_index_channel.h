@@ -25,7 +25,7 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
-#include "exec/data_sink.h"
+#include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -41,8 +41,6 @@ namespace starrocks {
 
 class MemTracker;
 class TupleDescriptor;
-
-namespace stream_load {
 
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
@@ -322,5 +320,4 @@ private:
     bool _has_intolerable_failure = false;
 };
 
-} // namespace stream_load
 } // namespace starrocks

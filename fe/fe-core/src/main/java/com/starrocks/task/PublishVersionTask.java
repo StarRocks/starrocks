@@ -69,10 +69,19 @@ public class PublishVersionTask extends AgentTask {
     private Span span;
     private boolean enableSyncPublish;
     private TransactionType txnType;
+    private boolean isVersionOverwrite = false;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
+        this(backendId, transactionId, dbId, commitTimestamp, partitionVersionInfos,
+                traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
+    }
+
+    public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime, TransactionState state, boolean enableSyncPublish,
+                              TransactionType txnType, boolean isVersionOverwrite) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
@@ -82,6 +91,7 @@ public class PublishVersionTask extends AgentTask {
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
         this.txnType = txnType;
+        this.isVersionOverwrite = isVersionOverwrite;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -98,6 +108,10 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
         publishVersionRequest.setTxn_type(txnType.toThrift());
+        if (isVersionOverwrite) {
+            publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
+        }
+        LOG.debug("publish version request: {}", publishVersionRequest);
         return publishVersionRequest;
     }
 

@@ -440,7 +440,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // remove tablets channel and load channel after all things done
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_index_id);
+        _load_channel->remove_tablets_channel(_key);
     }
 }
 
@@ -655,6 +655,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.parent_span = _load_channel->get_span();
         options.index_id = _index_id;
         options.node_id = _node_id;
+        options.sink_id = params.sink_id();
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
@@ -850,6 +851,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.parent_span = _load_channel->get_span();
         options.index_id = _index_id;
         options.node_id = _node_id;
+        options.sink_id = params.sink_id();
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
