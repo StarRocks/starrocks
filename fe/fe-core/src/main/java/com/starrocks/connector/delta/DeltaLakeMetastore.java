@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
-public abstract class DeltaLakeMetastore implements IMetastore {
+public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
     protected final String catalogName;
     protected final IMetastore delegate;
@@ -87,18 +87,22 @@ public abstract class DeltaLakeMetastore implements IMetastore {
                 });
     }
 
+    @Override
     public List<String> getAllDatabaseNames() {
         return delegate.getAllDatabaseNames();
     }
 
+    @Override
     public List<String> getAllTableNames(String dbName) {
         return delegate.getAllTableNames(dbName);
     }
 
+    @Override
     public Database getDb(String dbName) {
         return delegate.getDb(dbName);
     }
 
+    @Override
     public DeltaLakeTable getTable(String dbName, String tableName) {
         MetastoreTable metastoreTable = getMetastoreTable(dbName, tableName);
         if (metastoreTable == null) {
@@ -113,6 +117,7 @@ public abstract class DeltaLakeMetastore implements IMetastore {
         return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
     }
 
+    @Override
     public List<String> getPartitionKeys(String dbName, String tableName) {
         DeltaLakeTable deltaLakeTable = getTable(dbName, tableName);
         if (deltaLakeTable == null) {
@@ -151,6 +156,7 @@ public abstract class DeltaLakeMetastore implements IMetastore {
         return partitionKeys;
     }
 
+    @Override
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
     }
