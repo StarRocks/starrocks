@@ -55,7 +55,7 @@ public:
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
     static InputStreamPtr union_all(std::vector<InputStreamPtr>& _streams);
-    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller);
+    static InputStreamPtr as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller);
 
 private:
     std::atomic_bool _eof = false;

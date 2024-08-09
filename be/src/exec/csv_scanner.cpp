@@ -630,7 +630,7 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(fields[i]));
         }
         schemas.emplace_back(schema);
         i++;
@@ -667,7 +667,7 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             const Slice field(basePtr + column.start_pos, column.length);
 
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(field));
         }
         schemas.emplace_back(schema);
         i++;

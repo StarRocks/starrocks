@@ -20,6 +20,6 @@
 namespace starrocks {
 
 // take a sleep with small intervals until time out by `sleep_secs` or the `stop_condition()` is true
-void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition);
+void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition);
 
 } // namespace starrocks
