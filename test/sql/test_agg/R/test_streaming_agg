@@ -1,4 +1,4 @@
--- name: test_streaming_agg @sequential
+-- name: test_streaming_agg @sequential @fault_injection
 create table t0(
     c0 INT,
     c1 BIGINT

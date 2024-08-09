@@ -1,4 +1,4 @@
--- name: test_exception_function_call @sequential
+-- name: test_exception_function_call @sequential @fault_injection
 
 create table t0 (
     c0 INT,
