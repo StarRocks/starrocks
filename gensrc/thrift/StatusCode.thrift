@@ -104,6 +104,20 @@ enum TStatusCode {
 
     SR_EAGAIN = 54,
 
+<<<<<<< HEAD
     REMOTE_FILE_NOT_FOUND = 55 // for hive external table
+=======
+    REMOTE_FILE_NOT_FOUND = 55, // for hive external table
+    YIELD = 56,
+    
+    JIT_COMPILE_ERROR = 57,
+
+    CAPACITY_LIMIT_EXCEED = 58,
+
+    SHUTDOWN = 59, // the service is shutting down
+
+    BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED = 60,
+    BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED = 61,
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
 }
 
