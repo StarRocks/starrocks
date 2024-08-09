@@ -268,7 +268,7 @@ public:
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
         static_assert(PhmapHashFuncSelector<LT, PhmapSeed1>::is_supported());
 
-        _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
+        return _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
     }
 
 private:
