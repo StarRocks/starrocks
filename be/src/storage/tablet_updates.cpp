@@ -987,9 +987,10 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             return;
         }
     }
-    PersistentIndexMetaPB index_meta;
+    google::protobuf::Arena arena;
+    auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
     if (enable_persistent_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), index_meta);
         if (!st.ok() && !st.is_not_found()) {
             failure_handler("get persistent index meta failed", st);
             return;
@@ -999,7 +1000,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
     span->AddEvent("gen_delta_column_group");
     // 3. finalize and generate delta column group
-    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, manager->mem_tracker(), new_del_vecs, index);
+    st = state.finalize(&_tablet, rowset.get(), rowset_id, *index_meta, manager->mem_tracker(), new_del_vecs, index);
     if (!st.ok()) {
         failure_handler("finalize failed", st);
         return;
@@ -1014,7 +1015,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
         }
 
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                    state.delta_column_groups(), new_del_vecs, index_meta,
+                                                    state.delta_column_groups(), new_del_vecs, *index_meta,
                                                     enable_persistent_index, &(rowset->rowset_meta()->get_meta_pb()));
 
         if (!st.ok()) {
@@ -1066,7 +1067,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
         failure_handler("primary index on_commit failed", st);
         return;
     }
-    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
 }
@@ -1350,9 +1351,10 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         return;
     }
 
-    PersistentIndexMetaPB index_meta;
+    google::protobuf::Arena arena;
+    auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
     if (enable_persistent_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
                                                   _debug_string(false, true));
@@ -1361,7 +1363,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         }
     }
     span->AddEvent("commit_index");
-    st = index.commit(&index_meta);
+    st = index.commit(index_meta);
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
         failure_handler(msg, true);
@@ -1473,14 +1475,14 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                 rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
                 rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
                 st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                            new_del_vecs, index_meta, enable_persistent_index,
+                                                            new_del_vecs, *index_meta, enable_persistent_index,
                                                             &(rowset->rowset_meta()->get_meta_pb()));
             } else {
                 st.update(r.status());
             }
         } else {
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                        new_del_vecs, index_meta, enable_persistent_index, nullptr);
+                                                        new_del_vecs, *index_meta, enable_persistent_index, nullptr);
         }
 
         if (!st.ok()) {
@@ -1523,7 +1525,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         failure_handler(msg, false);
         return;
     }
-    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache
@@ -1991,12 +1993,13 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto& index = index_entry->value();
 
     Status st;
-    PersistentIndexMetaPB index_meta;
+    google::protobuf::Arena arena;
+    auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
 
     bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
-        st = index.reset(&_tablet, version_info.version, &index_meta);
+        st = index.reset(&_tablet, version_info.version, index_meta);
     } else {
         st = index.load(&_tablet);
     }
@@ -2022,7 +2025,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
     });
     if (enable_persistent_index && !rebuild_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
                                                   _debug_string(false, true));
@@ -2123,7 +2126,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
     int64_t t_index_delvec = MonotonicMillis();
 
-    st = index.commit(&index_meta);
+    st = index.commit(index_meta);
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
         LOG(ERROR) << msg << " " << _debug_string(false, true);
@@ -2140,7 +2143,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs, index_meta, enable_persistent_index, nullptr);
+                                                    delvecs, *index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
@@ -2171,7 +2174,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
     {
         // Update the stats of affected rowsets.
