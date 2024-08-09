@@ -360,7 +360,7 @@ struct PhmapHashFuncSelector {
     }
 
     constexpr bool is_supported() {
-        return lt_is_fixedlength<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>;
+        return lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>;
     }
 };
 
