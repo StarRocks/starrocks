@@ -22,6 +22,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
@@ -457,6 +458,33 @@ public class FunctionAnalyzer {
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(fnName + " function 's args must be column");
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.MANN_WHITNEY_U_TEST)) {
+            if (functionCallExpr.getChildren().size() >= 3) {
+                if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
+                    throw new SemanticException(fnName + "'s third parameter should be a string literal.");
+                }
+                String alternative = ((StringLiteral) functionCallExpr.getChild(2)).getStringValue();
+                if (!(alternative.equals("two-sided") || alternative.equals("greater") || alternative.equals("less"))) {
+                    throw new SemanticException(
+                            fnName + "'s third parameter should be one of ['two-sided', 'greater', 'less'], but get '" +
+                                    alternative + "'.");
+                }
+            }
+            if (functionCallExpr.getChildren().size() >= 4) {
+                long continuityCorrection;
+                if (functionCallExpr.getChild(3) instanceof IntLiteral) {
+                    continuityCorrection = ((IntLiteral) functionCallExpr.getChild(3)).getLongValue();
+                } else if (functionCallExpr.getChild(3) instanceof LargeIntLiteral) {
+                    continuityCorrection = ((LargeIntLiteral) functionCallExpr.getChild(3)).getLongValue();
+                } else {
+                    throw new SemanticException(fnName + "'s fourth parameter should be a non-negative int literal.");
+                }
+                if (continuityCorrection < 0) {
+                    throw new SemanticException(fnName + "'s fourth parameter should be a non-negative int literal.");
+                }
             }
         }
     }
