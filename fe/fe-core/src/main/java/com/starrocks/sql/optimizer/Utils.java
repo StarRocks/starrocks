@@ -917,4 +917,25 @@ public class Utils {
         return downcast(obj, klass)
                 .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
     }
+
+    // this method is useful when map is small, but key is very complex  like compound predicate with 1000 OR
+    // in which case key's hashCode() can be super slow because of bad time complexity
+    // so we can use equals' short-circuit logic to help us find whether key is in map quickly
+    // which means key's type is not same as map's key's types
+    public static <K, V> V getValueIfExists(Map<K, V> map, K key) {
+        V value = null;
+
+        if (map.size() < 4) {
+            for (Map.Entry<K, V> entry : map.entrySet()) {
+                if (entry.getKey().equals(key)) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
+        } else {
+            value = map.get(key);
+        }
+
+        return value;
+    }
 }
