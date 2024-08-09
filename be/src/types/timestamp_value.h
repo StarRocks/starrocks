@@ -78,6 +78,8 @@ public:
 
     bool check_range(const DatetimeContent*) const;
     bool check_date(const DatetimeContent*) const;
+    bool is_valid_year(const DatetimeContent*) const;
+    bool is_valid_month(const DatetimeContent*) const;
 
     // This is private function which modify date but modify `_type`
     bool get_date_from_daynr(uint64_t, DatetimeContent*);
