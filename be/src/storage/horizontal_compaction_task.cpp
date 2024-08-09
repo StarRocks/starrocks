@@ -71,6 +71,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
 
     int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, _task_info.input_rows_num,

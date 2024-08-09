@@ -22,26 +22,18 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(ColumnReader* reader,
-                                                                    std::unique_ptr<ColumnIterator> null_iter,
-                                                                    std::vector<std::unique_ptr<ColumnIterator>> iters,
-                                                                    const std::vector<std::string>& target_paths,
-                                                                    const std::vector<LogicalType>& target_types,
-                                                                    const std::vector<std::string>& source_paths,
-                                                                    const std::vector<LogicalType>& source_types);
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
+        const std::vector<LogicalType>& target_types, const std::vector<std::string>& source_paths,
+        const std::vector<LogicalType>& source_types, bool need_remain = false);
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
         std::unique_ptr<ScalarColumnIterator> json_iter, const std::vector<std::string>& target_paths,
-        const std::vector<LogicalType>& target_types);
+        const std::vector<LogicalType>& target_types, bool need_remain = false);
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
         const std::vector<LogicalType>& merge_types);
-
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_direct_iterator(
-        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& all_paths,
-        const std::vector<LogicalType>& all_types);
-
 } // namespace starrocks
