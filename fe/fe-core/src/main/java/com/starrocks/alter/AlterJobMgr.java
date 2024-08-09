@@ -69,6 +69,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -565,6 +566,10 @@ public class AlterJobMgr {
         int schemaChangeJobSize = reader.readInt();
         for (int i = 0; i != schemaChangeJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown alterJobV2(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             schemaChangeHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -579,6 +584,10 @@ public class AlterJobMgr {
         int materializedViewJobSize = reader.readInt();
         for (int i = 0; i != materializedViewJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown MV job(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             materializedViewHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
