@@ -34,11 +34,18 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -224,4 +231,49 @@ public class ConnectContextTest {
         Assert.assertNotNull(ConnectContext.get());
         Assert.assertEquals(ctx, ConnectContext.get());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) {
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentWarehouse("wh1");
+        Assert.assertEquals("wh1", ctx.getCurrentWarehouseName());
+
+        ctx.setCurrentWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
+    }
+
+    @Test
+    public void testGetNormalizedErrorCode() {
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setState(new QueryState());
+        Status status = new Status(new TStatus(TStatusCode.MEM_LIMIT_EXCEEDED));
+
+        {
+            ctx.setErrorCodeOnce(status.getErrorCodeString());
+            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            Assert.assertEquals("MEM_LIMIT_EXCEEDED", ctx.getNormalizedErrorCode());
+        }
+
+        {
+            ctx.resetErrorCode();
+            Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
+        }
+    }
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
 }
