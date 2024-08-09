@@ -58,7 +58,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.starrocks.sql.plan.PlanFragmentBuilder.PhysicalPlanTranslator.getShuffleColumns;
+import static com.starrocks.sql.plan.PlanFragmentBuilder.getShuffleColumns;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children

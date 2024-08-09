@@ -15,6 +15,9 @@
 #include "split_local_exchange.h"
 
 #include <memory>
+
+#include "exec/exec_node.h"
+
 namespace starrocks::pipeline {
 
 Status SplitLocalExchanger::prepare(RuntimeState* state) {

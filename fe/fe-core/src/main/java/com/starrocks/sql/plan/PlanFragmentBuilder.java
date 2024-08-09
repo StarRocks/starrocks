@@ -409,6 +409,18 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
+    public static List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec,
+                                                            ColumnRefFactory columnRefFactory) {
+        List<DistributionCol> columns = spec.getShuffleColumns();
+        Preconditions.checkState(!columns.isEmpty());
+
+        List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
+        for (DistributionCol column : columns) {
+            shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
+        }
+        return shuffleColumns;
+    }
+
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
@@ -3904,18 +3916,6 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
-        }
-
-        public static List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec,
-                                                                ColumnRefFactory columnRefFactory) {
-            List<DistributionCol> columns = spec.getShuffleColumns();
-            Preconditions.checkState(!columns.isEmpty());
-
-            List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (DistributionCol column : columns) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
-            }
-            return shuffleColumns;
         }
     }
 }
