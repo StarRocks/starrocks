@@ -676,6 +676,117 @@ TEST_P(CSVScannerTest, test_start_offset) {
     EXPECT_EQ(8, chunk->get(1)[1].get_int32());
 }
 
+TEST_P(CSVScannerTest, test_split_multi_scan_ranges) {
+    // ----- csv_file9 -----
+    // 1|2\n
+    // 3|4\n
+    // 5|6\n
+    // 7|8\n
+    // 9|0\n
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+
+    {
+        // split at row delimiter
+        // 1|2\n
+        //     |<- split point is '\n'
+        // 3|4\n
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(2);
+        range.__set_start_offset(0);
+        range.__set_size(4);
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file9");
+        ranges.push_back(range);
+
+        auto scanner = create_csv_scanner(types, ranges);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        scanner->use_v2(_use_v2);
+
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("[1, 2]", chunk->debug_row(0));
+        EXPECT_EQ("[3, 4]", chunk->debug_row(1));
+    }
+
+    {
+        // split before row delimiter
+        // 3|4\n
+        // 5|6\n
+        //   |<- split point is '6'
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(2);
+        range.__set_start_offset(4);
+        range.__set_size(7);
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file9");
+        ranges.push_back(range);
+
+        auto scanner = create_csv_scanner(types, ranges);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        scanner->use_v2(_use_v2);
+
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        EXPECT_EQ(1, chunk->num_rows());
+        EXPECT_EQ("[5, 6]", chunk->debug_row(0));
+    }
+
+    {
+        // split after row delimiter
+        // 7|8\n
+        // 9|0\n
+        // |<- split point is '9'
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(2);
+        range.__set_start_offset(11);
+        range.__set_size(6);
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file9");
+        ranges.push_back(range);
+
+        auto scanner = create_csv_scanner(types, ranges);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        scanner->use_v2(_use_v2);
+
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("[7, 8]", chunk->debug_row(0));
+        EXPECT_EQ("[9, 0]", chunk->debug_row(1));
+    }
+
+    {
+        // left
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(2);
+        range.__set_start_offset(17);
+        range.__set_size(3);
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file9");
+        ranges.push_back(range);
+
+        auto scanner = create_csv_scanner(types, ranges);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        scanner->use_v2(_use_v2);
+
+        auto st2 = scanner->get_next();
+        ASSERT_TRUE(st2.status().is_end_of_file());
+    }
+}
+
 TEST_P(CSVScannerTest, test_skip_header) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
