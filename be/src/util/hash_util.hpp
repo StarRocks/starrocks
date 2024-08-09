@@ -346,10 +346,18 @@ struct ReduceOp {
 
 template <LogicalType LT, enum PhmapSeed seed>
 struct PhmapHashFuncSelector {
-    using Type = typename std::conditional_t<
+    using func = typename std::conditional_t<
             lt_is_largeint<LT> || lt_is_decimal128<LT>, Hash128WithSeed<seed>,
             std::conditional_t<lt_is_fixedlength<LT>, StdHashWithSeed<RunTimeCppType<LT>, seed>,
-                               std::conditional_t<lt_is_string<LT>, SliceHashWithSeed<seed>, void>>>;
+                    std::conditional_t<lt_is_string<LT>, SliceHashWithSeed<seed>, void>>>;
+
+    std::size_t operator()(RunTimeCppType<LT> value) const {
+        return func(value);
+    }
+
+    static constexpr bool is_supported() {
+        return lt_is_fixedlength<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>;
+    }
 };
 
 } // namespace starrocks
