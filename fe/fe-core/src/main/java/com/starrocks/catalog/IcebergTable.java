@@ -223,7 +223,7 @@ public class IcebergTable extends Table {
     }
 
     public void resetSnapshot() {
-        snapshot = Optional.empty();
+        snapshot = null;
     }
 
     public boolean isV2Format() {
