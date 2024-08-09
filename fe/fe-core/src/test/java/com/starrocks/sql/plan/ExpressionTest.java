@@ -748,31 +748,40 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testReuseIndependentExprInLambdaFunction() throws Exception {
-        starRocksAssert.withTable("create table if not exists test_reuse_lambda_expr (k bigint, v array<bigint>) " +
+        starRocksAssert.withTable("create table if not exists test_reuse_lambda_expr " +
+                "(k bigint, v array<bigint>, m map<bigint, bigint>) " +
                 "duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');");
         String sql = "select array_map((arg0, arg1) -> arg0 + arg1 + array_length(`v`), `v`, `v`) from test_reuse_lambda_expr";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 6> : array_length(2: v)\n" +
-                "  |  <slot 7> : CAST(6: array_length AS BIGINT)");
+                "  |  <slot 7> : array_length(2: v)\n" +
+                "  |  <slot 8> : CAST(7: array_length AS BIGINT)");
 
         sql = "select array_length(array_map((arg0, arg1) -> " +
                 "arg0 + arg1 + array_length(`v`) + array_length(array_filter((arg0) -> length(arg0) > 4, `v`)),`v`,`v`)) " +
                 "from test_reuse_lambda_expr";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 7> : array_length(2: v)\n" +
-                "  |  <slot 8> : CAST(7: array_length AS BIGINT)\n" +
-                "  |  <slot 9> : array_map(<slot 5> -> length(CAST(<slot 5> AS VARCHAR)) > 4, 2: v)\n" +
-                "  |  <slot 10> : array_filter(2: v, 9: array_map)\n" +
-                "  |  <slot 11> : array_length(10: array_filter)\n" +
-                "  |  <slot 12> : CAST(11: array_length AS BIGINT)");
+                "  |  <slot 8> : array_length(2: v)\n" +
+                "  |  <slot 9> : CAST(8: array_length AS BIGINT)\n" +
+                "  |  <slot 10> : array_map(<slot 6> -> length(CAST(<slot 6> AS VARCHAR)) > 4, 2: v)\n" +
+                "  |  <slot 11> : array_filter(2: v, 10: array_map)\n" +
+                "  |  <slot 12> : array_length(11: array_filter)\n" +
+                "  |  <slot 13> : CAST(12: array_length AS BIGINT)");
 
         sql = "select k, array_filter(x -> x > k + 10, `v`) from test_reuse_lambda_expr";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 5> : 1: k + 10");
+                "  |  <slot 6> : 1: k + 10");
+
+        sql = "select map_apply((arg0, arg1) -> (arg0 + k * 10, arg1 + map_size(`m`)), `m`) from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 7> : 1: k * 10\n" +
+                "  |  <slot 8> : map_size(3: m)\n" +
+                "  |  <slot 9> : CAST(8: map_size AS BIGINT)");
     }
+
 
     @Test
     public void testInPredicateNormalize() throws Exception {
