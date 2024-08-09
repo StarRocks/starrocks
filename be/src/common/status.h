@@ -219,6 +219,13 @@ public:
         return code() == TStatusCode::CAPACITY_LIMIT_EXCEED;
     }
 
+    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
     bool is_thrift_rpc_error() const {
         mark_checked();
         return code() == TStatusCode::THRIFT_RPC_ERROR;
