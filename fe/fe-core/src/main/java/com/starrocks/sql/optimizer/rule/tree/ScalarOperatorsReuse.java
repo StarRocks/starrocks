@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -177,6 +178,14 @@ public class ScalarOperatorsReuse {
             ScalarOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
                     operator.getLambdaExpr().accept(this, null), operator.getType()
             );
+            return tryRewrite(newOperator);
+        }
+
+        @Override
+        public ScalarOperator visitMap(MapOperator operator, Void context) {
+            ScalarOperator newOperator = new MapOperator(operator.getType(),
+                    operator.getChildren().stream().map(argument -> argument.accept(this, null)).
+                            collect(Collectors.toList()));
             return tryRewrite(newOperator);
         }
 
