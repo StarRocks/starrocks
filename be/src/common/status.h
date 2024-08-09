@@ -151,6 +151,18 @@ public:
 
     static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
 
+<<<<<<< HEAD
+=======
+    static Status Shutdown(std::string_view msg) { return Status(TStatusCode::SHUTDOWN, msg); }
+
+    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }

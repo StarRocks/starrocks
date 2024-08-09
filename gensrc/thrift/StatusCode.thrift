@@ -110,5 +110,13 @@ enum TStatusCode {
     JIT_COMPILE_ERROR = 57,
 
     CAPACITY_LIMIT_EXCEED = 58,
+<<<<<<< HEAD
+=======
+
+    SHUTDOWN = 59, // the service is shutting down
+
+    BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED = 60,
+    BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED = 61,
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
 }
 
