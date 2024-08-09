@@ -58,6 +58,8 @@ public class ConfigBase {
 
     public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
 
+    public static final String AUTHENTICATION_CHAIN_MECHANISM_CUSTOM = "custom";
+
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface ConfField {
         boolean mutable() default false;

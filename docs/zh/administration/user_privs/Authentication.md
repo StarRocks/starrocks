@@ -99,3 +99,78 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.M
 default_auth = mysql_clear_password
 ENABLE_CLEARTEXT_PLUGIN = 1
 ```
+
+## 设置 自定义方式 认证
+
+StarRocks 提供自定义方式认证。
+
+### 开启 自定义 认证
+
+1. 实现自定义认证抽象类
+
+自定义方式需要用户自己实现相关认证逻辑。用户需实现`AuthenticationProvider`以完成认证。
+
+代码示例：
+
+```java
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
+
+public class Test implements AuthenticationProvider {
+
+    /** used when Create or Alter User through SQL, to check the new password valid. */
+    @Override
+    public UserAuthenticationInfo validAuthenticationInfo(
+            UserIdentity userIdentity, String password, String textForAuthPlugin)
+            throws AuthenticationException {
+        return null;
+    }
+
+    /** used when login. */
+    @Override
+    public void authenticate(
+            String name,
+            String host,
+            byte[] password,
+            byte[] randomString,
+            UserAuthenticationInfo authenticationInfo)
+            throws AuthenticationException {}
+
+    /** used to upgrade from 2.x. */
+    @Override
+    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException {
+        return null;
+    }
+}
+
+```
+
+2. 将相关jar包放入 **fe/lib** 下
+
+
+3. 在 FE 节点的配置文件 **fe.conf** 中添加以下配置项。
+
+```conf
+# 通过添加custom方式，指定登录验证方式顺序。下方示例意思是先进行自定义鉴权，若鉴权失败会再次尝试用户建立时指定内部鉴权方式。
+authentication_chain = custom,native
+# 添加 自定义 认证方式相关类。
+authorization_custom_class = xxx.xxx.xxx
+```
+4. 自定义配置，需要与 **fe.conf** 同一目录下，新建 **custom_authentication.conf** 进行配置。文件格式与 **fe.conf** 一致。
+
+```java
+# 在自定义类中获取自定义参数
+  Properties prop =
+        (Properties) authenticationInfo.extraInfo.get(AuthPlugin.AUTHENTICATION_CUSTOM.name());
+```
+
+### 其他说明
+
+1. root用户为StarRocks内置超管用户，在自定义方式中也已经特殊处理，用户无需单独处理。
+2. 如果需要使用明文密码，请参考上述LDAP相关内容，不再赘述。
+3. 如果是直接登录，即默认密文密码，其密码解析与校验可以参考`MysqlPassword`类。
+4. 自定义方式主要用于与其他外部系统保持统一登录信息。因此，与StarRocks其他内部登录校验方式不同的是，自定义方式无需在StarRocks创建用户，用户和密码均保存在外部系统即可。

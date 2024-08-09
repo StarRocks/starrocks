@@ -17,6 +17,8 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.CustomAuthenticationProviderFactory;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -131,6 +133,8 @@ public class Password implements Writable {
                 LOG.error("Failed to authenticate for [user: {}] by kerberos, msg: ", remoteUser, e);
                 return false;
             }
+        } else if (authPlugin == AuthPlugin.AUTHENTICATION_CUSTOM) {
+            return checkPasswordByCustom(remoteUser, remotePassword, randomString);
         } else {
             LOG.warn("unknown auth plugin {} to check password", authPlugin);
             return false;
@@ -151,9 +155,28 @@ public class Password implements Writable {
             } else {
                 return LdapSecurity.checkPasswordByRoot(remoteUser, remotePassword);
             }
+        } else if (authPlugin == AuthPlugin.AUTHENTICATION_CUSTOM) {
+            return checkPasswordByCustom(remoteUser, remotePassword.getBytes(StandardCharsets.UTF_8), null);
         } else {
             LOG.warn("unknown auth plugin {} to check password", authPlugin);
             return false;
         }
+    }
+
+    private boolean checkPasswordByCustom(String remoteUser, byte[] remotePassword, byte[] randomString) {
+        String className = Config.authorization_custom_class.trim();
+        if (className.isEmpty()) {
+            LOG.error("The authorization_custom_class configuration is empty ");
+            return false;
+        }
+        try {
+            AuthenticationProvider provider = CustomAuthenticationProviderFactory.getInstance().getCustomAuthenticationProvider();
+            provider.authenticate(remoteUser, "", remotePassword, randomString,
+                    CustomAuthenticationProviderFactory.getUserAuthenticationInfo());
+        } catch (Exception e) {
+            LOG.error("Failed to authenticate for [user: {}] by custom, msg: ", remoteUser, e);
+            return false;
+        }
+        return true;
     }
 }
