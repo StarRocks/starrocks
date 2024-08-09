@@ -38,6 +38,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.EmptyStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
@@ -684,5 +686,12 @@ public class SelectStmtTest {
                 "         NULL\n" +
                 "     limit: 1\n" +
                 "     cardinality: 1\n"));
+    }
+
+    @Test
+    void testCommentLines() throws Exception {
+        String sql = "/*!50503 SET NAMES utf8mb4 */;";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assertions.assertTrue(stmt instanceof EmptyStmt);
     }
 }
