@@ -75,7 +75,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     private static final int PUSH_DOWN_MEDIUM_CARDINALITY_AGG = 2;
     private static final int PUSH_DOWN_HIGH_CARDINALITY_AGG = 3;
 
-    private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
+    private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN, FunctionSet.COUNT,
             FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
 
     private final TaskContext taskContext;
@@ -163,6 +163,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         // origin predicate, we just do check in collect phase
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
             CallOperator aggFn = entry.getValue();
+            if (aggFn.getChildren().isEmpty()) {
+                continue;
+            }
             ScalarOperator aggInput = aggFn.getChild(0);
 
             if (!(aggInput instanceof CallOperator)) {
@@ -218,8 +221,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     @Override
     public Void visitLogicalAggregate(OptExpression optExpression, AggregatePushDownContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
-        // distinct/count* aggregate can't push down
-        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct() || c.isCountStar())) {
+        // distinct aggregate can't push down
+        if (aggregate.getAggregations().values().stream().anyMatch(CallOperator::isDistinct)) {
             return visit(optExpression, context);
         }
 

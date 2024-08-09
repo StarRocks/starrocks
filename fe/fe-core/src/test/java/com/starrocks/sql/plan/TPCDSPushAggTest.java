@@ -20,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -96,6 +97,35 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         return StringUtils.countMatches(plan, ":AGGREGATE ");
     }
 
+    @Test
+    public void testPushDownCount() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(0);
+        String sql = "select 'store' channel, i_brand_id,i_class_id\n" +
+                "             ,i_category_id,sum(ss_quantity*ss_list_price) sales\n" +
+                "             , count(*) number_sales\n" +
+                "       from store_sales\n" +
+                "           ,item\n" +
+                "           ,date_dim\n" +
+                "       where ss_item_sk = i_item_sk\n" +
+                "         and ss_sold_date_sk = d_date_sk\n" +
+                "         and d_year = 1999+2 \n" +
+                "         and d_moy = 11\n" +
+                "       group by i_brand_id,i_class_id,i_category_id";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(80: multiply), count(*)\n" +
+                "  |  group by: 1: ss_item_sk, 3: ss_sold_date_sk\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: ss_item_sk\n" +
+                "  |  <slot 3> : 3: ss_sold_date_sk\n" +
+                "  |  <slot 80> : CAST(11: ss_quantity AS DECIMAL64(9,0)) * 13: ss_list_price\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: store_sales");
+    }
+
     private static Stream<Arguments> testPushDownProvider() {
         // orig(-1), auto(0), force(1), mid(2), high(3)
         Arguments[] cases = new Arguments[] {
@@ -107,6 +137,8 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q08", 4, 6, 6, 6, 6),
                 Arguments.of("Q11", 8, 6, 8, 6, 8),
                 Arguments.of("Q12", 2, 4, 4, 4, 4),
+                Arguments.of("Q14_1", 16, 22, 22, 22, 22),
+                Arguments.of("Q14_2", 12, 16, 16, 16, 16),
                 Arguments.of("Q15", 2, 4, 4, 4, 4),
                 Arguments.of("Q19", 2, 2, 4, 2, 2),
                 Arguments.of("Q20", 2, 4, 4, 4, 4),
@@ -135,6 +167,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q59", 2, 4, 4, 4, 4),
                 Arguments.of("Q60", 8, 14, 14, 14, 14),
                 Arguments.of("Q63", 2, 2, 4, 4, 4),
+                Arguments.of("Q64", 4, 4, 5, 4, 4),
                 Arguments.of("Q65", 6, 6, 10, 10, 10),
                 Arguments.of("Q68", 1, 1, 3, 1, 1),
                 Arguments.of("Q70", 4, 6, 6, 6, 6),
@@ -166,8 +199,6 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q09", 30, 30, 30, 30, 30),
                 Arguments.of("Q10", 2, 2, 2, 2, 2),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
-                Arguments.of("Q14_1", 16, 16, 16, 16, 16),
-                Arguments.of("Q14_2", 12, 12, 12, 12, 12),
                 Arguments.of("Q16", 4, 4, 4, 4, 4),
                 Arguments.of("Q17", 2, 2, 2, 2, 2),
                 Arguments.of("Q18", 2, 2, 2, 2, 2),
@@ -191,7 +222,6 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q50", 2, 2, 2, 2, 2),
                 Arguments.of("Q61", 4, 4, 4, 4, 4),
                 Arguments.of("Q62", 2, 2, 2, 2, 2),
-                Arguments.of("Q64", 4, 4, 4, 4, 4),
                 Arguments.of("Q66", 6, 6, 6, 6, 6),
                 Arguments.of("Q67", 2, 2, 2, 2, 2),
                 Arguments.of("Q69", 2, 2, 2, 2, 2),
