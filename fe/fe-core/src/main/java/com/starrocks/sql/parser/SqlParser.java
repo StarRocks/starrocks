@@ -58,7 +58,7 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
-
+    private static final int MIN_TOKEN_LIMIT = 100;
     private static final String EOF = "<EOF>";
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
@@ -194,6 +194,8 @@ public class SqlParser {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
+        int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
         StarRocksParser parser = new StarRocksParser(tokenStream);
 
         // Unify the error message
@@ -310,8 +312,7 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
-                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+        parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
         return parser;
     }
 
