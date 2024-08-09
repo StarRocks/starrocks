@@ -102,6 +102,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.TableProperty.INVALID;
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 
 /**
@@ -389,10 +390,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // throw the last exception if all retries failed
         Preconditions.checkState(lastException != null);
-        String errorMsg = lastException.getMessage();
-        if (lastException instanceof NullPointerException) {
-            errorMsg = ExceptionUtils.getStackTrace(lastException);
-        }
+        String errorMsg = DebugUtil.getStackTrace(lastException);
         // field ERROR_MESSAGE in information_schema.task_runs length is 65535
         errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ?
                 errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
@@ -663,7 +661,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
+        int priority = mvContext.getPriority() != INVALID ? mvContext.getPriority() : Constants.TaskRunPriority.HIGHEST.value();
+        ExecuteOption option = new ExecuteOption(priority, true, newProperties);
         LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
                 materializedView.getName(), materializedView.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());

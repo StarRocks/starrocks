@@ -20,6 +20,8 @@ import com.starrocks.qe.ConnectContext;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.catalog.TableProperty.INVALID;
+
 public class TaskRunBuilder {
     private final Task task;
     private Map<String, String> properties = new HashMap<>();
@@ -48,6 +50,14 @@ public class TaskRunBuilder {
         taskRun.setTask(task);
         taskRun.setExecuteOption(executeOption);
         taskRun.setType(getTaskType());
+        taskRun.setEventTriggerDelayPeriod(task.getEventTriggerDelayPeriod());
+        taskRun.setTaskLastFinishedTime(task.getLastLastFinishTime());
+        if (task.getTaskPriority() != INVALID) {
+            taskRun.setTaskPriority(task.getTaskPriority());
+        }
+        if (task.getTaskRetryAttempts() != INVALID) {
+            taskRun.setTaskRetryAttempts(task.getTaskRetryAttempts());
+        }
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
         } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {

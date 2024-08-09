@@ -112,9 +112,21 @@ public class TaskRunScheduler {
                 .orElse(null);
     }
 
+    /**
+     * check this task run can be run to schedule
+     * @param taskRun: task run
+     * @return true if can be run, false if can not be run
+     */
     boolean canTaskRunBeScheduled(TaskRun taskRun) {
         // if the task is running, it can't be scheduled
-        return !runningTaskRunMap.containsKey(taskRun.getTaskId());
+        if (runningTaskRunMap.containsKey(taskRun.getTaskId())) {
+            return false;
+        }
+        // if the task has event trigger delay period, it can't be scheduled if the time is not reached.
+        if (taskRun.getEventTriggerDelayPeriod() > 0 && taskRun.getNextEventTriggerTime() > System.currentTimeMillis()) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -134,11 +146,11 @@ public class TaskRunScheduler {
             if (taskRun == null) {
                 break;
             }
-            // do schedule action
-            action.accept(taskRun);
             // put it into running task run map
             runningTaskRunMap.put(taskRun.getTaskId(), taskRun);
             currentRunning += 1;
+            // do schedule action
+            action.accept(taskRun);
         }
     }
 

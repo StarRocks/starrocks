@@ -45,8 +45,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -4775,5 +4778,143 @@ public class CreateMaterializedViewTest {
                 connectContext);
         backend = systemInfoService.getBackend(12011);
         systemInfoService.dropBackend(backend);
+    }
+
+    @Test
+    public void testMVWithPriority() throws Exception {
+        // create materialized view with task_priority
+        starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                "refresh async\n" +
+                "properties('task_priority' = '20')\n" +
+                "as select c_1_0, count(1) from t1 group by c_1_0");
+        String sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"task_priority\" = \"20\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task mvTask = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assert.assertTrue(mvTask != null);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(20, taskRun.getTaskPriority());
+
+        // alter materialized view with task_priority
+        starRocksAssert.ddl("alter materialized view test_mv1 set('task_priority'='30') ");
+        sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"task_priority\" = \"30\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(30, taskRun.getTaskPriority());
+   }
+
+    @Test
+    public void testMVWithTaskRetryAttempts() throws Exception {
+        // create materialized view with task_retry_attempts
+        starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                "refresh async\n" +
+                "properties('task_retry_attempts' = '3')\n" +
+                "as select c_1_0, count(1) from t1 group by c_1_0");
+        String sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"task_retry_attempts\" = \"3\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task mvTask = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assert.assertTrue(mvTask != null);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(3, taskRun.getTaskRetryAttempts());
+
+        // alter materialized view with task_priority
+        starRocksAssert.ddl("alter materialized view test_mv1 set('task_retry_attempts'='2') ");
+        sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"task_retry_attempts\" = \"2\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(2, taskRun.getTaskRetryAttempts());
+    }
+
+    @Test
+    public void testMVWithEventTriggerDelayPeriod() throws Exception {
+        // create materialized view with task_retry_attempts
+        starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                "refresh async\n" +
+                "properties('event_trigger_delay_period' = '10 minute')\n" +
+                "as select c_1_0, count(1) from t1 group by c_1_0");
+        String sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"event_trigger_delay_period\" = \"10 minute\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task mvTask = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assert.assertTrue(mvTask != null);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(600, taskRun.getEventTriggerDelayPeriod());
+
+        // alter materialized view with task_priority
+        starRocksAssert.ddl("alter materialized view test_mv1 set('event_trigger_delay_period'='3 minute') ");
+        sql = starRocksAssert.showCreateTable("show create table test_mv1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `test_mv1` (`c_1_0`, `count(1)`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"event_trigger_delay_period\" = \"3 minute\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1`.`c_1_0`, count(1) AS `count(1)`\n" +
+                "FROM `test`.`t1`\n" +
+                "GROUP BY `t1`.`c_1_0`;", sql);
+        taskRun = TaskRunBuilder.newBuilder(mvTask).build();
+        Assert.assertEquals(180, taskRun.getEventTriggerDelayPeriod());
     }
 }

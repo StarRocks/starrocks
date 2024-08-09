@@ -37,9 +37,13 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
+import org.threeten.extra.PeriodDuration;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.catalog.TableProperty.INVALID;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -101,6 +105,26 @@ public class TaskBuilder {
 
         handleSpecialTaskProperties(task);
         return task;
+    }
+
+    /**
+     * Build task properties from materialized view properties, eg: task_priority, task_retry_attempts, event_trigger_delay.
+     * @param task task of this mv
+     * @param mv materialized view
+     */
+    public static void buildTaskProperties(Task task, MaterializedView mv) {
+        PeriodDuration delayPeriod = mv.getTableProperty().getEventTriggerDelayPeriod();
+        if (!delayPeriod.isZero()) {
+            task.setEventTriggerDelayPeriod(delayPeriod.get(ChronoUnit.SECONDS));
+        }
+        int taskRetryAttempts = mv.getTableProperty().getTaskRetryAttempts();
+        if (taskRetryAttempts != INVALID) {
+            task.setTaskRetryAttempts(taskRetryAttempts);
+        }
+        int taskPriority = mv.getTableProperty().getTaskPriority();
+        if (taskPriority != INVALID) {
+            task.setTaskPriority(taskPriority);
+        }
     }
 
     /**
@@ -167,10 +191,12 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
+
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
             task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
+        buildTaskProperties(task, materializedView);
         handleSpecialTaskProperties(task);
         return task;
     }
@@ -190,12 +216,14 @@ public class TaskBuilder {
             task.setCreateUser(previousTask.getCreateUser());
             task.setUserIdentity(previousTask.getUserIdentity());
         }
+        buildTaskProperties(task, materializedView);
         handleSpecialTaskProperties(task);
         return task;
     }
 
     public static void updateTaskInfo(Task task, RefreshSchemeClause refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
+        buildTaskProperties(task, materializedView);
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);
@@ -233,6 +261,7 @@ public class TaskBuilder {
         MaterializedView.AsyncRefreshContext asyncRefreshContext =
                 materializedView.getRefreshScheme().getAsyncRefreshContext();
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        buildTaskProperties(task, materializedView);
         // mapping refresh type to task type
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);

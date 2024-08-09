@@ -73,6 +73,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -191,6 +192,11 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+    public static final String PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD = "event_trigger_delay_period";
+    public static final String PROPERTIES_TASK_RETRY_ATTEMPTS = "task_retry_attempts";
+    public static final String PROPERTIES_TASK_PRIORITY = "task_priority";
+    // Max retry attempt times for a task-run
+    public static final int MAX_RETRY_ATTEMPT_TIMES = 30;
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -410,6 +416,57 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static Pair<String, PeriodDuration> analyzeEventTriggerDelayPeriod(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
+            String delayPeriod = properties.get(PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD);
+            PeriodDuration duration;
+            try {
+                duration = TimeUtils.parseHumanReadablePeriodOrDuration(delayPeriod);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("illegal %s: %s",
+                        PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD, e.getMessage()));
+            }
+            properties.remove(PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD);
+            return Pair.create(delayPeriod, duration);
+        }
+        return Pair.create(null, PeriodDuration.ZERO);
+    }
+
+    public static int analyzeTaskRetryAttempts(Map<String, String> properties) {
+        int taskRetryAttemps = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_TASK_RETRY_ATTEMPTS)) {
+            try {
+                taskRetryAttemps = Integer.parseInt(properties.get(PROPERTIES_TASK_RETRY_ATTEMPTS));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Task retry attempts: " + e.getMessage());
+            }
+            if (taskRetryAttemps < 0 || taskRetryAttemps > MAX_RETRY_ATTEMPT_TIMES) {
+                throw new SemanticException("Illegal task retry attempts: " + taskRetryAttemps);
+            }
+            return taskRetryAttemps;
+        } else {
+            return 1;
+        }
+    }
+
+    public static int analyzeTaskPriority(Map<String, String> properties) {
+        int taskPriority = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_TASK_PRIORITY)) {
+            try {
+                taskPriority = Integer.parseInt(properties.get(PROPERTIES_TASK_PRIORITY));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Task priority: " + e.getMessage());
+            }
+            if (taskPriority < Constants.TaskRunPriority.LOWEST.value() ||
+                    taskPriority > Constants.TaskRunPriority.HIGHEST.value()) {
+                throw new SemanticException("Illegal task priority: " + taskPriority);
+            }
+            return taskPriority;
+        } else {
+            return 0;
+        }
     }
 
     public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
@@ -1581,6 +1638,36 @@ public class PropertyAnalyzer {
                     PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
                     materializedView.setDataCachePartitionDuration(duration);
                 }
+            }
+
+            // event_trigger_initial_period
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
+                MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+                if (!refreshScheme.getAsyncRefreshContext().isEventTriggered()) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD
+                            + " is only supported by event-triggered task");
+                }
+                Pair<String, PeriodDuration> delayPeriod = PropertyAnalyzer.analyzeEventTriggerDelayPeriod(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD, delayPeriod.first);
+                materializedView.getTableProperty().setEventTriggerDelayPeriod(delayPeriod.second);
+                properties.remove(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD);
+            }
+            // task_retry_attempts
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS)) {
+                int taskRetryAttempts = PropertyAnalyzer.analyzeTaskRetryAttempts(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS, String.valueOf(taskRetryAttempts));
+                materializedView.getTableProperty().setTaskRetryAttempts(taskRetryAttempts);
+                properties.remove(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS);
+            }
+            // task_priority
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY)) {
+                int taskPriority = PropertyAnalyzer.analyzeTaskPriority(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY, String.valueOf(taskPriority));
+                materializedView.getTableProperty().setTaskPriority(taskPriority);
+                properties.remove(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY);
             }
 
             // NOTE: for recognizing unknown properties, this should be put as the last if condition

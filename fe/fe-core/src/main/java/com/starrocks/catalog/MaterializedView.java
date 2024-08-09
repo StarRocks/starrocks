@@ -308,6 +308,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.timeUnit = timeUnit;
         }
 
+        public boolean isEventTriggered() {
+            return Strings.isNullOrEmpty(timeUnit);
+        }
+
         @Override
         public String toString() {
             return "AsyncRefreshContext{" +

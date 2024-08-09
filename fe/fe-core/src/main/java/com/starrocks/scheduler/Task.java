@@ -81,6 +81,20 @@ public class Task implements Writable {
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
 
+    // unit: second
+    @SerializedName("eventTriggerDelayPeriod")
+    private long eventTriggerDelayPeriod = 0L;
+
+    @SerializedName("taskRetryAttempts")
+    private int taskRetryAttempts = -1;
+
+    @SerializedName("taskPriority")
+    private int taskPriority = -1;
+
+    // last finish time of the task
+    @SerializedName("lastLastFinishTime")
+    private volatile long lastLastFinishTime = -1;
+
     public Task() {}
 
     public Task(String name) {
@@ -217,6 +231,38 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
+    public long getEventTriggerDelayPeriod() {
+        return eventTriggerDelayPeriod;
+    }
+
+    public void setEventTriggerDelayPeriod(long eventTriggerDelayPeriod) {
+        this.eventTriggerDelayPeriod = eventTriggerDelayPeriod;
+    }
+
+    public int getTaskRetryAttempts() {
+        return taskRetryAttempts;
+    }
+
+    public void setTaskRetryAttempts(int taskRetryAttempts) {
+        this.taskRetryAttempts = taskRetryAttempts;
+    }
+
+    public int getTaskPriority() {
+        return taskPriority;
+    }
+
+    public void setTaskPriority(int taskPriority) {
+        this.taskPriority = taskPriority;
+    }
+
+    public void setLastLastFinishTime(long lastLastFinishTime) {
+        this.lastLastFinishTime = lastLastFinishTime;
+    }
+
+    public long getLastLastFinishTime() {
+        return lastLastFinishTime;
+    }
+
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
@@ -244,6 +290,8 @@ public class Task implements Writable {
                 ", expireTime=" + expireTime +
                 ", source=" + source +
                 ", createUser='" + createUser + '\'' +
+                ", eventTriggerDelayPeriod='" + eventTriggerDelayPeriod + '\'' +
+                ", lastLastFinishTime=" + lastLastFinishTime +
                 '}';
     }
 }
