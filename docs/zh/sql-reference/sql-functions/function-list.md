@@ -258,6 +258,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [tan](./math-functions/tan.md)| 计算参数 x 的正切，x 为弧度值。 |
 |  [tanh](./math-functions/tanh.md)| 计算输入数值的双曲正切值。 |
 |  [truncate](./math-functions/truncate.md)| 返回数值 x 保留到小数点后 y 位的值。 |
+|  [width_bucket](./math-functions/width_bucket.md)| 返回等宽直方图中某个值的 Bucket 编号。 |
 
 ## Array 函数
 
