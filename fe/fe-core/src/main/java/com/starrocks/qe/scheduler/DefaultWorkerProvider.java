@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,9 +35,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -389,7 +392,16 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static Set<String> getLabelsLocation() {
-        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        String user = null;
+        try {
+            user = ConnectContext.get().getCurrentUserIdentity().getUser();
+        } catch (Exception e) {
+            if (user == null) {
+                return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
+            } else {
+                LOG.info("fail to get user info, msg: {}", e.getMessage());
+            }
+        }
         Set<String> locations = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getLabelsLocation(user);
         return locations;
     }
