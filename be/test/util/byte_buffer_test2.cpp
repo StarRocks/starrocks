@@ -29,7 +29,7 @@ public:
 };
 
 TEST_F(ByteBufferTest, normal) {
-    auto buf = ByteBuffer::allocate(4);
+    auto buf = ByteBuffer::allocate_with_tracker(4).value();
     ASSERT_EQ(0, buf->pos);
     ASSERT_EQ(4, buf->limit);
     ASSERT_EQ(4, buf->capacity);
