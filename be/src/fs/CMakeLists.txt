@@ -30,6 +30,7 @@ set(EXEC_FILES
     hdfs/hdfs_fs_cache.cpp
     fs_util.cpp
     fs_starlet.cpp
+    jindo/fs_jindo.cpp
     )
 
 add_library(FileSystem STATIC

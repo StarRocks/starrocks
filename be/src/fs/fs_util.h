@@ -231,4 +231,8 @@ inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
+inline bool is_jindo_uri(std::string_view uri) {
+    return is_in_list(uri, config::jindo_fs_list);
+}
+
 } // namespace starrocks::fs

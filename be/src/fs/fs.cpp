@@ -21,6 +21,7 @@
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/fs_hdfs.h"
+#include "fs/jindo/fs_jindo.h"
 #include "runtime/file_result_writer.h"
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
@@ -52,6 +53,7 @@ std::unique_ptr<RandomAccessFile> RandomAccessFile::from(std::unique_ptr<io::See
 static thread_local std::shared_ptr<FileSystem> tls_fs_posix;
 static thread_local std::shared_ptr<FileSystem> tls_fs_s3;
 static thread_local std::shared_ptr<FileSystem> tls_fs_hdfs;
+static thread_local std::shared_ptr<FileSystem> tls_fs_jindo;
 #ifdef USE_STAROS
 static thread_local std::shared_ptr<FileSystem> tls_fs_starlet;
 #endif
@@ -77,6 +79,13 @@ inline std::shared_ptr<FileSystem> get_tls_fs_s3() {
     return tls_fs_s3;
 }
 
+inline std::shared_ptr<FileSystem> get_tls_fs_jindo() {
+    if (tls_fs_jindo == nullptr) {
+        tls_fs_jindo.reset(new_fs_jindo(FSOptions()).release());
+    }
+    return tls_fs_jindo;
+}
+
 #ifdef USE_STAROS
 inline std::shared_ptr<FileSystem> get_tls_fs_starlet() {
     if (tls_fs_starlet == nullptr) {
@@ -89,6 +98,9 @@ inline std::shared_ptr<FileSystem> get_tls_fs_starlet() {
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri, FSOptions options) {
     if (fs::is_fallback_to_hadoop_fs(uri)) {
         return new_fs_hdfs(options);
+    }
+    if (fs::is_jindo_uri(uri)) {
+        return new_fs_jindo(options);
     }
     if (fs::is_posix_uri(uri)) {
         return new_fs_posix();
@@ -114,6 +126,9 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
 StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
     if (fs::is_fallback_to_hadoop_fs(uri)) {
         return get_tls_fs_hdfs();
+    }
+    if (fs::is_jindo_uri(uri)) {
+        return get_tls_fs_jindo();
     }
     if (fs::is_posix_uri(uri)) {
         return get_tls_fs_posix();

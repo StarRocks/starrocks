@@ -22,10 +22,10 @@
 #####################################################
 
 # jindosdk for Aliyun OSS
-JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-ubuntu22-x86_64.tar.gz"
-JINDOSDK_NAME="jindosdk-4.6.8-linux-ubuntu22-x86_64.tar.gz"
-JINDOSDK_SOURCE="jindosdk-4.6.8-linux-ubuntu22-x86_64"
-JINDOSDK_MD5SUM="52236053391091591c2d09684791e810"
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindo/jindosdk-6.5.0-linux-ubuntu22-x86_64.tar.gz"
+JINDOSDK_NAME="jindosdk-6.5.0-linux-ubuntu22-x86_64.tar.gz"
+JINDOSDK_SOURCE="jindosdk-6.5.0-linux-ubuntu22-x86_64"
+JINDOSDK_MD5SUM="64ec94caf86fdcbe2fb04263ab10ec96"
 
 # starcache
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.3.3/starcache-ubuntu22_amd64.tar.gz"

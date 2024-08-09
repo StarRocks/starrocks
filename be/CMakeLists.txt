@@ -229,6 +229,9 @@ set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/li
 add_library(fiu STATIC IMPORTED)
 set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
 
+add_library(jindosdk SHARED IMPORTED GLOBAL)
+set_target_properties(jindosdk PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/jindosdk/libjindosdk_c.so)
+
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
@@ -899,6 +902,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    jindosdk
     ${WL_END_GROUP}
 )
 

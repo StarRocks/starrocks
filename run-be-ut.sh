@@ -37,6 +37,7 @@ Usage: $0 <options>
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
      --with-aws                     enable to test aws
+     --with-jindo                   enable to test jindo
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
@@ -82,6 +83,7 @@ OPTS=$(getopt \
   -l 'with-gcov' \
   -l 'module:' \
   -l 'with-aws' \
+  -l 'with-jindo' \
   -l 'with-bench' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
@@ -107,6 +109,7 @@ TEST_MODULE=".*"
 EXCLUDING_TEST_SUIT=
 HELP=0
 WITH_AWS=OFF
+WITH_JINDO=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_STARCACHE=ON
@@ -121,6 +124,7 @@ while true; do
         --module) TEST_MODULE=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
+        --with-jindo) WITH_JINDO=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
@@ -228,7 +232,7 @@ else
     fi
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jindosdk:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
@@ -252,6 +256,10 @@ export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"
+fi
+
+if [ $WITH_JINDO = "OFF" ]; then
+    append_negative_case "*Jindo*"
 fi
 
 if [ -n "$EXCLUDING_TEST_SUIT" ]; then

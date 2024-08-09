@@ -411,6 +411,7 @@ cd ${STARROCKS_HOME}
 
 # Assesmble FE modules
 FE_MODULES=
+USING_PROFILE=
 if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         FE_MODULES="fe-common,spark-dpp"
@@ -420,6 +421,16 @@ if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} 
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
         FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
+        # macos/aarch64 linux jindo are activated automatically by os detection.
+        # for x86 linux, detect only ubuntu or centos.
+        # since os-type is only meaningfull in x86 linux, it will not conflict with other profile.
+        USING_PROFILE="-Dos-type=centos"
+        if [ -f /etc/lsb-release ]; then
+            source /etc/lsb-release
+            if [[ $DISTRIB_ID = "Ubuntu" ]]; then
+                USING_PROFILE="-Dos-type=ubuntu"
+            fi
+        fi
     fi
 fi
 
@@ -430,7 +441,8 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+
+    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests $USING_PROFILE
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}
@@ -548,6 +560,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/libjindosdk_c.so* ${STARROCKS_OUTPUT}/be/lib/hadoop/native/
 
     # remove zookeeper
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar

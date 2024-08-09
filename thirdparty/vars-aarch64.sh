@@ -46,10 +46,10 @@ ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
 ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"
 
 # jindosdk for Aliyun OSS
-JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
-JINDOSDK_NAME="jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
-JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
-JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindo/jindosdk-6.5.0-linux-el7-aarch64.tar.gz"
+JINDOSDK_NAME="jindosdk-6.5.0-linux-el7-aarch64.tar.gz"
+JINDOSDK_SOURCE="jindosdk-6.5.0-linux-el7-aarch64"
+JINDOSDK_MD5SUM="ca1e82e32df0f6a68f2961b009e06dae"
 
 # starcache
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.3.3/starcache-centos7_arm64.tar.gz"

@@ -133,7 +133,11 @@ under the License.
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
-
+                <!-- for jindo-sdk/jindo-core -->
+                <repository>
+                    <id>jindodata</id>
+                    <url>https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/mvn-repo/</url>
+                </repository>
             </repositories>
 
             <pluginRepositories>
@@ -864,7 +868,6 @@ under the License.
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
             </dependency>
-
         </dependencies>
     </dependencyManagement>
 

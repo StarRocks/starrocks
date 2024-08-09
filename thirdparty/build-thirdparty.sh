@@ -985,6 +985,9 @@ build_aliyun_jindosdk() {
     check_if_source_exist $JINDOSDK_SOURCE
     mkdir -p $TP_INSTALL_DIR/jindosdk
     cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/*.jar $TP_INSTALL_DIR/jindosdk
+    cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/native/ibjindosdk_c.so.6 $TP_INSTALL_DIR/jindosdk/ibjindosdk_c.so.6
+    mkdir -p $TP_INSTALL_DIR/include/jindosdk
+    cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/include/* $TP_INSTALL_DIR/include/jindosdk
 }
 
 build_gcs_connector() {

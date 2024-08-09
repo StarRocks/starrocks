@@ -43,6 +43,7 @@ under the License.
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <staros.version>3.3-rc3</staros.version>
         <python>python</python>
+        <jindo.version>6.5.0</jindo.version>
     </properties>
 
     <profiles>
@@ -93,6 +94,94 @@ under the License.
             <properties>
                 <python>${env.PYTHON}</python>
             </properties>
+        </profile>
+        <profile>
+            <id>aarch64-macos</id>
+            <activation>
+                <os>
+                    <arch>aarch64</arch>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.aliyun.jindodata</groupId>
+                    <artifactId>jindo-core-macos-11_0-aarch64</artifactId>
+                    <version>${jindo.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>x86-macos</id>
+            <activation>
+                <os>
+                    <arch>amd64</arch>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.aliyun.jindodata</groupId>
+                    <artifactId>jindo-core-macos-11_0-x86_64</artifactId>
+                    <version>6.5.0</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>x86-centos</id>
+            <activation>
+                <property>
+                    <name>os-type</name>
+                    <value>centos</value>
+                </property>
+                <os>
+                    <arch>amd64</arch>
+                    <family>linux</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.aliyun.jindodata</groupId>
+                    <artifactId>jindo-core-linux-el6-x86_64</artifactId>
+                    <version>${jindo.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>x86-ubuntu</id>
+            <activation>
+                <property>
+                    <name>os-type</name>
+                    <value>ubuntu</value>
+                </property>
+                <os>
+                    <arch>amd64</arch>
+                    <family>linux</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.aliyun.jindodata</groupId>
+                    <artifactId>jindo-core-linux-ubuntu22-x86_64</artifactId>
+                    <version>${jindo.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>aarch64-linux</id>
+            <activation>
+                <os>
+                    <arch>aarch64</arch>
+                    <family>linux</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.aliyun.jindodata</groupId>
+                    <artifactId>jindo-core-linux-el7-aarch64</artifactId>
+                    <version>${jindo.version}</version>
+                </dependency>
+            </dependencies>
         </profile>
     </profiles>
 
@@ -1016,6 +1105,18 @@ under the License.
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.jindodata</groupId>
+            <artifactId>jindo-core</artifactId>
+            <version>${jindo.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.jindodata</groupId>
+            <artifactId>jindo-sdk</artifactId>
+            <version>${jindo.version}</version>
         </dependency>
     </dependencies>
 
