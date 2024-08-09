@@ -392,9 +392,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static Set<String> getLabelsLocation() {
+        ConnectContext ctx = ConnectContext.get();
         String user = null;
         try {
-            user = ConnectContext.get().getCurrentUserIdentity().getUser();
+            user = ctx.getCurrentUserIdentity().getUser();
         } catch (Exception e) {
             if (user == null) {
                 return new HashSet<>(Arrays.asList(SessionVariable.GLOBAL_LABELS_LOCATION));
