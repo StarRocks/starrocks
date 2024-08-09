@@ -188,11 +188,10 @@ public class MetadataMgrTest {
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);
 
-        com.starrocks.catalog.Table tbl3 = metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx");
-        Assert.assertNull(tbl3);
-
-        com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
-        Assert.assertNull(tbl4);
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx"));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl"));
     }
 
     @Test
