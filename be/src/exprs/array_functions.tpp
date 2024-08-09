@@ -297,7 +297,7 @@ public:
             state->left_is_notnull_const = true;
             if (state->right_is_notnull_const) {
                 state->has_overlapping =
-                        _check_exist(*state->hash_set, ctx->get_constant_column(0), state->has_null, 0);
+                        _check_exist(*state->hash_set, *ctx->get_constant_column(0), state->has_null, 0);
             } else {
                 state->hash_set = std::make_unique<HashSet>();
                 _put_array_to_hash_set(ctx->get_constant_column(0)->get(0).get_array(), state->hash_set.get(),
@@ -427,7 +427,7 @@ private:
         }
     }
 
-    static bool _check_exist(const HashSet& hash_set, const ArrayColumn& column, bool has_null, size_t index) {
+    static bool _check_exist(const HashSet& hash_set, const Column& column, bool has_null, size_t index) {
         const auto& items = column.get(index).get<DatumArray>();
         for (const auto& item : items) {
             if (item.is_null()) {
