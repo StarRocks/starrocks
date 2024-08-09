@@ -128,6 +128,9 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             // set _need_split false to make iterator can get data this round if split do not happen,
             // otherwise, iterator will return empty.
             _need_split = false;
+            LOG(INFO) << "the rows of tablet " << _tablet_metadata->id() << ", is " << tablet_num_rows
+                      << ", less than splitted_scan_rows * config::lake_tablet_rows_splitted_ratio, which are "
+                      << read_params.splitted_scan_rows << ", and " << config::lake_tablet_rows_splitted_ratio;
             return init_collector(read_params);
         }
 
@@ -170,6 +173,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                 break;
             }
         }
+        LOG(INFO) << "split tablet: " << _tablet_metadata->id() << ", into " << _split_tasks.size() << ", split_tasks";
 
     } else {
         return init_collector(read_params);
