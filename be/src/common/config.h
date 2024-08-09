@@ -120,9 +120,9 @@ CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
-CONF_Int32(upload_worker_count, "1");
+CONF_Int32(upload_worker_count, "2");
 // The count of thread to download.
-CONF_Int32(download_worker_count, "1");
+CONF_Int32(download_worker_count, "2");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
