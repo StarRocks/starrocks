@@ -1194,7 +1194,8 @@ public class OlapTable extends Table {
      * @return : table's partition name to range partition key mapping.
      */
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
-        Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
+        Preconditions.checkState(partitionInfo instanceof RangePartitionInfo, "table:%s " +
+                "partition type:%s not supports", this.name, partitionInfo.getType().name());
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
