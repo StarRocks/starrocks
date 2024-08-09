@@ -89,7 +89,7 @@ StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE
 
 ### 使用 Colocate Table
 
-StarRocks 支持将分布相同的相关表存储与共同的分桶列，从而相关表的 JOIN 操作可以直接在本地进行，进而加速查询。更多信息，参考 [Colocate Join](../using_starrocks/Colocate_join.md)。
+StarRocks 支持将分布相同的相关表存储于共同的分桶列，从而相关表的 JOIN 操作可以直接在本地进行，进而加速查询。更多信息，参考 [Colocate Join](../using_starrocks/Colocate_join.md)。
 
 ```sql
 CREATE TABLE colocate_table
