@@ -339,6 +339,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
         rpc_status = Status(res.status);
     } catch (TException& e) {
+        (void)coord.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream msg;
         msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
@@ -763,6 +764,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 }
 
             } catch (TException& e) {
+                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
