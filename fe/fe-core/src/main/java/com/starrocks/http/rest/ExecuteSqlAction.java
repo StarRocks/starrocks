@@ -102,10 +102,13 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        TASKSERVICE.submit(() -> realWork(request, response));
+        // Get the content before submitting to executor pool,
+        // because the request body will be released after handleAction.
+        String content = request.getContent();
+        TASKSERVICE.submit(() -> realWork(request, content, response));
     }
 
-    private void realWork(BaseRequest request, BaseResponse response) {
+    private void realWork(BaseRequest request, String requestContent, BaseResponse response) {
         StatementBase parsedStmt;
 
         response.setContentType("application/x-ndjson; charset=utf-8");
@@ -123,7 +126,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
-                SqlRequest requestBody = validatePostBody(request.getContent(), context);
+                SqlRequest requestBody = validatePostBody(requestContent, context);
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
