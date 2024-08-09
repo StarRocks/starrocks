@@ -402,6 +402,10 @@ public class DynamicPartitionUtil {
             properties.remove(DynamicPartitionProperty.REPLICATION_NUM);
             analyzedProperties.put(DynamicPartitionProperty.REPLICATION_NUM, val);
         }
+        // all needed key have been removed
+        if (checkDynamicPartitionPropertiesExist(properties)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
+        }
         return analyzedProperties;
     }
 
