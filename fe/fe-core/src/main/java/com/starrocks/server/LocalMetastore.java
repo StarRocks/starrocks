@@ -1574,10 +1574,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, long warehouseId) throws DdlException {
-        addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
+        try {
+            table.setAutomaticBucketing(true);
+            addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
+        } finally {
+            table.setAutomaticBucketing(false);
+        }
     }
 
-    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+    private void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
