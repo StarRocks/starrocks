@@ -130,6 +130,49 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
     return Status::OK();
 }
 
+std::vector<std::map<std::string, std::string>> ExternalScanContextMgr::get_active_contexts() {
+    std::vector<std::map<std::string, std::string>> _active_contexts_message;
+    {
+        for (auto& [context_id, v] : _active_contexts) {
+            std::map<std::string, std::string> context_message;
+            context_message["context_id"] = context_id;
+            context_message["query_id"] = print_id(v->query_id);
+            context_message["last_access_time"] = ctime(&v->last_access_time);
+            context_message["keep_alive_min"] = std::to_string(v->keep_alive_min);
+            context_message["offset"] = std::to_string(v->offset);
+            _active_contexts_message.push_back(context_message);
+        }
+    }
+    return _active_contexts_message;
+}
+
+Status ExternalScanContextMgr::clear_inactive_scan_contexts(const int64_t inactive_time_s) {
+    std::vector<std::string> contexts_to_clear;
+    time_t now;
+    time(&now);
+
+    // Iterate over active contexts and prepare a list of context IDs to clear.
+    for (const auto& [context_id, v] : _active_contexts) {
+        int64_t diff = now - v->last_access_time;
+        if (diff > inactive_time_s) {
+            contexts_to_clear.push_back(context_id);
+        }
+    }
+
+    // Clear the inactive scan contexts using the prepared list.
+    for (const auto& context_id : contexts_to_clear) {
+        Status st = clear_scan_context(context_id);
+        if (!st.ok()) {
+            std::string msg = strings::Substitute("Fail to clear_scan_context. error: $0, context id: $1", st.message(),
+                                                  context_id);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+    }
+
+    return Status::OK();
+}
+
 void ExternalScanContextMgr::gc_expired_context() {
 #ifndef BE_TEST
     while (true) {

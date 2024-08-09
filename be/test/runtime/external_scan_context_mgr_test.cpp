@@ -116,4 +116,27 @@ TEST_F(ExternalScanContextMgrTest, clear_context) {
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
 }
+
+TEST_F(ExternalScanContextMgrTest, clear_inactive_contexts) {
+    std::shared_ptr<ScanContext> context;
+    ExternalScanContextMgr context_mgr(&_exec_env);
+    Status st = context_mgr.create_scan_context(&context);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(context != nullptr);
+
+    std::string context_id = context->context_id;
+    std::vector<std::map<std::string, std::string>> active_contexts = context_mgr.get_active_contexts();
+    ASSERT_EQ(1, active_contexts.size());
+
+    st = context_mgr.clear_inactive_scan_contexts(0);
+    ASSERT_TRUE(st.ok());
+
+    active_contexts = context_mgr.get_active_contexts();
+    ASSERT_EQ(0, active_contexts.size());
+
+    std::shared_ptr<ScanContext> result;
+    st = context_mgr.get_scan_context(context_id, &result);
+    ASSERT_TRUE(!st.ok());
+    ASSERT_TRUE(result == nullptr);
+}
 } // namespace starrocks
