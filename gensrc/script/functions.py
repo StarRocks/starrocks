@@ -60,6 +60,8 @@ vectorized_functions = [
      "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
      "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10104, "l2_distance", True, False "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
+     "MathFunctions::l2_distance<TYPE_FLOAT>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
