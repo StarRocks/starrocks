@@ -193,6 +193,11 @@ public:
     }
 
     void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
+    bool need_record_exec_stats(int32_t plan_node_id) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        return it != _node_exec_stats.end();
+    }
+
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
     void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
         auto it = _node_exec_stats.find(plan_node_id);

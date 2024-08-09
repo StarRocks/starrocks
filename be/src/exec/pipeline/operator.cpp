@@ -293,7 +293,7 @@ void Operator::_init_conjuct_counters() {
 
 void Operator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
-    if (!_is_subordinate && ctx != nullptr) {
+    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
         ctx->update_push_rows_stats(_plan_node_id, _push_row_num_counter->value());
         ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
         if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
