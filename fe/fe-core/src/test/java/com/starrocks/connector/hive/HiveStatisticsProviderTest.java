@@ -21,6 +21,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileOperations;
@@ -186,7 +187,7 @@ public class HiveStatisticsProviderTest {
 
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
-        fileOps.getRemoteFiles(Lists.newArrayList(partitions.values()), RemoteFileOperations.Options.DEFAULT);
+        fileOps.getRemoteFiles(hiveTable, Lists.newArrayList(partitions.values()), GetRemoteFilesParams.newBuilder().build());
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(

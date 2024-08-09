@@ -34,6 +34,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -160,11 +161,12 @@ public class HiveMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+            Table table = GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             if (hmsTable != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+                        hmsTable.getDbName(), hmsTable.getTableName(), table));
             }
         } else {
             HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
@@ -215,8 +217,7 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
-    @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+    private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -246,6 +247,12 @@ public class HiveMetadata implements ConnectorMetadata {
                 }
             }
         }
+        return partitions.build();
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
 
         boolean useCache = true;
         if (table instanceof HiveTable) {
@@ -256,7 +263,15 @@ public class HiveMetadata implements ConnectorMetadata {
             useCache = false;
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useCache));
+        GetRemoteFilesParams updatedParams = params.copy();
+        updatedParams.setUseCache(useCache);
+        return fileOps.getRemoteFiles(table, partitions, updatedParams);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
+        return fileOps.getRemoteFilesAsync(table, partitions, params);
     }
 
     @Override

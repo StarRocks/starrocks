@@ -54,6 +54,8 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -792,6 +794,19 @@ public class MetadataMgr {
             }
         }
         return new ArrayList<>();
+    }
+
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFilesAsync(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return RemoteFileInfoDefaultSource.EMPTY;
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {

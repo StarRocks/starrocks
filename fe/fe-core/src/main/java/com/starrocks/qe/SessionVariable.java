@@ -810,6 +810,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1106,7 +1109,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
-
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
@@ -2141,6 +2143,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PREDICATE_MOVE_AROUND)
     private boolean enablePredicateMoveAround = true;
 
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncQueueSize = 1000;
+
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncTaskSize = 4;
+
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
@@ -2297,6 +2305,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getPhasedSchedulerMaxConcurrency() {
         return phasedSchedulerMaxConcurrency;
     }
+
     public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
         this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
     }
@@ -2304,6 +2313,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean enablePhasedScheduler() {
         return enablePhasedScheduler;
     }
+
     public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
         this.enablePhasedScheduler = enablePhasedScheduler;
     }
@@ -2507,7 +2517,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
             String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
             throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
@@ -2517,7 +2527,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
         return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
                 .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
@@ -4314,6 +4324,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
+    }
+
+    public int getConnectorRemoteFileAsyncQueueSize() {
+        return connectorRemoteFileAsyncQueueSize;
+    }
+
+    public int getConnectorRemoteFileAsyncTaskSize() {
+        return connectorRemoteFileAsyncTaskSize;
     }
 
     // Serialize to thrift object

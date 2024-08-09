@@ -233,17 +233,21 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
-    private Optional<List<DataCacheOptions>> generateDataCacheOptions(final QualifiedName qualifiedName,
-                                                                      final List<String> partitionColumnNames,
+    private Optional<List<DataCacheOptions>> generateDataCacheOptions(Table table,
                                                                       final List<PartitionKey> partitionKeys) {
         if (!ConnectContext.get().getSessionVariable().isEnableScanDataCache()) {
             return Optional.empty();
         }
 
+        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(hmsTable.getCatalogName(),
+                hmsTable.getDbName(), hmsTable.getTableName()));
         Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(qualifiedName);
         if (!dataCacheRule.isPresent()) {
             return Optional.empty();
         }
+
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
 
         List<DataCacheOptions> dataCacheOptions = new ArrayList<>(partitionKeys.size());
         Expr predicates = dataCacheRule.get().getPredicates();
@@ -319,25 +323,38 @@ public class RemoteScanRangeLocations {
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
-        HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
 
         long start = System.currentTimeMillis();
+
+        class PartitionAttachment {
+            long partitionId = 0;
+            DataCacheOptions dataCacheOptions = null;
+        }
+
+        List<PartitionAttachment> partitionAttachments = new ArrayList<>();
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         for (long partitionId : scanNodePredicates.getSelectedPartitionIds()) {
             PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
             partitionKeys.add(partitionKey);
+            PartitionAttachment attachment = new PartitionAttachment();
+            attachment.partitionId = partitionId;
+            partitionAttachments.add(attachment);
         }
-        String catalogName = hiveMetaStoreTable.getCatalogName();
-        QualifiedName qualifiedName = QualifiedName.of(ImmutableList.of(catalogName,
-                hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName()));
-        Optional<List<DataCacheOptions>> dataCacheOptionsList = generateDataCacheOptions(qualifiedName,
-                hiveMetaStoreTable.getPartitionColumnNames(), partitionKeys);
+
+        Optional<List<DataCacheOptions>> dataCacheOptionsList = generateDataCacheOptions(table, partitionKeys);
+        if (dataCacheOptionsList.isPresent()) {
+            List<DataCacheOptions> dataCacheOptions = dataCacheOptionsList.get();
+            Preconditions.checkArgument(partitionAttachments.size() == dataCacheOptions.size());
+            for (int i = 0; i < partitionAttachments.size(); i++) {
+                partitionAttachments.get(i).dataCacheOptions = dataCacheOptions.get(i);
+            }
+        }
 
         List<RemoteFileInfo> partitions;
-
         try {
-            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys).build();
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
+                    .setPartitionAttachments(partitionAttachments).build();
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(table, params).getAllOutputs();
         } catch (Exception e) {
             LOG.error("Failed to get remote files", e);
             throw e;
@@ -347,29 +364,25 @@ public class RemoteScanRangeLocations {
 
         if (table instanceof HiveTable) {
             for (int i = 0; i < partitions.size(); i++) {
-                DataCacheOptions dataCacheOptions = null;
-                if (dataCacheOptionsList.isPresent()) {
-                    dataCacheOptions = dataCacheOptionsList.get().get(i);
-                }
-                for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
+                RemoteFileInfo remoteFileInfo = partitions.get(i);
+                PartitionAttachment attachment = (PartitionAttachment) remoteFileInfo.getAttachment();
+                for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
                     if (fileDesc.getLength() == 0) {
                         continue;
                     }
                     if (forceScheduleLocal) {
                         for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                            addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
-                                    Optional.of(blockDesc),
-                                    dataCacheOptions);
+                            addScanRangeLocations(attachment.partitionId, remoteFileInfo, fileDesc,
+                                    Optional.of(blockDesc), attachment.dataCacheOptions);
                             LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
-                                    partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                                    remoteFileInfo.getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
                                     blockDesc.getLength());
                         }
                     } else {
-                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
-                                Optional.empty(),
-                                dataCacheOptions);
+                        addScanRangeLocations(attachment.partitionId, remoteFileInfo, fileDesc,
+                                Optional.empty(), attachment.dataCacheOptions);
                         LOG.debug("Add scan range success. partition: {}, file: {}, range: {}-{}",
-                                partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
+                                remoteFileInfo.getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
                     }
                 }
             }
@@ -383,12 +396,9 @@ public class RemoteScanRangeLocations {
                     || tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT_LEGACY);
             boolean forceJNIReader = ConnectContext.get().getSessionVariable().getHudiMORForceJNIReader();
             for (int i = 0; i < partitions.size(); i++) {
-                DataCacheOptions dataCacheOptions = null;
-                if (dataCacheOptionsList.isPresent()) {
-                    dataCacheOptions = dataCacheOptionsList.get().get(i);
-                }
-                descTbl.addReferencedPartitions(table, partitionInfos.get(i));
-                for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
+                RemoteFileInfo remoteFileInfo = partitions.get(i);
+                PartitionAttachment attachment = (PartitionAttachment) remoteFileInfo.getAttachment();
+                for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
                     HudiRemoteFileDesc hudiFiledesc = (HudiRemoteFileDesc) fileDesc;
                     if (fileDesc.getLength() == -1 && hudiFiledesc.getHudiDeltaLogs().isEmpty()) {
                         String message = "Error: get a empty hudi fileSlice";
@@ -400,8 +410,8 @@ public class RemoteScanRangeLocations {
                     }
                     boolean useJNIReader =
                             forceJNIReader || (morTable && snapshot && !hudiFiledesc.getHudiDeltaLogs().isEmpty());
-                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), hudiFiledesc,
-                            useJNIReader, dataCacheOptions);
+                    createHudiScanRangeLocations(attachment.partitionId, remoteFileInfo, hudiFiledesc, useJNIReader,
+                            attachment.dataCacheOptions);
                 }
             }
         } else {

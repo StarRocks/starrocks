@@ -28,6 +28,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
@@ -170,6 +171,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
     }
 
     @Override
