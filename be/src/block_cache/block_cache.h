@@ -94,6 +94,8 @@ public:
 
     DataCacheEngineType engine_type();
 
+    std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
+
     static const size_t MAX_BLOCK_SIZE;
 
 private:
@@ -103,7 +105,7 @@ private:
     void _refresh_quota();
 
     size_t _block_size = 0;
-    std::unique_ptr<KvCache> _kv_cache;
+    std::shared_ptr<KvCache> _kv_cache;
     std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::atomic<bool> _initialized = false;
     std::atomic<size_t> _mem_quota = 0;

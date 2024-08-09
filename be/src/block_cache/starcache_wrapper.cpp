@@ -30,7 +30,8 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     for (auto& dir : options.disk_spaces) {
         opt.disk_dir_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
     }
-    opt.block_size = options.block_size;
+    //opt.block_size = options.block_size;
+    opt.block_size = 256uL * 1024;
     opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
     opt.enable_os_page_cache = !options.enable_direct_io;

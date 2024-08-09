@@ -195,11 +195,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
-#ifdef USE_STAROS
-    init_staros_worker();
-    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
-#endif
-
     if (!init_datacache(global_env, paths).ok()) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
@@ -209,6 +204,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     } else {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
+
+#ifdef USE_STAROS
+    BlockCache* block_cache = BlockCache::instance();
+    if (block_cache->available()) {
+        init_staros_worker(block_cache->starcache_instance());
+        LOG(INFO) << "[Gavin] init staros worker with starcache instance";
+    } else {
+        init_staros_worker(nullptr);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
+#endif
 
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream
