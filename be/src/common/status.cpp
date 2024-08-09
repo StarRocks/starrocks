@@ -213,11 +213,64 @@ std::string Status::code_as_string() const {
         return "Data quality error";
     case TStatusCode::RESOURCE_BUSY:
         return "Resource busy";
+<<<<<<< HEAD
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
         return tmp;
     }
+=======
+    case TStatusCode::SR_EAGAIN:
+        return "Resource temporarily unavailable";
+    case TStatusCode::REMOTE_FILE_NOT_FOUND:
+        return "Remote file not found";
+    case TStatusCode::ANALYSIS_ERROR:
+        return "Analysis error";
+    case TStatusCode::KUDU_NOT_ENABLED:
+        return "Kudu not enabled";
+    case TStatusCode::KUDU_NOT_SUPPORTED_ON_OS:
+        return "Kudu not supported on os";
+    case TStatusCode::TOO_MANY_TASKS:
+        return "Too many tasks";
+    case TStatusCode::ES_INTERNAL_ERROR:
+        return "ES internal error";
+    case TStatusCode::ES_INDEX_NOT_FOUND:
+        return "ES index not found";
+    case TStatusCode::ES_SHARD_NOT_FOUND:
+        return "ES shard not found";
+    case TStatusCode::ES_INVALID_CONTEXTID:
+        return "ES invalid context id";
+    case TStatusCode::ES_INVALID_OFFSET:
+        return "ES invalid offset";
+    case TStatusCode::ES_REQUEST_ERROR:
+        return "ES request error";
+    case TStatusCode::ABORTED:
+        return "Aborted";
+    case TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED:
+        return "Version already merged";
+    case TStatusCode::DUPLICATE_RPC_INVOCATION:
+        return "Duplicate RPC invocation";
+    case TStatusCode::GLOBAL_DICT_ERROR:
+        return "Global dictionary error";
+    case TStatusCode::UNKNOWN:
+        return "Unknown";
+    case TStatusCode::TXN_NOT_EXISTS:
+        return "Transaction not exist";
+    case TStatusCode::TXN_IN_PROCESSING:
+        return "Transaction in processing";
+    case TStatusCode::YIELD:
+        return "Task yield";
+    case TStatusCode::JIT_COMPILE_ERROR:
+        return "JIT compile error";
+    case TStatusCode::CAPACITY_LIMIT_EXCEED:
+        return "Capaticy limit exceeded";
+    case TStatusCode::SHUTDOWN:
+        return "Shut down in progress";
+    case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
+        return "Big query cpu second limit exceeded";
+    case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:
+        return "Big query scan rows limit exceeded";
+>>>>>>> 2e68c7ec74 ([Enhancement] Add big query error in audit log (#49611))
     }
     return {};
 }
