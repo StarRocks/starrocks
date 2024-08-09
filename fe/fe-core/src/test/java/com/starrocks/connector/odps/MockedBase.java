@@ -75,6 +75,7 @@ public class MockedBase {
     protected static Partition partition = Mockito.mock(Partition.class);
     protected static Iterator<Table> tableIterator = Mockito.mock(Iterator.class);
     protected static Iterator<Project> projectIterator = Mockito.mock(Iterator.class);
+    protected static Iterator<Partition> partitionIterator = Mockito.mock(Iterator.class);
     protected static Table table = Mockito.mock(Table.class);
     protected static Project project = Mockito.mock(Project.class);
     protected static SecurityManager securityManager = Mockito.mock(SecurityManager.class);
@@ -101,6 +102,7 @@ public class MockedBase {
         properties.put("odps.access.key", "sk");
         properties.put("odps.endpoint", "http://127.0.0.1");
         properties.put("odps.project", "project");
+        properties.put("odps.tunnel.quota", "quota");
         odpsProperties = new OdpsProperties(properties);
 
         when(odps.getEndpoint()).thenReturn("http://127.0.0.1");
@@ -134,6 +136,10 @@ public class MockedBase {
         when(table.getProject()).thenReturn("project");
         doNothing().when(table).reload();
         when(table.getPartitions()).thenReturn(ImmutableList.of(partition));
+        when(table.getPartition(any())).thenReturn(partition);
+        when(table.getPartitionIterator(any())).thenReturn(partitionIterator);
+        when(partitionIterator.hasNext()).thenReturn(true, false);
+        when(partitionIterator.next()).thenReturn(partition);
 
         when(partition.getPartitionSpec()).thenReturn(new PartitionSpec("p1=a/p2=b"));
         when(partition.getLastDataModifiedTime()).thenReturn(new Date());
