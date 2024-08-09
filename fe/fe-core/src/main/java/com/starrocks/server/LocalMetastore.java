@@ -2965,7 +2965,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                                 changedPartitionsMap.put(dbId, multimap);
                             }
                             multimap.put(tableId, partitionId);
-                        } else {
+                        } else if (olapTable.getState() != OlapTable.OlapTableState.RESTORE) {
                             storageMediumMap.put(partitionId, dataProperty.getStorageMedium());
                         }
                     } // end for partitions
