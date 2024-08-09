@@ -219,8 +219,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (taskPriority != INVALID) {
             return taskPriority;
         }
-        if (executeOption != null) {
-            return executeOption.getPriority();
+        if (status != null) {
+            return status.getPriority();
         }
         return Constants.TaskRunPriority.LOWEST.value();
     }

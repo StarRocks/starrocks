@@ -46,7 +46,6 @@ public class TaskRunExecutorTest {
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 returns(100L, 101L, 102L, 103L, 104L, 105L);
-
             }
         };
     }
@@ -55,7 +54,6 @@ public class TaskRunExecutorTest {
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
-
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
@@ -142,7 +140,6 @@ public class TaskRunExecutorTest {
         taskRunManager.scheduledPendingTaskRun();
         taskRun.getFuture().join();
         TaskRunStatus status = taskRun.getStatus();
-        System.out.println(status);
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, status.getState());
         Assert.assertEquals(0, status.getErrorCode());
         Assert.assertEquals(null, status.getErrorMessage());
@@ -170,7 +167,6 @@ public class TaskRunExecutorTest {
         taskRunManager.scheduledPendingTaskRun();
         taskRun.getFuture().join();
         TaskRunStatus status = taskRun.getStatus();
-        System.out.println(status);
         Assert.assertEquals(Constants.TaskRunState.FAILED, status.getState());
         Assert.assertEquals(-1, status.getErrorCode());
         Assert.assertEquals(null, status.getErrorMessage());

@@ -292,7 +292,6 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        System.out.println(taskRunScheduler);
         Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
     }
 
@@ -319,8 +318,6 @@ public class TaskRunSchedulerTest {
         // running queue only support one task with same task id
         Assert.assertTrue(scheduler.getRunningTaskCount() == 0);
         Assert.assertTrue(scheduler.getPendingQueueCount() == 10);
-        System.out.println(scheduler);
-
         Uninterruptibles.sleepUninterruptibly(3000, TimeUnit.MICROSECONDS);
         List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
         for (int i = 1; i < 10; i++) {
@@ -355,7 +352,6 @@ public class TaskRunSchedulerTest {
         Assert.assertEquals(N, queue.size());
         List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
-            System.out.println(i);
             int j = i; // for lambda function
             scheduler.scheduledPendingTaskRun(taskRun -> {
                 Assert.assertEquals(taskRuns.get(N - 1 - j), taskRun);
