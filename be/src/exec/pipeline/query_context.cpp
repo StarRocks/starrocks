@@ -621,6 +621,7 @@ void QueryContextManager::report_fragments(
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
 
+            // TODO: refactor me
             try {
                 try {
                     fe_connection->batchReportExecStatus(res, report_batch);
@@ -634,6 +635,7 @@ void QueryContextManager::report_fragments(
                 }
 
             } catch (TException& e) {
+                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();

@@ -60,6 +60,54 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
+<<<<<<< HEAD
+=======
+template <>
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback,
+                                 ClientConnection<FrontendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <>
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<BackendServiceClient>&)>& callback,
+                                 ClientConnection<BackendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "BE/CN RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <>
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback,
+                                 ClientConnection<TFileBrokerServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "Broker RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+>>>>>>> c8bd9004d9 ([BugFix] Fix thrift rpc not reopen after failed (#49619))
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
