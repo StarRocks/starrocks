@@ -262,15 +262,12 @@ template <LogicalType LT>
 class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
+    using HashFunc = typename PhmapHashFuncSelector<LT, PhmapSeed1>::Type;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
-        } else if constexpr (lt_is_fixedlength<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (lt_is_string<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
+        if constexpr (!std::is_same_v<HashFunc, void>) {
+            return _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
         } else {
             assert(false);
         }
