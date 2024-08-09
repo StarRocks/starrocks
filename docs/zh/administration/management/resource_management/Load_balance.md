@@ -22,7 +22,7 @@ jdbc:mysql:loadbalance://[host1][:port],[host2][:port][,[host3][:port]]...[/[dat
 
 ProxySQL 是一个灵活强大的 MySQL 代理层，可以实现读写分离，支持 Query 路由、SQL Cache，动态加载配置、故障切换和 SQL 过滤等功能。
 
-StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可以横向扩展且可以部署为高可用集群。您需要在多个 FE 节点上架设一层 Proxy 以实现自动的连接负载均衡。
+StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可以横向扩展且可以部署为高可用集群。您需要在一台新服务器上部署ProxySQL， 并依照第7步的指引，将所有FE和Observer加入到 ProxySQL中， 然后程序中使用 ProxySQL的IP:6033来连接到 starRocks集群。
 
 1. 安装相关依赖。
 
