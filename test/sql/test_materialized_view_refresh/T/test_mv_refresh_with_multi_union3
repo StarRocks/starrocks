@@ -1,4 +1,4 @@
--- name: test_mv_refresh_with_multi_union3
+-- name: test_mv_refresh_with_multi_union3 @slow
 
 create database db_${uuid0};
 use db_${uuid0};

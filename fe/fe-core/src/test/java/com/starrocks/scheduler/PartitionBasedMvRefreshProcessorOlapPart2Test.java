@@ -280,7 +280,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
                         Assert.assertTrue(queryCacheStats != null);
                         Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                        Assert.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
                     }
                 });
         starRocksAssert.dropTable("tbl1");

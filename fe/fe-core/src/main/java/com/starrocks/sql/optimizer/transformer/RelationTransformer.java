@@ -103,6 +103,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
@@ -136,6 +137,7 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -658,14 +660,33 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
         }
-
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
+        if (isAddExtraFilterOperator(session.getSessionVariable(), node)) {
+            LogicalFilterOperator filterOperator = new LogicalFilterOperator(partitionPredicate);
+            scanBuilder = scanBuilder.withNewRoot(filterOperator);
+        }
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
         return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, List.of());
+    }
+
+    /**
+     * Whether to generate extra filter operators for table relation which it's only used in mv refresh insert stmt.
+     */
+    private boolean isAddExtraFilterOperator(SessionVariable sessionVariable, TableRelation node) {
+        if (!sessionVariable.isEnableMaterializedViewRewriteForInsert()) {
+            return false;
+        }
+        if (node.getPartitionNames() != null && !CollectionUtils.isEmpty(node.getPartitionNames().getPartitionNames())) {
+            return false;
+        }
+        if (node.getPartitionPredicate() == null) {
+            return false;
+        }
+        return true;
     }
 
     private Optional<ConnectorTableVersion> resolveQueryPeriod(Optional<Expr> version, QueryPeriod.PeriodType type) {

@@ -63,7 +63,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (scan.hasTableHints()) {
                 return false;
             }
-            // Avoid rewrite the query repeat, add a shortcut.
+            // Avoid rewriting the query repeat, add a shortcut.
             Table table = scan.getTable();
             if ((table instanceof MaterializedView) && ((MaterializedView) (table)).getRefreshScheme().isSync()) {
                 return false;
