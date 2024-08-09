@@ -115,7 +115,7 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
-    bool _need_create_tuple_columns = true;
+    bool _enable_late_materialization = false;
 
     JoinHashTable _ht;
 
@@ -124,8 +124,8 @@ private:
     ChunkPtr _probing_chunk = nullptr;
 
     Columns _key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
     size_t _probe_chunk_count = 0;
     size_t _output_chunk_count = 0;
 
@@ -146,7 +146,6 @@ private:
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;

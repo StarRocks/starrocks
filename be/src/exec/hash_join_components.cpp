@@ -31,10 +31,11 @@ StatusOr<ChunkPtr> HashJoinProber::probe_chunk(RuntimeState* state, JoinHashTabl
     TRY_CATCH_ALLOC_SCOPE_START()
     DCHECK(_current_probe_has_remain && _probe_chunk);
     RETURN_IF_ERROR(hash_table->probe(state, _key_columns, &_probe_chunk, &chunk, &_current_probe_has_remain));
+    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *hash_table));
+    RETURN_IF_ERROR(_hash_joiner.lazy_output_chunk<false>(state, &_probe_chunk, &chunk, *hash_table));
     if (!_current_probe_has_remain) {
         _probe_chunk = nullptr;
     }
-    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *hash_table));
     TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
@@ -45,6 +46,7 @@ StatusOr<ChunkPtr> HashJoinProber::probe_remain(RuntimeState* state, JoinHashTab
     RETURN_IF_ERROR(hash_table->probe_remain(state, &chunk, &_current_probe_has_remain));
     *has_remain = _current_probe_has_remain;
     RETURN_IF_ERROR(_hash_joiner.filter_post_probe_output_chunk(chunk));
+    RETURN_IF_ERROR(_hash_joiner.lazy_output_chunk<true>(state, nullptr, &chunk, *hash_table));
     TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
@@ -73,7 +75,7 @@ void HashJoinBuilder::reset_probe(RuntimeState* state) {
     _ht.reset_probe_state(state);
 }
 
-Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status HashJoinBuilder::append_chunk(const ChunkPtr& chunk) {
     if (UNLIKELY(_ht.get_row_count() + chunk->num_rows() >= max_hash_table_element_size)) {
         return Status::NotSupported(strings::Substitute("row count of right table in hash join > $0", UINT32_MAX));
     }
@@ -81,7 +83,7 @@ Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk)
     _hash_joiner.prepare_build_key_columns(&_key_columns, chunk);
     // copy chunk of right table
     SCOPED_TIMER(_hash_joiner.build_metrics().copy_right_table_chunk_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
+    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(chunk, _key_columns));
     return Status::OK();
 }
 

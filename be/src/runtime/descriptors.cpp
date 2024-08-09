@@ -156,7 +156,7 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TIcebergTable& thrift_tab
                                                  const THdfsPartition& thrift_partition)
         : _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
-Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
+Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
@@ -540,10 +540,7 @@ std::string TupleDescriptor::debug_string() const {
     return out.str();
 }
 
-RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples,
-                             const std::vector<bool>& nullable_tuples)
-        : _tuple_idx_nullable_map(nullable_tuples) {
-    DCHECK(nullable_tuples.size() == row_tuples.size());
+RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples) {
     DCHECK_GT(row_tuples.size(), 0);
 
     for (int row_tuple : row_tuples) {
@@ -555,8 +552,7 @@ RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TT
     init_tuple_idx_map();
 }
 
-RowDescriptor::RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable)
-        : _tuple_desc_map(1, tuple_desc), _tuple_idx_nullable_map(1, is_nullable) {
+RowDescriptor::RowDescriptor(TupleDescriptor* tuple_desc) : _tuple_desc_map(1, tuple_desc) {
     init_tuple_idx_map();
 }
 
@@ -644,15 +640,6 @@ std::string RowDescriptor::debug_string() const {
     }
     ss << "] ";
 
-    ss << "tuple_is_nullable: [";
-    for (int i = 0; i < _tuple_idx_nullable_map.size(); ++i) {
-        ss << _tuple_idx_nullable_map[i];
-        if (i != _tuple_idx_nullable_map.size() - 1) {
-            ss << ", ";
-        }
-    }
-    ss << "] ";
-
     return ss.str();
 }
 
@@ -685,7 +672,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         case TTableType::HDFS_TABLE: {
             auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool, chunk_size));
+            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool));
             desc = hdfs_desc;
             break;
         }
@@ -696,19 +683,19 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_TABLE: {
             auto* iceberg_desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
-            RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool, chunk_size));
+            RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool));
             desc = iceberg_desc;
             break;
         }
         case TTableType::DELTALAKE_TABLE: {
             auto* delta_lake_desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool, chunk_size));
+            RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool));
             desc = delta_lake_desc;
             break;
         }
         case TTableType::HUDI_TABLE: {
             auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool, chunk_size));
+            RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool));
             desc = hudi_desc;
             break;
         }

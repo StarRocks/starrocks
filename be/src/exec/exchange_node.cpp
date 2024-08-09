@@ -54,10 +54,7 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
-          _input_row_desc(
-                  descs, tnode.exchange_node.input_row_tuples,
-                  std::vector<bool>(tnode.nullable_tuples.begin(),
-                                    tnode.nullable_tuples.begin() + tnode.exchange_node.input_row_tuples.size())),
+          _input_row_desc(descs, tnode.exchange_node.input_row_tuples),
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
                              tnode.exchange_node.enable_parallel_merge),

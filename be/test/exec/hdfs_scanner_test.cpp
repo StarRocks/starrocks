@@ -168,11 +168,10 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -599,12 +598,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
         tuple_desc_builder.build(&table_desc_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
                                     config::vector_chunk_size)
                       .ok());
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         min_max_tuple_desc = row_desc->tuple_descriptors()[0];
     }
 

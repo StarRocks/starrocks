@@ -100,7 +100,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
-            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc(), false);
+            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc());
         }
         auto it = _tablets_channels.find(index_id);
         if (it == _tablets_channels.end()) {

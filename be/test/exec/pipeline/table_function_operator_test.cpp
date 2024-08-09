@@ -137,7 +137,6 @@ void TableFunctionOperatorTest::SetUp() {
     _tnode.num_children = 1;
 
     _tnode.row_tuples.push_back(1);
-    _tnode.nullable_tuples.push_back(false);
 
     TExprNode expr_node;
     expr_node.__isset.fn = true;

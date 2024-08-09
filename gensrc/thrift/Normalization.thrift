@@ -61,6 +61,7 @@ struct TNormalHashJoinNode {
   5: optional PlanNodes.TJoinDistributionMode distribution_mode
   6: optional list<binary> partition_exprs
   7: optional list<Types.TSlotId> output_columns
+  8: optional bool late_materialization
 }
 
 
