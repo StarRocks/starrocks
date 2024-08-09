@@ -275,5 +275,17 @@ public class VariableMgrTest {
         List<List<String>> vars2 = VariableMgr.dump(SetType.SESSION, null, null);
         Assert.assertTrue(vars.size() == vars2.size());
     }
+
+    @Test
+    public void testWarehouseVar() {
+        SystemVariable systemVariable =
+                new SystemVariable(SetType.GLOBAL, SessionVariable.WAREHOUSE_NAME, new StringLiteral("warehouse_1"));
+        try {
+            VariableMgr.setSystemVariable(null, systemVariable, false);
+        } catch (DdlException e) {
+            Assert.assertEquals("Variable 'warehouse' is a SESSION variable and can't be used with SET GLOBAL",
+                    e.getMessage());
+        }
+    }
 }
 
