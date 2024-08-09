@@ -130,7 +130,7 @@ public class CreateTableAnalyzer {
         }
     }
 
-    private static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
+    protected static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
         String engineName = stmt.getEngineName();
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
