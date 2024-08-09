@@ -1411,6 +1411,10 @@ public class MvUtils {
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 
+    public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
+    }
+
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
     }
