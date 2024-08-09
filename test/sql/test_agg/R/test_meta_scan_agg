@@ -1,0 +1,115 @@
+-- name: test_meta_scan_agg
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` varchar(20) NOT NULL COMMENT "",
+  `c2` varchar(200) NOT NULL COMMENT "",
+  `c3` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t1 SELECT * FROM t0;
+-- result:
+-- !result
+insert into t0 values (null,null,null,null);
+-- result:
+-- !result
+select count(c0) from t0;
+-- result:
+40960
+-- !result
+select count(c0) from t0 [_META_];
+-- result:
+40961
+-- !result
+select count(c0) from t1;
+-- result:
+40960
+-- !result
+select count(c0) from t1 [_META_];
+-- result:
+40960
+-- !result
+select count(c0),count(1),count('literal'),count(c0),max(c0),min(c0) from t0;
+-- result:
+40960	40961	40961	40960	40960	1
+-- !result
+select count(c0),count(1),count('literal'),count(c0),max(c0),min(c0) from t0 [_META_];
+-- result:
+40961	40961	40961	40961	40960	1
+-- !result
+select count(1) from t0 [_META_];
+-- result:
+E: (1064, 'unsupported meta scan')
+-- !result
+select count('literal') from t0 [_META_];
+-- result:
+E: (1064, 'unsupported meta scan')
+-- !result
+select count('literal'), count(1) from t0 [_META_];
+-- result:
+E: (1064, 'unsupported meta scan')
+-- !result
+select sum(null) from t0 [_META_];
+-- result:
+E: (1064, 'unsupported meta scan')
+-- !result
+set enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+select count(*),count(1),count('literal'),count(c0),max(c0),min(c0) from t1;
+-- result:
+40960	40960	40960	40960	40960	1
+-- !result
+select count(c0) from t1;
+-- result:
+40960
+-- !result
+select count(1) from t1;
+-- result:
+40960
+-- !result
+select count('literal') from t1;
+-- result:
+40960
+-- !result
+select count('literal'), count(1) from t1;
+-- result:
+40960	40960
+-- !result
+select sum(null) from t1;
+-- result:
+None
+-- !result

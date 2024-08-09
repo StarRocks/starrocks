@@ -18,6 +18,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -251,13 +252,13 @@ public class JsonTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_join(14: flat_json_meta, ', ')");
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(
                 "select flat_json_meta(12) from tjson_test[_META_]"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(
                 "select flat_json_meta(v_json) from tjson_test[_META_] group by v_INT"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(
                 "select flat_json_meta(json_query(v_json, '$.v1')) from tjson_test[_META_]"));
     }
 }

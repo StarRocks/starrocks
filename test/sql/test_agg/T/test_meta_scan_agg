@@ -1,0 +1,62 @@
+-- name: test_meta_scan_agg
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t1` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` varchar(20) NOT NULL COMMENT "",
+  `c2` varchar(200) NOT NULL COMMENT "",
+  `c3` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into t1 SELECT * FROM t0;
+insert into t0 values (null,null,null,null);
+
+select count(c0) from t0;
+select count(c0) from t0 [_META_];
+select count(c0) from t1;
+select count(c0) from t1 [_META_];
+
+select count(c0),count(1),count('literal'),count(c0),max(c0),min(c0) from t0;
+select count(c0),count(1),count('literal'),count(c0),max(c0),min(c0) from t0 [_META_];
+select count(1) from t0 [_META_];
+select count('literal') from t0 [_META_];
+select count('literal'), count(1) from t0 [_META_];
+select sum(null) from t0 [_META_];
+
+set enable_rewrite_simple_agg_to_meta_scan = true;
+select count(*),count(1),count('literal'),count(c0),max(c0),min(c0) from t1;
+select count(c0) from t1;
+select count(1) from t1;
+select count('literal') from t1;
+select count('literal'), count(1) from t1;
+select sum(null) from t1;
+

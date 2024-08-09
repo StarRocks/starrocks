@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -23,6 +22,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -57,11 +58,11 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.inputAt(0).getOp();
         if (CollectionUtils.isNotEmpty(agg.getGroupingKeys())) {
-            return false;
+            throw new StarRocksPlannerException("unsupported meta scan with group by columns", ErrorType.UNSUPPORTED);
         }
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
-            if (!entry.getKey().equals(entry.getValue())) {
-                return false;
+            if (!entry.getKey().equals(entry.getValue()) || entry.getValue().isConstant()) {
+                throw new StarRocksPlannerException("unsupported meta scan", ErrorType.UNSUPPORTED);
             }
         }
 
@@ -71,7 +72,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)) {
-                return false;
+                throw new StarRocksPlannerException("unsupported meta scan function:" + aggFuncName,
+                        ErrorType.UNSUPPORTED);
             }
         }
 
@@ -119,6 +121,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
             ColumnRefOperator metaColumn;
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                columnType = Type.BIGINT;
                 if (countPlaceHolderColumn != null) {
                     metaColumn = countPlaceHolderColumn;
                 } else {
