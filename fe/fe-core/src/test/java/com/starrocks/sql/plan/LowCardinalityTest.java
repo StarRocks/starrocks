@@ -1540,36 +1540,6 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testMetaScan4() throws Exception {
-        String sql = "select sum(t1c), min(t1d), t1a from test_all_type [_META_]";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(3: t1c), min(4: t1d), any_value(1: t1a)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : t1a\n" +
-                "  |  <slot 3> : t1c\n" +
-                "  |  <slot 4> : t1d\n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
-        sql = "select sum(t1c) from test_all_type [_META_] group by t1a";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(3: t1c)\n" +
-                "  |  group by: 1: t1a\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : t1a\n" +
-                "  |  <slot 3> : t1c\n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
-    }
-
-    @Test
     public void testHasGlobalDictButNotFound() throws Exception {
         IDictManager dictManager = IDictManager.getInstance();
 

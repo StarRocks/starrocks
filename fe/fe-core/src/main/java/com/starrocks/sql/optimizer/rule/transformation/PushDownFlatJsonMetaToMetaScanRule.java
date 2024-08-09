@@ -20,6 +20,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -64,17 +66,18 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
         }
 
         if (CollectionUtils.isNotEmpty(agg.getGroupingKeys())) {
-            throw new SemanticException("flat_json_meta don't support group-by");
+            throw new StarRocksPlannerException("flat_json_meta don't support group-by", ErrorType.UNSUPPORTED);
+
         }
 
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.inputAt(0).getOp();
         if (projectOperator.getColumnRefMap().entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue()))) {
-            throw new SemanticException("flat_json_meta don't support complex project");
+            throw new StarRocksPlannerException("flat_json_meta don't support complex project", ErrorType.UNSUPPORTED);
         }
 
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
         if (!metaScan.getAggColumnIdToNames().isEmpty()) {
-            throw new SemanticException("flat_json_meta don't support complex meta");
+            throw new StarRocksPlannerException("flat_json_meta don't support complex meta", ErrorType.UNSUPPORTED);
         }
         return true;
     }
