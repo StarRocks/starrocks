@@ -1,0 +1,48 @@
+-- name: test_tokenize_function
+SELECT tokenize('english', 'Today is saturday');
+-- result:
+["today","is","saturday"]
+-- !result
+SELECT tokenize('standard', 'Привет, мир');
+-- result:
+["привет","мир"]
+-- !result
+SELECT tokenize('chinese', '中华人民共和国');
+-- result:
+["中华","华人","人民","民共","共和","和国"]
+-- !result
+
+CREATE TABLE `t_tokenized_table` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `english_text` varchar(255) NULL COMMENT "",
+  `standard_text` varchar(255) NULL COMMENT "",
+  `chinese_text` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+
+INSERT INTO t_tokenized_table VALUES
+(1, 'hello', 'Привет', '你好'),
+(2, 'hello world', 'Привет, мир', '你好世界'),
+(3, 'Shanghai tap water comes from the sea', 'Водопроводная вода в Шанхае поступает из моря', '上海自来水来自海上');
+-- result:
+-- !result
+
+select id, tokenize('english', english_text), tokenize('standard', standard_text), tokenize('chinese', chinese_text) from t_tokenized_table order by id;
+-- result:
+1	["hello"]	["привет"]	["你好"]
+2	["hello","world"]	["привет","мир"]	["你好","好世","世界"]
+3	["shanghai","tap","water","comes","from","the","sea"]	["водопроводная","вода","в","шанхае","поступает","из","моря"]	["上海","海自","自来","来水","水来","来自","自海","海上"]
+-- !result
+
+DROP TABLE t_tokenized_table;
+-- result:
+-- !result
