@@ -77,13 +77,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -110,7 +107,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Version 2 of RollupJob.
@@ -353,8 +349,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         tbl.rebuildFullSchema();
     }
 
-    private Expr analyzeExpr(Type type, String name, Expr defineExpr, Map<String, SlotDescriptor> slotDescByName,
-                             List<Expr> outputExprs, OlapTable tbl, TableName tableName) throws AlterCancelException {
+    private Expr analyzeExpr(SelectAnalyzer.RewriteAliasVisitor visitor,
+                             Type type, String name, Expr defineExpr,
+                             Map<String, SlotDescriptor> slotDescByName) throws AlterCancelException {
         List<SlotRef> slots = new ArrayList<>();
         defineExpr.collect(SlotRef.class, slots);
         for (SlotRef slot : slots) {
@@ -379,20 +376,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             smap.getRhs().add(slotRef);
         }
         Expr newExpr = defineExpr.clone(smap);
-        // sourceScope must be set null tableName for its Field in RelationFields
-        // because we hope slotRef can not be resolved in sourceScope but can be
-        // resolved in outputScope to force to replace the node using outputExprs.
-        Scope sourceScope = new Scope(RelationId.anonymous(),
-                new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
-        Scope outputScope = new Scope(RelationId.anonymous(),
-                new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                new Field(col.getName(), col.getType(), tableName, null))
-                        .collect(Collectors.toList())));
-        SelectAnalyzer.RewriteAliasVisitor visitor =
-                new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
-                        outputExprs, new ConnectContext());
         newExpr = newExpr.accept(visitor, null);
         newExpr = Expr.analyzeAndCastFold(newExpr);
         if (!newExpr.getType().equals(type)) {
@@ -496,13 +479,19 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
                     TableName tableName = new TableName(db.getFullName(), tbl.getName());
                     Map<String, Expr> defineExprs = Maps.newHashMap();
+
+                    // sourceScope must be set null tableName for its Field in RelationFields
+                    // because we hope slotRef can not be resolved in sourceScope but can be
+                    // resolved in outputScope to force to replace the node using outputExprs.
+                    SelectAnalyzer.RewriteAliasVisitor visitor = MVUtils.buildRewriteAliasVisitor(new ConnectContext(),
+                            tbl, tableName, outputExprs);
                     for (Column column : rollupColumns) {
                         if (column.getDefineExpr() == null) {
                             continue;
                         }
 
-                        Expr definedExpr = analyzeExpr(column.getType(), column.getName(), column.getDefineExpr(),
-                                slotDescByName, outputExprs, tbl, tableName);
+                        Expr definedExpr = analyzeExpr(visitor, column.getType(), column.getName(),
+                                column.getDefineExpr(), slotDescByName);
 
                         defineExprs.put(column.getName(), definedExpr);
 
@@ -514,8 +503,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     Expr whereExpr = null;
                     if (whereClause != null) {
                         Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
-                        whereExpr = analyzeExpr(type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME, whereClause,
-                                slotDescByName, outputExprs, tbl, tableName);
+                        whereExpr = analyzeExpr(visitor, type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME,
+                                whereClause, slotDescByName);
                         List<SlotRef> slots = Lists.newArrayList();
                         whereExpr.collect(SlotRef.class, slots);
                         slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
@@ -528,6 +517,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     "found in the base table.");
                         }
                     }
+                    // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
+                    List<String> usedColIds = Lists.newArrayList();
+                    List<String> nonKeyColIds = Lists.newArrayList();
+                    for (String name : usedBaseTableColNames) {
+                        Column col = tbl.getColumn(name);
+                        if (col.isKey()) {
+                            usedColIds.add(name);
+                        } else {
+                            nonKeyColIds.add(name);
+                        }
+                    }
+                    usedColIds.addAll(nonKeyColIds);
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
                             new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
                                     Lists.newLinkedList(usedBaseTableColNames));
