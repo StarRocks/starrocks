@@ -32,6 +32,7 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
   - [View, materialized view](#view-materialized-view)
     - [View](#view)
     - [Materialized view](#materialized-view)
+  - [Dictionary object](#dictionary-object)
   - [Function](#function)
   - [CBO statistics](#cbo-statistics)
   - [Backup and restore](#backup-and-restore)
@@ -252,6 +253,14 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
 - [SHOW MATERIALIZED VIEWS](./data-manipulation/SHOW_MATERIALIZED_VIEW.md)
+
+## Dictionary object
+
+- [CANCEL REFRESH DICTIONARY](./data-definition/CANCEL_REFRESH_DICTIONARY.md)
+- [CREATE DICTIONARY](./data-definition/CREATE_DICTIONARY.md)
+- [DROP DICTIONARY](./data-definition/DROP_DICTIONARY.md)
+- [REFRESH DICTIONARY](./data-definition/REFRESH_DICTIONARY.md)
+- [SHOW DICTIONARY](./data-manipulation/SHOW_DICTIONARY.md)
 
 ## Function
 

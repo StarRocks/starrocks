@@ -21,6 +21,7 @@ displayed_sidebar: "English"
 - [ANALYZE TABLE](./data-definition/ANALYZE_TABLE.md)
 - [CREATE ANALYZE](./data-definition/CREATE_ANALYZE.md)
 - [CREATE DATABASE](./data-definition/CREATE_DATABASE.md)
+- [CREATE DICTIONARY](./data-definition/CREATE_DICTIONARY.md)
 - [CREATE EXTERNAL CATALOG](./data-definition/CREATE_EXTERNAL_CATALOG.md)
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [CREATE IDEX](./data-definition/CREATE_INDEX.md)
@@ -45,6 +46,7 @@ displayed_sidebar: "English"
 - [DROP ANALYZE](./data-definition/DROP_ANALYZE.md)
 - [DROP CATALOG](./data-definition/DROP_CATALOG.md)
 - [DROP DATABASE](./data-definition/DROP_DATABASE.md)
+- [DROP DICTIONARY](./data-definition/DROP_DICTIONARY.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
 - [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
@@ -55,6 +57,7 @@ displayed_sidebar: "English"
 
 ## REFRESH
 
+- [REFRESH DICTIONARY](./data-definition/REFRESH_DICTIONARY.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
 - [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
 
@@ -76,6 +79,7 @@ displayed_sidebar: "English"
 
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
 - [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
+- [CANCEL REFRESH DICTIONARY](./data-definition/CANCEL_REFRESH_DICTIONARY.md)
 - [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
 
