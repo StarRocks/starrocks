@@ -107,6 +107,8 @@ public:
 
     void append_default(size_t count) override;
 
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+
     void fill_default(const Filter& filter) override;
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
