@@ -18,19 +18,17 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 
 import java.time.format.DateTimeFormatter;
@@ -71,19 +69,23 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
-        Table table;
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+
+        if (table == null) {
+            throw new MetaNotFoundException("Table " + analyzeStatus.getDbName() + "."
+                    + analyzeStatus.getTableName() + " not found");
+        }
+
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status on it
         try {
-            table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
-                    analyzeStatus.getTableName());
             Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
-        } catch (AccessDeniedException | SemanticException e) {
+        } catch (AccessDeniedException e) {
             return null;
         }
 
-        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
-        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
+        if (null != columns && !columns.isEmpty()) {
             String str = String.join(",", columns);
             row.set(3, str);
         }
