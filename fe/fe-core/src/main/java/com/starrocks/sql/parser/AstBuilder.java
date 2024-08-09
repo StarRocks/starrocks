@@ -2045,10 +2045,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
         NodePosition pos = createPos(context);
-        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        long id = context.connId != null ? Long.parseLong(context.connId.getText()) : -1;
+        String queryId = context.queryId != null ? ((StringLiteral) visit(context.queryId)).getStringValue() : null;
         if (context.QUERY() != null) {
-            return new KillStmt(false, id, pos);
+            if (queryId != null) {
+                return new KillStmt(queryId, pos);
+            }
+            return new KillStmt(id, pos);
         } else {
+            if (queryId != null) {
+                throw new ParsingException(String.format("connection id %s should be a positive integer", queryId));
+            }
             return new KillStmt(true, id, pos);
         }
     }

@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -188,6 +189,15 @@ public class ConnectScheduler {
 
     public ConnectContext getContext(long connectionId) {
         return connectionMap.get(connectionId);
+    }
+
+    public ConnectContext findContextByQueryId(String queryId) {
+        return connectionMap.values().stream().filter(
+                        (Predicate<ConnectContext>) c ->
+                                c.getQueryId() != null
+                                && queryId.equals(c.getQueryId().toString())
+                )
+                .findFirst().orElse(null);
     }
 
     public int getConnectionNum() {
