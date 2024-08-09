@@ -304,6 +304,8 @@ public:
                                        &state->has_null);
             }
         }
+
+        return Status::OK();
     }
 
     static Status close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
