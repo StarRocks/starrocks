@@ -263,16 +263,16 @@ class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using HashFunc = PhmapHashFuncSelector<LT, PhmapSeed1>;
+    using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
         static_assert(PhmapHashFuncSelector<LT, PhmapSeed1>::is_supported());
 
-        return _array_overlap<phmap::flat_hash_set<CppType, HashFunc>>(columns);
+        return _array_overlap(columns);
     }
 
 private:
-    template <typename HashSet>
     static ColumnPtr _array_overlap(const Columns& original_columns) {
         size_t chunk_size = original_columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
@@ -302,8 +302,8 @@ private:
 
         HashSet hash_set;
         for (size_t i = 0; i < chunk_size; i++) {
-            _array_overlap_item<HashSet>(src_columns, i, &hash_set,
-                                         static_cast<BooleanColumn*>(result_column.get())->get_data().data());
+            _array_overlap_item(src_columns, i, &hash_set,
+                                static_cast<BooleanColumn*>(result_column.get())->get_data().data());
             hash_set.clear();
         }
 
@@ -314,7 +314,6 @@ private:
         return result_column;
     }
 
-    template <typename HashSet>
     static void _array_overlap_item(const std::vector<ArrayColumn*>& columns, size_t index, HashSet* hash_set,
                                     uint8_t* data) {
         bool has_null = false;
