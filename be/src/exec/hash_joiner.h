@@ -69,10 +69,10 @@ struct HashJoinerParam {
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
-                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
+                    bool build_conjunct_ctxs_is_empty, std::vector<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_late_materialization)
+                    bool enable_late_materialization, bool is_skew_join)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -90,7 +90,8 @@ struct HashJoinerParam {
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
               _mor_reader_mode(mor_reader_mode),
-              _enable_late_materialization(enable_late_materialization) {}
+              _enable_late_materialization(enable_late_materialization),
+              _is_skew_join(is_skew_join) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -108,13 +109,14 @@ struct HashJoinerParam {
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
-    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     std::set<SlotId> _build_output_slots;
     std::set<SlotId> _probe_output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
     const bool _enable_late_materialization;
+    const bool _is_skew_join;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -237,6 +239,7 @@ public:
 
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
+    bool is_skew_join() const { return _is_skew_join; }
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
@@ -453,6 +456,7 @@ private:
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
     bool _enable_late_materialization = false;
+    bool _is_skew_join = false;
 };
 
 } // namespace starrocks

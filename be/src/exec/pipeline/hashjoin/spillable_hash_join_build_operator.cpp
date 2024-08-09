@@ -145,7 +145,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
 
         if (merged.value()) {
             RuntimeInFilterList in_filters;
-            RuntimeBloomFilterList bloom_filters;
+            RuntimeBloomFilters bloom_filters;
             // publish empty runtime bloom-filters
             state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             // move runtime filters into RuntimeFilterHub.

@@ -48,21 +48,23 @@ using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomF
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
     RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, ColumnPtr column,
-                                 MutableJoinRuntimeFilterPtr runtime_filter)
+                                 MutableJoinRuntimeFilterPtr runtime_filter, const TypeDescriptor& type_descriptor)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
               column(std::move(column)),
-              runtime_filter(std::move(runtime_filter)) {}
+              runtime_filter(std::move(runtime_filter)),
+              _type_descriptor(type_descriptor) {}
     bool multi_partitioned;
     bool eq_null;
     ColumnPtr column;
     MutableJoinRuntimeFilterPtr runtime_filter;
+    TypeDescriptor _type_descriptor;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub
 // and every HashJoinBuildOperatorFactory has its corresponding RuntimeFilterCollector.
 struct RuntimeFilterCollector {
-    RuntimeFilterCollector(RuntimeInFilterList&& in_filters, RuntimeBloomFilterList&& bloom_filters)
+    RuntimeFilterCollector(RuntimeInFilterList&& in_filters, RuntimeBloomFilters&& bloom_filters)
             : _in_filters(std::move(in_filters)), _bloom_filters(std::move(bloom_filters)) {}
     RuntimeFilterCollector(RuntimeInFilterList in_filters) : _in_filters(std::move(in_filters)) {}
 
@@ -107,7 +109,7 @@ private:
     RuntimeInFilterList _in_filters;
     // TODO: unused, FIXME later
     // global/local runtime bloom-filter(including max-min filter)
-    RuntimeBloomFilterList _bloom_filters;
+    RuntimeBloomFilters _bloom_filters;
 };
 
 class RuntimeFilterHolder {
@@ -295,9 +297,7 @@ public:
         return {_partial_in_filters[0].begin(), _partial_in_filters[0].end()};
     }
 
-    RuntimeBloomFilterList get_total_bloom_filters() {
-        return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
-    }
+    RuntimeBloomFilters get_total_bloom_filters() { return _bloom_filter_descriptors; }
 
     Status merge_local_in_filters() {
         bool can_merge_in_filters = true;

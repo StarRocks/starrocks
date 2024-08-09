@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -41,6 +42,8 @@ public class SkewJoinTest extends PlanTestBase {
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
@@ -73,6 +76,18 @@ public class SkewJoinTest extends PlanTestBase {
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
     }
+
+    @AfterClass
+    public static void afterClass() {
+        try {
+            starRocksAssert.dropTable("struct_tbl");
+        } catch (Exception e) {
+            // ignore exceptions.
+        }
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(false);
+        PlanTestBase.afterClass();
+    }
+
 
     @Test
     public void testSkewJoin() throws Exception {
@@ -109,6 +124,7 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "LEFT ANTI JOIN (PARTITIONED)");
     }
 
+
     @Test
     public void testSkewJoinWithException1() throws Exception {
         String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
@@ -116,6 +132,7 @@ public class SkewJoinTest extends PlanTestBase {
         expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
     }
+
 
     @Test
     public void testSkewJoinWithException2() throws Exception {

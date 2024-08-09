@@ -308,6 +308,11 @@ public class OptExpression {
             return this;
         }
 
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
+            return this;
+        }
+
         public OptExpression build() {
             OptExpression tmp = optExpression;
             optExpression = null;
