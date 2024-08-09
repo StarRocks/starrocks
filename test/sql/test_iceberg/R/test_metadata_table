@@ -89,9 +89,33 @@ insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uui
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 3,3,4;
 -- result:
 -- !result
-select record_count,file_count from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions where partition_value.p2=4;
+select partition_value,record_count,file_count from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions where partition_value.p2=4;
 -- result:
-2	2
+{"p1":3,"p2":4}	2	2
+-- !result
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions;
+-- result:
+partition_value	struct<p1 int(11), p2 int(11)>	Yes	false	None		
+spec_id	INT	Yes	false	None		
+record_count	BIGINT	Yes	false	None		
+file_count	BIGINT	Yes	false	None		
+total_data_file_size_in_bytes	BIGINT	Yes	false	None		
+position_delete_record_count	BIGINT	Yes	false	None		
+position_delete_file_count	BIGINT	Yes	false	None		
+equality_delete_record_count	BIGINT	Yes	false	None		
+equality_delete_file_count	BIGINT	Yes	false	None		
+last_updated_at	DATETIME	Yes	false	None		
+-- !result
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
+-- result:
+record_count	BIGINT	Yes	false	None		
+file_count	BIGINT	Yes	false	None		
+total_data_file_size_in_bytes	BIGINT	Yes	false	None		
+position_delete_record_count	BIGINT	Yes	false	None		
+position_delete_file_count	BIGINT	Yes	false	None		
+equality_delete_record_count	BIGINT	Yes	false	None		
+equality_delete_file_count	BIGINT	Yes	false	None		
+last_updated_at	DATETIME	Yes	false	None		
 -- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} force;
 -- result:
