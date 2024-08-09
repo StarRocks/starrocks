@@ -664,7 +664,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             LOG.info("rollup tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = rollupBatchTask.getUnfinishedTasks(2000);
             for (AgentTask task : tasks) {
-                if (task.getFailedTimes() >= 3) {
+                if (task.isFailed() || task.getFailedTimes() >= 3) {
                     throw new AlterCancelException("rollup task failed after try three times: " + task.getErrorMsg());
                 }
             }
