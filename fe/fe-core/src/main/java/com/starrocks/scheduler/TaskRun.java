@@ -44,6 +44,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static com.starrocks.catalog.TableProperty.INVALID;
+
 public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
@@ -78,6 +80,15 @@ public class TaskRun implements Comparable<TaskRun> {
     private Constants.TaskType type;
 
     private ExecuteOption executeOption;
+
+    // The delay period for event trigger task run, unit: second
+    private long eventTriggerDelayPeriod = 0;
+    // task retry attempts, -1 means no retry
+    private int taskRetryAttempts = INVALID;
+    // task priority, -1 means no set
+    private int taskPriority = INVALID;
+    // last finished time of this task run
+    private long taskLastFinishedTime = INVALID;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -150,6 +161,89 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean isKilled() {
         return isKilled;
+    }
+
+    /**
+     * Set the delayed time to trigger the event, unit: millisecond.
+     */
+    public void setEventTriggerDelayPeriod(long eventTriggerDelayPeriod) {
+        this.eventTriggerDelayPeriod = eventTriggerDelayPeriod;
+    }
+
+    /**
+     * Get the delayed time to trigger the event.
+     */
+    public long getEventTriggerDelayPeriod() {
+        return eventTriggerDelayPeriod;
+    }
+
+    /**
+     * Next time to trigger the event =  last finished time + event trigger delay period.
+     */
+    public long getNextEventTriggerTime() {
+        // if this task run is sync-mode task, no needs to delay.
+        if (executeOption != null && (executeOption.getIsSync() || executeOption.isManual())) {
+            return 0L;
+        }
+        return this.taskLastFinishedTime + this.eventTriggerDelayPeriod * 1000;
+    }
+
+    /**
+     * Get the max task retry attempts.
+     */
+    public int getTaskRetryAttempts() {
+        return taskRetryAttempts;
+    }
+
+    /**
+     * Set the task max retry attempts.
+     */
+    public void setTaskRetryAttempts(int taskRetryAttempts) {
+        this.taskRetryAttempts = taskRetryAttempts;
+    }
+
+    /**
+     * Get the task run current attempt.
+     */
+    public int getTaskRunAttempt() {
+        if (status == null) {
+            return 0;
+        }
+        return status.getTaskRunAttempt();
+    }
+
+    /**
+     * Get the task priority: taskPriority > executeOption > Constants.TaskRunPriority.LOWEST
+     */
+    public int getTaskPriority() {
+        if (taskPriority != INVALID) {
+            return taskPriority;
+        }
+        if (status != null) {
+            return status.getPriority();
+        }
+        return Constants.TaskRunPriority.LOWEST.value();
+    }
+
+    /**
+     * Set the task priority.
+     */
+    public void setTaskPriority(int taskPriority) {
+        this.taskPriority = taskPriority;
+    }
+
+    /**
+     * Set the last finished time of this task run.
+     */
+    public void setTaskLastFinishedTime(long taskLastFinishedTime) {
+        this.taskLastFinishedTime = taskLastFinishedTime;
+    }
+
+    /**
+     * Get the last finished time of this task run.
+     */
+    public long getTaskLastFinishedTime() {
+        return taskLastFinishedTime;
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
@@ -253,6 +347,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
+        taskRunContext.setTaskRetryAttempts(taskRetryAttempts);
 
         processor.processTaskRun(taskRunContext);
 
@@ -313,6 +408,10 @@ public class TaskRun implements Comparable<TaskRun> {
         return status;
     }
 
+    public TaskRunStatus getTaskRunStatus() {
+        return status;
+    }
+
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         long created = createTime == null ? System.currentTimeMillis() : createTime;
@@ -336,25 +435,29 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        int ret = comparePriority(this.status, taskRun.status);
+        int ret = comparePriority(this, taskRun);
         if (ret != 0) {
             return ret;
         }
         return taskRunId.compareTo(taskRun.taskRunId);
     }
 
-    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+    private int comparePriority(TaskRun t0, TaskRun t1) {
         if (t0 == null || t1 == null) {
             // prefer this
             return 0;
         }
         // if priority is different, return the higher priority
-        if (t0.getPriority() != t1.getPriority()) {
-            return Integer.compare(t1.getPriority(), t0.getPriority());
-        } else {
-            // if priority is the same, return the older task
-            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
+        int ret = Integer.compare(t1.getTaskPriority(), t0.getTaskPriority());
+        if (ret != 0) {
+            return ret;
         }
+        // if priority is the same, return the older task
+        return Long.compare(t0.getCreateTime(), t1.getCreateTime());
+    }
+
+    public long getCreateTime() {
+        return status != null ? status.getCreateTime() : -1;
     }
 
     /**
@@ -401,8 +504,11 @@ public class TaskRun implements Comparable<TaskRun> {
                 ", type=" + type +
                 ", uuid=" + taskRunId +
                 ", task_state=" + (status != null ? status.getState() : "") +
+                ", taskRetryAttempts=" + taskRetryAttempts +
+                ", taskPriority=" + taskPriority +
+                ", eventTriggerDelayPeriod=" + eventTriggerDelayPeriod +
                 ", properties=" + properties +
-                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
+                ", extra_message=" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }

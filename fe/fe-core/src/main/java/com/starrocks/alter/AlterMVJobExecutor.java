@@ -103,6 +103,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
         }
+        Pair<String, PeriodDuration> eventTriggerDelayPeriod = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
+            if (!materializedView.getRefreshScheme().isEventTriggered()) {
+                throw new SemanticException(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD + " property " +
+                        "is only supported for event triggered materialized view");
+            }
+            eventTriggerDelayPeriod = PropertyAnalyzer.analyzeEventTriggerDelayPeriod(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD);
+        }
+        int taskRetryAttempts = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS)) {
+            taskRetryAttempts = PropertyAnalyzer.analyzeTaskRetryAttempts(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS);
+        }
+        int taskPriority = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY)) {
+            taskPriority = PropertyAnalyzer.analyzeTaskPriority(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY);
+        }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
@@ -204,6 +223,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         // TODO(murphy) refactor the code
         boolean isChanged = false;
+        boolean isChangeTaskProperties = false;
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
                 !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
@@ -235,6 +255,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
             materializedView.getTableProperty().setResourceGroup(resourceGroup);
             isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD) &&
+                eventTriggerDelayPeriod != null &&
+                !materializedView.getTableProperty().getEventTriggerDelayPeriod().equals(eventTriggerDelayPeriod.second)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD, eventTriggerDelayPeriod.first);
+            materializedView.getTableProperty().setEventTriggerDelayPeriod(eventTriggerDelayPeriod.second);
+            isChanged = true;
+            isChangeTaskProperties = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS) &&
+                materializedView.getTableProperty().getTaskRetryAttempts() != taskRetryAttempts) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS, String.valueOf(taskRetryAttempts));
+            materializedView.getTableProperty().setTaskRetryAttempts(taskRetryAttempts);
+            isChanged = true;
+            isChangeTaskProperties = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY) &&
+                materializedView.getTableProperty().getTaskPriority() != taskPriority) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_TASK_PRIORITY, String.valueOf(taskPriority));
+            materializedView.getTableProperty().setTaskPriority(taskPriority);
+            isChanged = true;
+            isChangeTaskProperties = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
@@ -305,6 +344,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         if (isChanged) {
+            if (isChangeTaskProperties) {
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                Task mvTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+                if (mvTask == null) {
+                    throw new SemanticException("Modify materialized view's properties failed, " +
+                            "Materialized view's task is not exist.");
+                }
+                TaskBuilder.buildTaskProperties(mvTask, materializedView);
+            }
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);

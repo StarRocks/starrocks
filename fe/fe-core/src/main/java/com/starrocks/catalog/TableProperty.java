@@ -188,6 +188,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration partitionTTL = PeriodDuration.ZERO;
 
+    // The delay period of the event trigger, the default is 0
+    private PeriodDuration eventTriggerDelayPeriod = PeriodDuration.ZERO;
+    // The period of the event trigger, the default is 0
+    private int taskPriority = INVALID;
+    // The maximum number of retries for the task, the default is -1
+    private int taskRetryAttempts = INVALID;
+
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
@@ -391,6 +398,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
+        buildEventTriggerDelayPeriod();
         return this;
     }
 
@@ -443,6 +451,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPartitionTTL() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
+        return this;
+    }
+
+    public TableProperty buildEventTriggerDelayPeriod() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD)) {
+            eventTriggerDelayPeriod = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_EVENT_TRIGGER_DELAY_PERIOD));
         }
         return this;
     }
@@ -788,6 +804,30 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public PeriodDuration getPartitionTTL() {
         return partitionTTL;
+    }
+
+    public void setEventTriggerDelayPeriod(PeriodDuration eventTriggerDelayPeriod) {
+        this.eventTriggerDelayPeriod = eventTriggerDelayPeriod;
+    }
+
+    public PeriodDuration getEventTriggerDelayPeriod() {
+        return eventTriggerDelayPeriod;
+    }
+
+    public int getTaskPriority() {
+        return taskPriority;
+    }
+
+    public void setTaskPriority(int taskPriority) {
+        this.taskPriority = taskPriority;
+    }
+
+    public int getTaskRetryAttempts() {
+        return taskRetryAttempts;
+    }
+
+    public void setTaskRetryAttempts(int taskRetryAttempts) {
+        this.taskRetryAttempts = taskRetryAttempts;
     }
 
     public int getAutoRefreshPartitionsLimit() {

@@ -25,6 +25,7 @@ public class TaskRunContext {
     String postRun;
     String remoteIp;
     int priority;
+    int taskRetryAttempts;
     Map<String, String> properties;
     Constants.TaskType type;
     TaskRunStatus status;
@@ -47,6 +48,7 @@ public class TaskRunContext {
         this.executeOption = context.executeOption;
         this.taskRunId = context.taskRunId;
         this.taskRun = context.taskRun;
+        this.taskRetryAttempts = context.taskRetryAttempts;
     }
 
     public ConnectContext getCtx() {
@@ -135,5 +137,13 @@ public class TaskRunContext {
 
     public void setTaskRun(TaskRun taskRun) {
         this.taskRun = taskRun;
+    }
+
+    public int getTaskRetryAttempts() {
+        return taskRetryAttempts;
+    }
+
+    public void setTaskRetryAttempts(int taskRetryAttempts) {
+        this.taskRetryAttempts = taskRetryAttempts;
     }
 }
