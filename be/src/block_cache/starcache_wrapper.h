@@ -56,8 +56,10 @@ public:
 
     DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
 
+    std::shared_ptr<starcache::StarCache> starcache_instance() override { return _cache; }
+
 private:
-    std::unique_ptr<starcache::StarCache> _cache;
+    std::shared_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
     bool _enable_tiered_cache = false;
 };
