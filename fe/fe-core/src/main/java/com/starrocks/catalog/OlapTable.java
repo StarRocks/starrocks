@@ -92,11 +92,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
-<<<<<<< HEAD
-=======
-import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -2888,11 +2884,7 @@ public class OlapTable extends Table {
     @Override
     public void onReload() {
         analyzePartitionInfo();
-<<<<<<< HEAD
-=======
         analyzeRollupIndexMeta();
-        tryToAssignIndexId();
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
     }
 
     @Override

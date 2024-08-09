@@ -110,11 +110,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
-<<<<<<< HEAD
-import java.util.stream.Collectors;
-=======
-import java.util.concurrent.atomic.AtomicBoolean;
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
 
 /**
  * Version 2 of RollupJob.
@@ -557,21 +552,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     "found in the base table.");
                         }
                     }
-<<<<<<< HEAD
-=======
                     // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
-                    List<ColumnId> usedColIds = Lists.newArrayList();
-                    List<ColumnId> nonKeyColIds = Lists.newArrayList();
+                    List<String> usedColIds = Lists.newArrayList();
+                    List<String> nonKeyColIds = Lists.newArrayList();
                     for (String name : usedBaseTableColNames) {
                         Column col = tbl.getColumn(name);
                         if (col.isKey()) {
-                            usedColIds.add(col.getColumnId());
+                            usedColIds.add(name);
                         } else {
-                            nonKeyColIds.add(col.getColumnId());
+                            nonKeyColIds.add(name);
                         }
                     }
                     usedColIds.addAll(nonKeyColIds);
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
                             new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
                                     Lists.newLinkedList(usedBaseTableColNames));

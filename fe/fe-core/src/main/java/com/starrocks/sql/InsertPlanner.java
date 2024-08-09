@@ -582,15 +582,9 @@ public class InsertPlanner {
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-<<<<<<< HEAD
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
-=======
-        for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
-            Column targetColumn = outputFullSchema.get(columnIdx);
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
-
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 if (targetColumn.isGeneratedColumn()) {

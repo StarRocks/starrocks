@@ -615,16 +615,13 @@ public class SelectAnalyzer {
         }
     }
 
-<<<<<<< HEAD
-    private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
-=======
     /**
      * SlotRefTableNameCleaner is used to clean the table name of SlotRef which may be introduced by relation
      * alias.In some scenes(eg: synchronized materialized view), the source scope is always defined(the single table),
      * it's safe to remove the alias table name to avoid ambiguous semantics in the analyzer stage.
      * Note: This cleaner will change the input expr directly instead of cloning a new expr.
      */
-    public static class SlotRefTableNameCleaner implements AstVisitor<Expr, Void> {
+    public static class SlotRefTableNameCleaner extends AstVisitor<Expr, Void> {
         private final Scope sourceScope;
         private final ConnectContext session;
 
@@ -657,8 +654,7 @@ public class SelectAnalyzer {
         }
     }
 
-    private static class NotFullGroupByRewriter implements AstVisitor<Expr, Void> {
->>>>>>> 0caf4bd58e ([BugFix] Fix synchronized mv crash if defined query's columns are unordered (#49528))
+    private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
         private final Map<Expr, Expr> columnsNotInGroupBy;
 
         public NotFullGroupByRewriter(Map<Expr, Expr> columnsNotInGroupBy) {
