@@ -14,27 +14,18 @@
 
 #include "storage/rowset/json_column_iterator.h"
 
-#include <algorithm>
-#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
 
-#include "column/column_access_path.h"
 #include "column/column_helper.h"
-#include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/cast_expr.h"
-#include "exprs/column_ref.h"
-#include "exprs/expr_context.h"
 #include "gutil/casts.h"
-#include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -108,6 +99,7 @@ private:
     std::vector<ColumnPtr> _source_column_modules;
     // to avoid create column with find type
 
+    bool _is_direct = false;
     std::unique_ptr<HyperJsonTransformer> transformer;
 };
 
@@ -134,6 +126,15 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
     DCHECK_EQ(_source_column_modules.size(), _source_paths.size());
     if (has_remain) {
         _source_column_modules.emplace_back(JsonColumn::create());
+    }
+
+    if (!opts.has_preaggregation && config::enable_lazy_dynamic_flat_json) {
+        _is_direct = true;
+        // update stats
+        for (int i = 0; i < _source_paths.size(); i++) {
+            opts.stats->flat_json_hits[_source_paths[i]] += 1;
+        }
+        return Status::OK();
     }
 
     {
@@ -177,9 +178,13 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
         RETURN_IF_ERROR(read_fn(_flat_iters[i].get(), columns[i].get()));
     }
 
-    RETURN_IF_ERROR(transformer->trans(columns));
-    auto result = transformer->mutable_result();
-    json_column->set_flat_columns(_target_paths, _target_types, result);
+    if (_is_direct) {
+        json_column->set_flat_columns(_source_paths, _source_types, columns);
+    } else {
+        RETURN_IF_ERROR(transformer->trans(columns));
+        auto result = transformer->mutable_result();
+        json_column->set_flat_columns(_target_paths, _target_types, result);
+    }
     return Status::OK();
 }
 
@@ -319,6 +324,7 @@ private:
     std::vector<LogicalType> _target_types;
     bool _need_remain = false;
 
+    bool _is_direct = false;
     std::unique_ptr<JsonFlattener> _flattener;
 };
 
@@ -330,6 +336,11 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
         opts.stats->dynamic_json_hits[p] += 1;
     }
 
+    if (!opts.has_preaggregation && config::enable_lazy_dynamic_flat_json) {
+        _is_direct = true;
+        return Status::OK();
+    }
+
     SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
     _flattener = std::make_unique<JsonFlattener>(_target_paths, _target_types, _need_remain);
     VLOG(1) << "JsonDynamicFlatIterator init, target: "
@@ -339,6 +350,9 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
 
 template <typename FUNC>
 Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
+    if (_is_direct) {
+        return read_fn(_json_iter.get(), output);
+    }
     auto proxy = output->clone_empty();
     RETURN_IF_ERROR(read_fn(_json_iter.get(), proxy.get()));
     output->set_delete_state(proxy->delete_state());
