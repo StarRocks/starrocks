@@ -236,6 +236,16 @@ void SharedBufferedInputStream::release() {
     _map.clear();
 }
 
+void SharedBufferedInputStream::try_release() {
+    if (hold_count.fetch_sub(1) == 1) {
+        _map.clear();
+    }
+}
+
+int SharedBufferedInputStream::increase_hold_count() {
+    return hold_count.fetch_add(1);
+}
+
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
