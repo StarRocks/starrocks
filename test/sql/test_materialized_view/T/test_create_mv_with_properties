@@ -22,6 +22,7 @@ CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
 PROPERTIES (
+    "replication_num" = "1",
     "task_priority" = "100",
     "task_retry_attempts" = "3"
 )
@@ -42,6 +43,7 @@ CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt 
 REFRESH DEFERRED ASYNC 
 PROPERTIES (
+   "replication_num" = "1",
     "task_priority" = "100",
     "task_retry_attempts" = "3",
     "event_trigger_delay_period" = "1 minute"
