@@ -668,8 +668,9 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     auto send_input_bytes = serde::ProtobufChunkSerde::max_serialized_size(*src, nullptr);
     COUNTER_UPDATE(_sender_input_bytes_counter, send_input_bytes * num_receivers);
+    int64_t serialization_time_ns = 0;
     {
-        SCOPED_TIMER(_serialize_chunk_timer);
+        ScopedTimer<MonotonicStopWatch> _timer(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
@@ -684,6 +685,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
+        serialization_time_ns = _timer.elapsed_time();
     }
     if (_encode_context) {
         _encode_context->set_encode_levels_in_pb(dst);
@@ -699,8 +701,10 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     }
 
     // try compress the ChunkPB data
-    if (_compress_codec != nullptr && serialized_size > 0) {
-        SCOPED_TIMER(_compress_timer);
+    bool do_sample = _compress_strategy.do_sample();
+    bool use_compression = do_sample || _compress_strategy.make_decision();
+    if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
+        ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
@@ -720,6 +724,9 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
+        int64_t compression_time_ns = _timer.elapsed_time();
+        _compress_strategy.feedback(serialized_size, _compression_scratch.size(), serialization_time_ns,
+                                    compression_time_ns);
 
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
