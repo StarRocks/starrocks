@@ -60,7 +60,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " 'replication_num' = '1'" +
                             " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
@@ -123,7 +123,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " 'replication_num' = '1'" +
                             " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
