@@ -224,6 +224,9 @@ public class EsUtil {
      * @return
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
+        if (mappings.has("properties")) {
+            return mappings;
+        }
         String element = mappings.keySet().iterator().next();
         if (!"properties".equals(element)) {
             // If type is not passed in takes the first type.
