@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
@@ -58,6 +60,7 @@ import org.assertj.core.util.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
@@ -88,6 +91,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static final String CHANNEL_NUM_STR = "channel_num";
     private static final String CHANNEL_ID_STR = "channel_id";
     private static final String SOURCE_TYPE = "source_type";
+    private static final String WAREHOUSE_KEY = "warehouse";
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
@@ -246,7 +250,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -258,7 +262,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                   long timeoutMillis,
                                                   int channelNum,
                                                   int channelId,
-                                                  TransactionResult resp) {
+                                                  TransactionResult resp,
+                                                  long warehouseId) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -286,7 +291,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
                     times = 1;
                     result = new StarRocksException("begin load task error");
                 }
@@ -320,6 +325,74 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+    }
+
+    @Test
+    public void beginTransactionWithWarehouseTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                    times = 1;
+                    result = new Delegate<Void>() {
+
+                        public void beginLoadTaskFromFrontend(String dbName,
+                                                              String tableName,
+                                                              String label,
+                                                              String user,
+                                                              String clientIp,
+                                                              long timeoutMillis,
+                                                              int channelNum,
+                                                              int channelId,
+                                                              TransactionResult resp,
+                                                              long warehouseId) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+                // no warehouse set here
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, Objects.toString(body.get(TransactionResult.LABEL_KEY)));
+            }
+        }
+    }
+
+    @Test
+    public void beginTransactionWithNonExistentWarehouseTest() throws Exception {
+        {
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+                reqBuilder.addHeader(WAREHOUSE_KEY, "non_exist_warehouse");
+            });
+            try {
+                networkClient.newCall(request).execute();
+            } catch (Exception e) {
+                Assert.assertTrue(e instanceof ErrorReportException);
+                Assert.assertEquals(ErrorCode.ERR_UNKNOWN_WAREHOUSE, ((ErrorReportException) e).getErrorCode());
+                return;
+            }
+            Assert.fail("should throw ERR_UNKNOWN_WAREHOUSE exception");
         }
     }
 
