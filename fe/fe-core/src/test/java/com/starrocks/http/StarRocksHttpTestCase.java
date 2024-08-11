@@ -530,6 +530,8 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
+        // init default warehouse
+        globalStateMgr.getWarehouseMgr().initDefaultWarehouse();
         assignBackends();
         doSetUp();
     }

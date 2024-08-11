@@ -27,6 +27,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
@@ -249,7 +250,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTask(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -261,7 +262,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                   long timeoutMillis,
                                                   int channelNum,
                                                   int channelId,
-                                                  TransactionResult resp) {
+                                                  TransactionResult resp,
+                                                  long warehouseId) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -289,7 +291,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTask(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                     times = 1;
                     result = new UserException("begin load task error");
                 }
