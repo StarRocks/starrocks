@@ -2575,7 +2575,7 @@ fileFormat
 
 string
     : SINGLE_QUOTED_TEXT
-    | DOUBLE_QUOTED_TEXT
+    | {(sqlMode & com.starrocks.qe.SqlModeHelper.MODE_ANSI_QUOTES) == 0 }? DOUBLE_QUOTED_TEXT
     ;
 
 binary
@@ -2686,10 +2686,11 @@ writeBranch
     ;
 
 identifier
-    : LETTER_IDENTIFIER      #unquotedIdentifier
-    | nonReserved            #unquotedIdentifier
-    | DIGIT_IDENTIFIER       #digitIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
+    : LETTER_IDENTIFIER                                                                         #unquotedIdentifier
+    | nonReserved                                                                               #unquotedIdentifier
+    | DIGIT_IDENTIFIER                                                                          #digitIdentifier
+    | BACKQUOTED_IDENTIFIER                                                                     #backQuotedIdentifier
+    | {(sqlMode & com.starrocks.qe.SqlModeHelper.MODE_ANSI_QUOTES) != 0 }? DOUBLE_QUOTED_TEXT   #ansiQuotedIdentifier
     ;
 
 identifierList

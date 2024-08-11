@@ -231,6 +231,7 @@ public class SqlParser {
         int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
         StarRocksParser parser = new StarRocksParser(tokenStream);
+        parser.setSqlMode(sessionVariable.getSqlMode());
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();

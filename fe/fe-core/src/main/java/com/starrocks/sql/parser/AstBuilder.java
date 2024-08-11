@@ -7014,6 +7014,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAnsiQuotedIdentifier(StarRocksParser.AnsiQuotedIdentifierContext context) {
+        String quotedString = context.DOUBLE_QUOTED_TEXT().getText();
+        quotedString = quotedString.substring(1, quotedString.length() - 1).replace("\"\"", "\"");
+        return new Identifier(quotedString, createPos(context));
+    }
+
+    @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText(), createPos(context));
     }
