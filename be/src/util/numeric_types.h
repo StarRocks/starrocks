@@ -27,7 +27,7 @@ template <typename FromType, typename ToType>
 static constexpr FromType floating_to_intergral_upper_bound = static_cast<FromType>(2) *
                                                               (std::numeric_limits<ToType>::max() / 2 + 1);
 
-/// EN: Check whether the value of type `FromType` overflows when converted to type `ToType`.
+/// Check whether the value of type `FromType` overflows when converted to type `ToType`.
 /// If overflow, return true; otherwise, return false.
 template <typename FromType, typename ToType>
 bool check_number_overflow(FromType value) {
