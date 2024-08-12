@@ -111,7 +111,6 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             }
             final List<String> values = Lists.newArrayList();
             values.add(TimeUtils.longToTimeString(item.getQueryStartTime()));
-            values.add(item.getCustomQueryId());
             values.add(item.getQueryId());
             values.add(item.getConnId());
             values.add(item.getDb());
@@ -123,6 +122,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(QueryStatisticsFormatter.getSecondsFromNano(statistics.getCpuCostNs()));
             values.add(QueryStatisticsFormatter.getSecondsFromMilli(item.getQueryExecTime()));
             values.add(item.getWarehouseName());
+            values.add(item.getCustomQueryId());
             sortedRowData.add(values);
         }
 
