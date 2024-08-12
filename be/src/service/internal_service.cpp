@@ -480,7 +480,7 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
     case TIMEOUT:
         return "TimeOut";
     case QUERY_FINISHED:
-        return "QUERY_FINISHED";
+        return "QueryFinished";
     default:
         return "UnknownReason";
     }
