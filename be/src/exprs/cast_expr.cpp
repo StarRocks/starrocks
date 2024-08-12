@@ -52,6 +52,7 @@
 #include "util/json.h"
 #include "util/json_converter.h"
 #include "util/mysql_global.h"
+#include "util/numeric_types.h"
 
 namespace starrocks {
 
@@ -354,37 +355,8 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
     return value;
 }
 
-template <typename FromType, typename ToType>
-static constexpr FromType floating_to_intergral_lower_bound =
-        static_cast<FromType>(std::numeric_limits<ToType>::lowest());
-
-template <typename FromType, typename ToType>
-static constexpr FromType floating_to_intergral_upper_bound = static_cast<FromType>(2) *
-                                                              (std::numeric_limits<ToType>::max() / 2 + 1);
-
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    if constexpr (std::is_floating_point_v<Type> && std::is_integral_v<ResultType>) {
-        // For floating-point numbers, we cannot use `value > (Type)std::numeric_limits<ResultType>::max()` to
-        // determine whether `value` exceeds the maximum value of ResultType. The reason is as follows:
-        //
-        // `std::numeric_limits<ResultType>::max()` is `2^n-1`, where n is 63, 31, 15 or 7, this number cannot be
-        // exactly represented by floating-point numbers, so when converted to Type, it will be rounded up to `2^n`.
-        // Therefore, when `value` is `2^n`, `value > (Type)std::numeric_limits<ResultType>::max()` will return false.
-        // However, in actual conversion, overflow will occur, resulting in the maximum or minimum value of ResultType,
-        // depending on the architecture, compiler, and compilation parameters.
-        //
-        // Because `2^n` can be exactly represented by floating-point numbers, we use `value >= (Type)2^n` to determine
-        // whether it is overflow, rather than `value > (Type)2^n-1`.
-        return !(value >= floating_to_intergral_lower_bound<Type, ResultType> &&
-                 value < floating_to_intergral_upper_bound<Type, ResultType>);
-    } else {
-        // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
-        // finite value y where y < x.
-        // This is different from std::numeric_limits<T>::min() for floating-point types.
-        // So we use lowest instead of min for lower bound of all types.
-        return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-               (value > (Type)std::numeric_limits<ResultType>::max());
-    }
+    return check_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
