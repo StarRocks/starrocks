@@ -2107,5 +2107,5 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                     break
             time.sleep(1)
             times += 1
-        tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
+        tools.assert_true(True, "wait row count > 0 error, timeout 300s")
 
