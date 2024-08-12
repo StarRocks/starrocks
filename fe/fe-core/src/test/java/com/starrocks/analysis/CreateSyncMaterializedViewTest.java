@@ -497,7 +497,8 @@ public class CreateSyncMaterializedViewTest {
                 ")\n" +
                 "AGGREGATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');");
+                "PROPERTIES('replication_num' = '1');" +
+                "");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                 "SELECT\n" +
                 "DATE_FORMAT(a.k1, '%Y-%m') AS month, \n" +
@@ -542,7 +543,8 @@ public class CreateSyncMaterializedViewTest {
                 "    v1 BIGINT sum DEFAULT \"0\"\n" +
                 ")\n" +
                 "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
-                "DISTRIBUTED BY HASH(k4);");
+                "DISTRIBUTED BY HASH(k4)\n" +
+                "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                 "SELECT\n" +
                 "  a.k3,\n" +
@@ -591,7 +593,8 @@ public class CreateSyncMaterializedViewTest {
                 "    v1 BIGINT sum DEFAULT \"0\"\n" +
                 ")\n" +
                 "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
-                "DISTRIBUTED BY HASH(k4);");
+                "DISTRIBUTED BY HASH(k4)\n" +
+                "PROPERTIES('replication_num' = '1');");
         try {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
                     "SELECT\n" +
