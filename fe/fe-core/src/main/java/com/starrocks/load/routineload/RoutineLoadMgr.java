@@ -100,31 +100,31 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
     // warehouse ==> {be : running tasks num}
-    private Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
-    private ReentrantLock slotLock = new ReentrantLock();
+    protected Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
+    protected ReentrantLock slotLock = new ReentrantLock();
 
     // routine load job meta
-    private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
-    private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+    protected Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
+    protected Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
 
-    private final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
             new WarehouseLoadInfoBuilder();
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
-    private void writeLock() {
+    protected void writeLock() {
         lock.writeLock().lock();
     }
 
-    private void writeUnlock() {
+    protected void writeUnlock() {
         lock.writeLock().unlock();
     }
 
-    private void readLock() {
+    protected void readLock() {
         lock.readLock().lock();
     }
 
-    private void readUnlock() {
+    protected void readUnlock() {
         lock.readLock().unlock();
     }
 
@@ -322,8 +322,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    private void unprotectedAddJob(RoutineLoadJob routineLoadJob) {
-        idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
+    protected void unprotectedAddJob(RoutineLoadJob routineLoadJob) {
+        RoutineLoadJob previusJob = idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
 
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId());
         if (nameToRoutineLoadJob == null) {
@@ -335,7 +335,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             routineLoadJobList = Lists.newArrayList();
             nameToRoutineLoadJob.put(routineLoadJob.getName(), routineLoadJobList);
         }
-        routineLoadJobList.add(routineLoadJob);
+        if (previusJob == null) {
+            routineLoadJobList.add(routineLoadJob);
+        } else {
+            int index = routineLoadJobList.lastIndexOf(previusJob);
+            routineLoadJobList.set(index, routineLoadJob);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory()
+                    .removeCallback(previusJob.getId());
+        }
         // add txn state callback in factory
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         if (!Config.enable_dict_optimize_routine_load) {

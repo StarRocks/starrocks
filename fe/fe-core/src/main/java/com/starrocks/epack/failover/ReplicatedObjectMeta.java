@@ -7,9 +7,15 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.load.DeleteMgr;
+import com.starrocks.load.loadv2.LoadMgr;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.system.SystemInfoService;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ReplicatedObjectMeta {
     public static class SystemMeta {
@@ -116,6 +122,18 @@ public class ReplicatedObjectMeta {
 
     private final Map<Long, TableMeta> tableMetas = Maps.newConcurrentMap();
 
+    private LoadMgr loadMgr;
+
+    private RoutineLoadMgr routineLoadMgr;
+
+    private StreamLoadMgr streamLoadMgr;
+
+    private PipeManager pipeManager;
+
+    private DeleteMgr deleteMgr;
+
+    private ConcurrentHashMap<Long, Long> tableIdToIncrementId;
+
     public ReplicatedObjectMeta(SystemMeta systemMeta) {
         this.systemMeta = systemMeta;
     }
@@ -170,5 +188,53 @@ public class ReplicatedObjectMeta {
     public boolean addTable(TableMeta tableMeta) {
         TableMeta previous = tableMetas.putIfAbsent(tableMeta.getTable().getId(), tableMeta);
         return previous == null;
+    }
+
+    public LoadMgr getLoadMgr() {
+        return loadMgr;
+    }
+
+    public void setLoadMgr(LoadMgr loadMgr) {
+        this.loadMgr = loadMgr;
+    }
+
+    public RoutineLoadMgr getRoutineLoadMgr() {
+        return routineLoadMgr;
+    }
+
+    public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
+        this.routineLoadMgr = routineLoadMgr;
+    }
+
+    public StreamLoadMgr getStreamLoadMgr() {
+        return streamLoadMgr;
+    }
+
+    public void setStreamLoadMgr(StreamLoadMgr streamLoadMgr) {
+        this.streamLoadMgr = streamLoadMgr;
+    }
+
+    public PipeManager getPipeManager() {
+        return pipeManager;
+    }
+
+    public void setPipeManager(PipeManager pipeManager) {
+        this.pipeManager = pipeManager;
+    }
+
+    public DeleteMgr getDeleteMgr() {
+        return deleteMgr;
+    }
+
+    public void setDeleteMgr(DeleteMgr deleteMgr) {
+        this.deleteMgr = deleteMgr;
+    }
+
+    public ConcurrentHashMap<Long, Long> getTableIdToIncrementId() {
+        return tableIdToIncrementId;
+    }
+
+    public void setTableIdToIncrementId(ConcurrentHashMap<Long, Long> tableIdToIncrementId) {
+        this.tableIdToIncrementId = tableIdToIncrementId;
     }
 }

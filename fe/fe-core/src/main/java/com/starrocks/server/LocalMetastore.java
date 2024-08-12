@@ -5246,6 +5246,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         }
     }
 
+    public void setTableAutoIncrementId(ConcurrentHashMap<Long, Long> tableIdToIncrementId) {
+        for (Map.Entry<Long, Long> entry : tableIdToIncrementId.entrySet()) {
+            tableIdToIncrementId.put(entry.getKey(), entry.getValue());
+        }
+        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
+        GlobalStateMgr.getCurrentState().getEditLog().logSaveAutoIncrementId(info);
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         // Don't write system db meta
         Map<Long, Database> idToDbNormal =

@@ -1283,6 +1283,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return dbId;
     }
 
+    public long getTableId() {
+        return tableId;
+    }
+
     public String getTableName() {
         return tableName;
     }
@@ -1297,6 +1301,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public long getId() {
         return id;
+    }
+
+    public State getState() {
+        return state;
     }
 
     public String getStateName() {
@@ -1494,5 +1502,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         } finally {
             readUnlock();
         }
+    }
+
+    public static void setId(StreamLoadTask streamLoadTask, long id) {
+        streamLoadTask.id = id;
+    }
+
+    public static void setWarehouseId(StreamLoadTask streamLoadTask, long warehouseId) {
+        streamLoadTask.warehouseId = warehouseId;
+    }
+
+    public static void setDBId(StreamLoadTask streamLoadTask, long dbId) {
+        streamLoadTask.dbId = dbId;
+    }
+
+    public static void setTableId(StreamLoadTask streamLoadTask, long tableId) {
+        streamLoadTask.tableId = tableId;
     }
 }

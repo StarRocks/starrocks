@@ -3,7 +3,6 @@
 package com.starrocks.epack.failover.job;
 
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -11,19 +10,13 @@ public abstract class FailoverGroupJob implements Runnable {
     private static final Logger LOG = LogManager.getLogger(FailoverGroupJob.class);
 
     protected final FailoverGroup failoverGroup;
-    protected final ReplicatedObjectMeta objectMeta;
 
-    protected FailoverGroupJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta) {
+    protected FailoverGroupJob(FailoverGroup failoverGroup) {
         this.failoverGroup = failoverGroup;
-        this.objectMeta = objectMeta;
     }
 
     public FailoverGroup getFailoverGroup() {
         return this.failoverGroup;
-    }
-
-    public ReplicatedObjectMeta getObjectMeta() {
-        return this.objectMeta;
     }
 
     public void start() {

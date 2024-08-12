@@ -135,4 +135,11 @@ public class MultiDeleteInfo implements Writable {
         Text.writeString(out, json);
     }
 
+    public static void setDbId(MultiDeleteInfo deleteInfo, long dbId) {
+        deleteInfo.dbId = dbId;
+    }
+
+    public static void setTableId(MultiDeleteInfo deleteInfo, long tableId) {
+        deleteInfo.tableId = tableId;
+    }
 }

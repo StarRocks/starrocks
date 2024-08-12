@@ -8,7 +8,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import org.apache.logging.log4j.LogManager;
@@ -24,10 +23,9 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
     private final boolean isReplicatedObject;
     private final boolean isDropForce;
 
-    public DropReplicatedTableJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta, Database remoteDatabase,
-            OlapTable remoteTable, Database localDatabase, Table localTable, boolean isReplicatedObject,
-            boolean isDropForce) {
-        super(failoverGroup, objectMeta);
+    public DropReplicatedTableJob(FailoverGroup failoverGroup, Database remoteDatabase, OlapTable remoteTable,
+            Database localDatabase, Table localTable, boolean isReplicatedObject, boolean isDropForce) {
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
@@ -60,7 +58,7 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
             return;
         }
 
-        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta,
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
                 remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
         job.execute();
     }

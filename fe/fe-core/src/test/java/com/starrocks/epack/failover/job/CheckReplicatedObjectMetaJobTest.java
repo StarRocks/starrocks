@@ -57,8 +57,14 @@ public class CheckReplicatedObjectMetaJobTest {
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
         ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        new MockUp<FailoverGroup>() {
+            @Mock
+            public ReplicatedObjectMeta getObjectMeta() {
+                return objectMeta;
+            }
+        };
 
-        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup, objectMeta);
+        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup);
         job.execute();
 
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
@@ -76,8 +82,14 @@ public class CheckReplicatedObjectMetaJobTest {
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
         ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        new MockUp<FailoverGroup>() {
+            @Mock
+            public ReplicatedObjectMeta getObjectMeta() {
+                return objectMeta;
+            }
+        };
 
-        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup, objectMeta);
+        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup);
         job.execute();
 
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
@@ -95,8 +107,14 @@ public class CheckReplicatedObjectMetaJobTest {
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
         ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        new MockUp<FailoverGroup>() {
+            @Mock
+            public ReplicatedObjectMeta getObjectMeta() {
+                return objectMeta;
+            }
+        };
 
-        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup, objectMeta);
+        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(failoverGroup);
         job.execute();
 
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());

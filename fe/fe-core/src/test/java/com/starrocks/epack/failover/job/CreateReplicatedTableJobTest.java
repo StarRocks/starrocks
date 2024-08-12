@@ -62,11 +62,11 @@ public class CreateReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
@@ -96,11 +96,11 @@ public class CreateReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
@@ -131,11 +131,11 @@ public class CreateReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
@@ -165,11 +165,11 @@ public class CreateReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
@@ -199,11 +199,11 @@ public class CreateReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 

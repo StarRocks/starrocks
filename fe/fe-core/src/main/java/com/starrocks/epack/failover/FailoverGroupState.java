@@ -4,7 +4,6 @@ package com.starrocks.epack.failover;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.epack.thrift.TFailoverGroupState;
 
 import java.util.Map;
 import java.util.Objects;
@@ -29,47 +28,37 @@ public class FailoverGroupState {
         return "UNKNOWN";
     }
 
-    public TFailoverGroupState toThrift() {
-        return TFailoverGroupState.values()[id];
-    }
-
-    public static FailoverGroupState fromThrift(TFailoverGroupState thriftState) {
-        return FailoverGroupState.ID_TO_STATE.get(thriftState.ordinal());
-    }
-
     // Initial state
-    public static final FailoverGroupState INITIALIZING = new FailoverGroupState(
-            TFailoverGroupState.INITIALIZING.ordinal());
+    public static final FailoverGroupState INITIALIZING = new FailoverGroupState(0);
 
     // Failover group is running after a successful handshake
-    public static final FailoverGroupState RUNNING = new FailoverGroupState(TFailoverGroupState.RUNNING.ordinal());
+    public static final FailoverGroupState RUNNING = new FailoverGroupState(1);
 
     // Only for secondary, secondary is replicating data from primary
-    public static final FailoverGroupState REPLICATING = new FailoverGroupState(
-            TFailoverGroupState.REPLICATING.ordinal());
+    public static final FailoverGroupState REPLICATING = new FailoverGroupState(2);
 
-    // Failover group has error
-    public static final FailoverGroupState ERROR = new FailoverGroupState(TFailoverGroupState.ERROR.ordinal());
+    // Only for secondary, secondary is updating some meta from primary
+    public static final FailoverGroupState UPDATING = new FailoverGroupState(3);
 
     public static final Map<String, FailoverGroupState> NAME_TO_STATE = new ImmutableMap.Builder<String, FailoverGroupState>()
             .put("INITIALIZING", INITIALIZING)
             .put("RUNNING", RUNNING)
             .put("REPLICATING", REPLICATING)
-            .put("ERROR", ERROR)
+            .put("UPDATING", UPDATING)
             .build();
 
     public static final Map<Integer, String> ID_TO_NAME = new ImmutableMap.Builder<Integer, String>()
             .put(INITIALIZING.getId(), "INITIALIZING")
             .put(RUNNING.getId(), "RUNNING")
             .put(REPLICATING.getId(), "REPLICATING")
-            .put(ERROR.getId(), "ERROR")
+            .put(UPDATING.getId(), "UPDATING")
             .build();
 
     public static final Map<Integer, FailoverGroupState> ID_TO_STATE = new ImmutableMap.Builder<Integer, FailoverGroupState>()
             .put(INITIALIZING.getId(), INITIALIZING)
             .put(RUNNING.getId(), RUNNING)
             .put(REPLICATING.getId(), REPLICATING)
-            .put(ERROR.getId(), ERROR)
+            .put(UPDATING.getId(), UPDATING)
             .build();
 
     @Override

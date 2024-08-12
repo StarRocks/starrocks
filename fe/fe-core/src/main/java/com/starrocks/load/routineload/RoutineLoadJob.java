@@ -2057,4 +2057,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void updateSubstate() throws UserException {
     }
+
+    public static void setId(RoutineLoadJob routineLoadJob, long id) {
+        routineLoadJob.id = id;
+    }
+
+    public static void setDbId(RoutineLoadJob routineLoadJob, long dbId) {
+        routineLoadJob.dbId = dbId;
+    }
+
+    public static void setTableId(RoutineLoadJob routineLoadJob, long tableId) {
+        routineLoadJob.tableId = tableId;
+    }
 }

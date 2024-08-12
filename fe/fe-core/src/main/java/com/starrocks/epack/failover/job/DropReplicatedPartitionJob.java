@@ -5,7 +5,6 @@ package com.starrocks.epack.failover.job;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropPartitionClause;
 import org.apache.logging.log4j.LogManager;
@@ -21,10 +20,10 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
     private final String localPartitionName;
     private final boolean isReplicatedObject;
 
-    public DropReplicatedPartitionJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
-            Database remoteDatabase, OlapTable remoteTable, Database localDatabase, OlapTable localTable,
+    public DropReplicatedPartitionJob(FailoverGroup failoverGroup, Database remoteDatabase,
+            OlapTable remoteTable, Database localDatabase, OlapTable localTable,
             String localPartitionName, boolean isReplicatedObject) {
-        super(failoverGroup, objectMeta);
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
@@ -53,7 +52,7 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
             return;
         }
 
-        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta,
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
                 remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
         job.execute();
     }

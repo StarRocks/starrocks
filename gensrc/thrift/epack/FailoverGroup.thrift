@@ -12,13 +12,6 @@ enum TFailoverGroupRole {
     SECONDARY
 }
 
-enum TFailoverGroupState {
-    INITIALIZING,
-    RUNNING,
-    REPLICATING,
-    ERROR
-}
-
 struct TFailoverGroupMember {
     1: optional string name
     2: optional set<Types.TNetworkAddress> addresses

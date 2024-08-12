@@ -52,11 +52,11 @@ public class CreateReplicatedDatabaseJobTest {
 
         Database database = objectMeta.getDatabaseMetas().values().iterator().next().getDatabase();
 
-        DropReplicatedDatabaseJob dropJob = new DropReplicatedDatabaseJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedDatabaseJob dropJob = new DropReplicatedDatabaseJob(failoverGroup, null, null,
                 database, true, true);
         dropJob.execute();
 
-        CreateReplicatedDatabaseJob createJob = new CreateReplicatedDatabaseJob(failoverGroup, objectMeta, database,
+        CreateReplicatedDatabaseJob createJob = new CreateReplicatedDatabaseJob(failoverGroup, database,
                 null, true);
         createJob.execute();
 

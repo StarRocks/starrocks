@@ -7,7 +7,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,14 +20,14 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
     private final List<Table> remoteTables; // Null for whole database
     private final boolean isReplicatedObject;
 
-    public CheckReplicatedDatabaseJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
-            Database remoteDatabase, boolean isReplicatedObject) {
-        this(failoverGroup, objectMeta, remoteDatabase, null, isReplicatedObject);
+    public CheckReplicatedDatabaseJob(FailoverGroup failoverGroup, Database remoteDatabase,
+            boolean isReplicatedObject) {
+        this(failoverGroup, remoteDatabase, null, isReplicatedObject);
     }
 
-    public CheckReplicatedDatabaseJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
+    public CheckReplicatedDatabaseJob(FailoverGroup failoverGroup,
             Database remoteDatabase, List<Table> remoteTables, boolean isReplicatedObject) {
-        super(failoverGroup, objectMeta);
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTables = remoteTables;
         this.isReplicatedObject = isReplicatedObject;
@@ -38,7 +37,7 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
     public void execute() {
         Database localDatabase = GlobalStateMgr.getServingState().getDb(remoteDatabase.getFullName());
         if (localDatabase == null) {
-            CreateReplicatedDatabaseJob job = new CreateReplicatedDatabaseJob(failoverGroup, objectMeta,
+            CreateReplicatedDatabaseJob job = new CreateReplicatedDatabaseJob(failoverGroup,
                     remoteDatabase, remoteTables, isReplicatedObject);
             job.start();
             return;
@@ -54,10 +53,12 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
             }
 
             OlapTable remoteOlapTable = (OlapTable) remoteTable;
-            CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta,
+            CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
                     remoteDatabase, remoteOlapTable, localDatabase, isTableReplicatedObject);
             job.start();
         }
+
+        failoverGroup.getObjectMap().putDatabaseMap(remoteDatabase.getId(), localDatabase.getId());
 
         if (isReplicatedObject) {
             failoverGroup.addReplicatedDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, localDatabase.getId());
@@ -65,7 +66,7 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
             // Drop deleted tables in database
             for (Table localTable : localDatabase.getTables()) {
                 if (remoteDatabase.getTable(localTable.getName()) == null) {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, objectMeta, null,
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, null,
                             null, localDatabase, localTable, false, false);
                     job.start();
                 }

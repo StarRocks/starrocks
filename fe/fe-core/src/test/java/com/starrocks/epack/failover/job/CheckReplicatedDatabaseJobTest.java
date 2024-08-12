@@ -61,7 +61,7 @@ public class CheckReplicatedDatabaseJobTest {
 
         Database database = objectMeta.getDatabaseMetas().values().iterator().next().getDatabase();
 
-        CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, objectMeta, database, true);
+        CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, database, true);
         job.execute();
 
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());

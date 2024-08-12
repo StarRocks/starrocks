@@ -20,8 +20,8 @@ import java.util.Set;
 public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
     private static final Logger LOG = LogManager.getLogger(CheckReplicatedObjectMetaJob.class);
 
-    public CheckReplicatedObjectMetaJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta) {
-        super(failoverGroup, objectMeta);
+    public CheckReplicatedObjectMetaJob(FailoverGroup failoverGroup) {
+        super(failoverGroup);
     }
 
     @Override
@@ -32,7 +32,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
     }
 
     private void checkReplicatedCatalogs() {
-        for (ReplicatedObjectMeta.CatalogMeta catalogMeta : objectMeta.getCatalogMetas().values()) {
+        for (ReplicatedObjectMeta.CatalogMeta catalogMeta : failoverGroup.getObjectMeta().getCatalogMetas().values()) {
             if (!catalogMeta.isInternalCatalog()) {
                 LOG.warn("Ignore remote external catalog {}", catalogMeta.getCatalog().getName());
                 continue;
@@ -40,7 +40,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
 
             Set<String> databaseNames = Sets.newHashSet();
             for (Database remoteDatabase : catalogMeta.getDatabases().values()) {
-                CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, objectMeta,
+                CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
                         remoteDatabase, false);
                 job.start();
 
@@ -52,7 +52,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
             // Drop deleted databases in catalog
             for (Database localDatabase : failoverGroup.getObjectMgr().getCatalogs().get(null).values()) {
                 if (!databaseNames.contains(localDatabase.getFullName())) {
-                    DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, objectMeta, null, null,
+                    DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, null, null,
                             localDatabase, false, false);
                     job.start();
                 }
@@ -60,20 +60,20 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         }
 
         // Remove deleted catalog
-        if (objectMeta.getCatalogMetas().isEmpty() && !failoverGroup.getObjectMgr().getCatalogs().isEmpty()) {
+        if (failoverGroup.getObjectMeta().getCatalogMetas().isEmpty() && !failoverGroup.getObjectMgr().getCatalogs().isEmpty()) {
             failoverGroup.removeReplicatedCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
         }
     }
 
     private void checkReplicatedDatabases() {
         Set<String> databaseNames = Sets.newHashSet();
-        for (ReplicatedObjectMeta.DatabaseMeta databaseMeta : objectMeta.getDatabaseMetas().values()) {
+        for (ReplicatedObjectMeta.DatabaseMeta databaseMeta : failoverGroup.getObjectMeta().getDatabaseMetas().values()) {
             if (!databaseMeta.isInternalCatalog()) {
                 LOG.warn("Ignore remote external catalog {}", databaseMeta.getCatalog().getName());
                 continue;
             }
 
-            CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, objectMeta,
+            CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
                     databaseMeta.getDatabase(), true);
             job.start();
 
@@ -83,7 +83,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         // Drop deleted databases
         for (Database localDatabase : failoverGroup.getObjectMgr().getDatabases().values()) {
             if (!databaseNames.contains(localDatabase.getFullName())) {
-                DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, objectMeta, null, null,
+                DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, null, null,
                         localDatabase, true, false);
                 job.start();
             }
@@ -93,7 +93,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
     private void checkReplicatedTables() {
         Map<Database, List<Table>> databaseToTables = Maps.newHashMap();
         Map<String, Set<String>> databaseToTableNames = Maps.newHashMap();
-        for (ReplicatedObjectMeta.TableMeta tableMeta : objectMeta.getTableMetas().values()) {
+        for (ReplicatedObjectMeta.TableMeta tableMeta : failoverGroup.getObjectMeta().getTableMetas().values()) {
             if (!tableMeta.isInternalCatalog()) {
                 LOG.warn("Ignore remote external catalog {}", tableMeta.getCatalog().getName());
                 continue;
@@ -106,7 +106,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         }
 
         for (Map.Entry<Database, List<Table>> entry : databaseToTables.entrySet()) {
-            CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, objectMeta,
+            CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
                     entry.getKey(), entry.getValue(), false);
             job.start();
         }
@@ -120,7 +120,7 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
 
             for (Table localTable : entry.getValue().values()) {
                 if (!tableNames.contains(localTable.getName())) {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, objectMeta, null,
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, null,
                             null, entry.getKey(), localTable, true, false);
                     job.start();
                 }

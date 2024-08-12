@@ -63,32 +63,32 @@ public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     // label -> streamLoadTask
-    private Map<String, StreamLoadTask> idToStreamLoadTask;
+    protected Map<String, StreamLoadTask> idToStreamLoadTask;
 
     // Only used for sync stream load
     // txnId -> streamLoadTask
-    private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
+    protected Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
-    private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
+    protected Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
 
-    private final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
             new WarehouseLoadInfoBuilder();
 
-    private ReentrantReadWriteLock lock;
+    protected ReentrantReadWriteLock lock;
 
-    private void writeLock() {
+    protected void writeLock() {
         lock.writeLock().lock();
     }
 
-    private void writeUnlock() {
+    protected void writeUnlock() {
         lock.writeLock().unlock();
     }
 
-    private void readLock() {
+    protected void readLock() {
         lock.readLock().lock();
     }
 
-    private void readUnlock() {
+    protected void readUnlock() {
         lock.readLock().unlock();
     }
 
@@ -285,7 +285,9 @@ public class StreamLoadMgr implements MemoryTrackable {
 
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        if (!task.isFinal()) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        }
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,

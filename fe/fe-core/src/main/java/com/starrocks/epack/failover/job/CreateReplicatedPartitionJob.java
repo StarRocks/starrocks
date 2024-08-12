@@ -16,7 +16,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.util.Util;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -47,10 +46,10 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
     private final OlapTable localTable;
     private final boolean isReplicatedObject;
 
-    public CreateReplicatedPartitionJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
-            Database remoteDatabase, OlapTable remoteTable, Partition remotePartition, Database localDatabase,
+    public CreateReplicatedPartitionJob(FailoverGroup failoverGroup, Database remoteDatabase,
+            OlapTable remoteTable, Partition remotePartition, Database localDatabase,
             OlapTable localTable, boolean isReplicatedObject) {
-        super(failoverGroup, objectMeta);
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.remotePartition = remotePartition;
@@ -77,7 +76,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
             return;
         }
 
-        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta,
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
                 remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
         job.execute();
     }

@@ -123,6 +123,11 @@ import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.ranger.starrocks.RangerStarRocksAccessControllerEPack;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.epack.load.DeleteMgrEPack;
+import com.starrocks.epack.load.loadv2.LoadMgrEPack;
+import com.starrocks.epack.load.pipe.PipeManagerEPack;
+import com.starrocks.epack.load.routineload.RoutineLoadMgrEPack;
+import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
@@ -633,8 +638,8 @@ public class GlobalStateMgr {
                 new SystemHandlerEPack());
 
         this.load = new Load();
-        this.streamLoadMgr = new StreamLoadMgr();
-        this.routineLoadMgr = new RoutineLoadMgr();
+        this.streamLoadMgr = new StreamLoadMgrEPack();
+        this.routineLoadMgr = new RoutineLoadMgrEPack();
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
 
@@ -642,7 +647,7 @@ public class GlobalStateMgr {
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.deleteMgr = new DeleteMgr();
+        this.deleteMgr = new DeleteMgrEPack();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
@@ -698,7 +703,7 @@ public class GlobalStateMgr {
                 Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
 
         this.loadJobScheduler = new LoadJobScheduler();
-        this.loadMgr = new LoadMgr(loadJobScheduler);
+        this.loadMgr = new LoadMgrEPack(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
@@ -734,7 +739,7 @@ public class GlobalStateMgr {
         this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
 
         this.binlogManager = new BinlogManager();
-        this.pipeManager = new PipeManager();
+        this.pipeManager = new PipeManagerEPack();
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();

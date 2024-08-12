@@ -5,7 +5,6 @@ package com.starrocks.epack.failover.job;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,10 +20,10 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
     private final boolean isReplicatedObject;
     private final boolean isDropForce;
 
-    public DropReplicatedDatabaseJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
-            Database remoteDatabase, List<Table> remoteTables, Database localDatabase, boolean isReplicatedObject,
+    public DropReplicatedDatabaseJob(FailoverGroup failoverGroup, Database remoteDatabase,
+            List<Table> remoteTables, Database localDatabase, boolean isReplicatedObject,
             boolean isDropForce) {
-        super(failoverGroup, objectMeta);
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTables = remoteTables;
         this.localDatabase = localDatabase;
@@ -52,7 +51,7 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
             return;
         }
 
-        CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup, objectMeta,
+        CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
                 remoteDatabase, remoteTables, isReplicatedObject);
         job.execute();
     }

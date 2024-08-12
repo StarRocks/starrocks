@@ -7,7 +7,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.epack.failover.FailoverGroup;
-import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,10 +22,10 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
     private final Partition localPartition;
     private final boolean isReplicatedObject;
 
-    public CreateReplicatedPhysicalPartitionJob(FailoverGroup failoverGroup, ReplicatedObjectMeta objectMeta,
+    public CreateReplicatedPhysicalPartitionJob(FailoverGroup failoverGroup,
             Database remoteDatabase, OlapTable remoteTable, PhysicalPartition remotePhysicalPartition,
             Database localDatabase, OlapTable localTable, Partition localPartition, boolean isReplicatedObject) {
-        super(failoverGroup, objectMeta);
+        super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.remotePhysicalPartition = remotePhysicalPartition;
@@ -53,7 +52,7 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
             return;
         }
 
-        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta,
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
                 remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
         job.execute();
     }

@@ -110,13 +110,13 @@ import java.util.stream.Collectors;
 public class LoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
 
-    private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
-    private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
-    private final LoadJobScheduler loadJobScheduler;
+    protected final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
+    protected final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
+    protected final LoadJobScheduler loadJobScheduler;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    protected final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+    protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
             new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
@@ -204,7 +204,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    private void addLoadJob(LoadJob loadJob) {
+    protected void addLoadJob(LoadJob loadJob) {
         idToLoadJob.put(loadJob.getId(), loadJob);
         long dbId = loadJob.getDbId();
         if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
@@ -704,19 +704,19 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    private void readLock() {
+    protected void readLock() {
         lock.readLock().lock();
     }
 
-    private void readUnlock() {
+    protected void readUnlock() {
         lock.readLock().unlock();
     }
 
-    private void writeLock() {
+    protected void writeLock() {
         lock.writeLock().lock();
     }
 
-    private void writeUnlock() {
+    protected void writeUnlock() {
         lock.writeLock().unlock();
     }
 

@@ -21,13 +21,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
-import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
@@ -100,7 +100,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static int TEST_HTTP_PORT = 0;
 
     @Mocked
-    private StreamLoadMgr streamLoadMgr;
+    private StreamLoadMgrEPack streamLoadMgr;
 
     @Mocked
     private GlobalTransactionMgr globalTransactionMgr;

@@ -62,7 +62,7 @@ public class CheckReplicatedTableJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, objectMeta, tableMeta.getDatabase(),
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
                 (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         job.execute();
 

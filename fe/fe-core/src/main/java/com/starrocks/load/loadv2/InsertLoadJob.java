@@ -131,6 +131,10 @@ public class InsertLoadJob extends LoadJob {
         this.coordinator = coordinator;
     }
 
+    public long getTableId() {
+        return tableId;
+    }
+
     @Override
     public boolean isInternalJob() {
         return isStatisticsJob;
@@ -279,5 +283,9 @@ public class InsertLoadJob extends LoadJob {
 
     public void setTransactionId(long txnId) {
         this.transactionId = txnId;
+    }
+
+    public static void setTableId(InsertLoadJob insertLoadJob, long tableId) {
+        insertLoadJob.tableId = tableId;
     }
 }

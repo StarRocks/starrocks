@@ -50,12 +50,12 @@ public class PipeManager {
 
     private static final Logger LOG = LogManager.getLogger(PipeManager.class);
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    protected final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
-    private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
+    protected Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
+    protected Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
-    private final PipeRepo repo;
+    protected final PipeRepo repo;
 
     public PipeManager() {
         repo = new PipeRepo(this);

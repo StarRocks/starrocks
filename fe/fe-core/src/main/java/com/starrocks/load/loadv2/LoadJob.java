@@ -1331,4 +1331,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         @SerializedName("jr")
         public String jsonRoot;
     }
+
+    public static void setDbId(LoadJob loadJob, long dbId) {
+        loadJob.dbId = dbId;
+    }
 }

@@ -140,17 +140,17 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(DeleteMgr.class);
 
     // TransactionId -> DeleteJob
-    private final Map<Long, DeleteJob> idToDeleteJob;
+    protected final Map<Long, DeleteJob> idToDeleteJob;
 
     // Db -> DeleteInfo list
     @SerializedName(value = "dbToDeleteInfos")
-    private final Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
+    protected final Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
 
     // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    private final Set<Long> killJobSet;
+    protected final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    protected final Set<Long> killJobSet;
 
     public DeleteMgr() {
         idToDeleteJob = Maps.newConcurrentMap();
@@ -897,6 +897,10 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public long getDeleteJobCount() {
         return this.idToDeleteJob.size();
+    }
+
+    public Map<Long, List<MultiDeleteInfo>> getDbToDeleteInfos() {
+        return dbToDeleteInfos;
     }
 
     public long getDeleteInfoCount() {

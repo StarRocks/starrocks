@@ -66,11 +66,11 @@ public class CreateReplicatedPartitionJobTest {
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
         OlapTable table = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
 
-        DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", true);
         dropJob.execute();
 
-        CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup, objectMeta,
+        CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup,
                 tableMeta.getDatabase(), table, table.getPartitions().iterator().next(), tableMeta.getDatabase(),
                 (OlapTable) tableMeta.getTable(), true);
         createJob.execute();
@@ -102,11 +102,11 @@ public class CreateReplicatedPartitionJobTest {
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 

@@ -14,6 +14,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.failover.job.CheckReplicatedObjectMetaJob;
 import com.starrocks.epack.failover.job.FailoverGroupJob;
+import com.starrocks.epack.failover.job.UpdateReplicatedObjectJob;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
@@ -24,7 +25,6 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
 import com.starrocks.persist.Storage;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Main class of a failover group
  * One instance per failover group
  */
-public class FailoverGroup implements Writable, GsonPostProcessable {
+public class FailoverGroup implements Writable {
     private static final Logger LOG = LogManager.getLogger(FailoverGroup.class);
 
     private static final String IMAGE_SUBDIR_PREFIX = "/failover/";
@@ -83,7 +83,13 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
     @SerializedName(value = "objectMgr")
     private volatile ReplicatedObjectMgr objectMgr; // Managing replicated object, such as dbs or tables
 
-    private FailoverGroupJobExecutor jobExecutor; // Failover group job and replication job executor
+    private volatile ReplicatedObjectMeta objectMeta; // Replicated object meta from primary
+
+    // Failover group job and replication job executor
+    private final FailoverGroupJobExecutor jobExecutor = new FailoverGroupJobExecutor();
+
+    // Map remote object id to local object id
+    private final ReplicatedObjectMap objectMap = new ReplicatedObjectMap();
 
     public long getId() {
         return id;
@@ -121,8 +127,21 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
         return objectMgr;
     }
 
+    public ReplicatedObjectMeta getObjectMeta() {
+        return objectMeta;
+    }
+
     public FailoverGroupJobExecutor getJobExecutor() {
         return jobExecutor;
+    }
+
+    public ReplicatedObjectMap getObjectMap() {
+        return objectMap;
+    }
+
+    public FailoverGroup() {
+        this.id = 0;
+        this.name = null;
     }
 
     // For primary
@@ -137,7 +156,6 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
         this.properties = stmt.getProperties();
         this.schedule = new ReplicationSchedule(stmt.getSchedule());
         this.objectMgr = new ReplicatedObjectMgr(stmt);
-        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 
     // For secondary
@@ -152,7 +170,6 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
         this.properties = new HashMap<>();
         this.schedule = new ReplicationSchedule();
         this.objectMgr = new ReplicatedObjectMgr();
-        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 
     // For primary
@@ -280,8 +297,8 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_ROLE, role);
         }
 
-        if (!state.equals(FailoverGroupState.RUNNING)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_STATEMENT, "Falover group is not ready");
+        if (state.equals(FailoverGroupState.INITIALIZING)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_STATEMENT, "Failover group is not ready");
         }
 
         FailoverGroupMember newLocalMember = FailoverGroupMember.getLocalMember("", FailoverGroupRole.PRIMARY);
@@ -434,7 +451,7 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
             return response;
         }
 
-        if (!primary.equals(remotePrimaryMember)) {
+        if (!primary.getName().equals(remotePrimaryMember.getName())) {
             LOG.info("Failover group {} change primary from {} to {}", name, primary, remotePrimaryMember);
         }
 
@@ -467,11 +484,11 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
             return response;
         }
 
-        if (!state.equals(FailoverGroupState.RUNNING)) {
+        if (state.equals(FailoverGroupState.INITIALIZING)) {
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
             TStatus status = new TStatus(TStatusCode.ILLEGAL_STATE);
             status.addToError_msgs("Failover group " + name +
-                    " is not running, current state is " + state +
+                    " is not ready, current state is " + state +
                     ", members: " + members);
             response.setStatus(status);
             return response;
@@ -600,7 +617,7 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
      * Secondary FE Leader send request meta rpc to primary FE any node
      */
     private void sendRequestMeta() throws IOException, UserException {
-        if (!role.equals(FailoverGroupRole.SECONDARY) || !state.equals(FailoverGroupState.RUNNING)) {
+        if (!role.equals(FailoverGroupRole.SECONDARY) || state.equals(FailoverGroupState.INITIALIZING)) {
             return;
         }
 
@@ -637,27 +654,39 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
             GlobalStateMgr.setFailoverGroupThread();
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             globalStateMgr.loadImage(getFailoverImageDir());
-            ReplicatedObjectMeta objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name)
+            objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name)
                     .getObjectMgr().toObjectMeta(response.getPrimary_token()); // Token is not saved in image
-            handleObjectMeta(objectMeta);
+            objectMeta.setLoadMgr(globalStateMgr.getLoadMgr());
+            objectMeta.setRoutineLoadMgr(globalStateMgr.getRoutineLoadMgr());
+            objectMeta.setStreamLoadMgr(globalStateMgr.getStreamLoadMgr());
+            objectMeta.setPipeManager(globalStateMgr.getPipeManager());
+            objectMeta.setDeleteMgr(globalStateMgr.getDeleteMgr());
+            objectMeta.setTableIdToIncrementId(globalStateMgr.getLocalMetastore().tableIdToIncrementId());
         } finally {
             GlobalStateMgr.resetFailoverGroupThread();
             GlobalStateMgr.destroyFailoverGroupState();
         }
+
+        handleObjectMeta();
     }
 
     /*
      * For secondary
      * Handle object meta of primary
      */
-    private void handleObjectMeta(ReplicatedObjectMeta objectMeta) {
-        schedule.startSchedule();
-        LOG.info("Failover group {} start replication from primary {}", name, primary);
+    private void handleObjectMeta() {
+        if (!role.equals(FailoverGroupRole.SECONDARY) || state.equals(FailoverGroupState.INITIALIZING)) {
+            return;
+        }
 
-        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(this, objectMeta);
+        state = FailoverGroupState.REPLICATING;
+        schedule.startSchedule();
+
+        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(this);
         job.start();
 
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        LOG.info("Failover group {} start replication from primary {}", name, primary);
     }
 
     /*
@@ -670,16 +699,37 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
                 if (jobExecutor.hasFailedJobs()) {
                     schedule.finishSchedule(true);
                     GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-                    LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs", name,
-                            primary);
+                    LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs",
+                            name, primary);
                 } else {
-                    schedule.finishSchedule(false);
-                    jobExecutor.clear();
-                    GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-                    LOG.info("Failover group {} finished replication from primary {}", name, primary);
+                    if (state.equals(FailoverGroupState.REPLICATING)) {
+                        handleReplicationFinished();
+                    } else {
+                        state = FailoverGroupState.RUNNING;
+                        schedule.finishSchedule(false);
+                        jobExecutor.clear();
+                        objectMap.clear();
+                        objectMeta = null;
+                        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+                        LOG.info("Failover group {} finished replication and updating from primary {}", name, primary);
+                    }
                 }
             }
         }
+    }
+
+    /*
+     * For secondary
+     * Do some work when replication finished
+     */
+    private void handleReplicationFinished() {
+        state = FailoverGroupState.UPDATING;
+
+        UpdateReplicatedObjectJob job = new UpdateReplicatedObjectJob(this);
+        job.start();
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        LOG.info("Failover group {} finished replication and start updating from primary {}", name, primary);
     }
 
     /*
@@ -767,10 +817,5 @@ public class FailoverGroup implements Writable, GsonPostProcessable {
 
     public static FailoverGroup read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), FailoverGroup.class);
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 }
