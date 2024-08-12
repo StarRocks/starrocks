@@ -112,6 +112,7 @@ struct PrimaryKeyParam {
     bool enable_persistent_index = false;
     PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
+    bool enable_transparent_data_encryption = false;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
