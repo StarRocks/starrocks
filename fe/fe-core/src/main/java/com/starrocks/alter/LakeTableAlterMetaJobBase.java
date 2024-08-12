@@ -34,6 +34,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -185,15 +186,15 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
         db.writeLock();
 
+        LakeTable table = (LakeTable) db.getTable(tableId);
+        if (table == null) {
+            // table has been dropped
+            LOG.warn("table does not exist, tableId:" + tableId);
+            throw new AlterCancelException("table does not exist, tableId:" + tableId);
+        }
+
         try {
-            LakeTable table = (LakeTable) db.getTable(tableId);
-            if (table == null) {
-                // table has been dropped
-                LOG.warn("table does not exist, tableId:" + tableId);
-                throw new AlterCancelException("table does not exist, tableId:" + tableId);
-            } else {
-                updateCatalog(db, table);
-            }
+            updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -205,6 +206,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             db.writeUnlock();
         }
 
+        handleMVRepair(db, table);
         LOG.info("update meta job finished: {}", jobId);
     }
 
@@ -506,5 +508,37 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    private void handleMVRepair(Database db, LakeTable table) {
+        if (table.getRelatedMaterializedViews().isEmpty()) {
+            return;
+        }
+
+        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+        db.readLock();;
+        try {
+            for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
+                long partitionId = partitionVersion.getKey();
+                Partition partition = table.getPartition(partitionId);
+                if (partition == null || table.isTempPartition(partitionId)) {
+                    continue;
+                }
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo();
+                partitionRepairInfo.setPartitionId(partitionId);
+                partitionRepairInfo.setPartitionName(partition.getName());
+                partitionRepairInfo.setVersion(partitionVersion.getValue());
+                partitionRepairInfo.setVersionTime(finishedTimeMs);
+                partitionRepairInfos.add(partitionRepairInfo);
+            }
+        } finally {
+            db.readUnlock();
+        }
+
+        if (partitionRepairInfos.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
     }
 }
