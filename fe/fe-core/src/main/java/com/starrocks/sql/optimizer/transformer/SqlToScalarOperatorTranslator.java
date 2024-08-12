@@ -325,6 +325,11 @@ public final class SqlToScalarOperatorTranslator {
                 correlation.add(columnRefOperator);
             }
 
+            ScalarOperator constOperator = expressionMapping.getConstOperator(columnRefOperator);
+            if (constOperator != null) {
+                return constOperator;
+            }
+
             // If origin type is struct type, means that node contains subfield access
             if (node.getTrueOriginType().isStructType()) {
                 Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
@@ -417,7 +422,7 @@ public final class SqlToScalarOperatorTranslator {
             }
             Scope scope = new Scope(args, expressionMapping.getScope());
             ExpressionMapping old = expressionMapping;
-            expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
+            expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
             return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);

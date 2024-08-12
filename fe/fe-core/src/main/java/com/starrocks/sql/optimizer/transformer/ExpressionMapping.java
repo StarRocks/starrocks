@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,13 +51,24 @@ public class ExpressionMapping {
     private ColumnRefOperator[] fieldMappings;
     private RelationId outerScopeRelationId;
 
+    private Map<ColumnRefOperator, ScalarOperator> columnRefToConstOperators = new HashMap<>();
+
     public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings) {
         this.scope = scope;
         this.fieldMappings = new ColumnRefOperator[fieldMappings.size()];
         fieldMappings.toArray(this.fieldMappings);
     }
 
-    public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings, ExpressionMapping outer) {
+    public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings,
+                             Map<ColumnRefOperator, ScalarOperator> columnRefToConstOperators) {
+        this.scope = scope;
+        this.fieldMappings = new ColumnRefOperator[fieldMappings.size()];
+        fieldMappings.toArray(this.fieldMappings);
+        this.columnRefToConstOperators = columnRefToConstOperators;
+    }
+
+    public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings, ExpressionMapping outer,
+                             Map<ColumnRefOperator, ScalarOperator> columnRefToConstOperators) {
         this.scope = scope;
         List<ColumnRefOperator> fieldsList = new ArrayList<>(fieldMappings);
         if (outer != null) {
@@ -69,6 +81,8 @@ public class ExpressionMapping {
         }
         this.fieldMappings = new ColumnRefOperator[fieldsList.size()];
         fieldsList.toArray(this.fieldMappings);
+
+        this.columnRefToConstOperators = columnRefToConstOperators;
     }
 
     public ExpressionMapping(Scope scope) {
@@ -128,6 +142,14 @@ public class ExpressionMapping {
         expressionToColumns.put(expression, columnRefOperator);
     }
 
+    public void putConstOperator(ColumnRefOperator columnRefOperator, ScalarOperator constOperator) {
+        columnRefToConstOperators.put(columnRefOperator, constOperator);
+    }
+
+    public ScalarOperator getConstOperator(ColumnRefOperator columnRefOperator) {
+        return columnRefToConstOperators.get(columnRefOperator);
+    }
+
     public void putWithSymbol(Expr expression, Expr resolveExpr, ColumnRefOperator columnRefOperator) {
         if (resolveExpr instanceof SlotRef) {
             if (expression instanceof SlotRef
@@ -163,5 +185,13 @@ public class ExpressionMapping {
 
     public void addExpressionToColumns(Map<Expr, ColumnRefOperator> expressionToColumns) {
         this.expressionToColumns.putAll(expressionToColumns);
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefToConstOperators() {
+        return columnRefToConstOperators;
+    }
+
+    public void addColumnRefToConstOperators(Map<ColumnRefOperator, ScalarOperator> columnRefToConstOperators) {
+        this.columnRefToConstOperators.putAll(columnRefToConstOperators);
     }
 }
