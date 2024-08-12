@@ -96,8 +96,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
-    // cache select doesn't rely on `enable_scan_datacache` session variable
+    // Check that the system meets the requirements for enabling DataCache
     if (config::datacache_enable && BlockCache::instance()->available()) {
+        // setup priority & ttl seconds
         int8_t datacache_priority = 0;
         int64_t datacache_ttl_seconds = 0;
         if (state->query_options().__isset.datacache_priority) {
@@ -126,14 +127,15 @@ Status HiveDataSource::open(RuntimeState* state) {
                 hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
                 enable_populate_datacache = hdfs_scan_node.datacache_options.enable_populate_datacache;
             } else if (state->query_options().__isset.enable_populate_datacache) {
+                // Compatible with old parameter
                 enable_populate_datacache = state->query_options().enable_populate_datacache;
             }
 
-            bool enable_datacache_aync_populate_mode =
+            const bool enable_datacache_aync_populate_mode =
                     state->query_options().__isset.enable_datacache_async_populate_mode &&
                     state->query_options().enable_datacache_async_populate_mode;
-            bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
-                                               state->query_options().enable_datacache_io_adaptor;
+            const bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
+                                                     state->query_options().enable_datacache_io_adaptor;
 
             int32_t datacache_evict_probability = 0;
             if (state->query_options().__isset.datacache_evict_probability) {
@@ -614,10 +616,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     // setup options for datacache
     scanner_params.datacache_options = _datacache_options;
+    scanner_params.use_file_metacache = _use_file_metacache;
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
-    scanner_params.use_file_metacache = _use_file_metacache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

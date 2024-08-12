@@ -211,12 +211,12 @@ struct HdfsScannerParams {
 
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
 
-    DataCacheOptions datacache_options;
+    DataCacheOptions datacache_options{};
+    bool use_file_metacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
-    bool use_file_metacache = false;
     bool orc_use_column_names = false;
     MORParams mor_params;
 

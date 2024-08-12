@@ -243,11 +243,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
             cache_input_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
             cache_input_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
             cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
-            input_stream = cache_input_stream;
         }
         cache_input_stream->set_priority(datacache_options.datacache_priority);
         cache_input_stream->set_ttl_seconds(datacache_options.datacache_ttl_seconds);
         shared_buffered_input_stream->set_align_size(cache_input_stream->get_align_size());
+        input_stream = cache_input_stream;
     }
 
     // if compression
@@ -272,14 +272,13 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
 }
 
 Status HdfsScanner::open_random_access_file() {
-    OpenFileOptions options{};
-    options.fs = _scanner_params.fs;
-    options.path = _scanner_params.path;
-    options.file_size = _scanner_params.file_size;
-    options.datacache_options = _scanner_params.datacache_options;
-    options.compression_type = _compression_type;
-    options.fs_stats = &_fs_stats;
-    options.app_stats = &_app_stats;
+    OpenFileOptions options{.fs = _scanner_params.fs,
+                            .path = _scanner_params.path,
+                            .file_size = _scanner_params.file_size,
+                            .fs_stats = &_fs_stats,
+                            .app_stats = &_app_stats,
+                            .datacache_options = _scanner_params.datacache_options,
+                            .compression_type = _compression_type};
 
     ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
     return Status::OK();
@@ -390,10 +389,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
 
-        if (_runtime_state->query_options().__isset.query_type &&
-            _runtime_state->query_options().query_type == TQueryType::LOAD) {
-            // For cache select
-            // For load query type, we will update load datacache metrics, these metrics are retrived by cache select
+        if (_scanner_params.datacache_options.enable_cache_select) {
+            // For cache select, we will update load datacache metrics
             _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
             _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
             _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
