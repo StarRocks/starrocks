@@ -54,12 +54,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -88,18 +88,27 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -140,6 +149,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -273,6 +283,12 @@ public class OlapTable extends Table {
     private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
+
+    // Both the following two flags are used by StarMgrMetaSyncer
+    // The flag is used to indicate whether the table shard group has changed.
+    public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
+    // The flag is used to indicate whether the table is doing automatic bucketing.
+    public AtomicBoolean isAutomaticBucketing = new AtomicBoolean(false);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -415,6 +431,22 @@ public class OlapTable extends Table {
 
     public Map<Long, Long> getDoubleWritePartitions() {
         return doubleWritePartitions;
+    }
+
+    public boolean hasShardGroupChanged() {
+        return isShardGroupChanged.get();
+    }
+
+    public void setShardGroupChanged(boolean isShardGroupChanged) {
+        this.isShardGroupChanged.set(isShardGroupChanged);
+    }
+
+    public boolean isAutomaticBucketing() {
+        return isAutomaticBucketing.get();
+    }
+
+    public void setAutomaticBucketing(boolean isAutomaticBucketing) {
+        this.isAutomaticBucketing.set(isAutomaticBucketing);
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -1259,8 +1291,12 @@ public class OlapTable extends Table {
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                int numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                info.setBucketNum(numBucket);
+                // prior to use user set mutable bucket num
+                long numBucket = getMutableBucketNum();
+                if (numBucket <= 0) {
+                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                }
+                info.setBucketNum((int) numBucket);
             } else {
                 throw new DdlException("Unknown distribution info type: " + info.getType());
             }
@@ -1311,6 +1347,10 @@ public class OlapTable extends Table {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
             physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
         }
+    }
+
+    public void addPhysicalPartition(PhysicalPartition physicalPartition) {
+        physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
     }
 
     // This is a private method.
@@ -2466,6 +2506,13 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
+    public Long getMutableBucketNum() {
+        if (tableProperty != null) {
+            return tableProperty.getMutableBucketNum();
+        }
+        return (long) 0;
+    }
+
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2474,6 +2521,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setMutableBucketNum(long bucketNum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM,
+                        String.valueOf(bucketNum));
+        tableProperty.buildMutableBucketNum();
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -2921,6 +2978,7 @@ public class OlapTable extends Table {
     @Override
     public void onReload() {
         analyzePartitionInfo();
+        analyzeRollupIndexMeta();
         tryToAssignIndexId();
     }
 
@@ -2979,6 +3037,51 @@ public class OlapTable extends Table {
                 SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
                         column.getType(), column.isAllowNull());
                 slotRefs.get(0).setDesc(slotDescriptor);
+            }
+        }
+    }
+
+    /**
+     * Analyze defined expr of columns in rollup index meta.
+     */
+    private void analyzeRollupIndexMeta() {
+        if (indexIdToMeta.size() <= 1) {
+            return;
+        }
+        TableName tableName = new TableName(null, getName());
+        ConnectContext session = new ConnectContext();
+        Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
+        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
+            if (indexMeta.getIndexId() == baseIndexId) {
+                continue;
+            }
+            List<Column> columns = indexMeta.getSchema();
+            // Note: Add this try-catch block to avoid the failure of analyzing rollup index meta since this
+            // method will be called in replay method.
+            // And the failure of analyzing rollup index meta will only affect the associated synchronized mvs and
+            // will not affect the whole system.
+            try {
+                for (Column column : columns) {
+                    Expr definedExpr = column.getDefineExpr();
+                    if (definedExpr == null) {
+                        continue;
+                    }
+                    if (visitorOpt.isEmpty()) {
+                        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
+                                session, this, tableName);
+                        visitorOpt = Optional.of(visitor);
+                    }
+                    Preconditions.checkArgument(visitorOpt.isPresent(), "visitor should not be null");
+                    definedExpr.accept(visitorOpt.get(), null);
+                    ExpressionAnalyzer.analyzeExpression(definedExpr, new AnalyzeState(),
+                            new Scope(RelationId.anonymous(),
+                                    new RelationFields(this.getBaseSchema().stream()
+                                            .map(col -> new Field(col.getName(), col.getType(),
+                                                    tableName, null))
+                                            .collect(Collectors.toList()))), session);
+                }
+            } catch (Exception e) {
+                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexId(), getName(), e);
             }
         }
     }
@@ -3126,6 +3229,12 @@ public class OlapTable extends Table {
         Long bucketSize = getAutomaticBucketSize();
         if (bucketSize > 0) {
             properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // mutable bucket num
+        Long mutableBucketNum = getMutableBucketNum();
+        if (mutableBucketNum > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
         }
 
         // locations

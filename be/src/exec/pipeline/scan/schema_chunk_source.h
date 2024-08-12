@@ -35,7 +35,11 @@ public:
 
     ~SchemaChunkSource() override;
 
+    // Prepare the ChunkSource state. Should not put any blocking RPC calls in it
     Status prepare(RuntimeState* state) override;
+
+    // Start the ChunkSource, may execute some RPC calls to fetch metadata from FE
+    Status start(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
@@ -57,6 +61,8 @@ private:
     std::vector<int> _index_map;
 
     ChunkAccumulator _accumulator;
+
+    std::once_flag _start_once;
 };
 } // namespace pipeline
 } // namespace starrocks

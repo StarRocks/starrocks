@@ -107,9 +107,10 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
         return Status::OK();
     }
 
@@ -243,9 +244,10 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
         return Status::OK();
     }
 

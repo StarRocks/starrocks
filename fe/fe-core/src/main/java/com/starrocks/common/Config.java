@@ -2127,7 +2127,7 @@ public class Config extends ConfigBase {
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int max_hive_partitions_per_rpc = 5000;
 
     /**
@@ -2404,6 +2404,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long star_mgr_meta_sync_interval_sec = 600L;
+
+    /**
+     * Whether allows delete shard meta if failes to delete actual data.
+     * In extreme cases, actual data deletion might fail or timeout,
+     * and if shard meta is not deleted, the FE memory will grow,
+     * eventually cause fe frequently Full GC
+     */
+    @ConfField(mutable = true)
+    public static boolean meta_sync_force_delete_shard_meta = false;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
@@ -2917,6 +2926,10 @@ public class Config extends ConfigBase {
             "default")
     public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
 
+    @ConfField(mutable = true, comment = "Whether enable to rewrite query in mv refresh or not so it can use " +
+            "query the rewritten mv directly rather than original base table to improve query performance.")
+    public static boolean enable_mv_refresh_query_rewrite = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -3086,4 +3099,15 @@ public class Config extends ConfigBase {
     
     @ConfField
     public static boolean enable_alter_struct_column = true;
+
+    // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
+    // large bytes to being deserialized successfully. So we give a 1G default value here.
+    @ConfField(mutable = true)
+    public static int thrift_max_message_size = 1024 * 1024 * 1024;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_frame_size = 16384000;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_recursion_depth = 64;
 }

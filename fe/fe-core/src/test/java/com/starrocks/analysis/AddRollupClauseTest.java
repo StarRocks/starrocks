@@ -18,16 +18,16 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.RollupRenameClause;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class AddRollupClauseTest {
     @Test
-    public void testNormal() throws AnalysisException {
+    public void testNormal() {
         AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"),
                 null, "baseRollup", null);
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
@@ -79,5 +79,28 @@ public class AddRollupClauseTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
         analyzer.analyze(null, clause);
         Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRename1() {
+        RollupRenameClause clause = new RollupRenameClause("testRollup", "");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRename2() {
+        RollupRenameClause clause = new RollupRenameClause("", "testRollup");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testRename3() {
+        RollupRenameClause clause = new RollupRenameClause("testRollup", "testRollup2");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
     }
 }

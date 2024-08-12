@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {

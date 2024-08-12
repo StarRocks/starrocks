@@ -359,6 +359,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -545,6 +546,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
 
+    public static final String CUSTOM_QUERY_ID = "custom_query_id";
+
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
@@ -630,6 +633,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+    public static final String ENABLE_EVALUATE_SCHEMA_SCAN_RULE = "enable_evaluate_schema_scan_rule";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -774,6 +778,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // would be consolidated, since when the number of like predicates is too small, its corresponding
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1043,6 +1050,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
     private boolean cboPruneJsonSubfield = true;
 
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD_DEPTH, flag = VariableMgr.INVISIBLE)
+    private int cboPruneJsonSubfieldDepth = 20;
+
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -1068,7 +1078,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
-
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
@@ -1486,6 +1495,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
     private boolean enableRewriteSimpleAggToHdfsScan = false;
 
+    @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
+    private boolean enableEvaluateSchemaScanRule = true;
+
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;
 
@@ -1511,6 +1523,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    public int getCboPruneJsonSubfieldDepth() {
+        return cboPruneJsonSubfieldDepth;
+    }
+
+    public void setCboPruneJsonSubfieldDepth(int cboPruneJsonSubfieldDepth) {
+        this.cboPruneJsonSubfieldDepth = cboPruneJsonSubfieldDepth;
+    }
 
     public boolean isEnableExecutionOnly() {
         return enableExecutionOnly;
@@ -2095,6 +2115,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PREDICATE_MOVE_AROUND)
     private boolean enablePredicateMoveAround = true;
 
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncQueueSize = 1000;
+
+    @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE, flag = VariableMgr.INVISIBLE)
+    private int connectorRemoteFileAsyncTaskSize = 4;
+
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
@@ -2201,6 +2227,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getPhasedSchedulerMaxConcurrency() {
         return phasedSchedulerMaxConcurrency;
     }
+
     public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
         this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
     }
@@ -2208,6 +2235,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean enablePhasedScheduler() {
         return enablePhasedScheduler;
     }
+
     public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
         this.enablePhasedScheduler = enablePhasedScheduler;
     }
@@ -2232,6 +2260,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
+
+    @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
+    private String customQueryId = "";
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2408,7 +2439,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
                 Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
         if (result == null) {
             String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
             throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
@@ -2418,7 +2449,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
         return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                        StringUtils.upperCase(computationFragmentSchedulingPolicy))
                 .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
@@ -3710,6 +3741,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToHdfsScan;
     }
 
+    public boolean isEnableEvaluateSchemaScanRule() {
+        return enableEvaluateSchemaScanRule;
+    }
+
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -4047,6 +4082,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+    public void setCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+    }
+
+    public int getConnectorRemoteFileAsyncQueueSize() {
+        return connectorRemoteFileAsyncQueueSize;
+    }
+
+    public int getConnectorRemoteFileAsyncTaskSize() {
+        return connectorRemoteFileAsyncTaskSize;
     }
 
     // Serialize to thrift object

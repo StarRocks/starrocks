@@ -22,8 +22,8 @@
 
 #include "common/config.h"
 #include "exec/hash_joiner.h"
-#include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
@@ -456,6 +456,10 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     }
 
     return nullptr;
+}
+
+bool SpillableHashJoinProbeOperator::spilled() const {
+    return _join_builder->spiller()->spilled();
 }
 
 void SpillableHashJoinProbeOperator::_acquire_next_partitions() {

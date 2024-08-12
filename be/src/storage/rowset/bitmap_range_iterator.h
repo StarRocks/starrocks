@@ -38,11 +38,12 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 // A fast range iterator for roaring bitmap. Output ranges use closed-open form, like [from, to).
 // Example:
 //   input bitmap:  [0 1 4 5 6 7 10 15 16 17 18 19]
-//   output ranges: [0,2), [4,8), [10,11), [15,20) (when max_range_size=10)
-//   output ranges: [0,2), [4,8), [10,11), [15,18), [18,20) (when max_range_size=3)
+//   output ranges: [0,2), [4,8), [10,11), [15,20)
 class BitmapRangeIterator {
 public:
     explicit BitmapRangeIterator(const Roaring& bitmap) {
@@ -50,9 +51,13 @@ public:
         _read_next_batch();
     }
 
-    ~BitmapRangeIterator() = default;
+    BitmapRangeIterator(const Roaring& bitmap, uint32_t start) {
+        roaring_init_iterator(&bitmap.roaring, &_iter);
+        roaring_move_uint32_iterator_equalorlarger(&_iter, start);
+        _read_next_batch();
+    }
 
-    bool has_more_range() const { return !_eof; }
+    ~BitmapRangeIterator() = default;
 
     // read next range into [*from, *to) whose size <= max_range_size.
     // return false when there is no more range.
@@ -61,16 +66,39 @@ public:
             return false;
         }
         *from = _buf[_buf_pos];
+        auto last_val = *from;
+
         uint32_t range_size = 0;
         do {
-            _last_val = _buf[_buf_pos];
             _buf_pos++;
+            last_val++;
             range_size++;
-            if (_buf_pos == _buf_size) { // read next batch
+            if (_buf_pos == _buf_size) {
                 _read_next_batch();
             }
-        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == _last_val + 1);
-        *to = *from + range_size;
+        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == last_val);
+
+        *to = last_val;
+        return true;
+    }
+
+    // read next range into [*from, *to)
+    // return false when there is no more range.
+    bool next_range(uint32_t* from, uint32_t* to) {
+        if (_eof) {
+            return false;
+        }
+        *from = _buf[_buf_pos];
+        auto last_val = *from;
+
+        do {
+            _buf_pos++;
+            last_val++;
+            if (_buf_pos == _buf_size) {
+                _read_next_batch();
+            }
+        } while (!_eof && _buf[_buf_pos] == last_val);
+        *to = last_val;
         return true;
     }
 
@@ -85,7 +113,6 @@ private:
     static const uint32_t kBatchSize = 256;
 
     roaring::api::roaring_uint32_iterator_t _iter{};
-    uint32_t _last_val{0};
     uint32_t _buf_pos{0};
     uint32_t _buf_size{0};
     bool _eof{false};

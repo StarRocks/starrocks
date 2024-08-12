@@ -408,4 +408,16 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             }
         });
     }
+
+    @Test
+    public void testMVRewriteWithNonDeterministicFunctions() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select current_date(), t1a, t1b from test.test_all_type ;", () -> {
+            {
+                String query = " select current_date(), t1a, t1b from test.test_all_type";
+                sql(query).nonMatch("mv0");
+            }
+        });
+    }
 }

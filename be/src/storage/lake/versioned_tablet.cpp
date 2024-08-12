@@ -56,11 +56,11 @@ StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer_with_schema(
     } else {
         if (type == kHorizontal) {
             return std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
-                                                                   flush_pool);
+                                                                   is_compaction, flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
-                                                                 max_rows_per_segment, flush_pool);
+                                                                 max_rows_per_segment, is_compaction, flush_pool);
         }
     }
 }

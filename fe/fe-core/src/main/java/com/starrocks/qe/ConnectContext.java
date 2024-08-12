@@ -81,6 +81,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -592,12 +593,23 @@ public class ConnectContext {
         this.state = state;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getNormalizedErrorCode() {
+        // TODO: how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
+        if (StringUtils.isNotEmpty(errorCode)) {
+            // error happens in BE execution.
+            return errorCode;
+        }
+
+        if (state.getErrType() != QueryState.ErrType.UNKNOWN) {
+            // error happens in FE execution.
+            return state.getErrType().name();
+        }
+
+        return "";
     }
 
-    public void setErrorCode(String errorCode) {
-        this.errorCode = errorCode;
+    public void resetErrorCode() {
+        this.errorCode = "";
     }
 
     public void setErrorCodeOnce(String errorCode) {
@@ -671,6 +683,10 @@ public class ConnectContext {
 
     public void setLastQueryId(UUID queryId) {
         this.lastQueryId = queryId;
+    }
+
+    public String getCustomQueryId() {
+        return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
     public boolean isProfileEnabled() {

@@ -325,6 +325,12 @@ Status Rowset::remove() {
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
                 LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
+            } else if (index.index_type() == IndexType::VECTOR) {
+                std::string vector_index_path = IndexDescriptor::vector_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto vst = fs->delete_file(vector_index_path);
+                LOG_IF(WARNING, !vst.ok()) << "Fail to delete vector_index_path " << vector_index_path << ": " << vst;
+                merge_status(vst);
             }
         }
     }
@@ -431,6 +437,15 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                             return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
                                                                             src_absolute_path, dst_absolute_path));
                         }
+                    }
+                } else if (index.index_type() == VECTOR) {
+                    std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                    std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                        PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                        return Status::RuntimeError("Fail to link index data file");
                     }
                 }
             }
@@ -866,6 +881,7 @@ StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.rowset_path = _rowset_path;
 
     // open update file
     DCHECK(update_file_id < num_update_files());

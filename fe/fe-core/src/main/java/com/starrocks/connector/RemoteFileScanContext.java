@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.catalog.Table;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
@@ -26,12 +27,16 @@ import java.util.concurrent.locks.ReentrantLock;
   And in this context, we maintain fields can be shared and reused.
  */
 public class RemoteFileScanContext {
+    public RemoteFileScanContext(Table table) {
+        this.table = table;
+    }
+
+    public Table table = null;
     // ---- concurrent initialization -----
     public AtomicBoolean init = new AtomicBoolean(false);
     public ReentrantLock lock = new ReentrantLock();
 
     // ---- hudi related fields -----
-    public String hudiTableLocation = null;
     public HoodieTableFileSystemView hudiFsView = null;
     public HoodieTimeline hudiTimeline = null;
     public HoodieInstant hudiLastInstant = null;
