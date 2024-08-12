@@ -179,17 +179,12 @@ public class Optimizer {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
 
-            // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
+            // prepare for mv rewrite
+            prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
             try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
                 logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
                         .transform(logicOperatorTree, context).get(0);
             }
-
-            // prepare for mv rewrite
-            prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
-
-            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
-                    .transform(logicOperatorTree, context).get(0);
 
             OptExpression result = optimizerConfig.isRuleBased() ?
                     optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
@@ -340,9 +335,18 @@ public class Optimizer {
 
     private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
                                   ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        // MV Rewrite will be used when cbo is enabled.
+        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+                !sessionVariable.isEnableMaterializedViewRewrite()) {
+            return;
+        }
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
-                .prepare(logicOperatorTree, mvRewriteStrategy);
+                .prepare(logicOperatorTree);
+        // initialize mv rewrite strategy finally
+        mvRewriteStrategy = MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, logicOperatorTree);
+        OptimizerTraceUtil.logMVPrepare("MV rewrite strategy: {}", mvRewriteStrategy);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -375,7 +379,6 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            context.setEnableLeftRightJoinEquivalenceDerive(true);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         }
     }
@@ -391,11 +394,25 @@ public class Optimizer {
         return tree;
     }
 
-    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
+    private void ruleBasedMaterializedViewRewriteMultiStages(OptExpression tree,
+                                                             TaskContext rootTaskContext,
+                                                             ColumnRefSet requiredColumns) {
+        if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        // do rule based mv rewrite
+        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+    }
+
+    private void doRuleBasedMaterializedViewRewrite(OptExpression tree,
+                                                    TaskContext rootTaskContext) {
         if (mvRewriteStrategy.enableViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
@@ -412,6 +429,17 @@ public class Optimizer {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+    }
+
+    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
+                                                  TaskContext rootTaskContext) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
+                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            return;
+        }
+
+        // do rule based mv rewrite
+        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
@@ -444,9 +472,9 @@ public class Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
-        if (sessionVariable.isEnableRboTablePrune()) {
-            context.setEnableLeftRightJoinEquivalenceDerive(false);
-        }
+
+        // see JoinPredicatePushdown
+        context.getJoinPushDownParams().prepare(context, sessionVariable, mvRewriteStrategy);
 
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -500,6 +528,10 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+
+        // rule-based materialized view rewrite: early stage
+        ruleBasedMaterializedViewRewriteMultiStages(tree, rootTaskContext, requiredColumns);
+        context.getJoinPushDownParams().reset();
 
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune

@@ -2060,8 +2060,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
-                false, true, materializationContext.getQueryRefFactory(),
-                true, optimizerContext);
+                false, true, materializationContext.getQueryRefFactory(), optimizerContext);
         return joinPredicatePushdown.pushdown(predicate);
     }
 
