@@ -243,11 +243,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
             cache_input_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
             cache_input_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
             cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
+            input_stream = cache_input_stream;
         }
         cache_input_stream->set_priority(datacache_options.datacache_priority);
         cache_input_stream->set_ttl_seconds(datacache_options.datacache_ttl_seconds);
         shared_buffered_input_stream->set_align_size(cache_input_stream->get_align_size());
-        input_stream = cache_input_stream;
     }
 
     // if compression
