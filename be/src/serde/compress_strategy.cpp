@@ -26,14 +26,9 @@ void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed
     if (uncompressed_bytes != compressed_bytes) {
         _uncompressed_bytes += uncompressed_bytes;
         _compressed_bytes += compressed_bytes;
-        _serialization_time_ns += serialization_time_ns;
-        _compression_time_ns += compression_time_ns;
 
         double ratio = uncompressed_bytes / (compressed_bytes + 1);
-        bool positive = ratio >= _decision_bound;
-        if (positive) {
-            _positive_count++;
-        }
+        _positive_count += ratio >= _decision_bound;
         _compress_count++;
     }
 
@@ -42,13 +37,13 @@ void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed
 
         double new_decision_bound = kCompressionLowerBound;
         double good_decision_ratio = 1.0 * (_positive_count + 1) / (_compress_count + 1);
-        new_decision_bound *= good_decision_ratio;
+        new_decision_bound /= good_decision_ratio;
         new_decision_bound = std::max(new_decision_bound, kCompressionLowerBound);
         new_decision_bound = std::min(new_decision_bound, kCompressionUpperBound);
 
-        int accumulate_steps = _uncompressed_bytes / kAccumulateDataStep;
-        double processed_data_factor = std::pow(kAccumulateDataStepFactor, accumulate_steps);
-        new_decision_bound /= processed_data_factor;
+        int steps = _uncompressed_bytes / kAccumulateDataStep;
+        double factor = 1 + kAccumulateFactorMax * steps / (steps + kAccumulateDataStepAlpha);
+        new_decision_bound /= factor;
         new_decision_bound = std::max(new_decision_bound, kCompressionLowerBound);
         new_decision_bound = std::min(new_decision_bound, kCompressionUpperBound);
         _decision_bound = new_decision_bound;
@@ -63,7 +58,7 @@ bool CompressStrategy::make_decision() const {
 }
 
 bool CompressStrategy::do_sample() const {
-    return _compressed_bytes == 0 || _sampled_data_bytes >= kSampleDataSize;
+    return _sampled_data_bytes == 0;
 }
 
 } // namespace starrocks::serde

@@ -27,7 +27,7 @@ namespace starrocks::serde {
 //  - decision_threshold = baseline / good_decision_ratio / processed_data_factor
 //  - baseline = 3.0 by default
 //  - good_decision_ratio = positive_decision_count / total_decision_count
-//  - processed_data_factor = 1.1 ** (accumulated_bytes / 128MB)
+//  - processed_data_factor = 1 + 3 * steps/(steps+140)
 // The idea is:
 // 1. If keeping making bad decision, let's raise the threshould
 // 2. If processing more data, let's reduce the threshold
@@ -43,12 +43,15 @@ public:
     // Make the decision for the next compression
     bool make_decision() const;
 
+    // Do sample every kSampleDataSize of uncompressed data
     bool do_sample() const;
 
 private:
     static constexpr int kSampleDataSize = 4 << 20;       // sample every 4MB data
     static constexpr int kAccumulateDataStep = 128 << 20; // every 128MB is a step
-    static constexpr double kAccumulateDataStepFactor = 1.05;
+    // When steps=10, factor=1.2; When steps=100, factor=2.25
+    static constexpr int kAccumulateDataStepAlpha = 140;
+    static constexpr double kAccumulateFactorMax = 3.0;
     static constexpr double kCompressionThreshold = 3.0;
     static constexpr double kCompressionLowerBound = 2.0;
     static constexpr double kCompressionUpperBound = 10.0;
@@ -59,7 +62,5 @@ private:
     uint64_t _sampled_data_bytes = 0;
     uint64_t _uncompressed_bytes = 0;
     uint64_t _compressed_bytes = 0;
-    uint64_t _serialization_time_ns = 0;
-    uint64_t _compression_time_ns = 0;
 };
 } // namespace starrocks::serde
