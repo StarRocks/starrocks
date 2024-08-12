@@ -2497,6 +2497,11 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
+        try {
+            compactionMgr.cleanNonExistedPartitions();
+        } catch (Throwable t) {
+            LOG.warn("compaction manager clean expired partitions failed", t);
+        }
     }
 
     public void doTaskBackgroundJob() {

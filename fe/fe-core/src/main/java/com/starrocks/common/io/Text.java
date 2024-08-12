@@ -34,6 +34,7 @@
 
 package com.starrocks.common.io;
 
+import com.starrocks.common.Config;
 import com.starrocks.meta.LimitExceededException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -451,7 +452,13 @@ public class Text implements Writable {
         int length = ByteBuffer.wrap(bytes).getInt();
         bytes = new byte[length];
         readAndCheckEof(in, bytes, length);
-        return decode(bytes);
+        long allowedLength = Config.max_allowed_metadata_bytes_length;
+        if (length > allowedLength) {
+            LOG.info("readStringWithChecksum, length is too large: {}, allowed length is: {}", length, allowedLength);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } else {
+            return decode(bytes);
+        }
     }
 
     /**

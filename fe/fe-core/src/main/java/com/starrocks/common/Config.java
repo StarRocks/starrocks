@@ -2414,6 +2414,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean meta_sync_force_delete_shard_meta = false;
 
+    /**
+     * max block bytes length allowed to deserialize while loading image
+     */
+    @ConfField(mutable = true)
+    public static long max_allowed_metadata_bytes_length = Integer.MAX_VALUE / 3;
+
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
     // ***********************************************************

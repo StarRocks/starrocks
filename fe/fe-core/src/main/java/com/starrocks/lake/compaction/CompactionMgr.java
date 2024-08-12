@@ -27,6 +27,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -179,11 +180,21 @@ public class CompactionMgr implements MemoryTrackable {
         partitionStatisticsHashMap.clear();
     }
 
+    @Deprecated
     public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
         checksum ^= getChecksum();
         return checksum;
+    }
+
+    public void cleanNonExistedPartitions() {
+        // clean non-existent partitions first
+        this.getAllPartitions()
+                .stream()
+                .filter(p -> !MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(),
+                        p.getPartitionId()))
+                .forEach(this::removePartition);
     }
 
     public long getChecksum() {
