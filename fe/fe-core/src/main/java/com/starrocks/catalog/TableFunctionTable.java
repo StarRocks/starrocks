@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
@@ -270,7 +271,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
             int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
             if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
@@ -279,7 +280,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            csvRowDelimiter = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_ROW_DELIMITER));
             int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
             if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
