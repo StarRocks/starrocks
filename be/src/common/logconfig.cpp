@@ -29,6 +29,7 @@
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/page_cache.h"
@@ -123,19 +124,6 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
-static void release_cache_mem() {
-    static bool start_dump = false;
-    if (!start_dump) {
-        auto* page_cache = StoragePageCache::instance();
-        if (page_cache != nullptr) {
-            LOG(INFO) << "Start to release memory of cache";
-            page_cache->set_capacity(0);
-            LOG(INFO) << "Release memory of cache success";
-        }
-    }
-    start_dump = true;
-}
-
 static void dontdump_unused_pages() {
     static bool start_dump = false;
     if (!start_dump) {
@@ -158,29 +146,26 @@ static void dontdump_unused_pages() {
     start_dump = true;
 }
 
+static void failure_handler_after_output_log() {
+    static bool start_dump = false;
+    if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+        dontdump_unused_pages();
+    }
+    start_dump = true;
+}
+
 static void failure_writer(const char* data, size_t size) {
     if (config::enable_core_file_size_optimization) {
         dontdump_unused_pages();
     }
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
-
-    if (config::enable_core_file_size_optimization) {
-        // TODO: If page cache releases crash due to memory problem,
-        //  the stack of be.out will be incomplete.
-        //  Glog needs to add a new interface to first write the log of stach and then optimize core file size.
-        //  I will and the interface later.
-        release_cache_mem();
-        dontdump_unused_pages();
-    }
 }
 
 static void failure_function() {
     dump_trace_info();
-    if (config::enable_core_file_size_optimization) {
-        release_cache_mem();
-        dontdump_unused_pages();
-    }
+    failure_handler_after_output_log();
     std::abort();
 }
 
@@ -282,6 +267,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+        google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
     }
 
     logging_initialized = true;

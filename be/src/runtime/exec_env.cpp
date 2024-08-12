@@ -34,6 +34,7 @@
 
 #include "runtime/exec_env.h"
 
+#include <cctype>
 #include <memory>
 #include <thread>
 
@@ -55,6 +56,8 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -764,6 +767,64 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
+}
+
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+void ExecEnv::try_release_resource_before_core_dump() {
+    std::set<std::string> modules;
+    bool release_all = false;
+    if (config::try_release_resource_before_core_dump.value() == "*") {
+        release_all = true;
+    } else {
+        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
+                                       &parse_resource_str, &modules);
+    }
+
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
+
+    if (_connector_scan_executor != nullptr && need_release("connector_scan_executor")) {
+        _connector_scan_executor->close();
+        LOG(INFO) << "close connector scan executor";
+    }
+    if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
+        _thread_pool->shutdown();
+        LOG(INFO) << "shutdown non-pipeline scan thread pool";
+    }
+    if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
+        _pipeline_prepare_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline prepare thread pool";
+    }
+    if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
+        _pipeline_sink_io_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline sink io thread pool";
+    }
+    if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
+        _query_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    auto* storage_page_cache = StoragePageCache::instance();
+    if (storage_page_cache != nullptr && need_release("storage_page_cache")) {
+        storage_page_cache->set_capacity(0);
+        LOG(INFO) << "release storage page cache memory";
+    }
 }
 
 } // namespace starrocks
