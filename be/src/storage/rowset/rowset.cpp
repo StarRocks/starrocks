@@ -81,7 +81,10 @@ Rowset::~Rowset() {
     if (_keys_type != PRIMARY_KEYS) {
         // ONLY support non-pk table now.
         // evict rowset before destroy, in case this rowset no close yet.
-        StorageEngine::instance()->tablet_manager()->metadata_cache()->evict_rowset(this);
+        auto metadata_cache = StorageEngine::instance()->tablet_manager()->metadata_cache();
+        if (metadata_cache != nullptr) {
+            metadata_cache->evict_rowset(this);
+        }
     }
 #endif
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
