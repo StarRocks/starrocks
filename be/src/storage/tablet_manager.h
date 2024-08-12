@@ -278,6 +278,9 @@ private:
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
+    // LRU cache for metadata
+    std::unique_ptr<MetadataCache> _metadata_cache;
+
     std::vector<TabletsShard> _tablets_shards;
     const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
@@ -300,9 +303,6 @@ private:
     // context for compaction checker
     size_t _cur_shard = 0;
     std::unordered_set<int64_t> _shard_visited_tablet_ids;
-
-    // LRU cache for metadata
-    std::unique_ptr<MetadataCache> _metadata_cache;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {
