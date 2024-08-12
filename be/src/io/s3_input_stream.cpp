@@ -41,7 +41,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         return 0;
     }
 
-    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
+    // https://www.rfc-editor.org/rfc/rfc9110.html#name-range
     auto range = fmt::format("bytes={}-{}", _offset, std::min<int64_t>(_offset + count, _size) - 1);
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
