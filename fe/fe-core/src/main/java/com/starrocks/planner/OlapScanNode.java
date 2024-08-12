@@ -517,7 +517,7 @@ public class OlapScanNode extends ScanNode {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
         }
         for (Tablet tablet : tablets) {
