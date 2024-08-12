@@ -28,6 +28,9 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 
 Parameters in brackets [] is optional.
 
+NOTE:
+- Since v3.3, `SHOW MATERIALIZED VIEWS` command will track all task runs' state as its final state if one refresh contains multi partitions/task runs to refresh. Only all task runs are all success, `last_refresh_state` will return success.
+
 ## Parameters
 
 | **Parameter**   | **Required** | **Description**                                              |
