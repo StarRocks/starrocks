@@ -211,6 +211,12 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         return false;
     }
 
+    if (tablet->has_compaction_task()) {
+        // tablet already has a running compaction task, skip it
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because there is another running compaction task.";
+        return false;
+    }
+
     int64_t last_failure_ts = 0;
     DataDir* data_dir = tablet->data_dir();
     if (candidate.type == CUMULATIVE_COMPACTION) {
