@@ -58,7 +58,7 @@ enum TDataSinkType {
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
     MULTI_OLAP_TABLE_SINK,
-    Split_DATA_STREAM_SINK
+    SPLIT_DATA_STREAM_SINK
 }
 
 enum TResultSinkType {

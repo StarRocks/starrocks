@@ -3416,9 +3416,6 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
-            ColumnRefSet requiredColsForFilter = new ColumnRefSet();
-            otherJoin.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
-            predicates.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
         }

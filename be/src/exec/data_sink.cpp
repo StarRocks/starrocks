@@ -174,7 +174,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::move(mcast_data_stream_sink);
         break;
     }
-    case TDataSinkType::Split_DATA_STREAM_SINK: {
+    case TDataSinkType::SPLIT_DATA_STREAM_SINK: {
         DCHECK(thrift_sink.__isset.split_stream_sink || thrift_sink.split_stream_sink.sinks.size() == 0)
                 << "Missing split stream sink.";
 

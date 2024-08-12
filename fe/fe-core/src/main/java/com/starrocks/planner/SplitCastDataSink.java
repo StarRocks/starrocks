@@ -70,7 +70,7 @@ public class SplitCastDataSink extends DataSink {
         sink.setDestinations(destinations);
         sink.setSplitExprs(tSplitExprs);
 
-        TDataSink result = new TDataSink(TDataSinkType.Split_DATA_STREAM_SINK);
+        TDataSink result = new TDataSink(TDataSinkType.SPLIT_DATA_STREAM_SINK);
         result.setSplit_stream_sink(sink);
         return result;
     }

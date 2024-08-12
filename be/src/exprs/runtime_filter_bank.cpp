@@ -122,7 +122,7 @@ size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcas
     return size;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(const ColumnPtr& column, bool eq_null,
+size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
                                                                              uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD_TO(field)                  \
@@ -146,7 +146,7 @@ size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(con
 }
 
 // |version|eq_null|num_rows|is_null|is_const|type|column_data|
-int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(ObjectPool* pool,
+int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
                                                                             SkewBroadcastRfMaterial** material,
                                                                             const uint8_t* data, size_t size,
                                                                             const PTypeDesc& ptype) {

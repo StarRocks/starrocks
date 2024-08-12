@@ -228,7 +228,7 @@ void RuntimeFilterPort::publish_skew_boradcast_runtime_filters(RuntimeFilterBuil
     std::string* rf_data = params.mutable_data();
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(keyColumn);
     rf_data->resize(max_size);
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(
+    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(
             keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
     rf_data->resize(actual_size);
     *(params.mutable_columntype()) = type_desc.to_protobuf();
@@ -454,7 +454,7 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
 
     // store material of broadcast join rf
     status->skew_broadcast_rf_material = nullptr;
-    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(
+    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
             &(status->pool), &(status->skew_broadcast_rf_material),
             reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
 
