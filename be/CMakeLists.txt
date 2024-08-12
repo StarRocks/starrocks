@@ -600,7 +600,7 @@ include(cmake_modules/FindClangTidy.cmake)
 
 if (CLANG_TIDY_PATH)
     # enable clang-tidy check for all source code files
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}" "--fix" "--fix-errors")
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
 
