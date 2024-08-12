@@ -28,6 +28,7 @@ public:
                           size_t write_num_rows) = 0;
     virtual Status flush() = 0;
     virtual bool is_remote() const = 0;
+    // only used for DCHECK
     size_t append_rows() const { return _append_rows; }
 
 protected:

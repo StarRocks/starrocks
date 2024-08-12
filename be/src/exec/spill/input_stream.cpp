@@ -124,8 +124,8 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(workgroup::YieldCo
 class RawChunkInputStream final : public SpillInputStream {
 public:
     RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {
-        for (auto chunk : _chunks) {
-            total_rows += chunk->num_rows();
+        for (const auto& chunk : _chunks) {
+            _total_rows += chunk->num_rows();
         }
     }
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
@@ -134,23 +134,23 @@ public:
     void close() override{};
 
 private:
-    size_t total_rows = 0;
-    size_t read_rows = 0;
-    size_t read_idx{};
+    size_t _total_rows{};
+    size_t _read_rows{};
+    size_t _read_idx{};
     std::vector<ChunkPtr> _chunks;
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
     RACE_DETECT(detect_get_next);
-    if (read_idx >= _chunks.size()) {
-        DCHECK_EQ(total_rows, read_rows);
+    if (_read_idx >= _chunks.size()) {
+        DCHECK_EQ(_total_rows, _read_rows);
         return Status::EndOfFile("eos");
     }
     // TODO: make ChunkPtr could convert to ChunkUniquePtr to avoid unused memory copy
-    auto res = std::move(_chunks[read_idx++])->clone_unique();
-    read_rows += res->num_rows();
-    _chunks[read_idx - 1].reset();
+    auto res = std::move(_chunks[_read_idx++])->clone_unique();
+    _read_rows += res->num_rows();
+    _chunks[_read_idx - 1].reset();
 
     return res;
 }
