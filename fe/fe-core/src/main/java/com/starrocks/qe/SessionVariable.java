@@ -631,7 +631,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
-    public static final String ENABLE_PARTITION_PRUNE_FOR_SIMPLE_AGG = "enable_partition_prune_for_simple_agg";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 

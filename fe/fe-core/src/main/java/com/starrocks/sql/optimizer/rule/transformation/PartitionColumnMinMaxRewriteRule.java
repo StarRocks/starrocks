@@ -71,9 +71,14 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         LogicalOlapScanOperator scanOperator = input.getInputs().get(0).getInputs().get(0).getOp().cast();
         Table table = scanOperator.getTable();
         return context.getSessionVariable().isEnableRewritePartitionColumnMinMax()
-                && table.isNativeTableOrMaterializedView()
-                && ((OlapTable) table).isPartitionedTable()
+                && checkTableType(table)
                 && checkMinMaxAggregation(aggregationOperator, scanOperator, context);
+    }
+
+    private boolean checkTableType(Table table) {
+        return table.isNativeTableOrMaterializedView()
+                && ((OlapTable) table).isPartitionedTable()
+                && ((OlapTable) table).getPartitionInfo().getPartitionColumnsSize() <= 1;
     }
 
     /**
