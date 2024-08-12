@@ -47,6 +47,8 @@ import com.google.gson.internal.Streams;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -235,6 +237,8 @@ import java.util.Map;
  * </pre>
  */
 public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
+    private static final Logger LOG = LogManager.getLogger(RuntimeTypeAdapterFactory.class);
+
     private final Class<?> baseType;
     private final String typeFieldName;
     private final Map<String, Class<?>> labelToSubtype = new LinkedHashMap<String, Class<?>>();
@@ -400,6 +404,9 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                 TypeAdapter<R> delegate = (TypeAdapter<R>) labelToDelegate.get(label);
                 if (delegate == null && fallbackLabel != null) {
                     delegate = (TypeAdapter<R>) labelToDelegate.get(fallbackLabel);
+                    if (delegate != null) {
+                        LOG.warn("Fallback to deserialize object of label:{} to the label:{}", label, fallbackLabel);
+                    }
                 }
                 if (delegate == null) {
                     throw new JsonParseException("cannot deserialize " + baseType + " subtype named " + label
