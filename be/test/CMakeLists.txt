@@ -229,6 +229,7 @@ set(EXEC_FILES
         ./storage/persistent_index_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
+        ./storage/roaring2range_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
