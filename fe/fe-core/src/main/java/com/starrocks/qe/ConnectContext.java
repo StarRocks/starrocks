@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -1125,6 +1126,11 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+                String currentValue = VariableMgr.getValue(sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(VariableMgr.getDefaultValue(entry.getKey()))) {
+                    // If the current session variable is not default value, we should respect it.
+                    continue;
+                }
                 SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
                 modifySystemVariable(variable, true);
             }
