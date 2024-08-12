@@ -31,6 +31,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/runtime_state.h"
+#include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
@@ -397,7 +398,13 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     // Set compression type according to query options
     if (state->query_options().__isset.transmission_compression_type) {
-        _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+        TCompressionType::type type = state->query_options().transmission_compression_type;
+        if (type == TCompressionType::AUTO) {
+            _compress_type = CompressionTypePB::LZ4;
+            _compress_strategy = std::make_shared<serde::CompressStrategy>();
+        } else {
+            _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+        }
     } else if (config::compress_rowbatches) {
         // If transmission_compression_type is not set, use compress_rowbatches to check if
         // compress transmitted data.
@@ -701,8 +708,11 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     }
 
     // try compress the ChunkPB data
-    bool do_sample = _compress_strategy.do_sample();
-    bool use_compression = do_sample || _compress_strategy.make_decision();
+    bool use_compression = true;
+    if (_compress_strategy) {
+        bool do_sample = _compress_strategy->do_sample();
+        use_compression = do_sample || _compress_strategy->make_decision();
+    }
     if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
         ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
 
@@ -724,9 +734,11 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
-        int64_t compression_time_ns = _timer.elapsed_time();
-        _compress_strategy.feedback(serialized_size, _compression_scratch.size(), serialization_time_ns,
-                                    compression_time_ns);
+        if (_compress_strategy) {
+            int64_t compression_time_ns = _timer.elapsed_time();
+            _compress_strategy->feedback(serialized_size, _compression_scratch.size(), serialization_time_ns,
+                                        compression_time_ns);
+        }
 
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();

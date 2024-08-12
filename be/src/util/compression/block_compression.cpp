@@ -33,6 +33,7 @@
 // under the License.
 
 #include "util/compression/block_compression.h"
+#include "common/config.h"
 
 #ifdef __x86_64__
 #include <libdeflate.h>
@@ -148,7 +149,7 @@ private:
             }
         }
 
-        int32_t acceleration = 1;
+        int32_t acceleration = config::lz4_acceleration;
         size_t compressed_size =
                 LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
 

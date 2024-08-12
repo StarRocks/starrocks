@@ -172,6 +172,8 @@ private:
 
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
+    std::shared_ptr<serde::CompressStrategy> _compress_strategy;
 
     RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
@@ -210,8 +212,6 @@ private:
 
     std::unique_ptr<Shuffler> _shuffler;
 
-    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
-    serde::CompressStrategy _compress_strategy;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
