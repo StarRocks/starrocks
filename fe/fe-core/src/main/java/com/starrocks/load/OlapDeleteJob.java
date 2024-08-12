@@ -400,8 +400,7 @@ public class OlapDeleteJob extends DeleteJob {
                     getTabletFailInfos(), timeoutMs,
                     new InsertTxnCommitAttachment());
         } catch (LockTimeoutException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            return false;
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 

@@ -2358,7 +2358,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId);
         if (workerGroupId.isEmpty()) {
             Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
         }
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
@@ -3779,14 +3779,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) {
         if (!(table instanceof OlapTable)) {
-            ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+            throw ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
         }
         if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
-            ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB, db.getFullName());
+            throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB, db.getFullName());
         }
         OlapTable olapTable = (OlapTable) table;
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE, olapTable.getState());
+            throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE, olapTable.getState());
         }
 
         String colName = renameClause.getColName();
@@ -3794,11 +3794,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
         Column column = olapTable.getColumn(colName);
         if (column == null) {
-            ErrorReportException.report(ErrorCode.ERR_BAD_FIELD_ERROR, colName, table.getName());
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_FIELD_ERROR, colName, table.getName());
         }
         Column currentColumn = olapTable.getColumn(newColName);
         if (currentColumn != null) {
-            ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+            throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
         }
         olapTable.renameColumn(colName, newColName);
 
@@ -4940,17 +4940,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
         Database database = getDb(stmt.getTableName().getDb());
         if (database == null) {
-            ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
         }
         Locker locker = new Locker();
         locker.lockDatabase(database, LockType.WRITE);
         try {
             Table table = database.getTable(stmt.getTableName().getTbl());
             if (table == null) {
-                ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
             }
             if (!table.isOlapTableOrMaterializedView()) {
-                ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
             }
 
             PhysicalPartition physicalPartition;
@@ -4958,15 +4958,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             if (stmt.getPartitionId() != -1) {
                 physicalPartition = olapTable.getPhysicalPartition(stmt.getPartitionId());
                 if (physicalPartition == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
                 }
             } else {
                 Partition partition = olapTable.getPartition(stmt.getPartitionName());
                 if (partition == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
                 }
                 if (partition.getSubPartitions().size() >= 2) {
-                    ErrorReportException.report(ErrorCode.ERR_MULTI_SUB_PARTITION, stmt.getPartitionName());
+                    throw ErrorReportException.report(ErrorCode.ERR_MULTI_SUB_PARTITION, stmt.getPartitionName());
                 }
                 physicalPartition = partition;
             }

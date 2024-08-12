@@ -1306,7 +1306,7 @@ public class LeaderImpl {
             response.setStatus(status);
             return response;
         } catch (LockTimeoutException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
 
         TStatus status = new TStatus(TStatusCode.OK);
