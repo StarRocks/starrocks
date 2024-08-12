@@ -364,6 +364,17 @@ static constexpr FromType floating_to_intergral_upper_bound = static_cast<FromTy
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
     if constexpr (std::is_floating_point_v<Type> && std::is_integral_v<ResultType>) {
+        // For floating-point numbers, we cannot use `value > (Type)std::numeric_limits<ResultType>::max()` to
+        // determine whether `value` exceeds the maximum value of ResultType. The reason is as follows:
+        //
+        // `std::numeric_limits<ResultType>::max()` is `2^n-1`, where n is 63, 31, 15 or 7, this number cannot be
+        // exactly represented by floating-point numbers, so when converted to Type, it will be rounded up to `2^n`.
+        // Therefore, when `value` is `2^n`, `value > (Type)std::numeric_limits<ResultType>::max()` will return false.
+        // However, in actual conversion, overflow will occur, resulting in the maximum or minimum value of ResultType,
+        // depending on the architecture, compiler, and compilation parameters.
+        //
+        // Because `2^n` can be exactly represented by floating-point numbers, we use `value >= (Type)2^n` to determine
+        // whether it is overflow, rather than `value > (Type)2^n-1`.
         return !(value >= floating_to_intergral_lower_bound<Type, ResultType> &&
                  value < floating_to_intergral_upper_bound<Type, ResultType>);
     } else {
