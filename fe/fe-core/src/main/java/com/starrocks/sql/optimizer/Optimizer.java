@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
@@ -561,7 +562,7 @@ public class Optimizer {
         ruleRewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
-
+        ruleRewriteIterative(tree, rootTaskContext, new PartitionColumnMinMaxRewriteRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
