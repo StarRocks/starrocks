@@ -12,7 +12,8 @@ displayed_sidebar: "Chinese"
 
 - 当前仅支持声明会话级别的自定义变量，即用户只能使用自己声明的自定义变量，且如客户端断开，那么当前会话中所有自定义变量将失效。
 - StarRocks 暂不支持使用 SHOW 语句查看已有的自定义变量。
-- 不支持声明 BITMAP、HLL、PERCENTILE 和 ARRAY 类型的自定义变量，JSON 类型的自定义变量会转换为 STRING 类型进行存储。
+- 不支持声明 BITMAP、HLL 和 PERCENTILE 类型的自定义变量，JSON 类型的自定义变量会转换为 STRING 类型进行存储。
+- 自 v3.2.7 起，StarRocks 支持声明 ARRAY 类型的自定义变量。
 
 ## 声明自定义变量
 

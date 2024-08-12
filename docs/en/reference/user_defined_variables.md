@@ -12,7 +12,8 @@ StarRocks 2.5 and later versions support user-defined variables. These variables
 
 - User-defined variables are variables, which can be created by the user and exist in the session. This means that no one can access user-defined variables that have been declared by another user, and when the session is closed these variables expire.
 - StarRocks does not support using the SHOW statement to display existing user-defined variables.
-- The following types of values cannot be declared as user-defined variables: BITMAP, HLL, PERCENTILE, and ARRAY. User-defined variables of the JSON type are converted to the STRING type for storage.
+- The following types of values cannot be declared as user-defined variables: BITMAP, HLL, and PERCENTILE. User-defined variables of the JSON type are converted to the STRING type for storage.
+- From v3.2.7 onwards, StarRocks supports the ARRAY type as a user-defined variable.
 
 ## Declare user-defined variables
 
