@@ -354,10 +354,18 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
     return value;
 }
 
+template <typename FromType, typename ToType>
+static constexpr FromType floating_to_intergral_lower_bound =
+        static_cast<FromType>(std::numeric_limits<ToType>::lowest());
+
+template <typename FromType, typename ToType>
+static constexpr FromType floating_to_intergral_upper_bound = static_cast<FromType>(2) *
+                                                              (std::numeric_limits<ToType>::max() / 2 + 1);
+
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
     if constexpr (std::is_floating_point_v<Type> && std::is_integral_v<ResultType>) {
-        return !(static_cast<Type>(std::numeric_limits<ResultType>::lowest()) <= value &&
-                 value < static_cast<Type>(2) * (std::numeric_limits<ResultType>::max() / 2 + 1));
+        return !(value >= floating_to_intergral_lower_bound<Type, ResultType> &&
+                 value < floating_to_intergral_upper_bound<Type, ResultType>);
     } else {
         // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
         // finite value y where y < x.
