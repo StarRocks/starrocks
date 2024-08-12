@@ -18,6 +18,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
+
 public class LazyConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(LazyConnector.class);
     private Connector delegate;
@@ -55,5 +57,23 @@ public class LazyConnector implements Connector {
                 delegate.shutdown();
             }
         }
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        initIfNeeded();
+        return delegate.supportMemoryTrack();
+    }
+
+    @Override
+    public long estimateSize() {
+        initIfNeeded();
+        return delegate.estimateSize();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        initIfNeeded();
+        return delegate.estimateCount();
     }
 }

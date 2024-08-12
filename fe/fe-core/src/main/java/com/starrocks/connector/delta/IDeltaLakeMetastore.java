@@ -18,9 +18,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.metastore.IMetastore;
 
 import java.util.List;
+import java.util.Map;
 
 public interface IDeltaLakeMetastore extends IMetastore {
     Table getTable(String dbName, String tableName);
 
     List<String> getPartitionKeys(String dbName, String tableName);
+
+    long estimateSize();
+
+    Map<String, Long> estimateCount();
 }

@@ -36,6 +36,7 @@ public class DeltaLakeConnector implements Connector {
     private final String catalogName;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
+    private IDeltaLakeMetastore metastore;
 
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -53,7 +54,7 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IDeltaLakeMetastore metastore = internalMgr.createDeltaLakeMetastore();
+        metastore = internalMgr.createDeltaLakeMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
@@ -79,5 +80,20 @@ public class DeltaLakeConnector implements Connector {
         Optional<DeltaLakeCacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
         updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return metastore != null;
+    }
+
+    @Override
+    public long estimateSize() {
+        return metastore.estimateSize();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return metastore.estimateCount();
     }
 }

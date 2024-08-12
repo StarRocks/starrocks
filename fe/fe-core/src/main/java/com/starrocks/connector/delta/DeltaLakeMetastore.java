@@ -19,6 +19,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.Pair;
@@ -37,6 +38,7 @@ import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -63,10 +65,15 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         this.delegate = metastore;
         this.hdfsConfiguration = hdfsConfiguration;
         this.properties = properties;
+        long checkpointCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                properties.getDeltaLakeCheckpointMetaCacheMemoryUsageRatio());
+        long jsonCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                properties.getDeltaLakeJsonMetaCacheMemoryUsageRatio());
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .maximumSize(properties.getDeltaLakeCheckpointMetaCacheMaxNum())
+                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
@@ -77,7 +84,9 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .maximumSize(properties.getDeltaLakeJsonMetaCacheMaxNum())
+                .weigher((key, value) ->
+                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
@@ -159,6 +168,17 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     @Override
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
+    }
+
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(Maps.newHashMap(jsonCache.asMap())) +
+                SizeEstimator.estimate(Maps.newHashMap(checkpointCache.asMap()));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
     }
 
     public void invalidateAll() {
