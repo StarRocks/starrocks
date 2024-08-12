@@ -138,7 +138,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
-    ctx.datacache_evict_probability = _scanner_params.datacache_evict_probability;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
@@ -232,21 +231,22 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
     input_stream = shared_buffered_input_stream;
 
     // input_stream = CacheInputStream(input_stream)
-    if (options.use_datacache) {
-        if (options.use_cache_select) {
-            cache_input_stream = std::make_shared<io::CacheSelectInputStream>(shared_buffered_input_stream, filename,
-                                                                              file_size, options.modification_time);
+    const DataCacheOptions& datacache_options = options.datacache_options;
+    if (datacache_options.enable_datacache) {
+        if (datacache_options.enable_cache_select) {
+            cache_input_stream = std::make_shared<io::CacheSelectInputStream>(
+                    shared_buffered_input_stream, filename, file_size, datacache_options.modification_time);
         } else {
             cache_input_stream = std::make_shared<io::CacheInputStream>(shared_buffered_input_stream, filename,
-                                                                        file_size, options.modification_time);
-            cache_input_stream->set_enable_populate_cache(options.enable_populate_datacache);
-            cache_input_stream->set_enable_async_populate_mode(options.enable_datacache_async_populate_mode);
-            cache_input_stream->set_enable_cache_io_adaptor(options.enable_datacache_io_adaptor);
+                                                                        file_size, datacache_options.modification_time);
+            cache_input_stream->set_enable_populate_cache(datacache_options.enable_populate_datacache);
+            cache_input_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
+            cache_input_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
             cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
             input_stream = cache_input_stream;
         }
-        cache_input_stream->set_priority(options.datacache_priority);
-        cache_input_stream->set_ttl_seconds(options.datacache_ttl_seconds);
+        cache_input_stream->set_priority(datacache_options.datacache_priority);
+        cache_input_stream->set_ttl_seconds(datacache_options.datacache_ttl_seconds);
         shared_buffered_input_stream->set_align_size(cache_input_stream->get_align_size());
     }
 
@@ -276,19 +276,10 @@ Status HdfsScanner::open_random_access_file() {
     options.fs = _scanner_params.fs;
     options.path = _scanner_params.path;
     options.file_size = _scanner_params.file_size;
+    options.datacache_options = _scanner_params.datacache_options;
+    options.compression_type = _compression_type;
     options.fs_stats = &_fs_stats;
     options.app_stats = &_app_stats;
-    options.compression_type = _compression_type;
-
-    if (_scanner_params.use_datacache) {
-        options.use_datacache = true;
-        options.modification_time = _scanner_params.modification_time;
-        options.enable_populate_datacache = _scanner_params.enable_populate_datacache;
-        options.enable_datacache_async_populate_mode = _scanner_params.enable_datacache_async_populate_mode;
-        options.enable_datacache_io_adaptor = _scanner_params.enable_datacache_io_adaptor;
-        options.datacache_priority = _scanner_params.datacache_priority;
-        options.datacache_ttl_seconds = _scanner_params.datacache_ttl_seconds;
-    }
 
     ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
     return Status::OK();
@@ -382,7 +373,7 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
 
-    if (_scanner_params.use_datacache && _cache_input_stream) {
+    if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_cache_bytes);
@@ -401,15 +392,17 @@ void HdfsScanner::update_counter() {
 
         if (_runtime_state->query_options().__isset.query_type &&
             _runtime_state->query_options().query_type == TQueryType::LOAD) {
+            // For cache select
             // For load query type, we will update load datacache metrics, these metrics are retrived by cache select
             _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
             _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
             _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
             _runtime_state->update_num_datacache_count(1);
+        } else {
+            // For none cache select sql, we will update DataCache app hit rate
+            BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
         }
-
-        BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

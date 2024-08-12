@@ -27,27 +27,9 @@ Status CacheSelectScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 }
 
 Status CacheSelectScanner::do_open(RuntimeState* runtime_state) {
+    // Cache select don't need to decompress data
+    _compression_type = CompressionTypePB::NO_COMPRESSION;
     RETURN_IF_ERROR(open_random_access_file());
-    return Status::OK();
-}
-
-Status CacheSelectScanner::open_random_access_file() {
-    OpenFileOptions options{};
-    options.fs = _scanner_params.fs;
-    options.path = _scanner_params.path;
-    options.file_size = _scanner_params.file_size;
-    options.fs_stats = &_fs_stats;
-    options.app_stats = &_app_stats;
-
-    if (_scanner_params.use_datacache) {
-        options.use_datacache = true;
-        options.use_cache_select = true;
-        options.modification_time = _scanner_params.modification_time;
-        options.datacache_priority = _scanner_params.datacache_priority;
-        options.datacache_ttl_seconds = _scanner_params.datacache_ttl_seconds;
-    }
-
-    ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
     return Status::OK();
 }
 
@@ -169,6 +151,7 @@ Status CacheSelectScanner::_fetch_orc() {
                 uint64_t cur_offset = stripe_offset;
                 for (uint64_t stream_id = 0; stream_id < stripe_info->getNumberOfStreams(); stream_id++) {
                     const auto& stream_info = stripe_info->getStreamInformation(stream_id);
+                    // put selected column's stream into disk_ranges
                     if (selected_column_ids.contains(stream_info->getColumnId())) {
                         disk_ranges.emplace_back(cur_offset, stream_info->getLength());
                     }
@@ -178,14 +161,13 @@ Status CacheSelectScanner::_fetch_orc() {
         }
     }
 
-    RETURN_IF_ERROR(_write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges));
-    return Status::OK();
+    return _write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges);
 }
 
 Status CacheSelectScanner::_fetch_parquet() {
     // create file reader
     std::shared_ptr<parquet::FileReader> reader = std::make_shared<parquet::FileReader>(
-            4096, _file.get(), _file->get_size().value(), _scanner_params.modification_time,
+            4096, _file.get(), _file->get_size().value(), _scanner_params.datacache_options,
             _shared_buffered_input_stream.get(), nullptr);
 
     RETURN_IF_ERROR(reader->init(&_scanner_ctx));
@@ -198,8 +180,7 @@ Status CacheSelectScanner::_fetch_parquet() {
         disk_ranges.emplace_back(io_range.offset, io_range.size);
     }
 
-    RETURN_IF_ERROR(_write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges));
-    return Status::OK();
+    return _write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges);
 }
 
 // Split text into multiply disk ranges, then fetch it
@@ -221,8 +202,7 @@ Status CacheSelectScanner::_fetch_textfile() {
         offset += remain_length;
     }
 
-    RETURN_IF_ERROR(_write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges));
-    return Status::OK();
+    return _write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges);
 }
 
 // for iceberg delete files, we fetch an entire file directly
@@ -238,18 +218,11 @@ Status CacheSelectScanner::_fetch_iceberg_delete_files() {
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
     OpenFileOptions options{};
     options.fs = _scanner_params.fs;
-    options.path = _scanner_params.path;
-    options.file_size = _scanner_params.file_size;
+    options.path = file_path;
+    options.file_size = file_size;
+    options.datacache_options = _scanner_params.datacache_options;
     options.fs_stats = &_fs_stats;
     options.app_stats = &_app_stats;
-    options.compression_type = _compression_type;
-
-    options.use_datacache = true;
-    options.use_cache_select = true;
-    options.modification_time = _scanner_params.modification_time;
-    options.enable_populate_datacache = true;
-    options.datacache_priority = _scanner_params.datacache_priority;
-    options.datacache_ttl_seconds = _scanner_params.datacache_ttl_seconds;
 
     std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<io::CacheInputStream> cache_input_stream;
@@ -259,8 +232,7 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
     std::vector<DiskRange> disk_ranges{};
     disk_ranges.emplace_back(0, file_size);
 
-    RETURN_IF_ERROR(_write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges));
-    return Status::OK();
+    return _write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges);
 }
 
 Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<io::SharedBufferedInputStream>& shared_input_stream,
@@ -272,7 +244,7 @@ Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<io::SharedBuffered
 
     std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
     for (const DiskRange& disk_range : merged_disk_ranges) {
-        io_ranges.emplace_back(disk_range.get_offset(), disk_range.get_length());
+        io_ranges.emplace_back(disk_range.offset(), disk_range.length());
     }
     RETURN_IF_ERROR(shared_input_stream->set_io_ranges(io_ranges));
 
@@ -280,8 +252,8 @@ Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<io::SharedBuffered
             down_cast<io::CacheSelectInputStream*>(cache_input_stream.get());
 
     for (const DiskRange& merged_disk_range : merged_disk_ranges) {
-        RETURN_IF_ERROR(cache_select_input_stream->write_at_fully(merged_disk_range.get_offset(),
-                                                                  merged_disk_range.get_length()));
+        RETURN_IF_ERROR(
+                cache_select_input_stream->write_at_fully(merged_disk_range.offset(), merged_disk_range.length()));
     }
     return Status::OK();
 }

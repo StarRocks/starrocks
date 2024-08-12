@@ -174,9 +174,6 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
-    // The file last modification time
-    int64_t modification_time = 0;
-
     const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
@@ -214,13 +211,7 @@ struct HdfsScannerParams {
 
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
 
-    bool use_datacache = false;
-    bool enable_populate_datacache = false;
-    bool enable_datacache_async_populate_mode = false;
-    bool enable_datacache_io_adaptor = false;
-    int32_t datacache_evict_probability = 0;
-    int8_t datacache_priority = 0;
-    int64_t datacache_ttl_seconds = 0;
+    DataCacheOptions datacache_options;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -293,8 +284,6 @@ struct HdfsScannerContext {
 
     bool use_file_metacache = false;
 
-    int32_t datacache_evict_probability = 0;
-
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -341,15 +330,7 @@ struct OpenFileOptions {
     HdfsScanStats* app_stats = nullptr;
 
     // for datacache
-    bool use_datacache = false;
-    bool use_cache_select = false;
-    int64_t modification_time = 0;
-    bool enable_populate_datacache = false;
-    bool enable_datacache_async_populate_mode = false;
-    bool enable_datacache_io_adaptor = false;
-    int32_t datacache_evict_probability = 0;
-    int8_t datacache_priority = 0;
-    int64_t datacache_ttl_seconds = 0;
+    DataCacheOptions datacache_options;
 
     // for compressed text file
     CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
@@ -388,7 +369,7 @@ protected:
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
-    virtual Status open_random_access_file();
+    Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);

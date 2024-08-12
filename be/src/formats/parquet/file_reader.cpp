@@ -111,12 +111,13 @@ static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
     return _get_column_start_offset(last_column) + last_column.total_compressed_size;
 }
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
-                       io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+                       const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
+                       const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
-          _file_mtime(file_mtime),
+          _datacache_options(datacache_options),
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
@@ -135,8 +136,8 @@ std::string FileReader::_build_metacache_key() {
     // While some data source, such as Hudi, have no modification time because their files
     // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
     // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
-    if (_file_mtime > 0) {
-        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+    if (_datacache_options.modification_time > 0) {
+        uint32_t mtime_s = (_datacache_options.modification_time >> 9) & 0x00000000FFFFFFFF;
         memcpy(data + 10, &mtime_s, sizeof(mtime_s));
     } else {
         uint32_t size = _file_size;
@@ -290,7 +291,7 @@ Status FileReader::_get_footer() {
         });
         auto deleter = [capture]() { delete capture; };
         WriteCacheOptions options;
-        options.evict_probability = _scanner_ctx->datacache_evict_probability;
+        options.evict_probability = _datacache_options.datacache_evict_probability;
         st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";

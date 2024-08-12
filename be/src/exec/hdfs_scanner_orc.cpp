@@ -324,7 +324,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
     const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path,
                                                       _scanner_params.conjunct_ctxs, _scanner_params.materialize_slots,
-                                                      &_need_skip_rowids);
+                                                      &_need_skip_rowids, _scanner_params.datacache_options);
 
     for (const auto& tdelete_file : _scanner_params.deletes) {
         RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
@@ -369,7 +369,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
 Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes) {
     bool tiny_stripe_read = true;
     for (const DiskRange& disk_range : stripes) {
-        if (disk_range.get_length() > config::orc_tiny_stripe_threshold_size) {
+        if (disk_range.length() > config::orc_tiny_stripe_threshold_size) {
             tiny_stripe_read = false;
             break;
         }
@@ -381,7 +381,7 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
         DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
                                                     config::orc_tiny_stripe_threshold_size, merged_disk_ranges);
         for (const auto& disk_range : merged_disk_ranges) {
-            io_ranges.emplace_back(disk_range.get_offset(), disk_range.get_length());
+            io_ranges.emplace_back(disk_range.offset(), disk_range.length());
         }
         for (const auto& it : io_ranges) {
             _app_stats.orc_total_tiny_stripe_size += it.size;
@@ -446,8 +446,8 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-        ctx->split_start = info.get_offset();
-        ctx->split_end = info.get_offset() + info.get_length();
+        ctx->split_start = info.offset();
+        ctx->split_end = info.offset() + info.length();
         _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx.merge_split_tasks();

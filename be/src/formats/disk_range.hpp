@@ -33,16 +33,16 @@ public:
     * new range will cover that gap.
     */
     inline DiskRange span(const DiskRange& other_disk_range) const {
-        const int64_t start = std::min(get_offset(), other_disk_range.get_offset());
-        const int64_t end = std::max(get_end(), other_disk_range.get_end());
-        return {start, end - start};
+        const int64_t start_off = std::min(offset(), other_disk_range.offset());
+        const int64_t end_off = std::max(end(), other_disk_range.end());
+        return {start_off, end_off - start_off};
     }
 
-    inline int64_t get_end() const { return _offset + _length; }
+    inline int64_t end() const { return _offset + _length; }
 
-    inline int64_t get_offset() const { return _offset; }
+    inline int64_t offset() const { return _offset; }
 
-    inline int64_t get_length() const { return _length; }
+    inline int64_t length() const { return _length; }
 
 private:
     int64_t _offset = 0;
@@ -62,20 +62,20 @@ public:
         }
 
         std::sort(disk_ranges.begin(), disk_ranges.end(),
-                  [](const DiskRange& a, const DiskRange& b) { return a.get_offset() < b.get_offset(); });
+                  [](const DiskRange& a, const DiskRange& b) { return a.offset() < b.offset(); });
 
         DiskRange last = disk_ranges[0];
         for (size_t i = 1; i < disk_ranges.size(); i++) {
             DiskRange current = disk_ranges[i];
             DiskRange merged = last.span(current);
-            if (merged.get_length() <= max_merged_size && last.get_end() + max_merge_distance >= current.get_offset()) {
+            if (merged.length() <= max_merged_size && last.end() + max_merge_distance >= current.offset()) {
                 last = merged;
             } else {
-                merged_disk_ranges.emplace_back(last.get_offset(), last.get_length());
+                merged_disk_ranges.emplace_back(last.offset(), last.length());
                 last = current;
             }
         }
-        merged_disk_ranges.emplace_back(last.get_offset(), last.get_length());
+        merged_disk_ranges.emplace_back(last.offset(), last.length());
     }
 };
 

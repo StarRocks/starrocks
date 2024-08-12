@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <stddef.h>
-
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -67,7 +65,8 @@ using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               const DataCacheOptions& datacache_options = DataCacheOptions(),
                io::SharedBufferedInputStream* sb_stream = nullptr,
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
@@ -138,7 +137,7 @@ private:
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
-    int64_t _file_mtime = 0;
+    const DataCacheOptions _datacache_options;
 
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;

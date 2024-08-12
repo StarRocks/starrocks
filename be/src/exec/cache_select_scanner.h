@@ -34,9 +34,6 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 
-protected:
-    Status open_random_access_file() override;
-
 private:
     Status _fetch_orc();
     Status _fetch_parquet();

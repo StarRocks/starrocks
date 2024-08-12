@@ -37,8 +37,8 @@ TEST(DiskRangeTest, TestMergeTinyDiskRanges) {
     DiskRangeHelper::merge_adjacent_disk_ranges(disk_ranges, config::io_coalesce_read_max_distance_size,
                                                 config::io_coalesce_read_max_buffer_size, merged_disk_ranges);
     EXPECT_EQ(1, merged_disk_ranges.size());
-    EXPECT_EQ(0, merged_disk_ranges.at(0).get_offset());
-    EXPECT_EQ(900 * KB, merged_disk_ranges.at(0).get_length());
+    EXPECT_EQ(0, merged_disk_ranges.at(0).offset());
+    EXPECT_EQ(900 * KB, merged_disk_ranges.at(0).length());
 }
 
 TEST(DiskRangeTest, TestMergeBigDiskRanges) {
@@ -50,8 +50,8 @@ TEST(DiskRangeTest, TestMergeBigDiskRanges) {
     DiskRangeHelper::merge_adjacent_disk_ranges(disk_ranges, config::io_coalesce_read_max_distance_size,
                                                 config::io_coalesce_read_max_buffer_size, merged_disk_ranges);
     EXPECT_EQ(2, merged_disk_ranges.size());
-    EXPECT_EQ(0, merged_disk_ranges.at(0).get_offset());
-    EXPECT_EQ(200 * MB, merged_disk_ranges.at(1).get_offset());
+    EXPECT_EQ(0, merged_disk_ranges.at(0).offset());
+    EXPECT_EQ(200 * MB, merged_disk_ranges.at(1).offset());
 }
 
 } // namespace starrocks
