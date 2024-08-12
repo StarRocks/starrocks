@@ -110,9 +110,6 @@ public class LoadJobMVListener implements LoadJobListener {
                         "base table {} is a materialized view.", table.getName());
                 continue;
             }
-            List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
-            LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                    "transaction state:{}", table.getName(), txnPartitionCommitInfos);
             triggerToRefreshRelatedMVs(db, table);
         }
     }
