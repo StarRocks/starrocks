@@ -161,7 +161,7 @@ public class LeaderOpExecutor {
         }
         if (forwardTimes > MAX_FORWARD_TIMES) {
             LOG.warn("too many forward times, max allowed forward time is {}", MAX_FORWARD_TIMES);
-            ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
+            throw ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
         }
 
         Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();

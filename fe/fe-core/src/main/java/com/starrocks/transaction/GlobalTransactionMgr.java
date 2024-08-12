@@ -148,17 +148,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "disable_load_job is set to true, all load jobs are rejected");
         }
 
         if (Config.metadata_enable_recovery_mode) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under recovery mode, all load jobs are rejected");
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
@@ -338,8 +338,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
         } catch (LockTimeoutException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            return false;
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
