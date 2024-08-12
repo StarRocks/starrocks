@@ -1410,7 +1410,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
-    private String transmissionCompressionType = "NO_COMPRESSION";
+    private String transmissionCompressionType = "AUTO";
 
     // if a packet's size is larger than RPC_HTTP_MIN_SIZE, it will use RPC via http, as the std rpc has 2GB size limit.
     // the setting size is a bit smaller than 2GB, as the pre-computed serialization size of packets may not accurate.
