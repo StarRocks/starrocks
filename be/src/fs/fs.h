@@ -308,7 +308,7 @@ public:
 // Creation-time options for WritableFile
 struct WritableFileOptions {
     // Call Sync() during Close().
-    bool sync_on_close = true;
+    bool sync_on_close = false;
     // For remote filesystem, skip filling local filesystem cache on write requests
     bool skip_fill_local_cache = false;
 

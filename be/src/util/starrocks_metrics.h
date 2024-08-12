@@ -235,6 +235,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(memtable_finalize_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_io_time_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_sync_time_us, MetricUnit::MICROSECONDS);
     // total memory size of memtables
     METRIC_DEFINE_INT_COUNTER(memtable_flush_memory_bytes_total, MetricUnit::BYTES);
     // total disk size of memtables which is smaller than memtable_flush_memory_bytes_total because of compression

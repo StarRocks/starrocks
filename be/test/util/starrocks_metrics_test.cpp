@@ -315,6 +315,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_sync_time_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_memory_bytes_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_disk_bytes_total"));
     ASSERT_NE(nullptr, instance->get_metric("segment_flush_total"));
