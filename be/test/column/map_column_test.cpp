@@ -1467,4 +1467,26 @@ TEST(MapColumnTest, test_hash) {
     ASSERT_EQ(hash, hash1);
 }
 
+TEST(MapColumnTest, test_replicate) {
+    auto offsets = UInt32Column::create();
+    auto keys_data = Int32Column::create();
+    auto keys_null = NullColumn::create();
+    auto keys = NullableColumn::create(keys_data, keys_null);
+    auto values_data = Int32Column::create();
+    auto values_null = NullColumn::create();
+    auto values = NullableColumn::create(values_data, values_null);
+    auto map_column = MapColumn::create(keys, values, offsets);
+
+    const int32_t map_size = 100000;
+    DatumMap map;
+    for (int32_t i = 0; i < map_size; i++) {
+        map[i] = i;
+    }
+    map_column->append_datum(map);
+
+    auto new_column = map_column->replicate({0, 1});
+    ASSERT_EQ(new_column->size(), 1);
+
+    ASSERT_THROW((map_column->replicate({0, 100000})), std::runtime_error);
+}
 } // namespace starrocks

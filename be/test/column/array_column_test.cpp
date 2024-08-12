@@ -1225,4 +1225,21 @@ PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
     }
 }
 
+PARALLEL_TEST(ArrayColumnTest, test_replicate) {
+    auto offsets = UInt32Column::create();
+    auto elements = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto array_column = ArrayColumn::create(elements, offsets);
+
+    const size_t array_size = 100000;
+    for (size_t i = 0; i < array_size; i++) {
+        elements->append_datum(i);
+    }
+    offsets->append(array_size);
+
+    auto column = array_column->replicate({0, 1});
+    ASSERT_EQ(column->size(), 1);
+
+    ASSERT_THROW((array_column->replicate({0, 100000})), std::runtime_error);
+}
+
 } // namespace starrocks
