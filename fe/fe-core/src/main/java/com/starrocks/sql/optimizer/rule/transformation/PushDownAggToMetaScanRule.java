@@ -68,6 +68,9 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
         for (CallOperator aggCall : agg.getAggregations().values()) {
             String aggFuncName = aggCall.getFnName();
+            if (aggFuncName.equalsIgnoreCase(FunctionSet.FLAT_JSON_META)) {
+                return false;
+            }
             if (!aggFuncName.equalsIgnoreCase(FunctionSet.DICT_MERGE)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
