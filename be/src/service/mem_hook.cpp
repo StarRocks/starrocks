@@ -123,8 +123,8 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 #define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal) (void)0
 #endif
 
-#define SET_DELTA_MEMORY(value) \
-    do { \
+#define SET_DELTA_MEMORY(value)              \
+    do {                                     \
         starrocks::tls_delta_memory = value; \
     } while (0)
 
@@ -418,5 +418,4 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
-
 }

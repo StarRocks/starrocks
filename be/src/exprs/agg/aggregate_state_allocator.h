@@ -87,4 +87,7 @@ using HashSetWithAggStateAllocator =
 
 using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
                                                                AggregateStateAllocator<SliceWithHash>>;
+
+template <typename T>
+using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;
 } // namespace starrocks

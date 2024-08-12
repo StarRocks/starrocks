@@ -24,6 +24,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -32,7 +33,6 @@
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
-#include "exprs/agg/aggregate_state_allocator.h"
 
 namespace starrocks {
 
@@ -68,8 +68,9 @@ struct PercentileState {
 };
 
 template <LogicalType LT, typename CppType, bool reverse>
-void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b, std::vector<int>& ls,
-                   std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm, CppType& senior_elm) {
+void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
+                   std::vector<int>& ls, std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm,
+                   CppType& senior_elm) {
     CppType minV = RunTimeTypeLimits<LT>::min_value();
     CppType maxV = RunTimeTypeLimits<LT>::max_value();
     b.resize(k + 1);
