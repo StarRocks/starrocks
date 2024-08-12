@@ -100,7 +100,7 @@ public class Locker {
         try {
             lockManager.release(rid, this, lockType);
         } catch (LockException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public class Locker {
             try {
                 lock(database.getId(), lockType, 0);
             } catch (LockException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             QueryableReentrantReadWriteLock rwLock = database.getRwLock();
@@ -157,8 +157,7 @@ public class Locker {
             } catch (LockTimeoutException e) {
                 return false;
             } catch (LockException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-                return false;
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             Preconditions.checkArgument(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
@@ -299,7 +298,7 @@ public class Locker {
                     this.lock(rid, lockType, 0);
                 }
             } catch (LockException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             //Fallback to db lock
@@ -437,7 +436,7 @@ public class Locker {
                 }
                 this.lock(tableId, lockType, 0);
             } catch (LockException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
         } else {
             //Fallback to db lock

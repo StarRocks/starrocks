@@ -41,7 +41,7 @@ public class AccessDeniedException extends Exception {
 
         if (Authorizer.getInstance().getAccessControlOrDefault(catalog) instanceof
                 ExternalAccessController) {
-            ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER,
+            throw ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER,
                     privilegeType, objectType, object == null ? "" : " " + object);
         } else {
             AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
@@ -49,7 +49,7 @@ public class AccessDeniedException extends Exception {
             List<String> inactivatedRoles =
                     authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
 
-            ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED, privilegeType, objectType,
+            throw ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED, privilegeType, objectType,
                     object == null ? "" : " " + object,
                     activatedRoles.isEmpty() ? "NONE" : activatedRoles, inactivatedRoles.isEmpty() ? "NONE" : inactivatedRoles);
         }

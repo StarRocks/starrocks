@@ -85,13 +85,13 @@ public class PartitionDescAnalyzer {
 
         if (partitionDesc instanceof SingleRangePartitionDesc) {
             if (!(partitionInfo instanceof RangePartitionInfo)) {
-                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+                throw ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
             }
 
             analyzeSingleRangePartitionDescWithExistsTable((SingleRangePartitionDesc) partitionDesc, partitionInfo);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             if (!(partitionInfo instanceof RangePartitionInfo)) {
-                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+                throw ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
             }
 
             analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo,
