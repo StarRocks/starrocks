@@ -34,6 +34,11 @@ SELECT * FROM INFORMATION_SCHEMA.tasks;
 SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 SELECT * FROM information_schema.task_runs;
 SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
+```
+
+You can obtain the `task_name` of materialized view refresh tasks by using the SHOW MATERIALIZED VIEWS statement.
+
+```SQL
 SHOW MATERIALIZED VIEWS;
 SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
 ```
