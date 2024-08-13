@@ -133,6 +133,7 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
+WITH_COMPRESS=ON
 USE_STAROS=OFF
 MSG=""
 MSG_FE="Frontend"
@@ -233,6 +234,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     USE_STAROS          -- $USE_STAROS
+    WITH_COMPRESS       -- $WITH_COMPRESS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
     USE_SSE4_2          -- $USE_SSE4_2
@@ -312,6 +314,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     if [[ -z ${WITH_STARCACHE} ]]; then
       WITH_STARCACHE=ON
     fi
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        # this option cannot work with clang-14
+        WITH_COMPRESS=OFF
+    fi
+
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
