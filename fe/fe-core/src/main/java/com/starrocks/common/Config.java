@@ -3114,7 +3114,7 @@ public class Config extends ConfigBase {
      * Failover Group config
      */
     @ConfField
-    public static int failover_group_interval_ms = 10;
+    public static int failover_group_interval_ms = 100;
     @ConfField
     public static int failover_group_job_threads = 4;
     @ConfField(mutable = true)

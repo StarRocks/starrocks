@@ -19,10 +19,11 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
     private final OlapTable localTable;
     private final String localPartitionName;
     private final boolean isReplicatedObject;
+    private final boolean isDropForce;
 
     public DropReplicatedPartitionJob(FailoverGroup failoverGroup, Database remoteDatabase,
             OlapTable remoteTable, Database localDatabase, OlapTable localTable,
-            String localPartitionName, boolean isReplicatedObject) {
+            String localPartitionName, boolean isReplicatedObject, boolean isDropForce) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
@@ -30,6 +31,7 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
         this.localTable = localTable;
         this.localPartitionName = localPartitionName;
         this.isReplicatedObject = isReplicatedObject;
+        this.isDropForce = isDropForce;
     }
 
     @Override
@@ -38,7 +40,7 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
                 localTable.getName(), localPartitionName, failoverGroup.getName());
 
         DropPartitionClause dropPartitionClause = new DropPartitionClause(true, localPartitionName, false,
-                isReplicatedObject);
+                isDropForce);
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().dropPartition(localDatabase, localTable,
                     dropPartitionClause);

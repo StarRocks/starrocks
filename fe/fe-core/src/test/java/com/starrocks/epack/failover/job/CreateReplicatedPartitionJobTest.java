@@ -67,7 +67,7 @@ public class CreateReplicatedPartitionJobTest {
         OlapTable table = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
 
         DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, null, null,
-                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", true);
+                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", false, true);
         dropJob.execute();
 
         CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup,

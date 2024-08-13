@@ -662,6 +662,10 @@ public class FailoverGroup implements Writable {
             objectMeta.setPipeManager(globalStateMgr.getPipeManager());
             objectMeta.setDeleteMgr(globalStateMgr.getDeleteMgr());
             objectMeta.setTableIdToIncrementId(globalStateMgr.getLocalMetastore().tableIdToIncrementId());
+        } catch (Exception e) {
+            LOG.warn("Failover group {} load image {} failed: ",
+                    name, response.getMeta_version(), e);
+            return;
         } finally {
             GlobalStateMgr.resetFailoverGroupThread();
             GlobalStateMgr.destroyFailoverGroupState();

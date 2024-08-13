@@ -110,7 +110,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             for (Partition localPartition : localOlapTable.getPartitions()) {
                 if (remoteOlapTable.getPartition(localPartition.getName(), false) == null) {
                     DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup, null,
-                            null, localDatabase, localOlapTable, localPartition.getName(), false);
+                            null, localDatabase, localOlapTable, localPartition.getName(), false, true);
                     job.start();
                 }
             }
@@ -129,9 +129,16 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         }
 
         if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
-            DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup, remoteDatabase,
-                    remoteTable, localDatabase, localTable, localPartition.getName(), isReplicatedObject);
-            job.start();
+            if (localTable.getPartitionInfo().isPartitioned()) {
+                DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
+                        remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
+                        isReplicatedObject, true);
+                job.start();
+            } else {
+                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                        remoteTable, localDatabase, localTable, isReplicatedObject, true);
+                job.start();
+            }
             return null;
         }
 
@@ -286,6 +293,21 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                         localValuesString, remoteValuesString);
                 return false;
             }
+        }
+
+        if (localPartition.getCommittedVersion() > remotePartition.getVisibleVersion()) {
+            LOG.warn("Local partition {}.{}.{} has greater committed version {} than remote visible version {}",
+                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
+                    localPartition.getCommittedVersion(), remotePartition.getVisibleVersion());
+            return false;
+        }
+
+        if (localPartition.hasData() && localPartition.getVersionEpoch() != remotePartition.getVersionEpoch()) {
+            LOG.warn("Local partition {}.{}.{} has different version epoch {}:{} with remote version epoch {}:{}",
+                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
+                    localPartition.getVisibleVersion(), localPartition.getVersionEpoch(),
+                    remotePartition.getVisibleVersion(), remotePartition.getVersionEpoch());
+            return false;
         }
 
         return true;
