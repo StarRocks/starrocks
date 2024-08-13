@@ -520,14 +520,7 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
         new Expectations() {
