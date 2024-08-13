@@ -817,6 +817,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return GsonUtils.GSON.fromJson(json, Column.class);
     }
 
+    public String generatedColumnExprToString() {
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
+            return generatedColumnExprSerialized.deserialize().toSql();
+        }
+        return null;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
