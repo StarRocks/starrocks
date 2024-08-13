@@ -159,10 +159,16 @@ class ChooseCase(object):
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
 
-        def __read_single_stat_and_result(_line_content, _line_id, _stat_list, _res_list, _is_in_loop, _loop_stat_list = []):
+        def __read_single_stat_and_result(_line_content, _line_id, _stat_list, _res_list, _is_in_loop=False, _loop_stat_list=[]):
+
+            _line_content = _line_content.lstrip()
+
             this_line_res = []
             this_line_command = [_line_content]
             _line_id += 1
+
+            if _line_content.strip() == "":
+                return _line_id
 
             if _line_content.startswith(UNCHECK_FLAG):
                 _line_content = _line_content[len(UNCHECK_FLAG):]
@@ -181,7 +187,7 @@ class ChooseCase(object):
                 else:
                     # SQL support lines, read the SQL lines
                     while _line_id < len(f_lines):
-                        _line_content = f_lines[_line_id].rstrip("\n")
+                        _line_content = f_lines[_line_id].rstrip("\n").lstrip()
                         _line_id += 1
                         if not _line_content.startswith("--"):
                             this_line_command.append(_line_content)
@@ -190,9 +196,9 @@ class ChooseCase(object):
                                 break
 
             # SQL result
-            if _line_id < len(f_lines) and f_lines[_line_id].startswith(RESULT_FLAG):
+            if _line_id < len(f_lines) and f_lines[_line_id].lstrip().startswith(RESULT_FLAG):
                 while _line_id < len(f_lines):
-                    _line_content = f_lines[_line_id].rstrip("\n")
+                    _line_content = f_lines[_line_id].rstrip("\n").lstrip()
                     this_line_res.append(_line_content)
                     _line_id += 1
 
@@ -227,6 +233,9 @@ class ChooseCase(object):
         tmp_res = []
         tmp_loop_stat = []
         in_loop_flag = False
+
+        tmp_con_stat = []
+        in_concurrency_flag = False
 
         while line_id < len(f_lines):
             line_content = f_lines[line_id].rstrip("\n")
@@ -320,6 +329,75 @@ class ChooseCase(object):
                 })
                 tmp_res.append(None)
                 line_id += 1
+
+            elif line_content.startswith(CONCURRENCY_FLAG):
+                # thread info list
+                concurrency_t_list = []
+
+                l_concurrency_line = line_id
+
+                # concurrency -- end concurrency
+                if re.compile(f'{CONCURRENCY_FLAG}(\\s)*{{(\\s)*').fullmatch(line_content):
+                    in_concurrency_flag = True
+                else:
+                    tools.ok_(False, "Case file concurrency struct illegal: file: %s, line: %s" % (file, line_id))
+
+                line_id += 1
+                tmp_con_stat.clear()
+                tmp_con_prop = {}
+
+                # read concurrency struct
+                t_info_regex = r"^-- [0-9a-zA-Z ]+(\([0-9]+\))?:$"
+                while line_id < len(f_lines) and END_CONCURRENCY_FLAG not in f_lines[line_id]:
+
+                    _t_line = f_lines[line_id].rstrip().lstrip()
+                    tools.assert_regexp_matches(_t_line, t_info_regex, f"Missing thread info : {_t_line}")
+
+                    # get thread name & thread count
+                    _t_name, _, _t_count = re.findall(r"-- ([0-9a-zA-Z_\- ]+)(\(([0-9]+)\))?:", _t_line)[0]
+                    _t_count = 1 if not _t_count else int(_t_count)
+
+                    line_id += 1
+                    # thread info
+                    _thread_sql_list, _thread_res_list, _thread_ori_sql_list = [], [], []
+
+                    while line_id < len(f_lines):
+                        this_line = f_lines[line_id].rstrip().lstrip()
+                        _old_sql_size = len(_thread_sql_list)
+
+                        # read each cmd & res
+                        next_line_id = __read_single_stat_and_result(this_line, line_id, _thread_sql_list, _thread_res_list)
+                        if len(_thread_sql_list) > _old_sql_size:
+                            # new record was recorded
+                            _ori_lines = f_lines[line_id: next_line_id]
+                            _thread_ori_sql_list.extend([_line.rstrip() for _line in _ori_lines])
+                        line_id = next_line_id
+
+                        _next_line = f_lines[line_id].rstrip().lstrip()
+                        if (re.match(r"^-- [0-9a-zA-Z ]+(\([0-9]+\))?:$", _next_line)
+                                or END_CONCURRENCY_FLAG in _next_line):
+                            break
+
+                    # add previous thread info
+                    concurrency_t_list.append({
+                        "name": _t_name,
+                        "count": _t_count,
+                        "info": _t_line,
+                        "ori": _thread_ori_sql_list,
+                        "cmd": _thread_sql_list,
+                        "res": _thread_res_list
+                    })
+
+                tools.assert_in(END_CONCURRENCY_FLAG, f_lines[line_id], "`END CONCURRENCY` not found!")
+                line_id += 1
+                tmp_sql.append({
+                    "type": CONCURRENCY_FLAG,
+                    "thread": concurrency_t_list
+                })
+                tmp_res.append({
+                    "type": CONCURRENCY_FLAG,
+                    "thread": concurrency_t_list
+                })
 
             else:
                 # 1st line of command, SQL/SHELL/FUNCTION

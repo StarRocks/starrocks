@@ -25,6 +25,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import uuid
 from typing import List
@@ -33,6 +34,7 @@ import pymysql
 from nose import tools
 from parameterized import parameterized
 from cup import log
+import munch
 
 from lib import sr_sql_lib
 from lib import choose_cases
@@ -143,7 +145,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 resource_name = self._get_resource_name(sql)
                 if len(resource_name) > 0:
                     self.resource.append(resource_name)
-            elif isinstance(sql, dict):
+            elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
                 tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
 
                 for each_sql in sql["stat"]:
@@ -153,6 +155,17 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     resource_name = self._get_resource_name(each_sql)
                     if len(resource_name) > 0:
                         self.resource.append(resource_name)
+            elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
+
+                for each_thread in sql["thread"]:
+                    for each_cmd in each_thread["cmd"]:
+                        db_name = self._get_db_name(each_cmd)
+                        if len(db_name) > 0:
+                            self.db.append(db_name)
+                        resource_name = self._get_resource_name(each_cmd)
+                        if len(resource_name) > 0:
+                            self.resource.append(resource_name)
             else:
                 tools.ok_(False, "Init data error!")
 
@@ -189,13 +202,21 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     db_name = self._get_db_name(sql)
                     if len(db_name) > 0:
                         all_db_dict.setdefault(db_name, set()).add(case.name)
-                elif isinstance(sql, dict):
+                elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
                     tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
 
                     for each_sql in sql["stat"]:
                         db_name = self._get_db_name(each_sql)
                         if len(db_name) > 0:
                             all_db_dict.setdefault(db_name, set()).add(case.name)
+                elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                    tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
+
+                    for each_thread in sql["thread"]:
+                        for each_cmd in each_thread["cmd"]:
+                            db_name = self._get_db_name(each_cmd)
+                            if len(db_name) > 0:
+                                all_db_dict.setdefault(db_name, set()).add(case.name)
                 else:
                     tools.ok_(False, "Check db uniqueness error!")
 
@@ -213,7 +234,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 for each_uuid in uuid_vars:
                     if each_uuid not in variable_dict:
                         variable_dict[each_uuid] = uuid.uuid4().hex
-            elif isinstance(sql, dict):
+            elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
                 tools.assert_in("stat", sql, "LOOP STATEMENT FORMAT ERROR!")
 
                 for each_sql in sql["stat"]:
@@ -221,6 +242,16 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     for each_uuid in uuid_vars:
                         if each_uuid not in variable_dict:
                             variable_dict[each_uuid] = uuid.uuid4().hex
+            elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
+
+                for each_thread in sql["thread"]:
+                    for each_cmd in each_thread["cmd"]:
+                        uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_cmd)
+                        for each_uuid in uuid_vars:
+                            if each_uuid not in variable_dict:
+                                variable_dict[each_uuid] = uuid.uuid4().hex
+
             else:
                 tools.ok_(False, "Replace uuid error!")
 
@@ -229,13 +260,25 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 for each_var in variable_dict:
                     sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
                 ret.append(sql)
-            elif isinstance(sql, dict):
+            elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
                 tmp_stat = []
                 for each_sql in sql["stat"]:
                     for each_var in variable_dict:
                         each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
                     tmp_stat.append(each_sql)
                 sql["stat"] = tmp_stat
+                ret.append(sql)
+            elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
+
+                for each_thread in sql["thread"]:
+                    tmp_cmd = []
+                    for each_cmd in each_thread["cmd"]:
+                        for each_var in variable_dict:
+                            each_cmd = each_cmd.replace("${%s}" % each_var, variable_dict[each_var])
+                        tmp_cmd.append(each_cmd)
+                    each_thread["cmd"] = tmp_cmd
+
                 ret.append(sql)
 
         return ret
@@ -298,7 +341,6 @@ Start to run: %s
 
         for sql_id, sql in enumerate(sql_list):
             uncheck = False
-            order = False
             ori_sql = sql
             var = None
 
@@ -312,7 +354,7 @@ Start to run: %s
                     uncheck = True
                     sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
 
-                actual_res, actual_res_log, var = self.execute_single_statement(sql, sql_id, record_mode)
+                actual_res, actual_res_log, var, order = self.execute_single_statement(sql, sql_id, record_mode)
 
                 if not record_mode and not uncheck:
                     # check mode only work in validating mode
@@ -329,9 +371,8 @@ Start to run: %s
                     # -------------------------------------------
                     self.check(sql_id, sql, expect_res, actual_res, order, ori_sql)
 
-            elif isinstance(sql, dict):
-                # loop statement, check loop type
-                tools.eq_(sql["type"], sr_sql_lib.LOOP_FLAG, f"Statement Type error {json.dumps(sql)}")
+            elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.LOOP_FLAG:
+                # loop statement
 
                 # loop properties
                 loop_timeout = sql["prop"]["timeout"]
@@ -346,3 +387,50 @@ Start to run: %s
 
                 self_print(f"[LOOP] end!", color=ColorEnum.CYAN, logout=True)
                 tools.ok_(loop_check_res, f"Loop checker fail: {''.join(sql['ori'])}!")
+
+            elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.CONCURRENCY_FLAG:
+                # concurrency statement
+                self_print(f"[CONCURRENCY] start...", color=ColorEnum.CYAN, logout=True)
+
+                t_info_list: List[dict] = sql["thread"]
+                thread_list = []
+                self.thread_res = {}
+
+                for _t_info_id, _thread in enumerate(t_info_list):
+
+                    # _thread prop: name, count, info, ori, cmd, res
+                    _t_count = _thread["count"]
+                    _t_name = _thread["name"]
+                    _t_cmd = _thread["cmd"]
+                    _t_res = _thread["res"]
+
+                    for _t_exec_id in range(_t_count):
+                        this_t_id = f'{_t_name}-{_t_info_id}-{_t_exec_id}'
+                        t = threading.Thread(name=f"Thread-{this_t_id}",
+                                             target=self.execute_thread,
+                                             args=(this_t_id, _t_cmd, _t_res, record_mode))
+                        thread_list.append(t)
+
+                    threading.excepthook = self.custom_except_hook
+
+                    for thread in thread_list:
+                        thread.start()
+
+                    for thread in thread_list:
+                        thread.join()
+
+                if len(self.thread_res) == 0:
+                    self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
+                else:
+                    err_t_name = "\n\t- ".join(self.thread_res.keys())
+                    err_msg = f"[CONCURRENCY] FAIL:\n\t- {err_t_name}"
+                    self_print(err_msg, color=ColorEnum.RED, bold=True, logout=True)
+
+                    # console detail
+                    for t_name, t_err in self.thread_res.items():
+                        self_print({t_err}, bold=True, logout=True)
+
+                    tools.ok_(False, err_msg)
+
+
+

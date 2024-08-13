@@ -1,4 +1,4 @@
--- name: test_auto_increment_incorrect_col_id @testing
+-- name: test_auto_increment_incorrect_col_id
 CREATE DATABASE test_auto_increment_incorrect_col_id_${uuid0};
 USE test_auto_increment_incorrect_col_id_${uuid0};
 ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
@@ -25,13 +25,13 @@ LOOP {
 } END LOOP
 
 CONCURRENCY {
-  - group 1:
+  -- group 1(2):
     shell: curl --location-trusted -u root: -T ${data_path}/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_1 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id_${uuid0}/t_auto_increment_incorrect_col_id/_stream_load
     select 1;
     select sleep(3);
     sync;
 
-  - group 2:
+  -- group 2:
     shell: curl --location-trusted -u root: -T ${data_path}/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_2 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id_${uuid0}/t_auto_increment_incorrect_col_id/_stream_load
     select 3;
     sync;
@@ -45,3 +45,41 @@ SELECT * FROM t_auto_increment_incorrect_col_id;
 DROP TABLE t_auto_increment_incorrect_col_id;
 DROP DATABASE test_auto_increment_incorrect_col_id_${uuid0};
 
+-- name: test_concurrency_grammar @testing
+CREATE DATABASE test_auto_increment_incorrect_col_id_${uuid0};
+USE test_auto_increment_incorrect_col_id_${uuid0};
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+CREATE TABLE `t_auto_increment_incorrect_col_id` (
+  `k1` BIGINT NOT NULL COMMENT "",
+  `k2` string default "abc" COMMENT "",
+  `k3` BIGINT AUTO_INCREMENT COMMENT "",
+  `k4` string default "bcd"COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_auto_increment_incorrect_col_id VALUES (1, DEFAULT, DEFAULT, DEFAULT);
+SELECT * FROM t_auto_increment_incorrect_col_id;
+
+CONCURRENCY {
+  -- group 1(1):
+    shell: curl --location-trusted -u root: -T ${data_path}/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_1 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id_${uuid0}/t_auto_increment_incorrect_col_id/_stream_load
+    select 1;
+    select sleep(3);
+    sync;
+
+  -- group 2:
+    shell: curl --location-trusted -u root: -T ${data_path}/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_2 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id_${uuid0}/t_auto_increment_incorrect_col_id/_stream_load
+    select 3;
+    sync;
+} END CONCURRENCY
+
+SHOW LOAD FROM test_auto_increment_incorrect_col_id_${uuid0};
+
+SELECT * FROM t_auto_increment_incorrect_col_id;
+DROP TABLE t_auto_increment_incorrect_col_id;
+DROP DATABASE test_auto_increment_incorrect_col_id_${uuid0};

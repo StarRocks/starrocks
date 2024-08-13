@@ -39,6 +39,10 @@ END_LOOP_FLAG = "END LOOP"
 CHECK_FLAG = "CHECK: "
 PROPERTY_FLAG = "PROPERTY: "
 
+# concurrency -- end concurrency
+CONCURRENCY_FLAG = "CONCURRENCY"
+END_CONCURRENCY_FLAG = "END CONCURRENCY"
+
 
 def close_conn(conn, conn_type):
     log.info(f"Try to close {conn_type} connection...")
