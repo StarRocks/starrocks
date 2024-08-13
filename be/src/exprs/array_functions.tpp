@@ -259,6 +259,7 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         static_assert(lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         return _array_overlap<phmap::flat_hash_set<CppType, PhmapDefaultHashFunc<LT, PhmapSeed1>>>(columns);
     }
