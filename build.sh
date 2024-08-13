@@ -368,6 +368,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     else
         CXX_COMPILER_LAUNCHER=${CCACHE}
     fi
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        # this option cannot work with clang-14
+        WITH_COMPRESS=OFF
+    fi
+
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
