@@ -17,7 +17,7 @@ This operation requires the REFRESH privilege on the target materialized view.
 ## Syntax
 
 ```SQL
-CANCEL REFRESH MATERIALIZED VIEW [<database_name>.]<materialized_view_name> <FORCE>
+CANCEL REFRESH MATERIALIZED VIEW [<database_name>.]<materialized_view_name> [FORCE]
 ```
 
 ## Parameters
@@ -26,7 +26,7 @@ CANCEL REFRESH MATERIALIZED VIEW [<database_name>.]<materialized_view_name> <FOR
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | database_name          | No           | Name of the database where the materialized view resides. If this parameter is not specified, the current database is used. |
 | materialized_view_name | Yes          | Name of the materialized view.                               |
-| FORCE                  | NO           | Whether to cancel the running materialized view refresh task by force |
+| FORCE                  | NO           | Forces to cancel the running materialized view refresh task. |
 
 ## Examples
 
