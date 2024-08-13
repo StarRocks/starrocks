@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import org.junit.BeforeClass;
+import org.junit.Test;
 
 /**
  * Run all tests in MaterializedViewTest in multi stage mode.
@@ -29,5 +30,33 @@ public class MaterializedViewWithMultiStageTest extends MaterializedViewTest {
     @Override
     public void testJoinDeriveRewrite() {
         // ignore test case
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK17() {
+        // set join derive rewrite in view delta
+        setTracLogModule("Optimizer");
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testOuterJoinWithRangePredicates() {
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno > 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 20");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+        }
     }
 }

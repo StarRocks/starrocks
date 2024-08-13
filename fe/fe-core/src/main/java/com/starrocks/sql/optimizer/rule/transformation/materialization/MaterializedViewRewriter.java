@@ -1765,6 +1765,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (materializationContext.getMv().getRefreshScheme().isSync()) {
             return null;
         }
+        JoinPredicatePushdown.JoinPushDownParams params = optimizerContext.getJoinPushDownParams();
+        if (!params.enableJoinPredicatePushDown) {
+            return null;
+        }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());
         if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
             // TODO: support union rewrite for view based mv rewrite
@@ -1978,6 +1982,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
+            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
+            // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
             if (mvRewriteContext.getEnforcedNonExistedColumns() != null &&

@@ -122,10 +122,6 @@ public class JoinPredicatePushdown {
     }
 
     public OptExpression pushdown(ScalarOperator predicateToPush) {
-        JoinPushDownParams params = optimizerContext.getJoinPushDownParams();
-        if (!params.enableJoinPredicatePushDown) {
-            return joinOptExpression;
-        }
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         ScalarOperator derivedPredicate = predicateDerive(predicateToPush);
         return pushDownPredicate(derivedPredicate);
