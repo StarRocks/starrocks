@@ -23,39 +23,26 @@ import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class MvRewriteStrategy {
     public static final MvRewriteStrategy DEFAULT = new MvRewriteStrategy();
 
+    /**
+     * Materialized view rewrite strategy, when multi stages is enabled, we will rewrite query plan in multi stages.
+     * - Default: rewrite the query after required rules are executed in rule based rewrite stage.
+     * - MultiStage: rewrite the query in early stage(before some rules which may break plans' structure) and later stage
+     * (required rules are executed) in rule based rewrite stage.
+     * Attention: MultiStage may increase rewrite optimizer time, so it's disabled by default.
+     */
     public enum MVStrategy {
         DEFAULT(0),
         MULTI_STAGES(1);
         private int ordinal;
-
         MVStrategy(int ordinal) {
             this.ordinal = ordinal;
         }
         public int getOrdinal() {
             return this.ordinal;
         }
-        public static Map<Integer, MVStrategy> ORDINAL_MAP = getOrdinalMap();
-        public static Map<Integer, MVStrategy> getOrdinalMap() {
-            Map<Integer, MVStrategy> ordinalMap = new HashMap<>();
-            for (MVStrategy mode : MVStrategy.values()) {
-                ordinalMap.put(mode.ordinal, mode);
-            }
-            return ordinalMap;
-        }
-
-        public static MVStrategy create(int ordinal) {
-            if (ORDINAL_MAP.containsKey(ordinal)) {
-                return ORDINAL_MAP.get(ordinal);
-            }
-            return DEFAULT;
-        }
-
         public boolean isMultiStages() {
             return this == MULTI_STAGES;
         }

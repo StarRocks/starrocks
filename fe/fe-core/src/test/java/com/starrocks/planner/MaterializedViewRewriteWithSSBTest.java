@@ -34,7 +34,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         // put lineorder last because it depends on other tables for foreign key constraints
         createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
-//        connectContext.getSessionVariable().setCboPruneSubfield(false);
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
     }
 

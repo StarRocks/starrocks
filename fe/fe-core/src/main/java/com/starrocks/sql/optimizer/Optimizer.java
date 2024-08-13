@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -394,22 +395,32 @@ public class Optimizer {
         return tree;
     }
 
-    private void mvRewriteWithMultiStages(OptExpression tree,
-                                          TaskContext rootTaskContext) {
-        if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
+    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
+                                                  TaskContext rootTaskContext) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
+                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             return;
         }
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
-        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
         // do rule based mv rewrite
-        mvRewriteWithRule(tree, rootTaskContext);
-        new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
+        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+
+        // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
+        // and do partition predicate again.
+        // TODO: Do it in CBO if needed later.
+        if (MvUtils.isAppliedMVUnionRewrite(tree)) {
+            // Do predicate push down if union rewrite successes.
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+            // It's necessary for external table since its predicate is not used directly after push down.
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        }
     }
 
-    private void mvRewriteWithRule(OptExpression tree,
-                                   TaskContext rootTaskContext) {
+    private void doRuleBasedMaterializedViewRewrite(OptExpression tree,
+                                                    TaskContext rootTaskContext) {
         if (mvRewriteStrategy.enableViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
@@ -428,28 +439,18 @@ public class Optimizer {
         }
     }
 
-    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
-                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+    private void doMVRewriteWithMultiStages(OptExpression tree,
+                                            TaskContext rootTaskContext) {
+        if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
-
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         // do rule based mv rewrite
-        mvRewriteWithRule(tree, rootTaskContext);
-
-        // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
-        // and do partition predicate again.
-        // TODO: Do it in CBO if needed later.
-        if (MvUtils.isAppliedMVUnionRewrite(tree)) {
-            // Do predicate push down if union rewrite successes.
-            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-            deriveLogicalProperty(tree);
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
-            // It's necessary for external table since its predicate is not used directly after push down.
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
-            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        }
+        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
     }
 
     private OptExpression logicalRuleRewrite(
@@ -471,7 +472,8 @@ public class Optimizer {
         CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
-        context.getJoinPushDownParams().prepare(context, sessionVariable, mvRewriteStrategy);
+        JoinPredicatePushdown.JoinPushDownParams joinPushDownParams = context.getJoinPushDownParams();
+        joinPushDownParams.prepare(context, sessionVariable, mvRewriteStrategy);
 
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -527,8 +529,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         // rule-based materialized view rewrite: early stage
-        mvRewriteWithMultiStages(tree, rootTaskContext);
-        context.getJoinPushDownParams().reset();
+        doMVRewriteWithMultiStages(tree, rootTaskContext);
+        joinPushDownParams.reset();
 
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune

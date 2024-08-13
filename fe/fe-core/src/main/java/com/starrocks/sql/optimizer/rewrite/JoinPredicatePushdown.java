@@ -86,9 +86,7 @@ public class JoinPredicatePushdown {
                 return;
             }
             JoinPushDownParams joinPushDownParams = context.getJoinPushDownParams();
-            // disable equivalence derive for outer join
             joinPushDownParams.enableLeftRightJoinEquivalenceDerive = false;
-            // disable outer join to inner join
             if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
                 joinPushDownParams.enableJoinPredicatePushDown = false;
             }
