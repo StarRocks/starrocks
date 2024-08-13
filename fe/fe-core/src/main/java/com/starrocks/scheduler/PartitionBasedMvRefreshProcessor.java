@@ -389,10 +389,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // throw the last exception if all retries failed
         Preconditions.checkState(lastException != null);
-        String errorMsg = lastException.getMessage();
-        if (lastException instanceof NullPointerException) {
-            errorMsg = ExceptionUtils.getStackTrace(lastException);
-        }
+        String errorMsg = DebugUtil.getStackTrace(lastException);
         // field ERROR_MESSAGE in information_schema.task_runs length is 65535
         errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ?
                 errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;

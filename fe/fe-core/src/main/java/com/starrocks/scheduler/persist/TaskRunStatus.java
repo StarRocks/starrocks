@@ -17,10 +17,12 @@ package com.starrocks.scheduler.persist;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
@@ -348,6 +350,20 @@ public class TaskRunStatus implements Writable {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public void setTaskRunAttempt(int taskRunAttempt) {
+        if (properties == null)  {
+            properties = Maps.newHashMap();
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS, String.valueOf(taskRunAttempt));
+    }
+
+    public int getTaskRunAttempt() {
+        if (properties == null) {
+            return 0;
+        }
+        return Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_TASK_RETRY_ATTEMPTS, "0"));
     }
 
     public Constants.TaskRunState getLastRefreshState() {

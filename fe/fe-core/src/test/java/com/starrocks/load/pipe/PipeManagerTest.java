@@ -306,7 +306,7 @@ public class PipeManagerTest {
 
         new MockUp<TaskRunExecutor>() {
             /**
-             * @see TaskRunExecutor#executeTaskRun(TaskRun)
+             * @see TaskRunExecutor#ggexecuteTaskRun(TaskRun)
              */
             @Mock
             public boolean executeTaskRun(TaskRun taskRun) {

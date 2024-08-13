@@ -67,7 +67,8 @@ public class TaskRunManager implements MemoryTrackable {
 
         String queryId = UUIDUtil.genUUID().toString();
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
-        status.setPriority(option.getPriority());
+        // use task run's priority if it's set
+        status.setPriority(taskRun.getTaskPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
         if (!arrangeTaskRun(taskRun, false)) {

@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 
@@ -25,7 +26,7 @@ import java.util.Map;
 public class ExecuteOption {
 
     @SerializedName("priority")
-    private int priority = Constants.TaskRunPriority.LOWEST.value();
+    private int priority = TableProperty.INVALID;
 
     @SerializedName("taskRunProperties")
     private Map<String, String> taskRunProperties;

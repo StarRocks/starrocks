@@ -17,8 +17,10 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +34,7 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class TaskRunSchedulerTest {
 
@@ -289,7 +292,72 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        System.out.println(taskRunScheduler);
         Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+    }
+
+    @Test
+    public void testScheduledWithEventTriggerDelayPeriod() {
+        Task task = new Task("test");
+        long created = System.currentTimeMillis();
+        task.setDefinition("select 1");
+        task.setLastLastFinishTime(created);
+        task.setEventTriggerDelayPeriod(3000);
+        List<TaskRun> taskRuns = Lists.newArrayList();
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false, 1), i);
+            taskRun.setTaskLastFinishedTime(task.getLastLastFinishTime());
+            taskRun.setEventTriggerDelayPeriod(task.getEventTriggerDelayPeriod());
+            taskRuns.add(taskRun);
+            Assert.assertTrue(scheduler.addPendingTaskRun(taskRun));
+        }
+        Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, 1));
+        scheduler.scheduledPendingTaskRun(taskRun -> {
+            Assert.assertTrue(runningTaskRuns.contains(taskRun));
+        });
+        // running queue only support one task with same task id
+        Assert.assertTrue(scheduler.getRunningTaskCount() == 0);
+        Assert.assertTrue(scheduler.getPendingQueueCount() == 10);
+        Uninterruptibles.sleepUninterruptibly(3000, TimeUnit.MICROSECONDS);
+        List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
+        for (int i = 1; i < 10; i++) {
+            int j = i;
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(taskRun.equals(taskRuns.get(j)));
+                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j - 1)));
+            });
+        }
+    }
+
+    @Test
+    public void testScheduleWithDifferentPriorities() {
+        Config.task_runs_concurrency = 1;
+        List<TaskRun> taskRuns = Lists.newArrayList();
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        long created = System.currentTimeMillis();
+        for (int i = 0; i < N; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            task.setTaskPriority(i);
+            task.setId(i);
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            String queryId = UUIDUtil.genUUID().toString();
+            // all tasks run with the same created time
+            taskRun.initStatus(queryId, created);
+            taskRuns.add(taskRun);
+            scheduler.addPendingTaskRun(taskRun);
+        }
+        Assert.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
+        List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
+        Assert.assertEquals(N, queue.size());
+        List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
+        for (int i = 0; i < N; i++) {
+            int j = i; // for lambda function
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertEquals(taskRuns.get(N - 1 - j), taskRun);
+                Assert.assertEquals(pendingTaskRuns.get(j), taskRun);
+            });
+        }
+        Config.task_runs_concurrency = 4;
     }
 }
