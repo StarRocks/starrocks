@@ -36,6 +36,16 @@ public:
 
 class LakeDataSourceProvider;
 
+struct SharedBufferedStreamProfile {
+    RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_align_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_timer = nullptr;
+};
+
 class LakeDataSource final : public DataSource {
 public:
     explicit LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range);
@@ -174,6 +184,15 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+
+    // shared_buffer_stream
+    RuntimeProfile::Counter* _shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_align_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* _shared_buffered_direct_io_timer = nullptr;
 };
 
 // ================================
