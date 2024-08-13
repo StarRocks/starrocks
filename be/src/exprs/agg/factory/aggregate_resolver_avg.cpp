@@ -62,20 +62,8 @@ struct ArrayUniqueAggDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<pt>) {
             using CppType = RunTimeCppType<pt>;
-            if constexpr (lt_is_largeint<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>;
-                auto func = std::make_shared<ArrayUnionAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
-            } else if constexpr (lt_is_fixedlength<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
-                auto func = std::make_shared<ArrayUnionAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
-            } else if constexpr (lt_is_string<pt>) {
-                using MyHashSet = SliceHashSet;
+            if constexpr (lt_is_largeint<pt> || lt_is_fixedlength<pt> || lt_is_string<pt>) {
+                using MyHashSet = phmap::flat_hash_set<CppType, PhmapDefaultHashFunc<pt, PhmapSeed1>>;
                 auto func = std::make_shared<ArrayUnionAggAggregateFunction<pt, true, MyHashSet>>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
@@ -92,20 +80,8 @@ struct ArrayAggDistinctDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<pt>) {
             using CppType = RunTimeCppType<pt>;
-            if constexpr (lt_is_largeint<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_fixedlength<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_string<pt>) {
-                using MyHashSet = SliceHashSet;
+            if constexpr (lt_is_largeint<pt> || lt_is_fixedlength<pt> || lt_is_string<pt>) {
+                using MyHashSet = phmap::flat_hash_set<CppType, PhmapDefaultHashFunc<pt, PhmapSeed1>>;
                 auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
                 using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
