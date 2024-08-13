@@ -792,6 +792,15 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  <slot 4> : " +
                 "array_map(<slot 2> -> array_map(<slot 3> -> CAST(<slot 3> AS SMALLINT) + 100, <slot 2>), [[1,23],[4,3,2]])");
+
+        sql = "select array_map(x->array_map(y->array_filter(z-> z > array_length(x),y),x), [[[1,23],[4,3,2]],[[3]]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 5> : array_map(<slot 2> -> " +
+                "array_map(<slot 3> -> " +
+                "array_filter(<slot 3>, array_map(<slot 4> -> CAST(<slot 4> AS INT) > <slot 8>, <slot 3>))\n" +
+                "        lambda common expressions:{<slot 8> <-> array_length(<slot 2>)}\n" +
+                "        , <slot 2>), [[[1,23],[4,3,2]],[[3]]])");
     }
 
 
