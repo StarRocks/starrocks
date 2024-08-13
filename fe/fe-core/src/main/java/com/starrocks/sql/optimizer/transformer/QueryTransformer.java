@@ -257,7 +257,8 @@ public class QueryTransformer {
     }
 
     private OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions, long limit) {
-        ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
+        ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings(),
+                subOpt.getExpressionMapping().getColumnRefToConstOperators());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         for (Expr expression : expressions) {
@@ -445,7 +446,8 @@ public class QueryTransformer {
             subOpt = project(subOpt, inputs);
         }
         ExpressionMapping groupingTranslations =
-                new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
+                new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings(),
+                        subOpt.getExpressionMapping().getColumnRefToConstOperators());
 
         List<ColumnRefOperator> groupByColumnRefs = new ArrayList<>();
 
