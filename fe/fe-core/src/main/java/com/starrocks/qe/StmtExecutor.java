@@ -2163,6 +2163,8 @@ public class StmtExecutor {
                         database.getFullName(),
                         targetTable.getId(),
                         transactionId,
+                        DebugUtil.printId(context.getExecutionId()),
+                        context.getQualifiedUser(),
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
@@ -2173,6 +2175,9 @@ public class StmtExecutor {
                         context.getCurrentWarehouseId(),
                         context.isStatisticsJob(),
                         coord);
+                if (txnState != null) {
+                    txnState.setCallbackId(jobId);
+                }
             }
 
             coord.setLoadJobId(jobId);

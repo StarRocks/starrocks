@@ -21,9 +21,12 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
@@ -35,6 +38,8 @@ import org.junit.Test;
 import java.util.Map;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class StreamLoadTaskTest {
 
@@ -52,7 +57,7 @@ public class StreamLoadTaskTest {
         boolean isRoutineLoad = false;
         long warehouseId = 0L;
         streamLoadTask =
-                new StreamLoadTask(id, new Database(), new OlapTable(), label, timeoutMs, createTimeMs, isRoutineLoad,
+                new StreamLoadTask(id, new Database(), new OlapTable(), label, "", "", timeoutMs, createTimeMs, isRoutineLoad,
                         warehouseId);
     }
 
@@ -112,5 +117,49 @@ public class StreamLoadTaskTest {
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
         ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+    }
+
+    @Test
+    public void testSetLoadStateWithManualLoadTxnCommitAttachment() {
+        ManualLoadTxnCommitAttachment attachment = mock(ManualLoadTxnCommitAttachment.class);
+        when(attachment.getLoadedRows()).thenReturn(100L);
+        when(attachment.getFilteredRows()).thenReturn(10L);
+        when(attachment.getUnselectedRows()).thenReturn(5L);
+        when(attachment.getLoadedBytes()).thenReturn(1000L);
+        when(attachment.getErrorLogUrl()).thenReturn("http://error.log");
+        when(attachment.getBeginTxnTime()).thenReturn(100L);
+        when(attachment.getReceiveDataTime()).thenReturn(200L);
+        when(attachment.getPlanTime()).thenReturn(300L);
+
+        streamLoadTask.setLoadState(attachment, "Error message");
+
+        TLoadInfo loadInfo = streamLoadTask.toThrift();
+
+        Assert.assertEquals(100L, loadInfo.getNum_sink_rows());
+        Assert.assertEquals(10L, loadInfo.getNum_filtered_rows());
+        Assert.assertEquals(5L, loadInfo.getNum_unselected_rows());
+        Assert.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        Assert.assertEquals("http://error.log", loadInfo.getUrl());
+        Assert.assertEquals("Error message", loadInfo.getError_msg());
+    }
+
+    @Test
+    public void testSetLoadStateWithRLTaskTxnCommitAttachment() {
+        RLTaskTxnCommitAttachment attachment = mock(RLTaskTxnCommitAttachment.class);
+        when(attachment.getLoadedRows()).thenReturn(200L);
+        when(attachment.getFilteredRows()).thenReturn(20L);
+        when(attachment.getUnselectedRows()).thenReturn(10L);
+        when(attachment.getLoadedBytes()).thenReturn(2000L);
+        when(attachment.getErrorLogUrl()).thenReturn("http://error.log.rl");
+
+        streamLoadTask.setLoadState(attachment, "Another error message");
+
+        TLoadInfo loadInfo = streamLoadTask.toThrift();
+
+        Assert.assertEquals(200L, loadInfo.getNum_sink_rows());
+        Assert.assertEquals(20L, loadInfo.getNum_filtered_rows());
+        Assert.assertEquals(10L, loadInfo.getNum_unselected_rows());
+        Assert.assertEquals("http://error.log.rl", loadInfo.getUrl());
+        Assert.assertEquals("Another error message", loadInfo.getError_msg());
     }
 }

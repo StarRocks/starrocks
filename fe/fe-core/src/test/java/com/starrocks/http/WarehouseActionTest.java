@@ -510,7 +510,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         Table table = db.getTable(TEST_TABLE_ID);
         return new StreamLoadTask(NEXT_INDEX.getAndIncrement(),
                 db,
-                (OlapTable) table,
+                (OlapTable) table, "", "",
                 "stream-load-" + NEXT_INDEX.getAndIncrement(),
                 0L, System.currentTimeMillis(),
                 false,
@@ -542,7 +542,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     "insert-load-" + NEXT_INDEX.getAndIncrement(),
                     DB_NAME,
                     TEST_TABLE_ID,
-                    0,
+                    0, "", "",
                     EtlJobType.INSERT,
                     System.currentTimeMillis(),
                     0L,

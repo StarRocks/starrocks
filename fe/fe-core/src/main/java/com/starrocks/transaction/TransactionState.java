@@ -402,6 +402,10 @@ public class TransactionState implements Writable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
+    public void setCallbackId(long callbackId) {
+        this.callbackId = callbackId;
+    }
+
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
         this.errorReplicas = newErrorReplicas;
     }

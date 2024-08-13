@@ -412,6 +412,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             } catch (LockTimeoutException e) {
                 throw e;
             } catch (Exception e) {
+                LOG.warn("fail to commit", e);
                 throw new UserException("fail to execute commit task: " + e.getMessage(), e);
             }
         }

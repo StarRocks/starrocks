@@ -64,7 +64,8 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                     throw new UserException("Warehouse " + txnOperationParams.getWarehouseName() + " not exist");
                 }
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result, warehouse.getId());
+                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(),
+                        channel.getId(), result, warehouse.getId());
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
