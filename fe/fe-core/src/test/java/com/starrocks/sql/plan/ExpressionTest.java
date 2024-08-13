@@ -786,6 +786,12 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
                 "  |  <slot 9> : array_generate(0, 1: k, 1)");
+
+        sql = "select array_map(x -> array_map(x->x+100, x),[[1,23],[4,3,2]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : " +
+                "array_map(<slot 2> -> array_map(<slot 3> -> CAST(<slot 3> AS SMALLINT) + 100, <slot 2>), [[1,23],[4,3,2]])");
     }
 
 

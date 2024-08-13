@@ -287,7 +287,17 @@ public class ScalarOperatorsReuse {
     }
     private static class CommonSubScalarOperatorCollectorContext {
         public boolean isPartOfLambdaExpr = false;
+        // used to record the lambda arguments during visiting operator.
 
+        // take map_apply((k,v)->(k, array_sum(array_map(arg -> arg * v, array_column), map_column))) as an example,
+        // when visiting `array_sum(array_map(arg -> arg * v, array_column))`,
+        // currentLambdaArguments will contain k and v,
+        // outerLambdaArguments will be empty since there are no higher-order lambda functions nested outside.
+        // when visiting `arg * v`,
+        // currentLambdaArguments will contain arg,
+        // outerLambdaArguments will contain k and v since there is a map_apply's lambda expr outside.
+
+        // this information will help us determine whether an operator can be reused.
         public Set<ColumnRefOperator> currentLambdaArguments = Sets.newHashSet();
         public Set<ColumnRefOperator> outerLambdaArguments = Sets.newHashSet();
 
@@ -339,7 +349,8 @@ public class ScalarOperatorsReuse {
             return depth;
         }
 
-        private boolean isDependentOnCurrentLambdaArguments(ScalarOperator operator, CommonSubScalarOperatorCollectorContext context) {
+        private boolean isDependentOnCurrentLambdaArguments(ScalarOperator operator,
+                                                            CommonSubScalarOperatorCollectorContext context) {
             if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
                 return context.currentLambdaArguments.contains(operator);
             }
@@ -351,7 +362,8 @@ public class ScalarOperatorsReuse {
             return false;
         }
 
-        private boolean isDependentOnOuterLambdaArguments(ScalarOperator operator, CommonSubScalarOperatorCollectorContext context) {
+        private boolean isDependentOnOuterLambdaArguments(ScalarOperator operator,
+                                                          CommonSubScalarOperatorCollectorContext context) {
             if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
                 return context.outerLambdaArguments.contains(operator);
             }
