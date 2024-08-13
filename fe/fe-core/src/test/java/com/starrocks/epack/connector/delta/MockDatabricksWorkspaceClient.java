@@ -12,9 +12,11 @@ import com.databricks.sdk.service.catalog.CreateSchema;
 import com.databricks.sdk.service.catalog.DeleteCatalogRequest;
 import com.databricks.sdk.service.catalog.DeleteSchemaRequest;
 import com.databricks.sdk.service.catalog.DeleteTableRequest;
+import com.databricks.sdk.service.catalog.ExistsRequest;
 import com.databricks.sdk.service.catalog.GetCatalogRequest;
 import com.databricks.sdk.service.catalog.GetSchemaRequest;
 import com.databricks.sdk.service.catalog.GetTableRequest;
+import com.databricks.sdk.service.catalog.ListCatalogsRequest;
 import com.databricks.sdk.service.catalog.ListCatalogsResponse;
 import com.databricks.sdk.service.catalog.ListSchemasRequest;
 import com.databricks.sdk.service.catalog.ListSchemasResponse;
@@ -25,12 +27,14 @@ import com.databricks.sdk.service.catalog.ListTablesResponse;
 import com.databricks.sdk.service.catalog.SchemaInfo;
 import com.databricks.sdk.service.catalog.SchemasAPI;
 import com.databricks.sdk.service.catalog.SchemasService;
+import com.databricks.sdk.service.catalog.TableExistsResponse;
 import com.databricks.sdk.service.catalog.TableInfo;
 import com.databricks.sdk.service.catalog.TableType;
 import com.databricks.sdk.service.catalog.TablesAPI;
 import com.databricks.sdk.service.catalog.TablesService;
 import com.databricks.sdk.service.catalog.UpdateCatalog;
 import com.databricks.sdk.service.catalog.UpdateSchema;
+import com.databricks.sdk.service.catalog.UpdateTableRequest;
 
 import java.util.Arrays;
 import java.util.Iterator;
@@ -83,7 +87,7 @@ public class MockDatabricksWorkspaceClient extends WorkspaceClient {
         }
 
         @Override
-        public ListCatalogsResponse list() {
+        public ListCatalogsResponse list(ListCatalogsRequest listCatalogsRequest) {
             return null;
         }
 
@@ -163,6 +167,11 @@ public class MockDatabricksWorkspaceClient extends WorkspaceClient {
         }
 
         @Override
+        public TableExistsResponse exists(ExistsRequest existsRequest) {
+            return null;
+        }
+
+        @Override
         public TableInfo get(GetTableRequest getTableRequest) {
             return null;
         }
@@ -175,6 +184,10 @@ public class MockDatabricksWorkspaceClient extends WorkspaceClient {
         @Override
         public ListTableSummariesResponse listSummaries(ListSummariesRequest listSummariesRequest) {
             return null;
+        }
+
+        @Override
+        public void update(UpdateTableRequest updateTableRequest) {
         }
     }
 

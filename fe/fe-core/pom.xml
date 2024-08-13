@@ -365,7 +365,7 @@ under the License.
         <dependency>
             <groupId>com.databricks</groupId>
             <artifactId>databricks-sdk-java</artifactId>
-            <version>0.0.1</version>
+            <version>0.28.0</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
