@@ -297,7 +297,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
+<<<<<<< HEAD
         routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+=======
+        routineLoadManager.releaseBeTaskSlot(
+                routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
+>>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -363,7 +368,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
+<<<<<<< HEAD
             if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+=======
+            if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getWarehouseId(),
+                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+>>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -377,7 +387,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
+<<<<<<< HEAD
         long beId = routineLoadManager.takeBeTaskSlot();
+=======
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
+>>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
         if (beId < 0) {
             return false;
         }
