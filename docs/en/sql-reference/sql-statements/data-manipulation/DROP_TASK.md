@@ -15,15 +15,15 @@ Drops an asynchronous ETL task submitted using [SUBMIT TASK](./SUBMIT_TASK.md). 
 ## Syntax
 
 ```SQL
-DROP TASK `<task_name>` <FORCE>
+DROP TASK `<task_name>` [FORCE]
 ```
 
 ## Parameters
 
 | **Parameter** | **Required** | **Description**               |
 | ------------- | ------------ | ----------------------------- |
-| task_name     |     TRUE     | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
-| FORCE         |     FALSE    | Optional, force to drop dangling tasks |
+| task_name     | Yes          | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
+| FORCE         | No           | Forces to drop the task. |
 
 ## Usage notes
 
