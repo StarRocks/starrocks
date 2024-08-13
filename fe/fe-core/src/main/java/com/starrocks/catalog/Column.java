@@ -713,7 +713,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         }
-        if (defaultValue != null && !type.isOnlyMetricType()) {
+        if (defaultExpr == null && defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         }
         if (isGeneratedColumn()) {
