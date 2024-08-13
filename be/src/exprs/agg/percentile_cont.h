@@ -52,9 +52,9 @@ struct PercentileStateTypes {
 
 template <LogicalType LT, typename = guard::Guard>
 struct PercentileState {
-    using CppType = PercentileStateTypes<LT>::CppType;
-    using ItemType = PercentileStateTypes<LT>::ItemType;
-    using GridType = PercentileStateTypes<LT>::GridType;
+    using CppType = typename PercentileStateTypes<LT>::CppType;
+    using ItemType = typename PercentileStateTypes<LT>::ItemType;
+    using GridType = typename PercentileStateTypes<LT>::GridType;
 
     void update(CppType item) { items.emplace_back(item); }
     void update_batch(const std::vector<CppType>& vec) {
@@ -405,7 +405,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
         // for group by
         if (grid.size() == 0) {
             ResultColumnType* column = down_cast<ResultColumnType*>(to);
-            auto& items = const_cast<PercentileStateTypes<LT>::ItemType&>(this->data(state).items);
+            auto& items = const_cast<typename PercentileStateTypes<LT>::ItemType&>(this->data(state).items);
             std::sort(items.begin(), items.end());
 
             if (items.size() == 0) {
