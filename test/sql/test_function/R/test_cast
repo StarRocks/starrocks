@@ -193,3 +193,36 @@ select k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 order by k1;
 28	0.0	0.0	0	0
 29	0.0	0.0	0	0
 -- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 order by k1;
+-- result:
+[REGEX].*Expr evaluate meet error: .* conflict with range of.*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 >= 11 order by k1;
+-- result:
+[REGEX]Expr evaluate meet error: .* conflict with range of (-32768, 32767).*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 >= 18 order by k1;
+-- result:
+[REGEX]Expr evaluate meet error: .* conflict with range of (-32768, 32767).*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 where k1 in (1, 6, 7, 8, 9) order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0	9223372036854774784	2147483008
+6	-9.223372036854675e+18	-2147473700.0	-9223372036854675456	-2147473664
+7	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+8	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+9	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 in (11, 14, 15, 16) order by k1;
+-- result:
+11	32767.0	32767.0	32767	32767
+14	-32765.0	-32765.0	-32765	-32765
+15	-32767.0	-32767.0	-32767	-32767
+16	-32768.0	-32768.0	-32768	-32768
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 in (18, 21, 22) order by k1;
+-- result:
+18	127.0	127.0	127	127
+21	-127.0	-127.0	-127	-127
+22	-128.0	-128.0	-128	-128
+-- !result
