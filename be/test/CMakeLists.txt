@@ -360,6 +360,11 @@ set(EXEC_FILES
         ./util/cpu_usage_info_test.cpp
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/download_util_test.cpp
+        ./util/numeric_types_test.cpp
+>>>>>>> ebc98ddaa4 ([BugFix] Fix check of overflow for converting floating to intergal (#49707))
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
