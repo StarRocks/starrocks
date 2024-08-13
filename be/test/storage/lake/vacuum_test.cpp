@@ -1360,7 +1360,8 @@ TEST(LakeVacuumTest2, test_delete_files_retry) {
 TEST(LakeVacuumTest2, test_delete_files_retry2) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry2.txt"));
+    std::string testFile("test_vacuum_delete_files_retry2.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1379,19 +1380,21 @@ TEST(LakeVacuumTest2, test_delete_files_retry2) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future2 = delete_files_callable({"test_vacuum_delete_files_retry2.txt"});
+    auto future2 = delete_files_callable({testFile});
     ASSERT_TRUE(future2.valid());
     ASSERT_FALSE(future2.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry2.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 
 TEST(LakeVacuumTest2, test_delete_files_retry3) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry3.txt"));
+    std::string testFile("test_vacuum_delete_files_retry3.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1410,12 +1413,13 @@ TEST(LakeVacuumTest2, test_delete_files_retry3) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future = delete_files_callable({"test_vacuum_delete_files_retry3.txt"});
+    auto future = delete_files_callable({testFile});
     ASSERT_TRUE(future.valid());
     ASSERT_FALSE(future.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry3.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 
