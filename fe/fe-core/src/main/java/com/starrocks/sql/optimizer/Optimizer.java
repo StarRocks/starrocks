@@ -394,25 +394,22 @@ public class Optimizer {
         return tree;
     }
 
-    private void ruleBasedMaterializedViewRewriteMultiStages(OptExpression tree,
-                                                             TaskContext rootTaskContext,
-                                                             ColumnRefSet requiredColumns) {
+    private void mvRewriteWithMultiStages(OptExpression tree,
+                                          TaskContext rootTaskContext) {
         if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
         // do rule based mv rewrite
-        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
-        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        mvRewriteWithRule(tree, rootTaskContext);
         new SeparateProjectRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
     }
 
-    private void doRuleBasedMaterializedViewRewrite(OptExpression tree,
-                                                    TaskContext rootTaskContext) {
+    private void mvRewriteWithRule(OptExpression tree,
+                                   TaskContext rootTaskContext) {
         if (mvRewriteStrategy.enableViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
@@ -439,7 +436,7 @@ public class Optimizer {
         }
 
         // do rule based mv rewrite
-        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        mvRewriteWithRule(tree, rootTaskContext);
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
@@ -530,7 +527,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         // rule-based materialized view rewrite: early stage
-        ruleBasedMaterializedViewRewriteMultiStages(tree, rootTaskContext, requiredColumns);
+        mvRewriteWithMultiStages(tree, rootTaskContext);
         context.getJoinPushDownParams().reset();
 
         // Limit push must be after the column prune,

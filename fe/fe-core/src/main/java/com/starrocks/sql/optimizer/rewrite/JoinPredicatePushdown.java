@@ -71,7 +71,7 @@ public class JoinPredicatePushdown {
      */
     public static class JoinPushDownParams {
         public boolean enableLeftRightJoinEquivalenceDerive = true;
-        public boolean enableLeftRightJoinToInnerJoin = true;
+        public boolean enableJoinPredicatePushDown = true;
 
         /**
          * Prepare the join push down parameters.
@@ -90,7 +90,7 @@ public class JoinPredicatePushdown {
             joinPushDownParams.enableLeftRightJoinEquivalenceDerive = false;
             // disable outer join to inner join
             if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
-                joinPushDownParams.enableLeftRightJoinToInnerJoin = false;
+                joinPushDownParams.enableJoinPredicatePushDown = false;
             }
         }
 
@@ -99,7 +99,7 @@ public class JoinPredicatePushdown {
          */
         public void reset() {
             this.enableLeftRightJoinEquivalenceDerive = true;
-            this.enableLeftRightJoinToInnerJoin = true;
+            this.enableJoinPredicatePushDown = true;
         }
     }
 
@@ -122,6 +122,10 @@ public class JoinPredicatePushdown {
     }
 
     public OptExpression pushdown(ScalarOperator predicateToPush) {
+        JoinPushDownParams params = optimizerContext.getJoinPushDownParams();
+        if (!params.enableJoinPredicatePushDown) {
+            return joinOptExpression;
+        }
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         ScalarOperator derivedPredicate = predicateDerive(predicateToPush);
         return pushDownPredicate(derivedPredicate);
@@ -308,7 +312,7 @@ public class JoinPredicatePushdown {
     }
 
     public void pushDownPredicateDirectly(OptExpression root, List<ScalarOperator> leftPushDown,
-                                                 List<ScalarOperator> rightPushDown) {
+                                          List<ScalarOperator> rightPushDown) {
         if (CollectionUtils.isNotEmpty(leftPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(leftPushDown);
             Operator leftOp = root.inputAt(0).getOp().cast();
@@ -422,7 +426,7 @@ public class JoinPredicatePushdown {
             newOnPredicate = equivalenceDeriveOnPredicate(newOnPredicate, joinOptExpression, join);
             return newOnPredicate;
         } else {
-            if (joinPushDownParams.enableLeftRightJoinToInnerJoin && join.getJoinType().isOuterJoin()) {
+            if (join.getJoinType().isOuterJoin()) {
                 joinOptExpression = convertOuterToInner(joinOptExpression, predicateToPush);
                 join = (LogicalJoinOperator) joinOptExpression.getOp();
             }

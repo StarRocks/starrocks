@@ -36,8 +36,11 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-
         if (joinOperator.hasPushDownJoinOnClause()) {
+            return false;
+        }
+        JoinPredicatePushdown.JoinPushDownParams params = context.getJoinPushDownParams();
+        if (!params.enableJoinPredicatePushDown) {
             return false;
         }
         return joinOperator.getOnPredicate() != null;
