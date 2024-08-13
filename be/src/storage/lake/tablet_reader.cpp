@@ -259,6 +259,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
 
+    rs_opts.column_access_paths = params.column_access_paths;
+
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
