@@ -36,19 +36,22 @@ public:
         col->set_is_nullable(false);
         _tablet_schema = TabletSchema::create(schema_pb);
 
-        std::string segment_name = "segment_meta_collector_test.dat";
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
+        _segment_name = "segment_meta_collector_test.dat";
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_segment_name));
         WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, segment_name));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, _segment_name));
         SegmentWriter writer(std::move(wf), 0, _tablet_schema, SegmentWriterOptions());
         EXPECT_OK(writer.init());
         uint64_t file_size, index_size, footer_pos;
         EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
 
-        ASSIGN_OR_ABORT(_segment, Segment::open(fs, FileInfo{segment_name}, 0, _tablet_schema));
+        ASSIGN_OR_ABORT(_segment, Segment::open(fs, FileInfo{_segment_name}, 0, _tablet_schema));
     }
 
+    ~SegmentMetaCollecterTest() { fs::delete_file(_segment_name); }
+
 protected:
+    std::string _segment_name;
     TabletSchemaCSPtr _tablet_schema;
     SegmentSharedPtr _segment;
 };
