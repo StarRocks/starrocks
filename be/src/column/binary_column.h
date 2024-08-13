@@ -268,7 +268,7 @@ public:
         }
     }
 
-    ValueType get_data(uint32_t index) const { _immuable_container[index]; }
+    ValueType get_data(uint32_t index) const { return _immuable_container[index]; }
 
     Container& get_data() {
         if (!_slices_cache) {
