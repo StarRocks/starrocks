@@ -112,7 +112,7 @@ public class AnalyzeAlterTableStatementTest {
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
+        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.INTERNAL_ERR);
         connectContext.getState().getErrorMessage()
                 .contains(
                         "BITMAP index only used in columns of " +

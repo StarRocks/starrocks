@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
@@ -1705,7 +1706,7 @@ public class StmtExecutor {
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (DdlException e) {
+        } catch (DdlException | AlterJobException e) {
             // let StmtExecutor.execute catch this exception
             // which will set error as ANALYSIS_ERR
             throw e;
@@ -1716,7 +1717,7 @@ public class StmtExecutor {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
-            context.getState().setError("Unexpected exception: " + e.getMessage());
+            context.getState().setError(e.getMessage());
         }
     }
 

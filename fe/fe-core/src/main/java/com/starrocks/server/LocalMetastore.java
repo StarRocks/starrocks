@@ -47,7 +47,6 @@ import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -2975,21 +2974,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
      */
     @Override
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
-        /*
-         * Due to the implementation of the Table Level Lock transformation plan,
-         * we need to sort out the lock layering logic. Therefore, we plan to gradually
-         * migrate the alter table related logic scattered everywhere to AlterJobExecutor.
-         * This is a compatible logic, so that the functions that have not been migrated still use the original logic.
-         */
-        if (stmt.hasPartitionOp() || stmt.contains(AlterOpType.SWAP)
-                || stmt.contains(AlterOpType.COMPACT)
-                || stmt.contains(AlterOpType.RENAME)
-                || stmt.contains(AlterOpType.ALTER_COMMENT)) {
-            AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
-            alterJobExecutor.process(stmt, context);
-        } else {
-            stateMgr.getAlterJobMgr().processAlterTable(stmt);
-        }
+        AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
+        alterJobExecutor.process(stmt, context);
     }
 
     /**
@@ -3844,12 +3830,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-            try {
-                int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
-                results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
-            } catch (AnalysisException ex) {
-                throw new DdlException(ex.getMessage());
-            }
+            int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {
@@ -3901,8 +3883,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     // The caller need to hold the db write lock
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         if (colocateTableIndex.isColocateTable(table.getId())) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
@@ -4689,15 +4669,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     // Convert table's distribution type from random to hash.
     // random distribution is no longer supported.
     public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyDistributionType(tableInfo);
-            LOG.info("finished to modify distribution type of table: " + tbl.getName());
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
+        TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyDistributionType(tableInfo);
+        LOG.info("finished to modify distribution type of table: " + tbl.getName());
     }
 
     public void replayConvertDistributionType(TableInfo tableInfo) {

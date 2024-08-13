@@ -18,7 +18,6 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.Map;
 
 // clause which is used to add one column to
 public class DropPartitionClause extends AlterTableClause {
@@ -41,7 +40,6 @@ public class DropPartitionClause extends AlterTableClause {
         this.ifExists = ifExists;
         this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
-        this.needTableStable = false;
         this.forceDrop = forceDrop;
     }
 
@@ -67,11 +65,6 @@ public class DropPartitionClause extends AlterTableClause {
 
     public boolean isForceDrop() {
         return forceDrop;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override
