@@ -47,6 +47,9 @@ TEST_F(ColumnHelperTest, get_const_value) {
 
     result = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     ASSERT_EQ(result, slice);
+
+    column = ColumnHelper::create_const_column<TYPE_INT>(1, 10);
+    ASSERT_EQ(ColumnHelper::get_const_value<TYPE_INT>(column), 1);
 }
 
 TEST_F(ColumnHelperTest, cast_to_nullable_column) {
