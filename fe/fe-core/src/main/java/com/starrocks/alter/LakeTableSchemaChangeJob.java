@@ -526,7 +526,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (!getOrCreateSchemaChangeBatchTask().isFinished()) {
             LOG.info("schema change tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = getOrCreateSchemaChangeBatchTask().getUnfinishedTasks(2000);
-            AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny().orElse(null);
+            AgentTask task = tasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny().orElse(null);
             if (task != null) {
                 throw new AlterCancelException(
                         "schema change task failed after try three times: " + task.getErrorMsg());
