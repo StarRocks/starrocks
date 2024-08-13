@@ -780,8 +780,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String generatedColumnExprToString() {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
-            return generatedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
-                            SqlModeHelper.MODE_DEFAULT).toSql();
+            return SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql, SqlModeHelper.MODE_DEFAULT).toSql();
         }
         return null;
     }
