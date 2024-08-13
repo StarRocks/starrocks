@@ -1075,3 +1075,54 @@ SELECT * FROM t;
 DROP DATABASE test_compaction_after_adding_generated_column;
 -- result:
 -- !result
+-- name: test_information_schema_generated_column
+CREATE TABLE `t_information_schema_generated_column_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+CREATE TABLE `t_information_schema_generated_column_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+k	None
+v	k + 10
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+-- result:
+k	None
+v	k + 10
+-- !result
+DROP TABLE t_information_schema_generated_column_1;
+-- result:
+-- !result
+DROP TABLE t_information_schema_generated_column_2;
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+-- result:
+-- !result
