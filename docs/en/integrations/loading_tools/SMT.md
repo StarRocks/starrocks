@@ -10,13 +10,13 @@ StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to
 
 | Source database | Generate statement to create table in StarRocks | Full data synchronization | Incremental data synchronization |
 | --------------- | ----------------------------------------------- | ------------------------- | -------------------------------- |
-| MySQL           | Support                                         | Support                   | Support                          |
-| PostgreSQL      | Support                                         | Support                   | Support                          |
-| Oracle          | Support                                         | Support                   | Support                          |
-| Hive            | Support                                         | Support                   | Not support                      |
-| ClickHouse      | Support                                         | Support                   | Not support                      |
-| SQL Server      | Support                                         | Support                   | Support                          |
-| TiDB            | Support                                         | Support                   | Support                          |
+| MySQL           | Supported                                         | Supported                   | Supported                          |
+| PostgreSQL      | Supported                                         | Supported                   | Supported                          |
+| Oracle          | Supported                                         | Supported                   | Supported                          |
+| Hive            | Supported                                         | Supported                   | Not supported                      |
+| ClickHouse      | Supported                                         | Supported                   | Not supported                      |
+| SQL Server      | Supported                                         | Supported                   | Supported                          |
+| TiDB            | Supported                                         | Supported                   | Supported                          |
 
 Download link: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
 
