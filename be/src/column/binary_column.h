@@ -268,6 +268,8 @@ public:
         }
     }
 
+    ValueType get_data(uint32_t index) const { _immuable_container[index]; }
+
     Container& get_data() {
         if (!_slices_cache) {
             _build_slices();

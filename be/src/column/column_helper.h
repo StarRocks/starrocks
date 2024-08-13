@@ -312,13 +312,13 @@ public:
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->get_data(0);
     }
 
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->get_data(0);
     }
 
     static Column* get_data_column(Column* column) {

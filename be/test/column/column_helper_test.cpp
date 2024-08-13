@@ -38,6 +38,17 @@ protected:
     }
 };
 
+TEST_F(ColumnHelperTest, get_const_value) {
+    Slice slice("12345");
+    auto column = ColumnHelper::create_const_column<TYPE_VARCHAR>(slice, 10);
+
+    auto result = ColumnHelper::get_const_value<TYPE_VARCHAR>(column.get());
+    ASSERT_EQ(result, slice);
+
+    result = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    ASSERT_EQ(result, slice);
+}
+
 TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     auto col = ColumnHelper::cast_to_nullable_column(create_column());
     ASSERT_TRUE(col->is_nullable());

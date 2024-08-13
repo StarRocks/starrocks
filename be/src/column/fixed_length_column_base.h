@@ -214,6 +214,8 @@ public:
 
     const Container& get_data() const { return _data; }
 
+    ValueType get_data(uint32_t index) const { return _data[index]; }
+
     Datum get(size_t n) const override { return Datum(_data[n]); }
 
     std::string debug_item(size_t idx) const override;
