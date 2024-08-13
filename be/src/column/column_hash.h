@@ -348,7 +348,7 @@ struct HashTypeTraits<int128_t> {
 template <LogicalType LT, PhmapSeed seed>
 struct PhmapDefaultHashFunc {
     std::size_t operator()(const RunTimeCppType<LT>& value) const {
-        static_assert(is_supported());
+        static_assert(is_supported(), "unsupported logical type");
 
         if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
             return Hash128WithSeed<seed>()(value);
