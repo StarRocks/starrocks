@@ -128,6 +128,15 @@ public:
         return _groups.size();
     }
 
+    size_t num_rows() const {
+        std::lock_guard guard(_mutex);
+        size_t num_rows = 0;
+        for (const auto& group : _groups) {
+            num_rows += group->num_rows();
+        }
+        return num_rows;
+    }
+
     // choose the two smallest chunks for the compaction
     std::vector<BlockGroupPtr> select_compaction_block_groups();
 
