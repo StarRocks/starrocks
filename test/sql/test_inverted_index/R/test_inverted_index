@@ -117,7 +117,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: GIN does not support replicated mode.')
+E: (1064, 'Getting analyzing error. Detail message: GIN does not support replicated mode.')
 -- !result
 DROP TABLE t_test_basic_create_index_pk;
 -- result:

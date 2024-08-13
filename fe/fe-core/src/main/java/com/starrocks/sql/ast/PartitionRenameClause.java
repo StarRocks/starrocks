@@ -18,8 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
 // rename table
 public class PartitionRenameClause extends AlterTableClause {
     private final String partitionName;
@@ -33,7 +31,6 @@ public class PartitionRenameClause extends AlterTableClause {
         super(AlterOpType.RENAME, pos);
         this.partitionName = partitionName;
         this.newPartitionName = newPartitionName;
-        this.needTableStable = false;
     }
 
     public String getPartitionName() {
@@ -42,11 +39,6 @@ public class PartitionRenameClause extends AlterTableClause {
 
     public String getNewPartitionName() {
         return newPartitionName;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override
