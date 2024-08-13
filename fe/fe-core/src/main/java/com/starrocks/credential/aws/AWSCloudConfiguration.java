@@ -52,6 +52,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     public void applyToConfiguration(Configuration configuration) {
         configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.s3n.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         // Below storage using s3 compatible storage api
         configuration.set("fs.oss.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.ks3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
