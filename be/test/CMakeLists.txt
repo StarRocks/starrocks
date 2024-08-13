@@ -329,6 +329,13 @@ set(EXEC_FILES
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
         ./util/concurrent_limiter_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/stack_trace_mutex_test.cpp
+        ./util/download_util_test.cpp
+        ./util/numeric_types_test.cpp
+        ./gutil/cpu_test.cc
+>>>>>>> ebc98ddaa4 ([BugFix] Fix check of overflow for converting floating to intergal (#49707))
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )

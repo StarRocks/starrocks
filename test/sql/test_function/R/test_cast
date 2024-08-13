@@ -1,0 +1,228 @@
+-- name: test_cast_string_to_varbinary
+create table t1(c1 int, c2 string, c3 string);
+-- result:
+-- !result
+create table t2(c1 int, c2 binary, c3 varbinary);
+-- result:
+-- !result
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+-- result:
+-- !result
+insert into t1 values (2, null, null);
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+select * from t2 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result
+select c1, cast(c2 as binary), cast(c2 as varbinary) from t1 order by c1;
+-- result:
+1	1,2,3,4,5	1,2,3,4,5
+2	None	None
+-- !result
+select cast("1,2,3,4,5" as binary), cast("6,7,8,9.10" as varbinary);
+-- result:
+1,2,3,4,5	6,7,8,9.10
+-- !result
+-- name: test_cast_varbinary_to_string
+create table t1(c1 int, c2 binary, c3 varbinary);
+-- result:
+-- !result
+create table t2(c1 int, c2 string, c3 string);
+-- result:
+-- !result
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+-- result:
+-- !result
+insert into t1 values (2, null, null);
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+select * from t2 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result
+select c1, cast(c2 as string), cast(c3 as string) from t1 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result
+-- name: test_cast_floating_to_intergal
+create table t1(k1 int, d1 double, f1 float) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1
+values
+    (1, 9223372036854775000.0, 2147483000.0),
+    (2, 9223372036854775807.0, 2147483647.0),
+    (3, 9223372036854775807.3, 2147483647.3),
+    (4, 9223372036854775808.0, 2147483648.0),
+    (5, 9223372036854775809.0, 2147483649.0),
+
+    (6, -9223372036854675807.0, -2147473647.0),
+    (7, -9223372036854775807.0, -2147483647.0),
+    (8, -9223372036854775808.0, -2147483648.0),
+    (9, -9223372036854775809.0, -2147483649.0),
+    (10, -9223372036854778808.0, -2147494649.0),
+
+    (11, 32767, 32767),
+    (12, 32768, 32768),
+    (13, 32769, 32769),
+    (14, -32765, -32765),
+    (15, -32767, -32767),
+    (16, -32768, -32768),
+    (17, -32770, -32770),
+
+    (18, 127, 127),
+    (19, 128, 128),
+    (20, 129, 129),
+    (21, -127, -127),
+    (22, -128, -128),
+    (23, -129, -129),
+
+    (24, 0.1, 0.1),
+    (25, 0.9, 0.9),
+    (26, -0.1, -0.1),
+    (27, -0.9, -0.9),
+    (28, 0.0, 0.0),
+    (29, -0.0, -0.0);
+-- result:
+-- !result
+select k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0	9223372036854774784	2147483008
+2	9.223372036854776e+18	2147483600.0	None	None
+3	9.223372036854776e+18	2147483600.0	None	None
+4	9.223372036854776e+18	2147483600.0	None	None
+5	9.223372036854776e+18	2147483600.0	None	None
+6	-9.223372036854675e+18	-2147473700.0	-9223372036854675456	-2147473664
+7	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+8	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+9	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+10	-9.223372036854778e+18	-2147494700.0	None	None
+11	32767.0	32767.0	32767	32767
+12	32768.0	32768.0	32768	32768
+13	32769.0	32769.0	32769	32769
+14	-32765.0	-32765.0	-32765	-32765
+15	-32767.0	-32767.0	-32767	-32767
+16	-32768.0	-32768.0	-32768	-32768
+17	-32770.0	-32770.0	-32770	-32770
+18	127.0	127.0	127	127
+19	128.0	128.0	128	128
+20	129.0	129.0	129	129
+21	-127.0	-127.0	-127	-127
+22	-128.0	-128.0	-128	-128
+23	-129.0	-129.0	-129	-129
+24	0.1	0.1	0	0
+25	0.9	0.9	0	0
+26	-0.1	-0.1	0	0
+27	-0.9	-0.9	0	0
+28	0.0	0.0	0	0
+29	0.0	0.0	0	0
+-- !result
+select k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0	None	None
+2	9.223372036854776e+18	2147483600.0	None	None
+3	9.223372036854776e+18	2147483600.0	None	None
+4	9.223372036854776e+18	2147483600.0	None	None
+5	9.223372036854776e+18	2147483600.0	None	None
+6	-9.223372036854675e+18	-2147473700.0	None	None
+7	-9.223372036854776e+18	-2147483600.0	None	None
+8	-9.223372036854776e+18	-2147483600.0	None	None
+9	-9.223372036854776e+18	-2147483600.0	None	None
+10	-9.223372036854778e+18	-2147494700.0	None	None
+11	32767.0	32767.0	32767	32767
+12	32768.0	32768.0	None	None
+13	32769.0	32769.0	None	None
+14	-32765.0	-32765.0	-32765	-32765
+15	-32767.0	-32767.0	-32767	-32767
+16	-32768.0	-32768.0	-32768	-32768
+17	-32770.0	-32770.0	None	None
+18	127.0	127.0	127	127
+19	128.0	128.0	128	128
+20	129.0	129.0	129	129
+21	-127.0	-127.0	-127	-127
+22	-128.0	-128.0	-128	-128
+23	-129.0	-129.0	-129	-129
+24	0.1	0.1	0	0
+25	0.9	0.9	0	0
+26	-0.1	-0.1	0	0
+27	-0.9	-0.9	0	0
+28	0.0	0.0	0	0
+29	0.0	0.0	0	0
+-- !result
+select k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0	None	None
+2	9.223372036854776e+18	2147483600.0	None	None
+3	9.223372036854776e+18	2147483600.0	None	None
+4	9.223372036854776e+18	2147483600.0	None	None
+5	9.223372036854776e+18	2147483600.0	None	None
+6	-9.223372036854675e+18	-2147473700.0	None	None
+7	-9.223372036854776e+18	-2147483600.0	None	None
+8	-9.223372036854776e+18	-2147483600.0	None	None
+9	-9.223372036854776e+18	-2147483600.0	None	None
+10	-9.223372036854778e+18	-2147494700.0	None	None
+11	32767.0	32767.0	None	None
+12	32768.0	32768.0	None	None
+13	32769.0	32769.0	None	None
+14	-32765.0	-32765.0	None	None
+15	-32767.0	-32767.0	None	None
+16	-32768.0	-32768.0	None	None
+17	-32770.0	-32770.0	None	None
+18	127.0	127.0	127	127
+19	128.0	128.0	None	None
+20	129.0	129.0	None	None
+21	-127.0	-127.0	-127	-127
+22	-128.0	-128.0	-128	-128
+23	-129.0	-129.0	None	None
+24	0.1	0.1	0	0
+25	0.9	0.9	0	0
+26	-0.1	-0.1	0	0
+27	-0.9	-0.9	0	0
+28	0.0	0.0	0	0
+29	0.0	0.0	0	0
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 order by k1;
+-- result:
+[REGEX].*Expr evaluate meet error: .* conflict with range of.*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 >= 11 order by k1;
+-- result:
+[REGEX].*Expr evaluate meet error: .* conflict with range of.*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 >= 18 order by k1;
+-- result:
+[REGEX].*Expr evaluate meet error: .* conflict with range of.*
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as bigint), cast(f1 as int) from t1 where k1 in (1, 6, 7, 8, 9) order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0	9223372036854774784	2147483008
+6	-9.223372036854675e+18	-2147473700.0	-9223372036854675456	-2147473664
+7	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+8	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+9	-9.223372036854776e+18	-2147483600.0	-9223372036854775808	-2147483648
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as smallint), cast(f1 as smallint) from t1 where k1 in (11, 14, 15, 16) order by k1;
+-- result:
+11	32767.0	32767.0	32767	32767
+14	-32765.0	-32765.0	-32765	-32765
+15	-32767.0	-32767.0	-32767	-32767
+16	-32768.0	-32768.0	-32768	-32768
+-- !result
+select /*+SET_VAR(sql_mode='ALLOW_THROW_EXCEPTION')*/ k1, d1, f1, cast(d1 as tinyint), cast(f1 as tinyint) from t1 where k1 in (18, 21, 22) order by k1;
+-- result:
+18	127.0	127.0	127	127
+21	-127.0	-127.0	-127	-127
+22	-128.0	-128.0	-128	-128
+-- !result
