@@ -18,7 +18,6 @@
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
-#include <exception>
 #include <rapidjson/document.h>
 
 #include "gen_cpp/FrontendService_types.h"
@@ -793,14 +792,14 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
                                           [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
-    ctx->buffer = std::move(ByteBufferPtr (new ByteBuffer(1)));
+    ctx->buffer = std::move(ByteBufferPtr(new ByteBuffer(1)));
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
     ctx->buffer = nullptr;
     SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
     SyncPoint::GetInstance()->DisableProcessing();
-    ctx->buffer = std::move(ByteBufferPtr (new ByteBuffer(1)));
+    ctx->buffer = std::move(ByteBufferPtr(new ByteBuffer(1)));
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.ok());
@@ -812,7 +811,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
                                           [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
     ctx->format = TFileFormatType::FORMAT_JSON;
-    ctx->buffer = std::move(ByteBufferPtr (new ByteBuffer(1)));
+    ctx->buffer = std::move(ByteBufferPtr(new ByteBuffer(1)));
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
@@ -820,7 +819,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
     SyncPoint::GetInstance()->DisableProcessing();
     ctx->format = TFileFormatType::FORMAT_JSON;
-    ctx->buffer = std::move(ByteBufferPtr (new ByteBuffer(1)));
+    ctx->buffer = std::move(ByteBufferPtr(new ByteBuffer(1)));
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.ok());
