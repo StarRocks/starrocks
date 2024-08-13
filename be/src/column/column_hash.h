@@ -362,8 +362,8 @@ struct PhmapDefaultHashFunc {
     }
 
     constexpr static bool is_supported() {
-        return lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT>
-               || lt_is_string<LT> || lt_is_binary<LT>;
+        return lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT> ||
+               lt_is_binary<LT>;
     }
 };
 
