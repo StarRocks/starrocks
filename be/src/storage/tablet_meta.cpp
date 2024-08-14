@@ -548,52 +548,25 @@ void TabletMeta::delete_stale_schema() {
     if (_updates != nullptr) {
         _updates->get_active_schema_ids(&active_schema_ids);
     } else {
-        {
-            auto it = _rs_metas.begin();
-            while (it != _rs_metas.end()) {
-                if ((*it)->has_tablet_schema_id()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
-                } else if ((*it)->has_tablet_schema()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
+        auto collect_active_schema_ids = [&](const auto& metas) {
+            for (const auto& meta : metas) {
+                if (meta->has_tablet_schema_id() || meta->has_tablet_schema()) {
+                    active_schema_ids.insert(meta->tablet_schema()->id());
                 }
-                it++;
             }
-        }
+        };
 
-        {
-            auto it = _inc_rs_metas.begin();
-            while (it != _inc_rs_metas.end()) {
-                if ((*it)->has_tablet_schema_id()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
-                } else if ((*it)->has_tablet_schema()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
-                }
-                it++;
-            }
-        }
-
-        {
-            auto it = _stale_rs_metas.begin();
-            while (it != _stale_rs_metas.end()) {
-                if ((*it)->has_tablet_schema_id()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
-                } else if ((*it)->has_tablet_schema()) {
-                    active_schema_ids.insert((*it)->tablet_schema()->id());
-                }
-                it++;
-            }
-        }
+        collect_active_schema_ids(_rs_metas);
+        collect_active_schema_ids(_inc_rs_metas);
+        collect_active_schema_ids(_stale_rs_metas);
     }
 
-    std::set<int64_t> erase_schema_ids;
-    for (auto [id, _] : _history_schema) {
-        if (active_schema_ids.count(id) <= 0) {
-            erase_schema_ids.insert(id);
+    for (auto it = _history_schema.begin(); it != _history_schema.end();) {
+        if (active_schema_ids.find(it->first) == active_schema_ids.end()) {
+            it = _history_schema.erase(it);
+        } else {
+            it++;
         }
-    }
-
-    for (auto id : erase_schema_ids) {
-        _history_schema.erase(id);
     }
 }
 

@@ -397,12 +397,6 @@ Status DataDir::load() {
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
             if (!rowset_meta->tablet_schema()) {
-                if (rowset_meta->has_tablet_schema()) {
-                    LOG(ERROR) << "rowset does not have tablet schema. rowset=" << rowset_meta->rowset_id()
-                               << " tablet=" << rowset_meta->tablet_id();
-                    error_rowset_count++;
-                    return true;
-                }
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
                 RowsetMetaPB meta_pb;
@@ -432,12 +426,6 @@ Status DataDir::load() {
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                if (rowset_meta->has_tablet_schema()) {
-                    LOG(ERROR) << "rowset does not have tablet schema. rowset=" << rowset_meta->rowset_id()
-                               << " tablet=" << rowset_meta->tablet_id();
-                    error_rowset_count++;
-                    return true;
-                }
                 RowsetMetaPB meta_pb;
                 rowset_meta->get_full_meta_pb(&meta_pb);
                 Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);

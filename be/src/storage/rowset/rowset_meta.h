@@ -248,7 +248,6 @@ public:
         const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
 
         if (!_has_tablet_schema_id) {
-            LOG(INFO) << "rowset does not have rowset id";
             if (target_schema != nullptr) {
                 rs_meta_pb->clear_tablet_schema();
                 TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
@@ -302,7 +301,7 @@ private:
             _rowset_id.init(_rowset_meta_pb->rowset_id());
         }
 
-        if (_rowset_meta_pb->has_schema_id() && _rowset_meta_pb->schema_id() != 0) {
+        if (_rowset_meta_pb->has_schema_id() && _rowset_meta_pb->schema_id() != TabletSchema::invalid_id()) {
             _schema = GlobalTabletSchemaMap::Instance()->get(_rowset_meta_pb->schema_id());
             if (_schema != nullptr) {
                 _has_tablet_schema_id = true;

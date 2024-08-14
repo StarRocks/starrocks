@@ -582,8 +582,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
         ASSIGN_OR_RETURN(need_binlog, _prepare_binlog_if_needed(rowset, version));
     }
 
-    // TODO(zhangqiang)
-    // set rowset schema id in rowset_meta
     RowsetMetaPB rowset_meta_pb;
     rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
@@ -703,8 +701,6 @@ void Tablet::delete_expired_inc_rowsets() {
         VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << version.first;
     }
 
-    // TODO(zhangqiang)
-    // delete stale schema
     _delete_stale_schema();
     save_meta();
     wrlock.unlock();
