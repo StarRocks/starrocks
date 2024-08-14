@@ -205,6 +205,10 @@ select * from tab1;
 alter table tab1 modify column c1 largeint;
 function: wait_alter_table_finish()
 
+alter table tab1 add column date1 datetime default current_timestamp;
+function: wait_alter_table_finish()
+show create table tab1;
+
 select * from tab1;
 
 drop table tab1;
