@@ -14,8 +14,6 @@
 
 #include "column/column_access_path.h"
 
-#include <storage/chunk_helper.h>
-
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -50,9 +48,7 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
 
     RETURN_IF_ERROR(expr_ctx->prepare(state));
     RETURN_IF_ERROR(expr_ctx->open(state));
-
-    ChunkPtr dummyChunk = std::move(ChunkHelper::createDummyChunk());
-    ASSIGN_OR_RETURN(ColumnPtr column, expr_ctx->evaluate(dummyChunk.get()));
+    ASSIGN_OR_RETURN(ColumnPtr column, expr_ctx->evaluate(nullptr));
 
     if (column->is_null(0)) {
         return Status::InternalError("error column access null path.");
