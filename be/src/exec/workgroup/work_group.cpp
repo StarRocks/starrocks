@@ -199,8 +199,9 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
         int64_t query_runtime_ns = query_context.cpu_cost();
         if (query_runtime_ns > _big_query_cpu_nanos_limit) {
             _bigquery_count++;
-            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {}ns but limit is {}ns",
-                                                 query_runtime_ns, _big_query_cpu_nanos_limit));
+            return Status::BigQueryCpuSecondLimitExceeded(
+                    fmt::format("exceed big query cpu limit: current is {}ns but limit is {}ns", query_runtime_ns,
+                                _big_query_cpu_nanos_limit));
         }
     }
 
@@ -209,8 +210,9 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
             query_context.get_scan_limit() > 0 ? query_context.get_scan_limit() : _big_query_scan_rows_limit;
     if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > bigquery_scan_limit) {
         _bigquery_count++;
-        return Status::Cancelled(fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
-                                             query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
+        return Status::BigQueryScanRowsLimitExceeded(
+                fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
+                            query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
     }
 
     return Status::OK();
