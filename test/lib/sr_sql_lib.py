@@ -2108,3 +2108,22 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         expect_queries="[%s]" % (", ".join(['"%s"' % (e) for e in names]))
         tools.assert_true(len(accelerated_queries_list) > 0, "The number of AcceleratedQueries list should not be empty")
         tools.assert_true(any(map(lambda qs: qs == expect_queries, accelerated_queries_list)), "At least one of AcceleratedQueries should be %s" % (expect_queries))
+
+    def wait_table_rowcount_not_empty(self, table, time_out=300):
+        times = 0
+        rc = 0
+        sql = 'show partitions from ' + table
+        while times < time_out and times < time_out:
+            result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
+            if len(result["result"]) > 0:
+                rc = int(result["result"][0][-4])
+                log.info(rc)
+                if rc > 0:
+                    break
+            time.sleep(1)
+            times += 1
+        tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
+
+>>>>>>> b84bd41a4b... [BugFix] Fix subpartitions with tablet pruing bug (#49394)

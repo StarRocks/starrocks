@@ -837,19 +837,28 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
-                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
-                    return selectTabletIds != null && !selectTabletIds.isEmpty();
-                }).collect(Collectors.toList());
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
-
+                // Filter out empty partitions from all selected partitions, original selected partition ids may be
+                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                // eg:
+                // partition        : 10001 -> (tablet_1)
+                //  subpartition1   : 10002 -> (tablet_2)
+                //  subpartition2   : 10004 -> (tablet_3)
+                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                // after:
+                // selected partition ids   : 10002
+                // selected tablet ids      : tablet_2
+                // total tablets num        : 1
+                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
-
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
                                 .get(physicalPartition.getId());
+                        if (CollectionUtils.isEmpty(selectTabletIds)) {
+                            continue;
+                        }
+                        selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
                         List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -863,6 +872,7 @@ public class PlanFragmentBuilder {
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
                 }
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
