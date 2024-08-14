@@ -862,6 +862,7 @@ alterClause
     | createOrReplaceTagClause
     | dropBranchClause
     | dropTagClause
+    | tableOperationClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1044,6 +1045,10 @@ dropBranchClause
 
 dropTagClause
     : DROP TAG (IF EXISTS)? identifier
+    ;
+
+tableOperationClause
+    : EXECUTE functionCall
     ;
 
 tagOptions
