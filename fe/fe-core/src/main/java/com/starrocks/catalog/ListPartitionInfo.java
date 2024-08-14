@@ -472,7 +472,14 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) {
-        idToValues.put(partitionId, Collections.emptyList());
+        if (isMultiColumnPartition()) {
+            idToMultiValues.put(partitionId, Collections.emptyList());
+            idToMultiLiteralExprValues.put(partitionId, Collections.emptyList());
+        } else {
+            idToValues.put(partitionId, Collections.emptyList());
+            idToLiteralExprValues.put(partitionId, Collections.emptyList());
+        }
+
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
