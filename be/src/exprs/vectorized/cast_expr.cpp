@@ -30,6 +30,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/numeric_types.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
@@ -389,12 +390,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
-    // finite value y where y < x.
-    // This is different from std::numeric_limits<T>::min() for floating-point types.
-    // So we use lowest instead of min for lower bound of all types.
-    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-           (value > (Type)std::numeric_limits<ResultType>::max());
+    return check_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
@@ -402,8 +398,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
     // So we use lowest instead of min for lower bound of all types.
-    auto result = (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-                  (value > (Type)std::numeric_limits<ResultType>::max());
+    const auto result = NumberCheck::apply<Type, ResultType>(value);
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {

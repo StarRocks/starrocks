@@ -329,6 +329,7 @@ set(EXEC_FILES
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
         ./util/concurrent_limiter_test.cpp
+        ./util/numeric_types_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )
