@@ -18,9 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.lang.NotImplementedException;
-
-import java.util.Map;
 
 public class FrontendClause extends AlterClause {
     protected String hostPort;
@@ -52,11 +49,6 @@ public class FrontendClause extends AlterClause {
 
     public void setPort(int port) {
         this.port = port;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        throw new NotImplementedException();
     }
 
     @Override

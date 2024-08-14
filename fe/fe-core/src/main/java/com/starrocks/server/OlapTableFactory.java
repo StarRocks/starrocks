@@ -567,7 +567,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
                         table, baseRollupIndex);
                 short rollupShortKeyColumnCount =
-                        GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
+                        GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, addRollupClause.getProperties());
                 int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
                 long rollupIndexId = metastore.getNextId();
                 table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
@@ -607,11 +607,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // partition live number
             int partitionLiveNumber;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                try {
-                    partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
+                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 

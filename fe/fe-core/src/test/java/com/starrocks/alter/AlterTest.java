@@ -1847,7 +1847,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AlterJobException.class)
     public void testModifyPartitionBucket() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE modify_bucket (\n" +
@@ -2417,7 +2417,7 @@ public class AlterTest {
                 new SystemHandler());
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
-        alter.processAlterTable(stmt);
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }
 
     @Test
