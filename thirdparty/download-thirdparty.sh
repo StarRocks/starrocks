@@ -527,3 +527,14 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     cd -
     echo "Finished patching $BITSHUFFLE_SOURCE"
 fi
+
+#patch poco
+if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$POCO_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished pathcing $POCO_SOURCE"
+fi
