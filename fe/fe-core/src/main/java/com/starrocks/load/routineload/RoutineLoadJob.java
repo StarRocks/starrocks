@@ -712,7 +712,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                     GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
@@ -1100,7 +1101,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
             GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                            routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
@@ -1245,7 +1247,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                                routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
@@ -1385,7 +1388,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                        releaseBeTaskSlot(task.getWarehouseId(), task.getBeId());
+                        releaseBeTaskSlot(task.getWarehouseId(), task.getJobId(), task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
