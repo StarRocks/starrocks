@@ -922,6 +922,9 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 // Enabling RFC-3986 encoding will make sure these characters are properly encoded.
 CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 
+// use poco client to replace default curl client
+CONF_Bool(enable_poco_client_for_aws_sdk, "true");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB

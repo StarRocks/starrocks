@@ -245,6 +245,10 @@ endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
+set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
+find_package(Poco REQUIRED COMPONENTS Net NetSSL)
+include_directories(&{Poco_INCLUDE_DIRS})
+
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
@@ -858,6 +862,7 @@ set(STARROCKS_DEPENDENCIES
     lz4
     libevent
     curl
+    ${Poco_LIBRARIES}
     libz
     libbz2
     gflags
