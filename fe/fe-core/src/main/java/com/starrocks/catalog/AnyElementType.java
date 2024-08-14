@@ -27,6 +27,11 @@ public class AnyElementType extends PseudoType {
     }
 
     @Override
+    public Type clone() {
+        return new AnyElementType();
+    }
+
+    @Override
     public String toString() {
         return "PseudoType.AnyType";
     }

@@ -82,8 +82,10 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
@@ -93,6 +95,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -105,10 +108,12 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.TagOptions;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
@@ -961,17 +966,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private ColumnDef getColumnDef(StarRocksParser.ColumnDescContext context) {
         Identifier colIdentifier = (Identifier) visit(context.identifier());
         String columnName = colIdentifier.getValue();
-        TypeDef typeDef = new TypeDef(getType(context.type()), createPos(context.type()));
+        // This can only happen when aggStateDesc is not null.
+        Pair<Type, AggStateDesc> typeWithAggStateDesc = getAggStateDesc(context.aggDesc());
+        Type columnType = null;
+        if (context.type() == null) {
+            if (typeWithAggStateDesc == null) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedType("Column's type is null and it's not agg " +
+                        "state column" + columnName), colIdentifier.getPos());
+            } else {
+                columnType = typeWithAggStateDesc.first;
+            }
+        } else {
+            columnType = getType(context.type());
+        }
+        AggStateDesc aggStateDesc = typeWithAggStateDesc == null ? null : typeWithAggStateDesc.second;
+        NodePosition pos = context.type() == null ? NodePosition.ZERO : createPos(context.type());
+        TypeDef typeDef = new TypeDef(columnType, pos);
         String charsetName = context.charsetName() != null ?
                 ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
         boolean isKey = context.KEY() != null;
-        AggregateType aggregateType =
-                context.aggDesc() != null ? AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
+        AggregateType aggregateType = null;
+        if (typeWithAggStateDesc != null) {
+            aggregateType = AggregateType.AGG_STATE_UNION;
+        } else {
+            aggregateType = context.aggDesc() != null ?
+                    AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
+        }
         Boolean isAllowNull = null;
-        if (context.NOT() != null && context.NULL() != null) {
-            isAllowNull = false;
-        } else if (context.NULL() != null) {
-            isAllowNull = true;
+        if (context.columnNullable() != null) {
+            if (context.columnNullable().NOT() != null) {
+                isAllowNull = false;
+            } else if (context.columnNullable().NULL() != null) {
+                isAllowNull = true;
+            }
+        }
+        // TODO: AGG_STATE_UNION can only be nullable for now, optimize it later.
+        if (aggregateType != null && aggregateType.equals(AggregateType.AGG_STATE_UNION) && isAllowNull != null && !isAllowNull) {
+            throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Agg state column " + columnName), colIdentifier.getPos());
         }
         Boolean isAutoIncrement = null;
         if (context.AUTO_INCREMENT() != null) {
@@ -1014,7 +1045,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
-        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
+        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
                 isAutoIncrement, expr, comment, createPos(context));
     }
 
@@ -7632,6 +7663,66 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return getMapType(context.mapType());
         }
+    }
+
+    private boolean isWildcardDecimalType(StarRocksParser.TypeContext typeContext) {
+        if (typeContext.decimalType() == null) {
+            return false;
+        }
+        StarRocksParser.DecimalTypeContext context = typeContext.decimalType();
+
+        Integer precision = null;
+        Integer scale = null;
+        if (context.precision != null) {
+            precision = Integer.parseInt(context.precision.getText());
+            if (context.scale != null) {
+                scale = Integer.parseInt(context.scale.getText());
+            }
+        }
+        return precision == null && scale == null;
+    }
+
+    public Pair<Type, AggStateDesc> getAggStateDesc(StarRocksParser.AggDescContext context) {
+        if (context == null || context.aggStateDesc() == null) {
+            return null;
+        }
+        StarRocksParser.AggStateDescContext aggStateDescContext = context.aggStateDesc();
+        Identifier aggFuncNameId = (Identifier) visit(aggStateDescContext.identifier());
+        String aggFuncName = aggFuncNameId.getValue();
+        List<StarRocksParser.TypeWithNullableContext> typeWithNullables = aggStateDescContext.typeWithNullable();
+        List<Type> argTypes = Lists.newArrayList();
+        boolean hasNullableChild = false;
+        for (StarRocksParser.TypeWithNullableContext typeWithNullableContext : typeWithNullables) {
+            Type argType = getType(typeWithNullableContext.type());
+            if (isWildcardDecimalType(typeWithNullableContext.type())) {
+                throw new ParsingException(String.format("AggStateType function %s with input %s has wildcard decimal",
+                        aggFuncName, argType), createPos(context));
+            }
+            boolean isNotNullable = typeWithNullableContext.columnNullable() != null &&
+                    typeWithNullableContext.columnNullable().NOT() != null;
+            hasNullableChild |= !isNotNullable;
+            argTypes.add(argType);
+        }
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> new Boolean(false)).toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAggregateFunction(ConnectContext.get(), aggFuncName, params, argumentTypes,
+                isArgumentConstants, createPos(context));
+        if (result == null) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s not found", aggFuncName,
+                    argTypes), createPos(context));
+        }
+        if (!(result instanceof AggregateFunction)) {
+            throw new ParsingException(String.format("AggStateType function %s with input %s found but not an aggregate " +
+                            "function", aggFuncName, argTypes), createPos(context));
+        }
+        AggregateFunction aggFunc = (AggregateFunction) result;
+
+        Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
+        Type finalType = AnalyzerUtils.transformTableColumnType(intermediateType, false);
+        AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(),
+                argTypes, aggFunc.isNullable() | hasNullableChild);
+        return Pair.create(finalType, aggStateDesc);
     }
 
     private Type getBaseType(StarRocksParser.BaseTypeContext context) {

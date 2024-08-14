@@ -1700,7 +1700,8 @@ public abstract class Type implements Cloneable {
     @Override
     public Type clone() {
         try {
-            return (Type) super.clone();
+            Type cloned = (Type) super.clone();
+            return cloned;
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }

@@ -623,33 +623,52 @@ bool DataSketchesHll::is_valid(const Slice& slice) {
 }
 
 void DataSketchesHll::update(uint64_t hash_value) {
-    _sketch.update(hash_value);
+    _sketch_union->update(hash_value);
+    this->mark_changed();
 }
 
 void DataSketchesHll::merge(const DataSketchesHll& other) {
-    datasketches::hll_union u(MAX_HLL_LOG_K);
-    u.update(_sketch);
-    u.update(other._sketch);
-    _sketch = u.get_result(HLL_TGT_TYPE);
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        _sketch_union = std::make_shared<datasketches::hll_union>(_log_k);
+    }
+    _log_k = std::max(get_lg_config_k(), other.get_lg_config_k());
+    _tgt_type = std::max(get_target_type(), other.get_target_type());
+    auto o_sketch = other.get_hll_sketch();
+    if (o_sketch == nullptr) {
+        return;
+    }
+    _sketch_union->update(*o_sketch);
+    this->mark_changed();
 }
 
 size_t DataSketchesHll::max_serialized_size() const {
-    return _sketch.get_max_updatable_serialization_bytes(HLL_LOG_K, HLL_TGT_TYPE);
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        return 0;
+    }
+    uint8_t log_k = get_lg_config_k();
+    datasketches::target_hll_type tgt_type = get_target_type();
+    return get_hll_sketch()->get_max_updatable_serialization_bytes(log_k, tgt_type);
 }
 
 size_t DataSketchesHll::serialize_size() const {
-    return _sketch.get_compact_serialization_bytes();
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        return 0;
+    }
+    return get_hll_sketch()->get_compact_serialization_bytes();
 }
 
 size_t DataSketchesHll::serialize(uint8_t* dst) const {
-    auto serialize_compact = _sketch.serialize_compact();
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        return 0;
+    }
+    auto serialize_compact = _sketch->serialize_compact();
     std::copy(serialize_compact.begin(), serialize_compact.end(), dst);
-    return _sketch.get_compact_serialization_bytes();
+    return get_hll_sketch()->get_compact_serialization_bytes();
 }
 
 bool DataSketchesHll::deserialize(const Slice& slice) {
-    // can be called only when _sketch is empty
-    DCHECK(_sketch.is_empty());
+    // can be called only when _sketch_union is empty
+    DCHECK(_sketch_union == nullptr);
 
     // check if input length is valid
     if (!is_valid(slice)) {
@@ -657,7 +676,11 @@ bool DataSketchesHll::deserialize(const Slice& slice) {
     }
 
     try {
-        _sketch = datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size);
+        auto sketch = std::make_shared<datasketches::hll_sketch>(
+                datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size));
+        _sketch_union = std::make_shared<datasketches::hll_union>(_log_k);
+        _sketch_union->update(*sketch);
+        this->mark_changed();
     } catch (std::logic_error& e) {
         LOG(WARNING) << "DataSketchesHll deserialize error: " << e.what();
         return false;
@@ -666,12 +689,28 @@ bool DataSketchesHll::deserialize(const Slice& slice) {
     return true;
 }
 
+std::shared_ptr<datasketches::hll_sketch> DataSketchesHll::get_hll_sketch() const {
+    if (_is_changed && _sketch_union != nullptr) {
+        auto sketch = _sketch_union->get_result(_tgt_type);
+        _sketch = std::make_shared<datasketches::hll_sketch>(std::move(sketch));
+        _is_changed = false;
+    }
+    return _sketch;
+}
+
 int64_t DataSketchesHll::estimate_cardinality() const {
-    return _sketch.get_estimate();
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        return 0;
+    }
+    return _sketch_union->get_estimate();
 }
 
 std::string DataSketchesHll::to_string() const {
-    return _sketch.to_string();
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        return "";
+    }
+
+    return get_hll_sketch()->to_string();
 }
 
 } // namespace starrocks

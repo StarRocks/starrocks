@@ -1484,6 +1484,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             } else {
                 f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             }
+            f2->set_agg_state_desc(f->get_agg_state_desc());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),

@@ -29,6 +29,8 @@
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
+#include "exprs/agg/agg_state_merge.h"
+#include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -43,6 +45,9 @@ namespace starrocks {
 
 static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {"variance_samp", "var_samp",
                                                                                  "stddev_samp", "covar_samp", "corr"};
+
+static const std::string AGG_STATE_UNION_SUFFIX = "_union";
+static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
 
 template <bool UseIntermediateAsOutput>
 bool AggFunctionTypes::is_result_nullable() const {
@@ -395,59 +400,22 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         const TFunction& fn = desc.nodes[0].fn;
         const auto& agg_fn_type = _agg_fn_types[i];
         _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
+
         // get function
-        if (fn.name.function_name == "count") {
-            bool is_input_nullable =
-                    !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
-            auto* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
-            _agg_functions[i] = func;
-        } else {
-            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
-            TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
-
-            TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
-            // Because intersect_count have two input types.
-            // And intersect_count's first argument's type is alwasy Bitmap,
-            // so we use its second arguments type as input.
-            if (fn.name.function_name == "intersect_count") {
-                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
+        auto is_result_nullable_func = [&]() {
+            if (fn.name.function_name == "count") {
+                if (fn.arg_types.empty()) {
+                    return false;
+                }
+                if (has_outer_join_child || desc.nodes[0].has_nullable_child) {
+                    return true;
+                }
+                return false;
+            } else {
+                return agg_fn_type.use_nullable_fn(_use_intermediate_as_output());
             }
-
-            // Because max_by and min_by function have two input types,
-            // so we use its second arguments type as input.
-            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
-                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
-            }
-
-            // Because windowfunnel have more two input types.
-            // functions registry use 2th args(datetime/date).
-            if (fn.name.function_name == "window_funnel") {
-                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
-            }
-
-            // hack for accepting various arguments
-            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed") {
-                arg_type = TypeDescriptor(TYPE_BIGINT);
-            }
-
-            if (fn.name.function_name == "array_union_agg" || fn.name.function_name == "array_unique_agg") {
-                // for array_union_agg use inner type as signature
-                arg_type = arg_type.children[0];
-            }
-
-            const bool use_nullable_fn = agg_fn_type.use_nullable_fn(_use_intermediate_as_output());
-            auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type, use_nullable_fn,
-                                                fn.binary_type, state->func_version());
-            if (func == nullptr) {
-                return Status::InternalError(strings::Substitute(
-                        "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
-                        fn.name.function_name, type_to_string(arg_type.type), type_to_string(serde_type.type),
-                        type_to_string(return_type.type), use_nullable_fn ? "true" : "false"));
-            }
-            VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
-                     << return_type;
-            _agg_functions[i] = func;
-        }
+        };
+        RETURN_IF_ERROR(_create_aggregate_function(state, fn, is_result_nullable_func(), &_agg_functions[i]));
 
         int node_idx = 0;
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
@@ -527,6 +495,71 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         RETURN_IF_ERROR(spiller()->prepare(state));
     }
 
+    return Status::OK();
+}
+
+Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn,
+                                              bool is_result_nullable, const AggregateFunction** ret) {
+    std::vector<TypeDescriptor> arg_types;
+    for (auto& type : fn.arg_types) {
+        arg_types.push_back(TypeDescriptor::from_thrift(type));
+    }
+
+    // check whether it's _merge/_union combinator if it contains agg state type
+    auto& func_name = fn.name.function_name;
+    if (arg_types.size() == 1 && fn.__isset.agg_state_desc) {
+        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
+        auto nested_func_name = agg_state_desc.get_func_name();
+        if (nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name) {
+            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc, is_result_nullable);
+            if (nested_func == nullptr) {
+                return Status::InternalError(
+                        strings::Substitute("Merge combinator function $0 fails to get the nested agg func: $1 ",
+                                            func_name, nested_func_name));
+            }
+            auto merge_agg_func = std::make_shared<AggStateMerge>(nested_func);
+            *ret = merge_agg_func.get();
+            _combinator_function.emplace_back(std::move(merge_agg_func));
+        } else if (nested_func_name + AGG_STATE_UNION_SUFFIX == func_name) {
+            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc, is_result_nullable);
+            if (nested_func == nullptr) {
+                return Status::InternalError(
+                        strings::Substitute("Union combinator function $0 fails to get the nested agg func: $1 ",
+                                            func_name, nested_func_name));
+            }
+            auto union_agg_func = std::make_shared<AggStateUnion>(nested_func);
+            *ret = union_agg_func.get();
+            _combinator_function.emplace_back(std::move(union_agg_func));
+        } else {
+            return Status::InternalError(
+                    strings::Substitute("Agg function combinator is not implemented: $0 ", func_name));
+        }
+    } else {
+        // get function
+        if (func_name == "count") {
+            auto* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_result_nullable);
+            if (func == nullptr) {
+                return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 ", func_name));
+            }
+            *ret = func;
+        } else {
+            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+            TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
+            DCHECK_LE(1, fn.arg_types.size());
+            TypeDescriptor arg_type = arg_types[0];
+            auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
+                                                state->func_version());
+            if (func == nullptr) {
+                return Status::InternalError(strings::Substitute(
+                        "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
+                        func_name, type_to_string(arg_type.type), type_to_string(serde_type.type),
+                        type_to_string(return_type.type), is_result_nullable ? "true" : "false"));
+            }
+            *ret = func;
+            VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
+                     << return_type;
+        }
+    }
     return Status::OK();
 }
 

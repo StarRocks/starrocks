@@ -26,6 +26,11 @@ public class AnyMapType extends PseudoType {
     }
 
     @Override
+    public Type clone() {
+        return new AnyMapType();
+    }
+
+    @Override
     public String toString() {
         return "PseudoType.AnyMapType";
     }

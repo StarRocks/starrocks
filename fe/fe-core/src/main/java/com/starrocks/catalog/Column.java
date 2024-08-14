@@ -43,6 +43,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -57,6 +58,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
 
@@ -103,6 +105,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // column is not key and has aggregate type: aggregate type is name of aggregate function.
     @SerializedName(value = "aggregationType")
     private AggregateType aggregationType;
+    @SerializedName("aggStateDesc")
+    protected AggStateDesc aggStateDesc = null;
 
     // if isAggregationTypeImplicit is true, the actual aggregation type will not be shown in show create table
     // the key type of table is duplicate or unique: the isAggregationTypeImplicit of value columns are true
@@ -146,23 +150,23 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public Column(String name, Type dataType) {
-        this(name, dataType, false, null, false, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+        this(name, dataType, false, null, null, false, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type dataType, boolean isAllowNull) {
-        this(name, dataType, false, null, isAllowNull, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+        this(name, dataType, false, null, null, isAllowNull, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type dataType, boolean isAllowNull, String comment) {
-        this(name, dataType, false, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
+        this(name, dataType, false, null, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
-        this(name, type, isKey, aggregateType, false,
+        this(name, type, isKey, aggregateType, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
@@ -170,18 +174,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   ColumnDef.DefaultValueDef defaultValue,
                   String comment) {
-        this(name, type, isKey, aggregateType, false, defaultValue, comment,
+        this(name, type, isKey, aggregateType, null, false, defaultValue, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
                   ColumnDef.DefaultValueDef defaultValueDef, String comment) {
-        this(name, type, isKey, aggregateType, isAllowNull, defaultValueDef, comment,
+        this(name, type, isKey, aggregateType, null, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -195,6 +199,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
 
         this.aggregationType = aggregateType;
+        if (aggregateType != null && aggregateType == AggregateType.AGG_STATE_UNION) {
+            Preconditions.checkArgument(aggStateDesc != null, "aggStateDesc is null if " +
+                    "aggregation type is AGG_STATE_UNION");
+        }
+        this.aggStateDesc = aggStateDesc;
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
@@ -263,7 +272,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 defaultValueDef = new ColumnDef.DefaultValueDef(false, null);
             }
         }
-        return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, isAllowNull,
+        return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, aggStateDesc, isAllowNull,
                 defaultValueDef, isAutoIncrement,
                 generatedColumnExpr != null ? generatedColumnExpr.convertToColumnNameExpr(table.getIdToColumn()) : null,
                 comment);
@@ -415,6 +424,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setType_desc(this.type.toThrift());
         if (null != this.aggregationType) {
             tColumn.setAggregation_type(this.aggregationType.toThrift());
+        }
+        if (null != this.aggStateDesc) {
+            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            tColumn.setAgg_state_desc(tAggStateDesc);
         }
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
@@ -574,7 +587,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         String typeStr = type.toSql();
         sb.append(typeStr).append(" ");
         if (isAggregated() && !isAggregationTypeImplicit) {
-            sb.append(aggregationType.name()).append(" ");
+            if (aggregationType == AggregateType.AGG_STATE_UNION) {
+                sb.append(aggStateDesc.toSql()).append(" ");
+            } else {
+                sb.append(aggregationType.name()).append(" ");
+            }
         }
         if (isAllowNull) {
             sb.append("NULL ");
@@ -871,5 +888,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (bfColumns != null && bfColumns.contains(this.columnId)) {
             tColumn.setIs_bloom_filter_column(true);
         }
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return this.aggStateDesc;
+    }
+
+    public boolean hasAggStateDesc() {
+        return this.aggStateDesc != null;
     }
 }

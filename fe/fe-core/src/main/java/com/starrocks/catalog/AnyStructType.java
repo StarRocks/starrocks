@@ -26,6 +26,11 @@ public class AnyStructType extends PseudoType {
     }
 
     @Override
+    public Type clone() {
+        return new AnyStructType();
+    }
+
+    @Override
     public String toString() {
         return "PseudoType.AnyStructType";
     }
