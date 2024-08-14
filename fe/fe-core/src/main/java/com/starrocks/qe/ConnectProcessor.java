@@ -224,11 +224,7 @@ public class ConnectProcessor {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                try {
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
-                } catch (Exception e) {
-                    LOG.warn("Failed to compute statement digest", e);
-                }
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             } else {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
@@ -281,6 +277,7 @@ public class ConnectProcessor {
             md.update(digest.getBytes());
             return Hex.encodeHexString(md.digest());
         } catch (Exception e) {
+            LOG.warn("Failed to compute statement digest", e);
             return "";
         }
     }
