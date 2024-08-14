@@ -18,7 +18,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -81,17 +80,33 @@ public class ShortCircuitExecutor {
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
             TDescriptorTable tDescriptorTable, boolean isBinaryRow, boolean enableProfile, String protocol,
             WorkerProvider workerProvider) {
-        boolean isEmpty = scanNodes.isEmpty();
-        List<TScanRangeLocations> scanRangeLocations = isEmpty ? ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0);
-        if (fragments.size() != 1 || !fragments.get(0).isShortCircuit()) {
+        if (!isValidFragment(fragments) || isScanNodesEmpty(scanNodes)) {
             return null;
         }
 
-        if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
-            return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations, tDescriptorTable, isBinaryRow,
+        if (scanNodes.get(0) instanceof OlapScanNode) {
+            return createShortCircuitHybridExecutor(context, fragments.get(0), scanNodes, tDescriptorTable, isBinaryRow,
                     enableProfile, protocol, workerProvider);
         }
         return null;
+    }
+
+    private static boolean isValidFragment(List<PlanFragment> fragments) {
+        return fragments.size() == 1 && fragments.get(0).isShortCircuit();
+    }
+
+    private static boolean isScanNodesEmpty(List<ScanNode> scanNodes) {
+        return scanNodes.isEmpty();
+    }
+
+    private static ShortCircuitHybridExecutor createShortCircuitHybridExecutor(ConnectContext context, PlanFragment fragment,
+                                                                               List<ScanNode> scanNodes,
+                                                                               TDescriptorTable tDescriptorTable,
+                                                                               boolean isBinaryRow, boolean enableProfile,
+                                                                               String protocol, WorkerProvider workerProvider) {
+        List<TScanRangeLocations> scanRangeLocations = scanNodes.get(0).getScanRangeLocations(0);
+        return new ShortCircuitHybridExecutor(context, fragment, scanRangeLocations, tDescriptorTable, isBinaryRow,
+                enableProfile, protocol, workerProvider);
     }
 
     public void exec() throws Exception {
