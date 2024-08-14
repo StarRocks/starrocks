@@ -1151,7 +1151,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
