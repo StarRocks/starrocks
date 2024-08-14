@@ -60,7 +60,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-    if (!_aggregator->spiller()->spilled()) {
+    if (!_aggregator->spiller()->spilled() && _streaming_chunks.empty()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
@@ -245,8 +245,8 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         _aggregator->update_num_input_rows(hit_count);
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
-    // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
+    // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
