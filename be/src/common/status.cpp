@@ -213,6 +213,10 @@ std::string Status::code_as_string() const {
         return "Data quality error";
     case TStatusCode::RESOURCE_BUSY:
         return "Resource busy";
+    case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
+        return "Big query cpu second limit exceeded";
+    case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:
+        return "Big query scan rows limit exceeded";
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
