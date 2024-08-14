@@ -57,6 +57,9 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
 
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
+        if (UNLIKELY(outcome.GetResult().GetContentLength() != real_length)) {
+            return Status::InternalError("The response length is different from request length for io stream!");
+        }
         _offset += real_length;
         return real_length;
     } else {
