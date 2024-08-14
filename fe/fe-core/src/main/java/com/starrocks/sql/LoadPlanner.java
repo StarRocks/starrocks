@@ -342,6 +342,14 @@ public class LoadPlanner {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
         }
+        // load from local file does not require too much concurrency to maximize disk performance.
+        // Too much concurrency can easily lead to performance degradation and long tail.
+        if (fileGroups != null && !fileGroups.isEmpty()
+                && fileGroups.get(0).getFilePaths() != null
+                && fileGroups.get(0).getFilePaths().get(0).toLowerCase().startsWith("file:")) {
+            sinkFragment.setPipelineDop(1);
+            sinkFragment.setParallelExecNum(1);
+        }
         fragments.add(sinkFragment);
 
         // 5. finalize

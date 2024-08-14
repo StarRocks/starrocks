@@ -1137,4 +1137,98 @@ public class LoadPlannerTest {
             planner.completeTableSink(100);
         }
     }
+
+    @Test
+    public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                                  @Injectable Database db, @Injectable OlapTable table) throws UserException {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, true);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        List<String> columnNames = Lists.newArrayList("c1", "c2");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("c1");
+                result = columns.get(0);
+                table.getColumn("c2");
+                result = columns.get(1);
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("file:///file1", "file:///file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, columnNames, null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        brokerFileGroup.setFilePaths(files);
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("file:///file1", false, 268435456, true));
+        fileStatusList.add(new TBrokerFileStatus("file:///file2", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // load_parallel_instance_num: 1
+        Config.load_parallel_instance_num = 1;
+        long startTime = System.currentTimeMillis();
+        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        Assert.assertEquals(1, planner.getScanNodes().size());
+        FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2, pipeline
+        ctx.getSessionVariable().setEnablePipelineEngine(true);
+        Config.enable_pipeline_load = true;
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assert.assertNotNull(planner.getExecPlan());
+    }
 }
