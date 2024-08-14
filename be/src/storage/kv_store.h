@@ -94,7 +94,7 @@ public:
 
     ColumnFamilyHandle* handle(ColumnFamilyIndex column_family_index) { return _handles[column_family_index]; }
 
-    // Becayse `DeleteRange` provided by rocksdb will generate too many tomestones and it will be harmful for rocksdb scan.
+    // Becayse `DeleteRange` provided by rocksdb will generate too many tomestones and it will slow down rocksdb.
     // So we provide an opt version `DeleteRange` named `OptDeleteRange` here, it will :
     // 1. scan and get keys to be deleted first.
     // 2. and then generate write batch with batch delete.
