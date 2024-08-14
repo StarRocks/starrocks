@@ -2125,5 +2125,3 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             time.sleep(1)
             times += 1
         tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
-
->>>>>>> b84bd41a4b... [BugFix] Fix subpartitions with tablet pruing bug (#49394)
