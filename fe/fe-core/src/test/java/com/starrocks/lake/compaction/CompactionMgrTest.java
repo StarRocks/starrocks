@@ -16,9 +16,29 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Test;
 
+=======
+import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.Collection;
+>>>>>>> 36c995539e ([BugFix] fix redundant partition info in CompactionManager meta (#49746))
 import java.util.Collections;
 import java.util.List;
 
@@ -94,4 +114,86 @@ public class CompactionMgrTest {
         compactionMgr.removePartition(partition2);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTriggerManualCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
+        Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
+
+        Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
+        Assert.assertEquals(1, allStatistics.size());
+        Assert.assertTrue(allStatistics.contains(statistics));
+    }
+
+    @Test
+    public void testExistCompaction() {
+        long txnId = 11111;
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+        compactionManager.setCompactionScheduler(compactionScheduler);
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
+                Database db = new Database();
+                Table table = new LakeTable();
+                PhysicalPartition partition = new Partition(123, "aaa", null, null);
+                CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
+                r.put(partitionIdentifier, job);
+                return r;
+            }
+        };
+        Assert.assertEquals(true, compactionManager.existCompaction(txnId));
+    }
+
+    @Test
+    public void testSaveAndLoad() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
+
+        compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+        compactionMgr.handleLoadingFinished(partition2, 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(2d)));
+        compactionMgr.handleLoadingFinished(partition3, 4, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(3d)));
+
+        Assert.assertEquals(3, compactionMgr.getPartitionStatsCount());
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+                if (partitionId == 3) {
+                    return true;
+                }
+                if (partitionId == 4) {
+                    return false;
+                }
+                if (partitionId == 5) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+        ByteArrayOutputStream bstream = new ByteArrayOutputStream();
+        DataOutputStream ostream = new DataOutputStream(bstream);
+        compactionMgr.save(ostream);
+        CompactionMgr compactionMgr2 = new CompactionMgr();
+        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bstream.toByteArray()));
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        compactionMgr2.load(reader);
+        Assert.assertEquals(1, compactionMgr2.getPartitionStatsCount());
+    }
+>>>>>>> 36c995539e ([BugFix] fix redundant partition info in CompactionManager meta (#49746))
 }

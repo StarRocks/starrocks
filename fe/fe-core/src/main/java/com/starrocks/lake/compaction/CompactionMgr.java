@@ -16,19 +16,22 @@ package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.memory.MemoryTrackable;
+>>>>>>> 36c995539e ([BugFix] fix redundant partition info in CompactionManager meta (#49746))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -161,6 +164,7 @@ public class CompactionMgr {
         partitionStatisticsHashMap.remove(partition);
     }
 
+<<<<<<< HEAD
     public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
@@ -170,6 +174,11 @@ public class CompactionMgr {
 
     public long getChecksum() {
         return partitionStatisticsHashMap.size();
+=======
+    @VisibleForTesting
+    public void clearPartitions() {
+        partitionStatisticsHashMap.clear();
+>>>>>>> 36c995539e ([BugFix] fix redundant partition info in CompactionManager meta (#49746))
     }
 
     @NotNull
@@ -185,6 +194,7 @@ public class CompactionMgr {
         compactionScheduler.cancelCompaction(txnId);
     }
 
+<<<<<<< HEAD
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
@@ -194,9 +204,23 @@ public class CompactionMgr {
             throw new RuntimeException(e);
         }
         return compactionManager;
+=======
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
+>>>>>>> 36c995539e ([BugFix] fix redundant partition info in CompactionManager meta (#49746))
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // partitions are added into map after loading, but they are never removed in checkpoint thread.
+        // drop partition, drop table, truncate table, drop database, ...
+        // all of above will cause partition info change, and it is difficult to call
+        // remove partition for every case, so remove non-existed partitions only when writing image
+        getAllPartitions()
+                .stream()
+                .filter(p -> !MetaUtils.isPartitionExist(
+                             GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
+                .forEach(this::removePartition);
+
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();
