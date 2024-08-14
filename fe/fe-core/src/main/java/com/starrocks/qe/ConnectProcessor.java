@@ -270,18 +270,18 @@ public class ConnectProcessor {
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
-    public String computeStatementDigest(StatementBase queryStmt) {
+    public static String computeStatementDigest(StatementBase queryStmt) {
         if (queryStmt == null) {
             return "";
         }
 
-        String digest = SqlDigestBuilder.build(queryStmt);
         try {
+            String digest = SqlDigestBuilder.build(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
             return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
+        } catch (Exception e) {
             return "";
         }
     }

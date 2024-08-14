@@ -800,7 +800,8 @@ public class AstToStringBuilder {
             TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
-            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(Optional.ofNullable(tableFunction.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
