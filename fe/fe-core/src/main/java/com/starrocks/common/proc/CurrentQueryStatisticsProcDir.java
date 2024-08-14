@@ -36,16 +36,13 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.QueryStatisticsFormatter;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.QueryStatisticsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,6 +54,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("StartTime")
+            .add("feIp")
             .add("QueryId")
             .add("ConnectionId")
             .add("Database")
@@ -91,9 +89,8 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         final BaseProcResult result = new BaseProcResult();
-        final Map<String, QueryStatisticsItem> statistic =
-                QeProcessorImpl.INSTANCE.getQueryStatistics();
         result.setNames(TITLE_NAMES.asList());
+<<<<<<< HEAD
         final List<List<String>> sortedRowData = Lists.newArrayList();
 
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
@@ -123,6 +120,13 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(item.getWarehouseName());
             sortedRowData.add(values);
         }
+=======
+        List<QueryStatisticsInfo> queryInfos = QueryStatisticsInfo.makeListFromMetricsAndMgrs();
+        List<List<String>> sortedRowData = queryInfos
+                .stream()
+                .map(QueryStatisticsInfo::formatToList)
+                .collect(Collectors.toList());
+>>>>>>> 12c3d0f086 ([Enhancement] Implement global query command (#48819))
 
         result.setRows(sortedRowData);
         return result;
