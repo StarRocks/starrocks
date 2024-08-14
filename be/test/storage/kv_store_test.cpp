@@ -127,4 +127,30 @@ TEST_F(KVStoreTest, TestIterate) {
     ASSERT_EQ(false, error_flag);
 }
 
+TEST_F(KVStoreTest, TestOpDeleteRange) {
+    // insert 10 keys
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value = fmt::format("val_{:016x}", i);
+        ASSERT_TRUE(_kv_store->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
+    }
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value_get;
+        ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
+        ASSERT_TRUE(value_get == fmt::format("val_{:016x}", i));
+    }
+    rocksdb::WriteBatch wb;
+    ASSERT_TRUE(_kv_store
+                        ->OptDeleteRange(META_COLUMN_FAMILY_INDEX, fmt::format("key_{:016x}", 0),
+                                         fmt::format("key_{:016x}", 9), &wb)
+                        .ok());
+    ASSERT_TRUE(_kv_store->write_batch(&wb).ok());
+    for (int i = 0; i < 10; i++) {
+        std::string key = fmt::format("key_{:016x}", i);
+        std::string value_get;
+        ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).is_not_found());
+    }
+}
+
 } // namespace starrocks
