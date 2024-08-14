@@ -111,15 +111,8 @@ Status HdfsScanner::_build_scanner_context() {
         auto* slot = _scanner_params.materialize_slots[i];
 
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
-        if (_scanner_params.can_use_any_column && slot->col_name() != "___count___") {
-            ctx.not_existed_slots.push_back(slot);
-            SlotId slot_id = slot->id();
-            if (ctx.conjunct_ctxs_by_slot.find(slot_id) != ctx.conjunct_ctxs_by_slot.end()) {
-                for (ExprContext* expr_ctx : ctx.conjunct_ctxs_by_slot[slot_id]) {
-                    ctx.conjunct_ctxs_of_non_existed_slots.emplace_back(expr_ctx);
-                }
-                ctx.conjunct_ctxs_by_slot.erase(slot_id);
-            }
+        if (_scanner_params.can_use_any_column) {
+            ctx.update_with_none_existed_slot(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
             column.slot_desc = slot;
@@ -419,6 +412,17 @@ void HdfsScanner::update_counter() {
     do_update_counter(profile);
 }
 
+void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
+    not_existed_slots.push_back(slot);
+    SlotId slot_id = slot->id();
+    if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+        for (ExprContext* expr_ctx : conjunct_ctxs_by_slot[slot_id]) {
+            conjunct_ctxs_of_non_existed_slots.emplace_back(expr_ctx);
+        }
+        conjunct_ctxs_by_slot.erase(slot_id);
+    }
+}
+
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
 
@@ -440,14 +444,7 @@ Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<
         auto col_name = column.formatted_name(case_sensitive);
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
         if (names.find(col_name) == names.end()) {
-            not_existed_slots.push_back(column.slot_desc);
-            SlotId slot_id = column.slot_id();
-            if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
-                for (ExprContext* ctx : conjunct_ctxs_by_slot[slot_id]) {
-                    conjunct_ctxs_of_non_existed_slots.emplace_back(ctx);
-                }
-                conjunct_ctxs_by_slot.erase(slot_id);
-            }
+            update_with_none_existed_slot(column.slot_desc);
         } else {
             updated_columns.emplace_back(column);
         }
