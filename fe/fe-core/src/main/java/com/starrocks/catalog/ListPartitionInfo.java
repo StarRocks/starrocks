@@ -606,11 +606,13 @@ public class ListPartitionInfo extends PartitionInfo {
     public List<Long> getSortedPartitions(boolean asc) {
         if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
             return idToLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
                     .sorted((x, y) -> compareRow(x.getValue(), y.getValue(), asc))
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
         } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
             return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
                     .sorted((x, y) -> compareMultiValueList(x.getValue(), y.getValue(), asc))
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
