@@ -147,10 +147,10 @@ public:
 
     static Status ResourceBusy(const Slice& msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
 
-    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
+    static Status BigQueryCpuSecondLimitExceeded(const Slice& msg) {
         return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
     }
-    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
+    static Status BigQueryScanRowsLimitExceeded(const Slice& msg) {
         return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
     }
 
