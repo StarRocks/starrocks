@@ -305,6 +305,10 @@ struct HdfsScannerContext {
 
     int64_t connector_max_split_size = 0;
 
+    // update none_existed_slot
+    // update conjunct
+    void update_with_none_existed_slot(SlotDescriptor* slot);
+
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
