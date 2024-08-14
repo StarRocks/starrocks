@@ -50,8 +50,8 @@ public class HudiConnectorScanRangeSource extends HiveConnectorScanRangeSource {
     }
 
     @Override
-    protected void init() {
-        super.init();
+    protected void initRemoteFileInfoSource() {
+        super.initRemoteFileInfoSource();
         HudiTable hudiTable = (HudiTable) table;
         String tableInputFormat = hudiTable.getHudiInputFormat();
         morTable = hudiTable.getTableType() == HoodieTableType.MERGE_ON_READ;

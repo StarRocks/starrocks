@@ -103,7 +103,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
         public DataCacheOptions dataCacheOptions;
     }
 
-    protected void init() {
+    protected void initRemoteFileInfoSource() {
         List<PartitionAttachment> partitionAttachments = Lists.newArrayList();
 
         // get partitions keys;
@@ -365,20 +365,17 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
             return;
         }
         if (remoteFileInfoSource == null) {
-            init();
+            initRemoteFileInfoSource();
         }
         while ((iterator == null || !iterator.hasNext())) {
-            while (true) {
+            do {
                 if (!remoteFileInfoSource.hasMoreOutput()) {
                     hasMoreOutput = false;
                     return;
                 } else {
                     buffer = remoteFileInfoSource.getOutput();
                 }
-                if (buffer != null && buffer.getFiles() != null && buffer.getFiles().size() > 0) {
-                    break;
-                }
-            }
+            } while (buffer == null || buffer.getFiles() == null || buffer.getFiles().isEmpty());
             updateBackendSplitFile(buffer);
             iterator = createScanRangeIterator(buffer);
         }
