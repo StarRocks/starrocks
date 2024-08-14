@@ -199,6 +199,13 @@ public:
 
     static Status CapacityLimitExceed(const Slice& msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
 
+    static Status BigQueryCpuSecondLimitExceeded(const Slice& msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(const Slice& msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
     bool ok() const {
         mark_checked();
         return _state == nullptr;

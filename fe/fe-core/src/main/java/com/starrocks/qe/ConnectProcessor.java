@@ -179,19 +179,9 @@ public class ConnectProcessor {
             return;
         }
 
-        // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-        String errorCode = "";
-        if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
-            // error happens in FE execution.
-            errorCode = ctx.getState().getErrType().name();
-        } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
-            // error happens in BE execution.
-            errorCode = ctx.getErrorCode();
-        }
-
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
-                .setErrorCode(errorCode)
+                .setErrorCode(ctx.getNormalizedErrorCode())
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
@@ -525,7 +515,7 @@ public class ConnectProcessor {
         ctx.setCommand(command);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
 
         switch (command) {
             case COM_INIT_DB:
