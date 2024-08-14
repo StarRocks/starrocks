@@ -21,12 +21,20 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -133,6 +141,7 @@ public class CompactionMgrTest {
         Assert.assertEquals(true, compactionManager.existCompaction(txnId));
     }
 
+    @Test
     public void testTriggerManualCompaction() {
         CompactionMgr compactionManager = new CompactionMgr();
         PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
@@ -143,5 +152,47 @@ public class CompactionMgrTest {
         Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
         Assert.assertEquals(1, allStatistics.size());
         Assert.assertTrue(allStatistics.contains(statistics));
+    }
+
+    @Test
+    public void testSaveAndLoad() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
+
+        compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+        compactionMgr.handleLoadingFinished(partition2, 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(2d)));
+        compactionMgr.handleLoadingFinished(partition3, 4, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(3d)));
+
+        Assert.assertEquals(3, compactionMgr.getPartitionStatsCount());
+
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public boolean isPartitionExist(PartitionIdentifier partition) {
+                if (partition.getPartitionId() == 3) {
+                    return true;
+                }
+                if (partition.getPartitionId() == 4) {
+                    return false;
+                }
+                if (partition.getPartitionId() == 5) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+        ByteArrayOutputStream bstream = new ByteArrayOutputStream();
+        DataOutputStream ostream = new DataOutputStream(bstream);
+        compactionMgr.save(ostream);
+        CompactionMgr compactionMgr2 = new CompactionMgr();
+        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bstream.toByteArray()));
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        compactionMgr2.load(reader);
+        Assert.assertEquals(1, compactionMgr2.getPartitionStatsCount());
     }
 }

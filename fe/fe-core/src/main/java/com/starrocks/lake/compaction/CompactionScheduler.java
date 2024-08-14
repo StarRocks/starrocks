@@ -240,25 +240,10 @@ public class CompactionScheduler extends Daemon {
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !isPartitionExist(p))
+                    .filter(p -> !compactionManager.isPartitionExist(p))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
-        }
-    }
-
-    private boolean isPartitionExist(PartitionIdentifier partition) {
-        Database db = stateMgr.getDb(partition.getDbId());
-        if (db == null) {
-            return false;
-        }
-        db.readLock();
-        try {
-            // lake table or lake materialized view
-            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
-        } finally {
-            db.readUnlock();
         }
     }
 
