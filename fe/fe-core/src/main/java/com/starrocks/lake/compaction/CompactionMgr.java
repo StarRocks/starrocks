@@ -18,20 +18,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -179,17 +176,6 @@ public class CompactionMgr implements MemoryTrackable {
         partitionStatisticsHashMap.clear();
     }
 
-    public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-        checksum ^= getChecksum();
-        return checksum;
-    }
-
-    public long getChecksum() {
-        return partitionStatisticsHashMap.size();
-    }
-
     @NotNull
     public List<CompactionRecord> getHistory() {
         if (compactionScheduler != null) {
@@ -207,18 +193,17 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionScheduler.existCompaction(txnId);
     }
 
-    public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
-        try {
-            compactionManager.init();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        return compactionManager;
-    }
-
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // partitions are added into map after loading, but they are never removed in checkpoint thread.
+        // drop partition, drop table, truncate table, drop database, ...
+        // all of above will cause partition info change, and it is difficult to call
+        // remove partition for every case, so remove non-existed partitions only when writing image
+        getAllPartitions()
+                .stream()
+                .filter(p -> !MetaUtils.isPartitionExist(
+                             GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
+                .forEach(this::removePartition);
+
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();
