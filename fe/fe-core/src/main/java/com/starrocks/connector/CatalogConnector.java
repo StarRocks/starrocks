@@ -14,9 +14,11 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.common.Pair;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
 
+import java.util.List;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -63,6 +65,11 @@ public class CatalogConnector implements Connector {
     @Override
     public Map<String, Long> estimateCount() {
         return normalConnector.estimateCount();
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return normalConnector.getSamples();
     }
 
     public String normalConnectorClassName() {

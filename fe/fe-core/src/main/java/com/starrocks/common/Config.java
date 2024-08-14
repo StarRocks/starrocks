@@ -1340,7 +1340,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
