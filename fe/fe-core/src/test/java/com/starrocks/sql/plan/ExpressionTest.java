@@ -742,7 +742,39 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select k, array_filter(x -> x > k + 10, `v`) from test_reuse_lambda_expr";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
+<<<<<<< HEAD
                 "  |  <slot 5> : 1: k + 10");
+=======
+                "  |  <slot 6> : 1: k + 10");
+
+        sql = "select map_apply((arg0, arg1) -> (arg0 + k * 10, arg1 + map_size(`m`)), `m`) from test_reuse_lambda_expr";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 7> : 1: k * 10\n" +
+                "  |  <slot 8> : map_size(3: m)\n" +
+                "  |  <slot 9> : CAST(8: map_size AS BIGINT)");
+
+        sql = "select array_generate(0, `k`, 1) as a," +
+                " map_apply((k, v) -> (k, array_sum(array_map(arg -> arg * v, `a`))), `m` ) from test_reuse_lambda_expr;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 9> : array_generate(0, 1: k, 1)");
+
+        sql = "select array_map(x -> array_map(x->x+100, x),[[1,23],[4,3,2]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : " +
+                "array_map(<slot 2> -> array_map(<slot 3> -> CAST(<slot 3> AS SMALLINT) + 100, <slot 2>), [[1,23],[4,3,2]])");
+
+        sql = "select array_map(x->array_map(y->array_filter(z-> z > array_length(x),y),x), [[[1,23],[4,3,2]],[[3]]]);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 5> : array_map(<slot 2> -> " +
+                "array_map(<slot 3> -> " +
+                "array_filter(<slot 3>, array_map(<slot 4> -> CAST(<slot 4> AS INT) > <slot 8>, <slot 3>))\n" +
+                "        lambda common expressions:{<slot 8> <-> array_length(<slot 2>)}\n" +
+                "        , <slot 2>), [[[1,23],[4,3,2]],[[3]]])");
+>>>>>>> 22590bb426 ([BugFix] fix common expr reuse issue in nested lambda expr (#49755))
     }
 
     @Test
