@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name
+CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name [FORCE]
 ```
 
 ## 参数说明
@@ -26,6 +26,7 @@ CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name
 | ---------------------- | -------- | ------------------------------------------------------------ |
 | database_name          | 否       | 待取消刷新的物化视图所属数据库名称。如果不指定该参数，则默认使用当前数据库。 |
 | materialized_view_name | 是       | 待取消刷新的物化视图名称。                                   |
+| FORCE                  | 否       | 强制取消物化视图刷新任务。                                   |
 
 ## 示例
 
@@ -33,4 +34,5 @@ CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name
 
 ```SQL
 CANCEL REFRESH MATERIALIZED VIEW lo_mv1;
+CANCEL REFRESH MATERIALIZED VIEW lo_mv1 FORCE;
 ```
