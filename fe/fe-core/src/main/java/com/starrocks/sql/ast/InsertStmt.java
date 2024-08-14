@@ -84,6 +84,8 @@ public class InsertStmt extends DmlStmt {
     // this variable can be used to distinguish whether a partition is specified.
     private boolean partitionNotSpecifiedInOverwrite = false;
 
+    private final Map<String, String> insertProperties;
+
     /**
      * `true` means that it's created by CTAS statement
      */
@@ -97,12 +99,8 @@ public class InsertStmt extends DmlStmt {
     private boolean isVersionOverwrite = false;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
-    }
-
-    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
+                      NodePosition pos) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -110,6 +108,7 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+        this.insertProperties = insertProperties;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
@@ -123,6 +122,7 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
+        this.insertProperties = Maps.newHashMap();
         this.forCTAS = true;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
@@ -136,6 +136,7 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = null;
         this.targetPartitionNames = null;
         this.queryStatement = queryStatement;
+        this.insertProperties = Maps.newHashMap();
         this.tableFunctionAsTargetTable = true;
         this.tableFunctionProperties = tableFunctionProperties;
         this.blackHoleTableAsTargetTable = false;
@@ -148,6 +149,7 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = null;
         this.targetPartitionNames = null;
         this.queryStatement = queryStatement;
+        this.insertProperties = Maps.newHashMap();
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = true;
@@ -283,6 +285,10 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
+    }
+
+    public Map<String, String> getInsertProperties() {
+        return insertProperties;
     }
 
     @Override

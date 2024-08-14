@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -31,15 +32,19 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.SnapshotRef;
@@ -56,6 +61,9 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
+    private static final ImmutableSet<String> PUSH_DOWN_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(LoadStmt.STRICT_MODE)
+            .build();
 
     /**
      * Normal path of analyzer
@@ -70,6 +78,9 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        // insert properties
+        analyzeProperties(insertStmt, session);
+
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         List<Table> tables = new ArrayList<>();
         try {
@@ -273,6 +284,35 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+        }
+    }
+
+    private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
+        Map<String, String> insertProperties = insertStmt.getInsertProperties();
+        try {
+            LoadStmt.checkProperties(insertProperties);
+        } catch (DdlException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+        }
+
+        // use session variable if not set strict_mode property
+        if (!insertProperties.containsKey(LoadStmt.STRICT_MODE) &&
+                session.getSessionVariable().getEnableInsertStrict()) {
+            insertProperties.put(LoadStmt.STRICT_MODE, "true");
+        }
+
+        // push down some properties to file table function
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        if (queryStatement != null) {
+            List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            for (FileTableFunctionRelation relation : relations) {
+                Map<String, String> properties = relation.getProperties();
+                for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                    if (insertProperties.containsKey(property)) {
+                        properties.put(property, insertProperties.get(property));
+                    }
+                }
+            }
         }
     }
 

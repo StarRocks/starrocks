@@ -65,6 +65,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -266,6 +267,10 @@ public class InsertLoadJob extends LoadJob {
 
     public void setEstimateScanRow(long rows) {
         this.estimateScanRow = rows;
+    }
+
+    public void updateLoadingStatus(Map<String, String> counters) {
+        this.loadingStatus.getCounters().putAll(counters);
     }
 
     public void setTransactionId(long txnId) {
