@@ -15,14 +15,15 @@ Drops an asynchronous ETL task submitted using [SUBMIT TASK](./SUBMIT_TASK.md). 
 ## Syntax
 
 ```SQL
-DROP TASK `<task_name>`
+DROP TASK `<task_name>` [FORCE]
 ```
 
 ## Parameters
 
-| **Parameter** | **Description**               |
-| ------------- | ----------------------------- |
-| task_name     | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
+| **Parameter** | **Required** | **Description**               |
+| ------------- | ------------ | ----------------------------- |
+| task_name     | Yes          | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
+| FORCE         | No           | Forces to drop the task. |
 
 ## Usage notes
 
@@ -33,6 +34,13 @@ SELECT * FROM INFORMATION_SCHEMA.tasks;
 SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 SELECT * FROM information_schema.task_runs;
 SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
+```
+
+You can obtain the `task_name` of materialized view refresh tasks by using the SHOW MATERIALIZED VIEWS statement.
+
+```SQL
+SHOW MATERIALIZED VIEWS;
+SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
 ```
 
 ## Examples
