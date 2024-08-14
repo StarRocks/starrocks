@@ -588,6 +588,7 @@ bool TabletMeta::insert_committed_rowset_schema(RowsetId rowset_id, int64_t sche
 }
 
 void TabletMeta::erase_committed_rowset_schema(RowsetId rowset_id) {
+    LOG(INFO) << "call erase_committed_rowset_schema";
     _committed_rowsets_schema.erase(rowset_id);
 }
 

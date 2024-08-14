@@ -275,6 +275,9 @@ public:
             _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
         _has_tablet_schema_pb = true;
+        // reset rowset schema id
+        _has_tablet_schema_id = false;
+        _rowset_meta_pb->set_schema_id(0);
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }

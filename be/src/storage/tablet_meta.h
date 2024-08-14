@@ -245,6 +245,7 @@ public:
     bool check_schema_exist(int64_t id);
     bool insert_committed_rowset_schema(RowsetId rowset_id, int64_t schema_id);
     void erase_committed_rowset_schema(RowsetId rowset_id);
+    const std::map<int64_t, TabletSchemaCSPtr>& history_schema() const { return _history_schema; }
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }

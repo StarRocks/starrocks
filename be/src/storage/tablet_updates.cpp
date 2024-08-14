@@ -2611,12 +2611,23 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         }
     }
 
-    // GC works that can be done outside of lock
-    if (num_version_removed > 0) {
-        {
-            std::unique_lock wrlock(_tablet.get_header_lock());
+    {
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        const std::map<int64_t, TabletSchemaCSPtr> history_schema = _tablet.tablet_meta()->history_schema();
+        auto ori_size = _tablet.tablet_meta()->history_schema().size();
+        // we still save the tablet schema for the rowset in `_unused_rowsets`.
+        // if BE crash before we remove the rowsets in `_unused_rowsets` and we restarted BE, we may need to access the
+        // tablet schema again.
+        // and the corresponding tablet schema will be gc in next round.
+        _tablet.tablet_meta()->delete_stale_schema();
+        auto new_size = _tablet.tablet_meta()->history_schema().size();
+        if (ori_size != new_size || num_version_removed > 0) {
             _tablet.save_meta();
         }
+    }
+
+    // GC works that can be done outside of lock
+    if (num_version_removed > 0) {
         auto tablet_id = _tablet.tablet_id();
         // Remove useless delete vectors.
         auto meta_store = _tablet.data_dir()->get_meta();
@@ -2648,15 +2659,23 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     _remove_unused_rowsets();
 }
 
+#define INSERT_SCHEMA_ID_IF_EXISTS(rowset, active_schema_ids)                        \
+    if ((rowset)->rowset_meta()->has_tablet_schema()) {                              \
+        (active_schema_ids)->insert((rowset)->rowset_meta()->tablet_schema()->id()); \
+    }
+
 // return schema id set of all rowsets including `_unused_rowsets`
 void TabletUpdates::get_active_schema_ids(std::set<int64_t>* active_schema_ids) {
     std::lock_guard rl(_lock);
     for (auto& [_, rowset] : _rowsets) {
-        active_schema_ids->insert(rowset->rowset_meta()->tablet_schema()->id());
+        INSERT_SCHEMA_ID_IF_EXISTS(rowset, active_schema_ids);
+    }
+    for (auto& [_, rowset] : _pending_commits) {
+        INSERT_SCHEMA_ID_IF_EXISTS(rowset, active_schema_ids)
     }
     RowsetSharedPtr rowset;
     while (_unused_rowsets.try_get(&rowset) == 1) {
-        active_schema_ids->insert(rowset->tablet_schema()->id());
+        INSERT_SCHEMA_ID_IF_EXISTS(rowset, active_schema_ids)
     }
 }
 

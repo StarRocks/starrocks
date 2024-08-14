@@ -720,11 +720,6 @@ void Tablet::delete_expired_stale_rowset() {
 
     if (_updates) {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
-        {
-            std::unique_lock wrlock(_meta_lock);
-            _delete_stale_schema();
-            save_meta();
-        }
         return;
     }
 
