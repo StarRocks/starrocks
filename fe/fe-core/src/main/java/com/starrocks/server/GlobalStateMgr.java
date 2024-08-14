@@ -234,7 +234,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -1695,6 +1694,7 @@ public class GlobalStateMgr {
                 dictionaryMgr.save(imageWriter);
                 replicationMgr.save(imageWriter);
                 keyMgr.save(imageWriter);
+                pipeManager.getRepo().save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
