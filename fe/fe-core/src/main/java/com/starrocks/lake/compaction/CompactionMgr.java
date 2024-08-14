@@ -15,6 +15,8 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -196,7 +198,31 @@ public class CompactionMgr {
         return compactionManager;
     }
 
+    public boolean isPartitionExist(PartitionIdentifier partition) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(partition.getDbId());
+        if (db == null) {
+            return false;
+        }
+        db.readLock();
+        try {
+            // lake table or lake materialized view
+            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
+            return table != null && table.getPartition(partition.getPartitionId()) != null;
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // partitions are added into map after loading, but they are never removed in checkpoint thread.
+        // drop partition, drop table, truncate table, drop database, ...
+        // all of above will cause partition info change, and it is difficult to call
+        // remove partition for every case, so remove non-existed partitions only when writing image
+        getAllPartitions()
+                .stream()
+                .filter(p -> !isPartitionExist(p))
+                .forEach(this::removePartition);
+
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();
