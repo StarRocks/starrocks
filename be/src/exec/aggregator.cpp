@@ -845,6 +845,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     // TODO(kks): we should approve memory allocate here
     auto use_intermediate = _use_intermediate_as_output();
     Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     if (!use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
     } else {
