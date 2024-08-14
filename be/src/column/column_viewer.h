@@ -41,8 +41,10 @@ class ColumnViewer {
 public:
     static auto constexpr TYPE = Type;
     explicit ColumnViewer(const ColumnPtr& column);
+    ColumnViewer() = delete;
+    DISALLOW_COPY_AND_MOVE(ColumnViewer);
 
-    const RunTimeCppType<Type> value(const size_t idx) const { return _data[idx & _not_const_mask]; }
+    const RunTimeCppType<Type> value(const size_t idx) const { return (*_data)[idx & _not_const_mask]; }
 
     const bool is_null(const size_t idx) const { return _null_data[idx & _null_mask]; }
 
@@ -58,8 +60,7 @@ private:
 
     NullColumnPtr _null_column;
 
-    // raw pointer
-    RunTimeCppType<Type>* _data;
+    RunTimeContainerType<Type>* _data;
 
     NullColumn::ValueType* _null_data;
 

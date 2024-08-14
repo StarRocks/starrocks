@@ -185,7 +185,7 @@ public:
 
         // input data
         auto lhs_data = lhs->is_constant() ? ColumnHelper::as_raw_column<ConstColumn>(lhs)->data_column() : lhs;
-        auto data = ColumnHelper::cast_to_raw<Type>(lhs_data)->get_data().data();
+        const auto& data = ColumnHelper::cast_to_raw<Type>(lhs_data)->get_data();
 
         // output data
         auto result = RunTimeColumnType<TYPE_BOOLEAN>::create();

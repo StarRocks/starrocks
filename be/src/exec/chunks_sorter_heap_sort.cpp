@@ -180,12 +180,12 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     }
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
+        auto rf = type_dispatch_zone_map_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
                 top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), is_close_interval);
         _runtime_filter.emplace_back(rf);
     } else {
-        type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
+        type_dispatch_zone_map_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
                                                 detail::SortRuntimeFilterUpdater(), _runtime_filter.back(),
                                                 top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
     }
@@ -223,7 +223,7 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         const auto& order_by_data_column = down_cast<NullableColumn*>(input_column.get())->data_column();
 
         const auto* null_data = order_by_null_column->get_data().data();
-        const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();
+        const auto& order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data();
         auto* __restrict__ filter_data = filter->data();
 
         // null compare flag
@@ -251,7 +251,7 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(top_cursor_column)->get_data()[cursor_rid];
         auto* order_by_column = ColumnHelper::cast_to_raw<TYPE>(input_column);
 
-        const auto* __restrict__ order_by_data = order_by_column->get_data().data();
+        const auto& __restrict__ order_by_data = order_by_column->get_data();
         auto* __restrict__ filter_data = filter->data();
         int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
 

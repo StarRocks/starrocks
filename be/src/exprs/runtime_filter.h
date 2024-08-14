@@ -811,7 +811,7 @@ private:
 
     void _evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
         if constexpr (!IsSlice<CppType>) {
-            const auto* data = values.data();
+            const auto& data = values;
             for (size_t i = 0; i < size; i++) {
                 selection[i] = (data[i] >= _min && data[i] <= _max);
             }

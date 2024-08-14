@@ -61,6 +61,12 @@ public:
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
             }
+        } else if constexpr (lt_is_object_family<LType>) {
+            const auto& data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+            const auto& data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
+            for (int i = 0; i < s; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
+            }
         } else {
             auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
             auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data().data();
@@ -89,6 +95,12 @@ public:
             auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, r2[i]);
+            }
+        } else if constexpr (lt_is_object_family<LType>) {
+            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data()[0];
+            const auto& data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
+            for (int i = 0; i < size; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
             }
         } else {
             auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data()[0];
@@ -119,6 +131,12 @@ public:
             auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], data2);
+            }
+        } else if constexpr (lt_is_object_family<LType>) {
+            const auto& data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
+            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data()[0];
+            for (int i = 0; i < size; ++i) {
+                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
         } else {
             auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
