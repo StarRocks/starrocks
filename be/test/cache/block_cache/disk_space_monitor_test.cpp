@@ -181,7 +181,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
         for (size_t i = 0; i < 25; ++i) {
             char ch = 'a' + i % 26;
             std::string value(batch_size, ch);
-            Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
             ASSERT_TRUE(st.ok());
         }
         auto metrics = cache->cache_metrics();
@@ -242,7 +242,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
         for (size_t i = 0; i < 50; ++i) {
             char ch = 'a' + i % 26;
             std::string value(batch_size, ch);
-            Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
             ASSERT_TRUE(st.ok());
         }
         auto metrics = cache->cache_metrics();
@@ -354,7 +354,7 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
         for (size_t i = 0; i < 20; ++i) {
             char ch = 'a' + i % 26;
             std::string value(batch_size, ch);
-            Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
             ASSERT_TRUE(st.ok());
         }
 
