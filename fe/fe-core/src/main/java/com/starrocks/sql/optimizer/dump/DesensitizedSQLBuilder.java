@@ -153,7 +153,7 @@ public class DesensitizedSQLBuilder {
         private final Map<String, String> desensitizedDict;
 
         public DesensitizedSQLVisitor(boolean simple, boolean withoutTbl, Map<String, String> desensitizedDict) {
-            super(simple, withoutTbl);
+            super(simple, withoutTbl, true);
             this.desensitizedDict = desensitizedDict;
         }
 
