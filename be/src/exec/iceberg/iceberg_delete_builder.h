@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <utility>
+
+#include "cache/block_cache/cache_options.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "runtime/descriptors.h"

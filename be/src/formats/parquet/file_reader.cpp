@@ -25,6 +25,8 @@
 #include <vector>
 
 #include "cache/block_cache/kv_cache.h"
+#include "cache/object_cache/object_cache.h"
+#include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"

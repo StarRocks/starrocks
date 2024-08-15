@@ -161,9 +161,8 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
     }
-    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache &= state->query_options().enable_file_metacache;
+        _use_file_metacache = state->query_options().enable_file_metacache;
     }
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {

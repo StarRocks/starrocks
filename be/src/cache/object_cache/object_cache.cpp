@@ -36,6 +36,12 @@ Status ObjectCache::init(const ObjectCacheOptions& options) {
         LOG(WARNING) << "Fail to initialize because it has already been initialized before";
         return Status::AlreadyExist("already initialized");
     }
+#ifdef WITH_STARCACHE
+    if (options.module == ObjectCacheModuleType::STARCACHE) {
+        _cache_module = std::make_shared<StarCacheModule>(options);
+        LOG(INFO) << "init object cache with starcache module";
+    } 
+#endif
     if (options.module == ObjectCacheModuleType::LRUCACHE) {
         _cache_module = std::make_shared<LRUCacheModule>(options);
         LOG(INFO) << "Init object cache with lrucache module";

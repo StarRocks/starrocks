@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/object_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"

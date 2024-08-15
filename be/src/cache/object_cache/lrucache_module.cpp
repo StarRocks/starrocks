@@ -16,6 +16,7 @@
 
 #include <butil/fast_rand.h>
 
+#include "cache/status.h"
 #include "common/logging.h"
 
 namespace starrocks {
