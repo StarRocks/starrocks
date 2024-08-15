@@ -31,7 +31,7 @@ struct DataCacheOptions {
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
     int64_t modification_time = 0;
-    int32_t datacache_evict_probability = 0;
+    int32_t datacache_evict_probability = 100;
     int8_t datacache_priority = 0;
     int64_t datacache_ttl_seconds = 0;
 };

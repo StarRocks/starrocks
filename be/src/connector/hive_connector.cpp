@@ -116,7 +116,7 @@ Status HiveDataSource::open(RuntimeState* state) {
                                                   .enable_datacache_async_populate_mode = false,
                                                   .enable_datacache_io_adaptor = false,
                                                   .modification_time = _scan_range.modification_time,
-                                                  .datacache_evict_probability = 0,
+                                                  .datacache_evict_probability = 100,
                                                   .datacache_priority = datacache_priority,
                                                   .datacache_ttl_seconds = datacache_ttl_seconds};
         } else if (state->query_options().__isset.enable_scan_datacache &&
@@ -137,7 +137,7 @@ Status HiveDataSource::open(RuntimeState* state) {
             const bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
                                                      state->query_options().enable_datacache_io_adaptor;
 
-            int32_t datacache_evict_probability = 0;
+            int32_t datacache_evict_probability = 100;
             if (state->query_options().__isset.datacache_evict_probability) {
                 datacache_evict_probability = state->query_options().datacache_evict_probability;
             }
@@ -156,6 +156,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
 
     // Don't use datacache when priority = -1
+    // todo: should remove it later
     if (_scan_range.__isset.datacache_options && _scan_range.datacache_options.__isset.priority &&
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
