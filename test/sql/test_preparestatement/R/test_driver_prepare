@@ -35,8 +35,6 @@ None
 function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['5'])
 -- result:
 None
-<<<<<<< HEAD
-=======
 -- !result
 function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as date) from prepare_stmt where k1 > 0")
 -- result:
@@ -61,5 +59,4 @@ None
 function: assert_prepare_execute('test_driver_prepare', "select /*+set_var(enable_short_circuit = true)*/ * from prepare_stmt where k1 = 1 and k2 = 2 and k3 = 3 and k4 = 4 and k5 = ?", ['5'])
 -- result:
 None
->>>>>>> 3486ee03da ([BugFix] fix wrong binary format when enable short circuit read (#49829))
 -- !result
