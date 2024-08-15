@@ -23,7 +23,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,7 +55,7 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
-    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private HiveConnectorScanRangeSource scanRangeSource = null;
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
@@ -87,7 +87,8 @@ public class HdfsScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
         this.descTbl = descTbl;
-        scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
+        this.scanRangeSource = new HiveConnectorScanRangeSource(descTbl, hiveTable, scanNodePredicates);
+        this.scanRangeSource.setup();
     }
 
     private void setupCloudCredential() {
@@ -105,7 +106,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+        return scanRangeSource.getAllOutputs();
     }
 
     @Override
@@ -155,14 +156,14 @@ public class HdfsScanNode extends ScanNode {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
                     output.append(prefix)
-                            .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(), slotDescriptor.getColumn().getName(), type));
+                            .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(),
+                                    slotDescriptor.getColumn().getName(), type));
                 }
             }
         }
 
         return output.toString();
     }
-
 
     @Override
     protected void toThrift(TPlanNode msg) {
@@ -238,7 +239,7 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setPartitionConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
-                                                            HDFSScanNodePredicates scanNodePredicates) {
+                                                     HDFSScanNodePredicates scanNodePredicates) {
         List<Expr> partitionConjuncts = scanNodePredicates.getPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(partitionConjuncts);
         for (Expr expr : partitionConjuncts) {

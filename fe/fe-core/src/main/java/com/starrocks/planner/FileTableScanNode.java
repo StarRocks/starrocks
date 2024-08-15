@@ -21,7 +21,7 @@ import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
@@ -85,7 +85,7 @@ public class FileTableScanNode extends ScanNode {
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(file.getFileName());
-	    // If `fullPath` is set, we just pass it down directly. Otherwise we try to concatenate the `fileName`
+            // If `fullPath` is set, we just pass it down directly. Otherwise we try to concatenate the `fileName`
             // and `tableLocation` to get the full path.
             if (file.getFullPath() != null) {
                 hdfsScanRange.setFull_path(file.getFullPath());
@@ -100,8 +100,9 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
             hdfsScanRange.setModification_time(file.getModificationTime());
-            hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
-            if (RemoteScanRangeLocations.isTextFormat(hdfsScanRange.getFile_format())) {
+            RemoteFileInputFormat fileFormat = fileTable.getFileFormat();
+            hdfsScanRange.setFile_format(fileFormat.toThrift());
+            if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
             }
 
