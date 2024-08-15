@@ -67,7 +67,8 @@ public class ExpressionMapping {
         this.scope = scope;
         this.fieldMappings = new ColumnRefOperator[fieldMappings.size()];
         fieldMappings.toArray(this.fieldMappings);
-        this.columnRefToConstOperators = columnRefToConstOperators;
+        this.columnRefToConstOperators =
+                columnRefToConstOperators == null ? new HashMap<>() : columnRefToConstOperators;
     }
 
     public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings, ExpressionMapping outer,
@@ -85,7 +86,8 @@ public class ExpressionMapping {
         this.fieldMappings = new ColumnRefOperator[fieldsList.size()];
         fieldsList.toArray(this.fieldMappings);
 
-        this.columnRefToConstOperators = columnRefToConstOperators;
+        this.columnRefToConstOperators =
+                columnRefToConstOperators == null ? new HashMap<>() : columnRefToConstOperators;
     }
 
     public ExpressionMapping(Scope scope) {
