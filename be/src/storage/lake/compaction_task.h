@@ -18,6 +18,7 @@
 #include <functional>
 #include <ostream>
 
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "compaction_task_context.h"
 #include "runtime/mem_tracker.h"
@@ -59,6 +60,8 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
     std::shared_ptr<const TabletSchema> _tablet_schema;
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
 };
 
 } // namespace starrocks::lake
