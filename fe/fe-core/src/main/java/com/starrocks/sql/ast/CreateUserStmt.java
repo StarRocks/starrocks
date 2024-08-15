@@ -18,6 +18,7 @@ import com.starrocks.analysis.UserDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 /*
  * We support the following create user stmts:
@@ -37,12 +38,13 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     private final boolean ifNotExists;
 
-    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
-        this(ifNotExists, userDesc, defaultRoles, NodePosition.ZERO);
+    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles, Map<String, String> properties) {
+        this(ifNotExists, userDesc, defaultRoles, properties, NodePosition.ZERO);
     }
 
-    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles, NodePosition pos) {
-        super(userDesc, SetRoleType.ROLE, defaultRoles, pos);
+    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles,
+                          Map<String, String> properties, NodePosition pos) {
+        super(userDesc, SetRoleType.ROLE, defaultRoles, properties, pos);
         this.ifNotExists = ifNotExists;
     }
 
