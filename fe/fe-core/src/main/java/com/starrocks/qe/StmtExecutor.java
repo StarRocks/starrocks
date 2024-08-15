@@ -527,6 +527,11 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
+
+                        if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
+                            processQueryScopeHint();
+                        }
+
                         try {
                             execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
                         } catch (SemanticException e) {
