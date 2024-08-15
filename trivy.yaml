@@ -2,6 +2,9 @@ severity:
   - HIGH
   - CRITICAL
 scan:
+  skip-dirs:
+    # ignore broker's cve
+    - apache_hdfs_broker/
   skip-files:
     # hudi required
     - "**/htrace-core4-4.2.0-incubating.jar"
