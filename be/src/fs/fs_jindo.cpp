@@ -227,15 +227,9 @@ StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3UR
     jdo_freeHandleCtx(jdo_ctx);
     if (UNLIKELY(!init_status.ok())) {
         LOG(ERROR) << fmt::format("Failed to init the jindo file system for {} and file {}.", uri_prefix, uri.key());
-        if (client != nullptr) {
+        if (client.get() != nullptr) {
             LOG(INFO) << "Free invalid jindo client for " << uri_prefix;
-            JdoHandleCtx_t ctx = jdo_createHandleCtx1(*client);
-            jdo_destroyStore(ctx);
-            Status destroy_status = io::check_jindo_status(ctx);
-            jdo_freeHandleCtx(ctx);
-            if (UNLIKELY(!destroy_status.ok())) {
-                return destroy_status;
-            }
+            jdo_destroyStore(*client);
             jdo_freeStore(*client);
         }
         return init_status;
@@ -247,13 +241,7 @@ StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3UR
         LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
         auto old_client = *(_jindo_clients[idx]->jdo_store);
         jdo_freeOptions(_jindo_clients[idx]->option);
-        JdoHandleCtx_t ctx = jdo_createHandleCtx1(old_client);
-        jdo_destroyStore(ctx);
-        Status destroy_status = io::check_jindo_status(ctx);
-        jdo_freeHandleCtx(ctx);
-        if (UNLIKELY(!destroy_status.ok())) {
-            return destroy_status;
-        }
+        jdo_destroyStore(old_client);
         jdo_freeStore(old_client);
         _jindo_clients[idx]->jdo_store = client;
         _jindo_clients[idx]->option = jdo_options;
