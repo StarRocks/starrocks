@@ -157,7 +157,7 @@ public:
         }
     }
 
-    // the function can be used to transform memory from process mem_tracker to child mem_tracker
+    // the function can be used to transform memory stats from process mem_tracker to child mem_tracker
     void consume_without_root(int64_t bytes) {
         if (bytes == 0) {
             return;
