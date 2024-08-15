@@ -34,8 +34,10 @@ import com.starrocks.sql.ast.ViewRelation;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -272,7 +274,8 @@ public class AstToSQLBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -300,7 +303,9 @@ public class AstToSQLBuilder {
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
             sqlBuilder.append(
-                    tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+                    Optional.ofNullable(tableFunction.getChildExpressions())
+                            .orElse(Collections.emptyList()).stream().map(this::visit)
+                            .collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
