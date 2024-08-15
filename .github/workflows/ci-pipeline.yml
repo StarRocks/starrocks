@@ -570,7 +570,12 @@ jobs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
-    if: always() && (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || (env.BE_SRC_FILTER != 'true' && env.FE_SRC_FILTER == 'true' && needs.fe-ut.result == 'success') || (env.FE_SRC_FILTER != 'true' && env.BE_SRC_FILTER == 'true' && needs.clang-tidy.result == 'success') || (env.BE_SRC_FILTER != 'true' && env.FE_SRC_FILTER != 'true' && needs.test-checker.outputs.output1 == 'true')
+    if: >
+      always() &&
+      ${{ needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success' }} || 
+      ${{ env.BE_SRC_FILTER != 'true' && env.FE_SRC_FILTER == 'true' && needs.fe-ut.result == 'success' }} || 
+      ${{ env.FE_SRC_FILTER != 'true' && env.BE_SRC_FILTER == 'true' && needs.clang-tidy.result == 'success' }} ||
+      ${{ env.BE_SRC_FILTER != 'true' && env.FE_SRC_FILTER != 'true' && needs.test-checker.outputs.output1 == 'true'}}
     steps:
       - name: CLEAN
         run: |
