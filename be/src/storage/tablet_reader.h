@@ -85,6 +85,7 @@ private:
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
+    Status _init_compaction_column_paths(const TabletReaderParams& read_params);
 
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;

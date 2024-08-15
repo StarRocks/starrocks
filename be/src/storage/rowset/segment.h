@@ -222,6 +222,9 @@ public:
 
     DISALLOW_COPY_AND_MOVE(Segment);
 
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
 private:
     struct DummyDeleter {
         void operator()(const TabletSchema*) {}

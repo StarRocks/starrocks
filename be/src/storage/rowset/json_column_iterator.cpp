@@ -50,14 +50,16 @@ public:
     JsonFlatColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                            std::vector<std::unique_ptr<ColumnIterator>> field_iters,
                            const std::vector<std::string>& target_paths, const std::vector<LogicalType>& target_types,
-                           const std::vector<std::string>& source_paths, const std::vector<LogicalType>& source_types)
+                           const std::vector<std::string>& source_paths, const std::vector<LogicalType>& source_types,
+                           bool need_remain)
             : _reader(reader),
               _null_iter(std::move(null_iter)),
               _flat_iters(std::move(field_iters)),
               _target_paths(std::move(target_paths)),
               _target_types(std::move(target_types)),
               _source_paths(std::move(source_paths)),
-              _source_types(std::move(source_types)){};
+              _source_types(std::move(source_types)),
+              _need_remain(need_remain){};
 
     ~JsonFlatColumnIterator() override {
         if (transformer != nullptr) {
@@ -101,6 +103,7 @@ private:
     std::vector<LogicalType> _target_types;
     std::vector<std::string> _source_paths;
     std::vector<LogicalType> _source_types;
+    bool _need_remain = false;
 
     std::vector<ColumnPtr> _source_column_modules;
     // to avoid create column with find type
@@ -119,20 +122,29 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     bool has_remain = _source_paths.size() != _flat_iters.size();
-    transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, false);
-    {
-        SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
-        transformer->init_read_task(_source_paths, _source_types, has_remain);
+    VLOG(1) << "JsonFlatColumnIterator init, target: "
+            << JsonFlatPath::debug_flat_json(_target_paths, _target_types, _need_remain)
+            << ", source: " << JsonFlatPath::debug_flat_json(_source_paths, _source_types, has_remain);
 
-        for (int i = 0; i < _source_paths.size(); i++) {
-            auto column = ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true);
-            _source_column_modules.emplace_back(column);
-        }
+    for (int i = 0; i < _source_paths.size(); i++) {
+        auto column = ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true);
+        _source_column_modules.emplace_back(column);
     }
 
     DCHECK_EQ(_source_column_modules.size(), _source_paths.size());
     if (has_remain) {
         _source_column_modules.emplace_back(JsonColumn::create());
+    }
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
+        if (_need_remain) {
+            transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, true);
+            transformer->init_compaction_task(_source_paths, _source_types, has_remain);
+        } else {
+            transformer = std::make_unique<HyperJsonTransformer>(_target_paths, _target_types, false);
+            transformer->init_read_task(_source_paths, _source_types, has_remain);
+        }
     }
 
     // update stats
@@ -268,10 +280,11 @@ Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<cons
 class JsonDynamicFlatIterator final : public ColumnIterator {
 public:
     JsonDynamicFlatIterator(std::unique_ptr<ScalarColumnIterator>& json_iter, std::vector<std::string> target_paths,
-                            std::vector<LogicalType> target_types)
+                            std::vector<LogicalType> target_types, bool need_remain)
             : _json_iter(std::move(json_iter)),
               _target_paths(std::move(target_paths)),
-              _target_types(std::move(target_types)){};
+              _target_types(std::move(target_types)),
+              _need_remain(need_remain){};
 
     ~JsonDynamicFlatIterator() override = default;
 
@@ -297,28 +310,39 @@ public:
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
-    Status _flat_json(Column* input, Column* output);
+    template <typename FUNC>
+    Status _dynamic_flat(Column* dst, FUNC read_fn);
 
 private:
     std::unique_ptr<ScalarColumnIterator> _json_iter;
     std::vector<std::string> _target_paths;
     std::vector<LogicalType> _target_types;
+    bool _need_remain = false;
 
     std::unique_ptr<JsonFlattener> _flattener;
 };
 
 Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(ColumnIterator::init(opts));
+    RETURN_IF_ERROR(_json_iter->init(opts));
+
     for (auto& p : _target_paths) {
         opts.stats->dynamic_json_hits[p] += 1;
     }
 
     SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
-    _flattener = std::make_unique<JsonFlattener>(_target_paths, _target_types, false);
-    return _json_iter->init(opts);
+    _flattener = std::make_unique<JsonFlattener>(_target_paths, _target_types, _need_remain);
+    VLOG(1) << "JsonDynamicFlatIterator init, target: "
+            << JsonFlatPath::debug_flat_json(_target_paths, _target_types, _need_remain);
+    return Status::OK();
 }
 
-Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
+template <typename FUNC>
+Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
+    auto proxy = output->clone_empty();
+    RETURN_IF_ERROR(read_fn(_json_iter.get(), proxy.get()));
+    output->set_delete_state(proxy->delete_state());
+
     SCOPED_RAW_TIMER(&_opts.stats->json_flatten_ns);
     JsonColumn* json_data = nullptr;
 
@@ -328,7 +352,7 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
         auto* output_nullable = down_cast<NullableColumn*>(output);
         auto* output_null = down_cast<NullColumn*>(output_nullable->null_column().get());
 
-        auto* input_nullable = down_cast<NullableColumn*>(input);
+        auto* input_nullable = down_cast<NullableColumn*>(proxy.get());
         auto* input_null = down_cast<NullColumn*>(input_nullable->null_column().get());
 
         output_null->append(*input_null, 0, input_null->size());
@@ -341,31 +365,25 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
     }
 
     // 2. flat
-    _flattener->flatten(input);
+    _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
     json_data->set_flat_columns(_target_paths, _target_types, result);
     return Status::OK();
 }
 
 Status JsonDynamicFlatIterator::next_batch(size_t* n, Column* dst) {
-    auto proxy = dst->clone_empty();
-    RETURN_IF_ERROR(_json_iter->next_batch(n, proxy.get()));
-    dst->set_delete_state(proxy->delete_state());
-    return _flat_json(proxy.get(), dst);
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
+    return _dynamic_flat(dst, read);
 }
 
 Status JsonDynamicFlatIterator::next_batch(const SparseRange<>& range, Column* dst) {
-    auto proxy = dst->clone_empty();
-    RETURN_IF_ERROR(_json_iter->next_batch(range, proxy.get()));
-    dst->set_delete_state(proxy->delete_state());
-    return _flat_json(proxy.get(), dst);
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
+    return _dynamic_flat(dst, read);
 }
 
 Status JsonDynamicFlatIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-    auto proxy = values->clone_empty();
-    RETURN_IF_ERROR(_json_iter->fetch_values_by_rowid(rowids, size, proxy.get()));
-    values->set_delete_state(proxy->delete_state());
-    return _flat_json(proxy.get(), values);
+    auto read = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
+    return _dynamic_flat(values, read);
 }
 
 Status JsonDynamicFlatIterator::seek_to_first() {
@@ -386,13 +404,12 @@ class JsonMergeIterator final : public ColumnIterator {
 public:
     JsonMergeIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                       std::vector<std::unique_ptr<ColumnIterator>> all_iter, const std::vector<std::string>& src_paths,
-                      const std::vector<LogicalType>& src_types, bool is_merge)
+                      const std::vector<LogicalType>& src_types)
             : _reader(reader),
               _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
               _src_paths(std::move(src_paths)),
-              _src_types(std::move(src_types)),
-              _is_merge(is_merge){};
+              _src_types(std::move(src_types)){};
 
     ~JsonMergeIterator() override = default;
 
@@ -431,7 +448,6 @@ private:
     std::vector<ColumnPtr> _src_column_modules;
 
     std::unique_ptr<JsonMerger> _merger;
-    bool _is_merge;
 };
 
 Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
@@ -444,15 +460,8 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
         RETURN_IF_ERROR(iter->init(opts));
     }
 
-    if (_is_merge) {
-        for (auto& p : _src_paths) {
-            opts.stats->merge_json_hits[p] += 1;
-        }
-
-        SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
-        _merger = std::make_unique<JsonMerger>(_src_paths, _src_types, _all_iter.size() != _src_paths.size());
-    }
-
+    bool has_remain = _all_iter.size() != _src_paths.size();
+    VLOG(1) << "JsonMergeIterator init, source: " << JsonFlatPath::debug_flat_json(_src_paths, _src_types, has_remain);
     DCHECK(_all_iter.size() == _src_paths.size() || _all_iter.size() == _src_paths.size() + 1);
     for (int i = 0; i < _src_paths.size(); i++) {
         auto column = ColumnHelper::create_column(TypeDescriptor(_src_types[i]), true);
@@ -463,6 +472,12 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
         // remain
         _src_column_modules.emplace_back(JsonColumn::create());
     }
+
+    for (auto& p : _src_paths) {
+        opts.stats->merge_json_hits[p] += 1;
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
+    _merger = std::make_unique<JsonMerger>(_src_paths, _src_types, has_remain);
 
     return Status::OK();
 }
@@ -477,13 +492,9 @@ Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
         all_columns.emplace_back(std::move(c));
     }
 
-    if (_is_merge) {
-        SCOPED_RAW_TIMER(&_opts.stats->json_merge_ns);
-        auto json = _merger->merge(all_columns);
-        dst->append(*json, 0, json->size());
-    } else {
-        dst->set_flat_columns(_src_paths, _src_types, all_columns);
-    }
+    SCOPED_RAW_TIMER(&_opts.stats->json_merge_ns);
+    auto json = _merger->merge(all_columns);
+    dst->append(*json, 0, json->size());
     dst->check_or_die();
     return Status::OK();
 }
@@ -586,21 +597,19 @@ Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const Col
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(ColumnReader* reader,
-                                                                    std::unique_ptr<ColumnIterator> null_iter,
-                                                                    std::vector<std::unique_ptr<ColumnIterator>> iters,
-                                                                    const std::vector<std::string>& target_paths,
-                                                                    const std::vector<LogicalType>& target_types,
-                                                                    const std::vector<std::string>& source_paths,
-                                                                    const std::vector<LogicalType>& source_types) {
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
+        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
+        std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
+        const std::vector<LogicalType>& target_types, const std::vector<std::string>& source_paths,
+        const std::vector<LogicalType>& source_types, bool need_remain) {
     return std::make_unique<JsonFlatColumnIterator>(reader, std::move(null_iter), std::move(iters), target_paths,
-                                                    target_types, source_paths, source_types);
+                                                    target_types, source_paths, source_types, need_remain);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
         std::unique_ptr<ScalarColumnIterator> json_iter, const std::vector<std::string>& target_paths,
-        const std::vector<LogicalType>& target_types) {
-    return std::make_unique<JsonDynamicFlatIterator>(json_iter, target_paths, target_types);
+        const std::vector<LogicalType>& target_types, bool need_remain) {
+    return std::make_unique<JsonDynamicFlatIterator>(json_iter, target_paths, target_types, need_remain);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
@@ -608,14 +617,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
         const std::vector<LogicalType>& merge_types) {
     return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
-                                               merge_types, true);
-}
-
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_direct_iterator(
-        ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
-        const std::vector<LogicalType>& merge_types) {
-    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
-                                               merge_types, false);
+                                               merge_types);
 }
 } // namespace starrocks
