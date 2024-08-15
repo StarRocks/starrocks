@@ -78,7 +78,7 @@ public class StorageVolumeAnalysisTest {
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
         Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 " +
-                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.access_key\" = \"******\", \"aws.s3.secret_key\" = \"******\")",
+                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.access_key\" = \"***\", \"aws.s3.secret_key\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
 
         sql = "CREATE STORAGE VOLUME storage_volume_1 type = azblob " +
@@ -87,7 +87,7 @@ public class StorageVolumeAnalysisTest {
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
         Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = azblob " +
-                        "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+                        "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"***\", \"azure.blob.sas_token\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
 
         sql = "CREATE STORAGE VOLUME hdfsvolume TYPE = HDFS LOCATIONS = ('hdfs://abc');";
@@ -128,8 +128,8 @@ public class StorageVolumeAnalysisTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
         Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
-        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"******\", " +
-                "\"aws.s3.secret_key\" = \"******\", \"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"***\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"azure.blob.shared_key\" = \"***\", \"azure.blob.sas_token\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
     }
 
