@@ -21,7 +21,8 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/object_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/status.h"
@@ -130,6 +131,23 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
     return Status::OK();
 }
 
+Status init_object_cache(GlobalEnv* global_env) {
+    ObjectCache* object_cache = ObjectCache::instance();
+    if (object_cache->is_initialized()) {
+        return Status::OK();
+    }
+    if (config::storage_page_cache_based_on_datacache) {
+        BlockCache* block_cache = BlockCache::instance();
+        return object_cache->init(block_cache->starcache_instance());
+    } else {
+        ObjectCacheOptions options;
+        int64_t storage_cache_limit = global_env->get_storage_page_cache_size();
+        storage_cache_limit = global_env->check_storage_page_cache_size(storage_cache_limit);
+        options.capacity = storage_cache_limit;
+        return object_cache->init(options);
+    }
+}
+
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
     // Init and open storage engine.
     EngineOptions options;
@@ -183,11 +201,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
-#ifdef USE_STAROS
-    init_staros_worker();
-    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
-#endif
-
     if (!init_datacache(global_env, paths).ok()) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
@@ -197,6 +210,18 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     } else {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
+
+    EXIT_IF_ERROR(init_object_cache(global_env));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": object cache init successfully";
+
+    // Init storage page cache.
+    global_env->init_storage_page_cache();
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage page cache init successfully";
+
+#ifdef USE_STAROS
+    init_staros_worker();
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
+#endif
 
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream

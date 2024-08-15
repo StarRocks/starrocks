@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/starcache_wrapper.h"
+#include "cache/block_cache/starcache_wrapper.h"
 
 #include <filesystem>
 
@@ -40,7 +40,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.cache_adaptor = _cache_adaptor.get();
     opt.instance_name = "dla_cache";
     _enable_tiered_cache = options.enable_tiered_cache;
-    _cache = std::make_unique<starcache::StarCache>();
+    _cache = std::make_shared<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
 
@@ -175,6 +175,10 @@ void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
 Status StarCacheWrapper::shutdown() {
     // TODO: starcache implement shutdown to release memory
     return Status::OK();
+}
+
+std::shared_ptr<starcache::StarCache> StarCacheWrapper::starcache_instance() {
+    return _cache;
 }
 
 } // namespace starrocks

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 
 #include <fmt/format.h>
 
 #ifdef WITH_STARCACHE
-#include "block_cache/starcache_wrapper.h"
+#include "cache/block_cache/starcache_wrapper.h"
 #endif
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -179,6 +179,10 @@ void BlockCache::record_read_cache(size_t size, int64_t lateny_us) {
 
 const DataCacheMetrics BlockCache::cache_metrics(int level) const {
     return _kv_cache->cache_metrics(level);
+}
+
+std::shared_ptr<starcache::StarCache> BlockCache::starcache_instance() {
+    return _kv_cache->starcache_instance();
 }
 
 Status BlockCache::shutdown() {

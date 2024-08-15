@@ -21,8 +21,8 @@
 
 #include <string>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"

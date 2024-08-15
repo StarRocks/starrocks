@@ -16,8 +16,8 @@
 
 #include <atomic>
 
-#include "block_cache/disk_space_monitor.h"
-#include "block_cache/kv_cache.h"
+#include "cache/block_cache/disk_space_monitor.h"
+#include "cache/block_cache/kv_cache.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -93,6 +93,8 @@ public:
     bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
 
     DataCacheEngineType engine_type();
+
+    std::shared_ptr<starcache::StarCache> starcache_instance();
 
     static const size_t MAX_BLOCK_SIZE;
 
