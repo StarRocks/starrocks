@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
