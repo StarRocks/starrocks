@@ -167,9 +167,7 @@ public:
         }
     }
 
-    void release_without_root() {
-        return release_without_root(consumption());
-    }
+    void release_without_root() { return release_without_root(consumption()); }
 
     void list_mem_usage(std::vector<SimpleItem>* items, size_t cur_level, size_t upper_level) const {
         SimpleItem item;
