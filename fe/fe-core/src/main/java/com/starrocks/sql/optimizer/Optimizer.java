@@ -472,8 +472,8 @@ public class Optimizer {
         CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
-        JoinPredicatePushdown.JoinPushDownParams joinPushDownParams = context.getJoinPushDownParams();
-        joinPushDownParams.prepare(context, sessionVariable, mvRewriteStrategy);
+        JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext = context.getJoinPushDownParams();
+        joinPredicatePushDownContext.prepare(context, sessionVariable, mvRewriteStrategy);
 
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -530,7 +530,7 @@ public class Optimizer {
 
         // rule-based materialized view rewrite: early stage
         doMVRewriteWithMultiStages(tree, rootTaskContext);
-        joinPushDownParams.reset();
+        joinPredicatePushDownContext.reset();
 
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune

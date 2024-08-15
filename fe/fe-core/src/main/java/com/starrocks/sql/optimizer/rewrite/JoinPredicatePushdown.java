@@ -69,7 +69,7 @@ public class JoinPredicatePushdown {
      * NOTE: It's useful for normal queries but it will disturb some rewrite rule(eg: mv rewrite, table prune), so add
      * a config to control it.
      */
-    public static class JoinPushDownParams {
+    public static class JoinPredicatePushDownContext {
         public boolean enableLeftRightJoinEquivalenceDerive = true;
         public boolean enableJoinPredicatePushDown = true;
 
@@ -85,10 +85,10 @@ public class JoinPredicatePushdown {
             if (!sessionVariable.isEnableRboTablePrune() && !mvRewriteStrategy.mvStrategy.isMultiStages()) {
                 return;
             }
-            JoinPushDownParams joinPushDownParams = context.getJoinPushDownParams();
-            joinPushDownParams.enableLeftRightJoinEquivalenceDerive = false;
+            JoinPredicatePushDownContext joinPredicatePushDownContext = context.getJoinPushDownParams();
+            joinPredicatePushDownContext.enableLeftRightJoinEquivalenceDerive = false;
             if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
-                joinPushDownParams.enableJoinPredicatePushDown = false;
+                joinPredicatePushDownContext.enableJoinPredicatePushDown = false;
             }
         }
 
@@ -102,7 +102,7 @@ public class JoinPredicatePushdown {
     }
 
     // Join push down parameters to control the push down strategies.
-    private final JoinPushDownParams joinPushDownParams;
+    private final JoinPredicatePushDownContext joinPredicatePushDownContext;
 
     private final OptimizerContext optimizerContext;
 
@@ -113,7 +113,7 @@ public class JoinPredicatePushdown {
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
-        this.joinPushDownParams = optimizerContext.getJoinPushDownParams();
+        this.joinPredicatePushDownContext = optimizerContext.getJoinPushDownParams();
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
         this.optimizerContext = optimizerContext;
@@ -431,7 +431,7 @@ public class JoinPredicatePushdown {
             } else {
                 ScalarOperator predicate = rangePredicateDerive(predicateToPush);
                 JoinOperator joinType = join.getJoinType();
-                if (joinPushDownParams.enableLeftRightJoinEquivalenceDerive ||
+                if (joinPredicatePushDownContext.enableLeftRightJoinEquivalenceDerive ||
                         (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin())) {
                     getPushdownPredicatesFromEquivalenceDerive(
                             Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);

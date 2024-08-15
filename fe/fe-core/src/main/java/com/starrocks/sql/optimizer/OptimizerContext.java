@@ -61,12 +61,13 @@ public class OptimizerContext {
 
     private long updateTableId = -1;
 
-    private JoinPredicatePushdown.JoinPushDownParams joinPushDownParams = new JoinPredicatePushdown.JoinPushDownParams();
-
     private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
+    // The context for join predicate pushdown rule
+    private JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
+            new JoinPredicatePushdown.JoinPredicatePushDownContext();
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
@@ -186,8 +187,8 @@ public class OptimizerContext {
         return queryMaterializationContext.getValidCandidateMVs();
     }
 
-    public JoinPredicatePushdown.JoinPushDownParams getJoinPushDownParams() {
-        return joinPushDownParams;
+    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
+        return joinPredicatePushDownContext;
     }
 
     public void setUpdateTableId(long updateTableId) {
