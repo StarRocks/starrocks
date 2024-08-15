@@ -171,6 +171,6 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
 const workgroup::WorkGroupScanSchedEntity* SchemaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
+    return wg->connector_scan_sched_entity();
 }
 } // namespace starrocks::pipeline
