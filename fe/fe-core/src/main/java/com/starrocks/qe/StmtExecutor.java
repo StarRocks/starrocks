@@ -158,6 +158,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -2328,7 +2329,7 @@ public class StmtExecutor {
             return;
         }
         String sql;
-        if (parsedStmt.needAuditEncryption()) {
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;

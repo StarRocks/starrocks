@@ -60,9 +60,4 @@ public class QueryStatement extends StatementBase {
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return queryRelation.needAuditEncryption();
-    }
 }
