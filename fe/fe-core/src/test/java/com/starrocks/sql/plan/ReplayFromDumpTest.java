@@ -891,7 +891,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  <slot 391> : 391: case\n" +
                 "  |  <slot 396> : 396: rank()"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains(" 20:SORT\n" +
-                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, <slot 233> 233: mock_065 ASC\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC," +
+                " <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "<slot 233> 233: mock_065 ASC\n" +
                 "  |  analytic partition by: 194: mock_089, 395: case, 193: mock_081\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
