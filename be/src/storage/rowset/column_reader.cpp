@@ -703,7 +703,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             }
             // dynamic flattern
             // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types);
+            return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
+                                                     path->is_from_compaction());
         }
 
         std::vector<std::string> source_paths;
@@ -716,7 +717,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
         }
 
-        if (path == nullptr || path->children().empty()) {
+        if (path == nullptr || path->children().empty() || path->is_from_compaction()) {
             DCHECK(_is_flat_json);
             for (size_t i = start; i < end; i++) {
                 const auto& rd = (*_sub_readers)[i];
@@ -732,9 +733,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                 ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
                 all_iters.emplace_back(std::move(iter));
             }
-            // access whole json
-            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
-                                              source_types);
+
+            if (path == nullptr || path->children().empty()) {
+                // access whole json
+                return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
+                                                  source_types);
+            } else {
+                DCHECK(path->is_from_compaction());
+                return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
+                                                 target_types, source_paths, source_types, true);
+            }
         }
 
         bool need_remain = false;

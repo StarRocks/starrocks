@@ -1327,8 +1327,11 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.4");
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
