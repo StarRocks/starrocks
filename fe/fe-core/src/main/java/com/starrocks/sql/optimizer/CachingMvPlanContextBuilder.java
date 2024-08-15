@@ -51,7 +51,7 @@ public class CachingMvPlanContextBuilder {
          * @param parseNode
          */
         public AstKey(ParseNode parseNode) {
-            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false).visit(parseNode);
+            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
         }
 
         @Override
