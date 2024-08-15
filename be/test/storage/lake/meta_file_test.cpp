@@ -376,7 +376,7 @@ TEST_F(MetaFileTest, test_dcg) {
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(14);
         EXPECT_FALSE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
-        builder.apply_opcompaction(op_compaction, 1);
+        builder.apply_opcompaction(op_compaction, 1, tablet->tablet_schema()->id());
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
     }
@@ -471,7 +471,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         rowset_metadata.add_segments("ccc.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
-        builder.apply_opcompaction(op_compaction, 111);
+        builder.apply_opcompaction(op_compaction, 111, tablet->tablet_schema()->id());
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
         // check unpersistent del files
@@ -513,7 +513,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         rowset_metadata.add_segments("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(15);
-        builder.apply_opcompaction(op_compaction, 113);
+        builder.apply_opcompaction(op_compaction, 113, tablet->tablet_schema()->id());
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
         // check unpersistent del files
