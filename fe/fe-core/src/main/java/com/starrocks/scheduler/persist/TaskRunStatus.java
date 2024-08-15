@@ -487,9 +487,15 @@ public class TaskRunStatus implements Writable {
         List<TaskRunStatus> res = new ArrayList<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
-                ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                String jsonString = copied.toString(Charset.defaultCharset());
-                res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                String jsonString = "";
+                try {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    jsonString = copied.toString(Charset.defaultCharset());
+                    res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                            "_statistics_.task_run_history table: " + jsonString, e);
+                }
             }
         }
         return res;

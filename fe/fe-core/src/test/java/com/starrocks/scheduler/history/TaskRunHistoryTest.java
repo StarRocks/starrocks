@@ -294,7 +294,26 @@ public class TaskRunHistoryTest {
     public void testLookBadHistory() {
         try {
             String jsonString = "{\"data\":[{\"createTime\": 1723679736257, \"dbName\": " +
-                    "\"default_cluster:test_rename_columnb190692a_5a98_11ef_aa5e_00163e0e489a\", \"errorCode\": 0, \"expireTime\": 1723765136257, \"finishTime\": 1723679737239, \"mergeRedundant\": true, \"mvExtraMessage\": {\"basePartitionsToRefreshMap\": {\"t1\": [\"p3\"]}, \"executeOption\": {\"isManual\": false, \"isMergeRedundant\": true, \"isReplay\": false, \"isSync\": false, \"priority\": 100, \"taskRunProperties\": {\"PARTITION_END\": \"4\", \"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": \"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"compression\": \"LZ4\", \"datacache\": {\"enable\": \"true\"}, \"enable_async_write_back\": \"false\", \"mvId\": \"490884\", \"replicated_storage\": \"true\", \"replication_num\": \"1\"}}, \"forceRefresh\": false, \"mvPartitionsToRefresh\": [\"p3\"], \"partitionEnd\": \"4\", \"partitionStart\": \"3\", \"processStartTime\": 1723679736946, \"refBasePartitionsToRefreshMap\": {\"t1\": [\"p3\"]}}, \"postRun\": \"ANALYZE SAMPLE TABLE mv1 WITH ASYNC MODE\", \"priority\": 100, \"processStartTime\": 1723679736946, \"progress\": 100, \"properties\": {\"PARTITION_END\": \"4\", \"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": \"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"compression\": \"LZ4\", \"datacache\": {\"enable\": \"true\"}, \"enable_async_write_back\": \"false\", \"mvId\": \"490884\", \"replicated_storage\": \"true\", \"replication_num\": \"1\"}, \"queryId\": \"b35dc350-5a98-11ef-9acf-00163e08a129\", \"source\": \"MV\", \"startTaskRunId\": \"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"state\": \"SUCCESS\", \"taskId\": 490886, \"taskName\": \"mv-490884\", \"user\": \"root\", \"userIdentity\": {\"host\": \"%\", \"isDomain\": false, \"user\": \"root\"}}]}";
+                    "\"default_cluster:test_rename_columnb190692a_5a98_11ef_aa5e_00163e0e489a\", \"errorCode\": 0, " +
+                    "\"expireTime\": 1723765136257, \"finishTime\": 1723679737239, \"mergeRedundant\": true, " +
+                    "\"mvExtraMessage\": {\"basePartitionsToRefreshMap\": {\"t1\": [\"p3\"]}, \"executeOption\": " +
+                    "{\"isManual\": false, \"isMergeRedundant\": true, \"isReplay\": false, \"isSync\": false, " +
+                    "\"priority\": 100, \"taskRunProperties\": {\"PARTITION_END\": \"4\", " +
+                    "\"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": \"b1f755a8-5a98-11ef-9acf-00163e08a129\", " +
+                    "\"compression\": \"LZ4\", \"datacache\": {\"enable\": \"true\"}, \"enable_async_write_back\": " +
+                    "\"false\", \"mvId\": \"490884\", \"replicated_storage\": \"true\", \"replication_num\": \"1\"}}, " +
+                    "\"forceRefresh\": false, \"mvPartitionsToRefresh\": [\"p3\"], \"partitionEnd\": \"4\", " +
+                    "\"partitionStart\": \"3\", \"processStartTime\": 1723679736946, \"refBasePartitionsToRefreshMap\": " +
+                    "{\"t1\": [\"p3\"]}}, \"postRun\": \"ANALYZE SAMPLE TABLE mv1 WITH ASYNC MODE\", \"priority\": 100, " +
+                    "\"processStartTime\": 1723679736946, \"progress\": 100, \"properties\": " +
+                    "{\"PARTITION_END\": \"4\", \"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": " +
+                    "\"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"compression\": \"LZ4\", \"datacache\": " +
+                    "{\"enable\": \"true\"}, \"enable_async_write_back\": \"false\", \"mvId\": \"490884\", " +
+                    "\"replicated_storage\": \"true\", \"replication_num\": \"1\"}, \"queryId\": " +
+                    "\"b35dc350-5a98-11ef-9acf-00163e08a129\", \"source\": \"MV\", \"startTaskRunId\": " +
+                    "\"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"state\": \"SUCCESS\", \"taskId\": 490886, " +
+                    "\"taskName\": \"mv-490884\", \"user\": \"root\", \"userIdentity\": {\"host\": \"%\", " +
+                    "\"isDomain\": false, \"user\": \"root\"}}]}";
             List<TaskRunStatus> ans = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(jsonString).data;
             Preconditions.checkArgument(ans == null);
         } catch (Exception e) {
