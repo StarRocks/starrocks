@@ -52,6 +52,8 @@ struct ParquetField;
 } // namespace parquet
 struct TypeDescriptor;
 
+class ObjectCache;
+
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -125,7 +127,7 @@ private:
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
 
-    BlockCache* _cache = nullptr;
+    ObjectCache* _cache = nullptr;
     FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped

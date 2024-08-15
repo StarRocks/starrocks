@@ -51,6 +51,12 @@ METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
 StoragePageCache* StoragePageCache::_s_instance = nullptr;
 
+void StoragePageCache::create_global_cache(MemTracker* mem_tracker, size_t capacity) {
+    if (_s_instance == nullptr) {
+        _s_instance = new StoragePageCache(mem_tracker, capacity, ObjectCache::instance());
+    }
+}
+
 static void init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {
@@ -132,7 +138,7 @@ Status StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCach
     int64_t mem_size = data.size;
 #endif
 
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
+    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[] (uint8_t*)value; };
 
     ObjectCacheWriteOptions options;
     options.priority = in_memory ? 1 : 0;

@@ -20,6 +20,10 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 
+#ifdef WITH_STARCACHE
+#include "cache/object_cache/starcache_module.h"
+#endif
+
 namespace starrocks {
 
 ObjectCache* ObjectCache::instance() {
@@ -36,6 +40,12 @@ Status ObjectCache::init(const ObjectCacheOptions& options) {
         LOG(WARNING) << "Fail to initialize because it has already been initialized before";
         return Status::AlreadyExist("already initialized");
     }
+#ifdef WITH_STARCACHE
+    if (options.module == ObjectCacheModuleType::STARCACHE) {
+        _cache_module = std::make_shared<StarCacheModule>(options);
+        LOG(INFO) << "init object cache with starcache module";
+    } 
+#endif
     if (options.module == ObjectCacheModuleType::LRUCACHE) {
         _cache_module = std::make_shared<LRUCacheModule>(options);
         LOG(INFO) << "Init object cache with lrucache module";
@@ -48,6 +58,19 @@ Status ObjectCache::init(const ObjectCacheOptions& options) {
     _initialized.store(true, std::memory_order_release);
     return Status::OK();
 }
+
+#ifdef WITH_STARCACHE
+Status ObjectCache::init(std::shared_ptr<starcache::StarCache> star_cache) {
+    if (_initialized.load(std::memory_order_acquire)) {
+        LOG(WARNING) << "fail to initialize because it has already been initialized before";
+        return Status::AlreadyExist("already initialized");
+    }
+    _cache_module = std::make_shared<StarCacheModule>(star_cache);
+    _initialized.store(true, std::memory_order_release);
+    LOG(INFO) << "init object cache with an exist block cache module";
+    return Status::OK();
+}
+#endif
 
 Status ObjectCache::insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                            ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {

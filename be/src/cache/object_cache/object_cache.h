@@ -22,6 +22,10 @@
 #include "common/status.h"
 #include "util/lru_cache.h"
 
+#ifdef WITH_STARCACHE
+#include "starcache/star_cache.h"
+#endif
+
 namespace starrocks {
 
 class ObjectCache {
@@ -33,6 +37,11 @@ public:
 
     // Init the object cache instance with options.
     Status init(const ObjectCacheOptions& options);
+
+#ifdef WITH_STARCACHE
+    // Init the object cache instance with an exist block cache module.
+    Status init(std::shared_ptr<starcache::StarCache> star_cache);
+#endif
 
     // Insert object to cache, the `ptr` is the object pointer.
     // size: the size of the value.

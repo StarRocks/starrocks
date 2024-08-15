@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/object_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"
@@ -153,6 +154,23 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         return cache->init(cache_options);
     }
     return Status::OK();
+}
+
+Status init_object_cache(GlobalEnv* global_env) {
+    ObjectCache* object_cache = ObjectCache::instance();
+    if (object_cache->initialized()) {
+        return Status::OK();
+    }
+    if (config::construct_object_cache_based_on_datacache) {
+        BlockCache* block_cache = BlockCache::instance();
+        return object_cache->init(block_cache->starcache_instance());
+    } else {
+        ObjectCacheOptions options;
+        int64_t storage_cache_limit = global_env->get_storage_page_cache_size();
+        storage_cache_limit = global_env->check_storage_page_cache_size(storage_cache_limit);
+        options.capacity = storage_cache_limit;
+        return object_cache->init(options);
+    }
 }
 
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
