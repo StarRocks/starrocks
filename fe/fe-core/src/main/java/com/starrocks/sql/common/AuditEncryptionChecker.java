@@ -16,7 +16,7 @@ package com.starrocks.sql.common;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
