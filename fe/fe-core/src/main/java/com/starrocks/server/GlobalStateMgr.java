@@ -178,6 +178,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -561,6 +562,8 @@ public class GlobalStateMgr {
 
     private MemoryUsageTracker memoryUsageTracker;
 
+    private ProcProfileCollector procProfileCollector;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     public NodeMgr getNodeMgr() {
@@ -830,6 +833,23 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+<<<<<<< HEAD
+=======
+        this.procProfileCollector = new ProcProfileCollector();
+
+        this.sqlParser = new SqlParser(AstBuilder.getInstance());
+        this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+        }
+        this.authorizer = new Authorizer(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
+>>>>>>> 4bfdf55d84 ([Enhancement] Add memory alloc profile log (#49449))
     }
 
     public static void destroyCheckpoint() {
@@ -1519,6 +1539,13 @@ public class GlobalStateMgr {
 
         lockChecker.start();
 
+<<<<<<< HEAD
+=======
+        refreshDictionaryCacheTaskDaemon.start();
+
+        procProfileCollector.start();
+
+>>>>>>> 4bfdf55d84 ([Enhancement] Add memory alloc profile log (#49449))
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
     }
