@@ -48,20 +48,8 @@ import static org.junit.Assert.assertEquals;
 
 public class CompactionSchedulerTest {
 
-    private final long dbId = 9000L;
-    private final long transactionId = 12345L;
-
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
-
-    @Mocked
-    GlobalStateMgr globalStateMgr;
-
-    @Mocked
-    WarehouseManager warehouseManager;
-
-    @Mocked
-    Warehouse warehouse;
 
     @Before
     public void setUp() {
@@ -69,6 +57,8 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
+        long dbId = 9000L;
+        long transactionId = 12345L;
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         new Expectations() {
             {
@@ -202,28 +192,28 @@ public class CompactionSchedulerTest {
     public void testCompactionTaskLimit() {
         CompactionScheduler compactionScheduler = new CompactionScheduler(null, null, null, null, "");
 
+        int defaultValue = Config.lake_compaction_max_tasks;
         // explicitly set config to a value bigger than default -1
         Config.lake_compaction_max_tasks = 10;
         Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
 
         // reset config to default value
-        Config.lake_compaction_max_tasks = -1;
+        Config.lake_compaction_max_tasks = defaultValue;
 
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
         ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                result = warehouseManager;
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+                return Arrays.asList(b1, c1, c2);
+            }
 
-                warehouseManager.getCompactionWarehouse();
-                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+            @Mock
+            public Warehouse getCompactionWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-
-                warehouseManager.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                result = Arrays.asList(b1, c1, c2);
             }
         };
 
