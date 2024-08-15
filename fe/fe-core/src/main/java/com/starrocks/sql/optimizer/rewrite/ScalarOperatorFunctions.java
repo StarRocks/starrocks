@@ -73,6 +73,7 @@ import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
+import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
 import java.util.HashSet;
@@ -421,8 +422,12 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
-                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
+        TemporalAccessor temporal = builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                StringUtils.strip(date.getVarchar(), "\r\n\t "));
+        int year = temporal.isSupported(ChronoField.YEAR) ? temporal.get(ChronoField.YEAR) : 0;
+        int month = temporal.isSupported(ChronoField.MONTH_OF_YEAR) ? temporal.get(ChronoField.MONTH_OF_YEAR) : 1;
+        int day = temporal.isSupported(ChronoField.DAY_OF_MONTH) ? temporal.get(ChronoField.DAY_OF_MONTH) : 1;
+        LocalDate ld = LocalDate.of(year, month, day);
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
