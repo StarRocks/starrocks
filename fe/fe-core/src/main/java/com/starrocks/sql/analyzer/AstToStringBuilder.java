@@ -169,7 +169,7 @@ public class AstToStringBuilder {
     }
 
     public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
-        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
+        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote, true).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
@@ -182,13 +182,20 @@ public class AstToStringBuilder {
         // when you just want to get the real expr name set it false
         protected boolean withBackquote;
 
+        protected boolean hideCredential;
+
         public AST2StringBuilderVisitor() {
-            this(true, true);
+            this(true, true, true);
         }
 
-        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote) {
+        public AST2StringBuilderVisitor(boolean hideCredential) {
+            this(true, true, hideCredential);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote, boolean hideCredential) {
             this.addFunctionDbName = addFunctionDbName;
             this.withBackquote = withBackquote;
+            this.hideCredential = hideCredential;
         }
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
@@ -387,7 +394,7 @@ public class AstToStringBuilder {
             sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
 
             sb.append(" PROPERTIES (");
-            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
         }
@@ -436,14 +443,15 @@ public class AstToStringBuilder {
             }
 
             if (!stmt.getJobProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false, hideCredential);
                 sb.append("PROPERTIES ( ").append(map).append(" )");
             }
 
             sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
 
             if (!stmt.getDataSourceProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
+                PrintableMap<String, String> map =
+                        new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, hideCredential);
                 sb.append("( ").append(map).append(" )");
             }
 
@@ -475,7 +483,7 @@ public class AstToStringBuilder {
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (");
-                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -505,7 +513,7 @@ public class AstToStringBuilder {
             sb.append("\"" + stmt.getPath() + "\" ");
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             sb.append("WITH BROKER ");
@@ -514,7 +522,7 @@ public class AstToStringBuilder {
                     sb.append(stmt.getBrokerDesc().getName());
                 }
                 sb.append("' (");
-                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
+                sb.append(new PrintableMap<>(stmt.getBrokerDesc().getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -821,7 +829,7 @@ public class AstToStringBuilder {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
-            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, true));
+            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
         }
@@ -1408,7 +1416,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (")
-                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+                        .append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(")");
             }
             return sb.toString();
         }
@@ -1424,7 +1432,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!properties.isEmpty()) {
                 sb.append(" SET (").
-                        append(new PrintableMap<>(properties, "=", true, false))
+                        append(new PrintableMap<>(properties, "=", true, false, hideCredential))
                         .append(")");
             }
             return sb.toString();
@@ -1438,7 +1446,9 @@ public class AstToStringBuilder {
             if (stmt.getComment() != null) {
                 sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
             }
-            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
+            sb.append("PROPERTIES(");
+            sb.append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, hideCredential));
+            sb.append(")");
             return sb.toString();
         }
 
