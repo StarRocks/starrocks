@@ -371,7 +371,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             }
         }
         Map<ColumnRefOperator, ScalarOperator> constMap = new HashMap<>();
-        childPlan.forEach(x -> constMap.putAll(x.getExpressionMapping().getColumnRefToConstOperators()));
+
+        childPlan.stream().map(x -> x.getColumnRefToConstOperators()).filter(Objects::nonNull)
+                .forEach(constMap::putAll);
 
         Scope outputScope = setOperationRelation.getRelations().get(0).getScope();
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns, constMap);
@@ -728,7 +730,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             OptExprBuilder builder = new OptExprBuilder(childPlan.getRoot().getOp(),
                     childPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(), childPlan.getRootBuilder()
-                            .getExpressionMapping().getColumnRefToConstOperators()));
+                            .getColumnRefToConstOperators()));
             return new LogicalPlan(builder, childPlan.getOutputColumn(), childPlan.getCorrelation());
         }
 
@@ -739,7 +741,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(),
-                        childPlan.getRootBuilder().getExpressionMapping().getColumnRefToConstOperators()));
+                        childPlan.getRootBuilder().getColumnRefToConstOperators()));
 
         return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), List.of());
     }
@@ -753,7 +755,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
                 new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn(),
-                        logicalPlan.getRootBuilder().getExpressionMapping().getColumnRefToConstOperators()));
+                        logicalPlan.getRootBuilder().getColumnRefToConstOperators()));
 
         builder = addOrderByLimit(builder, node);
 
@@ -777,7 +779,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     logicalPlan.getRoot().getOp(),
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn(), logicalPlan.getRootBuilder()
-                            .getExpressionMapping().getColumnRefToConstOperators()));
+                            .getColumnRefToConstOperators()));
             if (enableViewBasedMvRewrite) {
                 LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
@@ -863,8 +865,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             List<ColumnRefOperator> leftFieldMappings = leftPlan.getRootBuilder().getFieldMappings();
             List<ColumnRefOperator> rightFieldMappings = rightPlan.getRootBuilder().getFieldMappings();
 
+            // rightPlan won't genetate ColumnRefToConstOperators because there is no project
             Map<ColumnRefOperator, ScalarOperator> leftConstMap =
-                    leftPlan.getRootBuilder().getExpressionMapping().getColumnRefToConstOperators();
+                    leftPlan.getRootBuilder().getColumnRefToConstOperators();
 
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
                     node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
@@ -887,9 +890,11 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         OptExprBuilder rightOpt = rightPlan.getRootBuilder();
 
         Map<ColumnRefOperator, ScalarOperator> leftConstMap =
-                leftOpt.getExpressionMapping().getColumnRefToConstOperators();
+                leftOpt.getColumnRefToConstOperators() == null ? new HashMap<>() :
+                        leftOpt.getColumnRefToConstOperators();
         Map<ColumnRefOperator, ScalarOperator> rightConstMap =
-                rightOpt.getExpressionMapping().getColumnRefToConstOperators();
+                rightOpt.getColumnRefToConstOperators() == null ? new HashMap<>() :
+                        rightOpt.getColumnRefToConstOperators();
 
         // The scope needs to be rebuilt here, because the scope of Semi/Anti Join
         // only has a child field. Bug on predicate needs to see the two child field
