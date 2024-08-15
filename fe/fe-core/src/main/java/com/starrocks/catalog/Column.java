@@ -670,18 +670,20 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultExpr == null && isAutoIncrement) {
-            sb.append("AUTO_INCREMENT ");
-        } else if (defaultExpr != null) {
+        if (defaultExpr == null) {
+            if (isAutoIncrement) {
+                sb.append("AUTO_INCREMENT ");
+            }
+            if (defaultValue != null && !type.isOnlyMetricType()) {
+                sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+            }
+        } else {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 // compatible with mysql
                 sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
-        }
-        if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         }
         if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
