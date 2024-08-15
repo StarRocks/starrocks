@@ -2501,13 +2501,8 @@ public class StmtExecutor {
             return;
         }
         String sql;
-<<<<<<< HEAD
-        if (parsedStmt.needAuditEncryption()) {
-            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
-=======
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt);
->>>>>>> 4be9aea5bf ([Refactor] Move needAuditEncryption logic to AuditEncryptionChecker to unified and centralized management (#47212))
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
