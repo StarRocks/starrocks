@@ -1,9 +1,11 @@
 -- name: test_driver_prepare
 create database test_driver_prepare;
 -- result:
+[]
 -- !result
 use test_driver_prepare;
 -- result:
+[]
 -- !result
 CREATE TABLE IF NOT EXISTS prepare_stmt (
     k1 INT,
@@ -28,11 +30,13 @@ CREATE TABLE IF NOT EXISTS prepare_stmt (
     PRIMARY KEY (k1, k2, k3, k4, k5)
     DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
 -- result:
+[]
 -- !result
 insert into prepare_stmt values (1, 2, 3, 4, '5', true, 7.2, 8.1, 9.222, '2010-01-01', null, '2010-01-01 01:02:03',
 null, [1, 2, 3, null, 4], [date '2021-01-05', null], [[null, datetime '2021-01-01 01:02:03'], [null, datetime '2021-01-01 01:02:03']],
 row(1, null), map{1:'2021-01-01',3:NULL}, json_object('a', 4, 'b', false));
 -- result:
+[]
 -- !result
 select * from prepare_stmt;
 -- result:
@@ -46,7 +50,7 @@ function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_s
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['2'])
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['5'])
 -- result:
 None
 -- !result
@@ -54,19 +58,23 @@ function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123456' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123456' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123' as datetime), cast('2021-01-01' as date), * from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123' as datetime), cast('2021-01-01' as date), * from prepare_stmt where k5 = ?", ['5'])
+-- result:
+None
+-- !result
+function: assert_prepare_execute('test_driver_prepare', "select /*+set_var(enable_short_circuit = true)*/ * from prepare_stmt where k1 = 1 and k2 = 2 and k3 = 3 and k4 = 4 and k5 = ?", ['5'])
 -- result:
 None
 -- !result
