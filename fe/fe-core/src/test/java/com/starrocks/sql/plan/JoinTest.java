@@ -426,12 +426,11 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:Project\n" +
+        assertContains(plan, " 1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 26> : '49'\n" +
                 "  |  \n" +
-                "  1:OlapScanNode");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -662,20 +661,9 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  45;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "9:Project\n" +
+        assertContains(plan, " 6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 21> : 21: expr\n" +
-                "  |  <slot 22> : 22: P_PARTKEY\n" +
-                "  |  <slot 23> : 23: P_NAME\n" +
-                "  |  <slot 24> : 24: P_MFGR\n" +
-                "  |  <slot 25> : 25: P_BRAND\n" +
-                "  |  <slot 26> : 26: P_TYPE\n" +
-                "  |  <slot 27> : 27: P_SIZE\n" +
-                "  |  <slot 28> : 28: P_CONTAINER\n" +
-                "  |  <slot 29> : 29: P_RETAILPRICE\n" +
-                "  |  <slot 30> : 30: P_COMMENT\n" +
-                "  |  <slot 31> : 31: PAD\n" +
-                "  |  <slot 40> : CAST(21: expr AS INT)");
+                "  |  <slot 21> : 37");
     }
 
     @Test
@@ -1723,7 +1711,9 @@ public class JoinTest extends PlanTestBase {
                 "address as (select 1 as user_id, 'newzland' as address_name) \n" +
                 "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
                 "  |  <slot 2> : NULL\n" +
                 "  |  <slot 3> : NULL\n" +
                 "  |  <slot 5> : 2\n" +
