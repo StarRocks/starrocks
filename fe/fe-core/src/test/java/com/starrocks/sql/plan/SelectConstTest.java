@@ -16,6 +16,8 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
+import com.starrocks.thrift.TDescriptorTable;
+import org.apache.commons.compress.utils.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -216,7 +218,8 @@ public class SelectConstTest extends PlanTestBase {
 
     private void assertFeExecuteResult(String sql, String expected) throws Exception {
         ExecPlan execPlan = getExecPlan(sql);
-        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan,
+                Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
         RowBatch rowBatch = coordinator.getNext();
         byte[] bytes = rowBatch.getBatch().getRows().get(0).array();
         int lengthOffset = getOffset(bytes);
