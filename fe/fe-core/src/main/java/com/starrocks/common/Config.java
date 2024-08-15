@@ -343,6 +343,12 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
@@ -1328,6 +1334,42 @@ public class Config extends ConfigBase {
     public static long memory_tracker_interval_seconds = 60;
 
     /**
+     * true to enable collect proc memory alloc profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc memory alloc profile")
+    public static boolean proc_profile_mem_enable = true;
+
+    /**
+     * true to enable collect proc cpu profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc cpu profile")
+    public static boolean proc_profile_cpu_enable = true;
+
+    /**
+     * The number of seconds between proc profile collections
+     */
+    @ConfField(mutable = true, comment = "The number of seconds between proc profile collections")
+    public static long proc_profile_collect_interval_s = 600;
+
+    /**
+     * The number of seconds it takes to collect single proc profile
+     */
+    @ConfField(mutable = true, comment = "The number of seconds it takes to collect single proc profile")
+    public static long proc_profile_collect_time_s = 300;
+
+    /**
+     * The number of days to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of days to retain profile files")
+    public static int proc_profile_file_retained_days = 2;
+
+    /**
+     * The number of bytes to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
+    public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
@@ -2053,16 +2095,22 @@ public class Config extends ConfigBase {
     public static int max_distribution_pruner_recursion_depth = 100;
 
     /**
-     * Used to limit num of partition for one batch partition clause
+     * Used to limit num of partition for one batch partition clause or one load for expression partition
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, aliases = {"auto_partition_max_creation_number_per_load"})
     public static long max_partitions_in_one_batch = 4096;
 
     /**
      * Used to limit num of partition for automatic partition table automatically created
      */
+    @ConfField(mutable = true, aliases = {"max_automatic_partition_number"})
+    public static long max_partition_number_per_table = 100000;
+
+    /**
+     * Used to limit num of partition for load open partition number
+     */
     @ConfField(mutable = true)
-    public static long max_automatic_partition_number = 4096;
+    public static long max_load_initial_open_partition_number = 32;
 
     /**
      * enable automatic bucket for random distribution table
@@ -2115,7 +2163,7 @@ public class Config extends ConfigBase {
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int max_hive_partitions_per_rpc = 5000;
 
     /**
@@ -2392,6 +2440,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long star_mgr_meta_sync_interval_sec = 600L;
+
+    /**
+     * Whether allows delete shard meta if failes to delete actual data.
+     * In extreme cases, actual data deletion might fail or timeout,
+     * and if shard meta is not deleted, the FE memory will grow,
+     * eventually cause fe frequently Full GC
+     */
+    @ConfField(mutable = true)
+    public static boolean meta_sync_force_delete_shard_meta = false;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
@@ -2905,6 +2962,10 @@ public class Config extends ConfigBase {
             "default")
     public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
 
+    @ConfField(mutable = true, comment = "Whether enable to rewrite query in mv refresh or not so it can use " +
+            "query the rewritten mv directly rather than original base table to improve query performance.")
+    public static boolean enable_mv_refresh_query_rewrite = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -3074,4 +3135,15 @@ public class Config extends ConfigBase {
     
     @ConfField
     public static boolean enable_alter_struct_column = true;
+
+    // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
+    // large bytes to being deserialized successfully. So we give a 1G default value here.
+    @ConfField(mutable = true)
+    public static int thrift_max_message_size = 1024 * 1024 * 1024;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_frame_size = 16384000;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_recursion_depth = 64;
 }

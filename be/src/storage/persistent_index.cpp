@@ -3778,7 +3778,7 @@ void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIn
 
                     auto iter = usage_and_size_stat.find(key_size);
                     if (iter == usage_and_size_stat.end()) {
-                        usage_and_size_stat.insert({key_size, {usage, size}});
+                        usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
                     } else {
                         iter->second.first += usage;
                         iter->second.second += size;
@@ -4885,8 +4885,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     return new_l2_version;
 }
 
-void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                         const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta) {
+Status PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                           const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta) {
     // delete input l2 versions, and add output l2 version
     std::vector<EditVersion> new_l2_versions;
     std::vector<bool> new_l2_version_merged;
@@ -4906,6 +4906,11 @@ void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l
             new_l2_version_merged.push_back(index_meta.l2_version_merged(i));
         }
     }
+    // Check all input l2 has been removed. If not, that means index has been rebuilt.
+    if (new_l2_versions.size() + input_l2_versions.size() != index_meta.l2_versions_size() + 1) {
+        return Status::Aborted(fmt::format("PersistentIndex has been rebuilt, abort this compaction task. meta : {}",
+                                           index_meta.ShortDebugString()));
+    }
     // rebuild l2 versions in meta
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
@@ -4915,6 +4920,7 @@ void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l
     for (const bool merge : new_l2_version_merged) {
         index_meta.add_l2_version_merged(merge);
     }
+    return Status::OK();
 }
 
 Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta) {
@@ -4936,7 +4942,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     }
     // 2. merge l2 files to new l2 file
     ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
-    modify_l2_versions(l2_versions, new_l2_version, index_meta);
+    RETURN_IF_ERROR(modify_l2_versions(l2_versions, new_l2_version, index_meta));
     // delete useless files
     RETURN_IF_ERROR(_reload(index_meta));
     RETURN_IF_ERROR(_delete_expired_index_file(
@@ -4998,7 +5004,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         }
         PersistentIndexMetaPB index_meta;
         RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
-        modify_l2_versions(l2_versions, new_l2_version, index_meta);
+        RETURN_IF_ERROR(modify_l2_versions(l2_versions, new_l2_version, index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));

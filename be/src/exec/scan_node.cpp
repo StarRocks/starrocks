@@ -127,7 +127,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
-        TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
     if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
@@ -147,6 +147,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
                                                                             /*could_local_shuffle*/ true);
         } else {
+            if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
+                scan_dop = pipeline_dop;
+            }
             return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
         }
     } else {

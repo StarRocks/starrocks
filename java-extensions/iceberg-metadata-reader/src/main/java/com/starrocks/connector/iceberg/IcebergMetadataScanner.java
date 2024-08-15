@@ -20,10 +20,8 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.utils.loader.ThreadContextClassLoader;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileContent;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
@@ -32,8 +30,6 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -46,7 +42,6 @@ import static org.apache.iceberg.util.ByteBuffers.toByteArray;
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
 public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanner.class);
 
     protected static final List<String> SCAN_COLUMNS =
             ImmutableList.of(
@@ -90,8 +85,6 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
-    private static final int DATA_FILE = 0;
-    private static final int DELETE_FILE = 1;
     private final String manifestBean;
     private final String predicateInfo;
     private final boolean loadColumnStats;
@@ -117,44 +110,33 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
     }
 
     @Override
-    public void close() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            if (reader != null) {
-                reader.close();
+    public int doGetNext() {
+        int numRows = 0;
+        for (; numRows < getTableSize(); numRows++) {
+            if (!reader.hasNext()) {
+                break;
             }
-            if (output != null) {
-                output.close();
+            ContentFile<?> file = reader.next();
+            for (int i = 0; i < requiredFields.length; i++) {
+                Object fieldData = get(requiredFields[i], file);
+                if (fieldData == null) {
+                    appendData(i, null);
+                } else {
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
+                    appendData(i, fieldValue);
+                }
             }
-        } catch (IOException e) {
-            LOG.error("Failed to close the iceberg metadata reader.", e);
-            throw new IOException("Failed to close the iceberg metadata reader.", e);
         }
+        return numRows;
     }
 
     @Override
-    public int getNext() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            for (; numRows < getTableSize(); numRows++) {
-                if (!reader.hasNext()) {
-                    break;
-                }
-                ContentFile<?> file = reader.next();
-                for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = get(requiredFields[i], file);
-                    if (fieldData == null) {
-                        appendData(i, null);
-                    } else {
-                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
-                        appendData(i, fieldValue);
-                    }
-                }
-            }
-            return numRows;
-        } catch (Exception e) {
-            close();
-            LOG.error("Failed to get the next off-heap table chunk of iceberg metadata.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of iceberg metadata.", e);
+    public void doClose() throws IOException {
+        if (reader != null) {
+            reader.close();
+        }
+        if (output != null) {
+            output.close();
         }
     }
 
@@ -192,7 +174,7 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
     private Object get(String columnName, ContentFile<?> file) {
         switch (columnName) {
             case "content":
-                return file.content() == FileContent.DATA ? DATA_FILE : DELETE_FILE;
+                return file.content().id();
             case "file_path":
                 return file.path().toString();
             case "file_format":

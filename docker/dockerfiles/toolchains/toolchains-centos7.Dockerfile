@@ -3,7 +3,7 @@
 #  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-centos7.Dockerfile -t toolchains-centos7:latest docker/dockerfiles/toolchains/
 
 ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-10/root/usr
-ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz
+ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.gz
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG MAVEN_VERSION=3.6.3
 ARG MAVEN_INSTALL_HOME=/opt/maven
@@ -81,3 +81,4 @@ RUN ARCH=`uname -m` ; if [[ $ARCH == "aarch64" ]] ; then DOWNLOAD_URL=http://cdn
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
 ENV JAVA_HOME=/usr/lib/jvm/java-11
 ENV MAVEN_HOME=${MAVEN_INSTALL_HOME}
+ENV LANG=en_US.utf8

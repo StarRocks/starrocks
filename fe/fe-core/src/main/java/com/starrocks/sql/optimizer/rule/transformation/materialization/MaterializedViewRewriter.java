@@ -511,6 +511,9 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         MatchMode matchMode = getMatchMode(queryTables, mvTables);
 
+        if (matchMode == MatchMode.NOT_MATCH && mvTables.stream().noneMatch(queryTables::contains)) {
+            return null;
+        }
         // Check whether mv can be applicable for the query.
         if (!isMVApplicable(mvExpression, matchMode, queryExpression)) {
             return null;

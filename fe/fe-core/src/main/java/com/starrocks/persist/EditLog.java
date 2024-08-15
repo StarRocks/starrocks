@@ -822,6 +822,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
+                case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1075,7 +1076,7 @@ public class EditLog {
                 case OperationType.OP_ALTER_USER_V2: {
                     AlterUserInfo info = (AlterUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayAlterUser(
-                            info.getUserIdentity(), info.getAuthenticationInfo());
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getProperties());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROP_V2:
@@ -1718,6 +1719,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
+    public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+    }
+
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
         logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
@@ -1882,8 +1887,9 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
-    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
-        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
+                             Map<String, String> properties) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 

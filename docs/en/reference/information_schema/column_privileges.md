@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # column_privileges
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `column_privileges` identifies all privileges granted on columns to a currently enabled role or by a currently enabled role.
 
 The following fields are provided in `column_privileges`:

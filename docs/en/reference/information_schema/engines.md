@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # engines
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `engines` provides information about storage engines.
 
 The following fields are provided in `engines`:

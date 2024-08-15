@@ -32,9 +32,11 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -164,11 +166,12 @@ public class HiveMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+            Table table = GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             if (hmsTable != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+                        hmsTable.getDbName(), hmsTable.getTableName(), table));
             }
         } else {
             HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
@@ -192,6 +195,9 @@ public class HiveMetadata implements ConnectorMetadata {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
+            throw e;
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
@@ -216,51 +222,65 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
-    @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange tableVersionRange, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
         if (((HiveMetaStoreTable) table).isUnPartitioned()) {
             partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
         } else {
-            Map<String, Partition> existingPartitions = hmsOps.getPartitionByPartitionKeys(table, partitionKeys);
-            for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
+            // convert partition keys to partition names.
+            // and handle partition names in following code.
+            // in most cases, we use partition keys. but in some cases,  we use partition names.
+            // so partition keys has higher priority than partition names.
+            List<String> partitionNames = params.getPartitionNames();
+            if (params.getPartitionKeys() != null) {
+                partitionNames =
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                                .collect(
+                                        Collectors.toList());
+            }
+            // check existences
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+            for (String hivePartitionName : partitionNames) {
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);
-                } else {
+                } else if (params.isCheckPartitionExistence()) {
                     LOG.error("Partition {} doesn't exist", hivePartitionName);
                     throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
                 }
             }
         }
-
-        boolean useRemoteFileCache = true;
-        if (table instanceof HiveTable) {
-            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
-        }
-
-        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useRemoteFileCache));
+        return partitions.build();
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
-        partitions.addAll(existingPartitions.values());
-        boolean useRemoteFileCache = true;
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
+
+        boolean useCache = true;
         if (table instanceof HiveTable) {
-            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
+            useCache = ((HiveTable) table).isUseMetadataCache();
         }
-        return fileOps.getRemoteFiles(partitions.build(), RemoteFileOperations.Options.toUseCache(useRemoteFileCache));
+        // if we disable cache explicitly
+        if (!params.isUseCache()) {
+            useCache = false;
+        }
+
+        GetRemoteFilesParams updatedParams = params.copy();
+        updatedParams.setUseCache(useCache);
+        return fileOps.getRemoteFiles(table, partitions, updatedParams);
     }
 
     @Override
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
+        return fileOps.getRemoteFilesAsync(table, partitions, params);
+    }
+
+    @Override
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
         Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
         partitionBuilder.addAll(existingPartitions.values());

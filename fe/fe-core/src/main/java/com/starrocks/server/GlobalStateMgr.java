@@ -145,6 +145,7 @@ import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.PipeListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.PipeScheduler;
@@ -153,6 +154,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -177,6 +179,7 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.JournalObservable;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
@@ -382,6 +385,7 @@ public class GlobalStateMgr {
     private final LoadJobScheduler loadJobScheduler;
 
     private final LoadTimeoutChecker loadTimeoutChecker;
+    private final LoadsHistorySyncer loadsHistorySyncer;
     private final LoadEtlChecker loadEtlChecker;
     private final LoadLoadingChecker loadLoadingChecker;
     private final LockChecker lockChecker;
@@ -475,6 +479,8 @@ public class GlobalStateMgr {
 
     private MemoryUsageTracker memoryUsageTracker;
 
+    private ProcProfileCollector procProfileCollector;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     private TemporaryTableMgr temporaryTableMgr;
@@ -496,9 +502,8 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(long warehouseId) {
+    public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService) {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         if (RunMode.isSharedDataMode()) {
             List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
             for (Long cnId : computeNodeIds) {
@@ -675,6 +680,7 @@ public class GlobalStateMgr {
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadMgr = new LoadMgr(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
+        this.loadsHistorySyncer = new LoadsHistorySyncer();
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
         this.lockChecker = new LockChecker();
@@ -761,6 +767,7 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+        this.procProfileCollector = new ProcProfileCollector();
 
         this.sqlParser = new SqlParser(AstBuilder.getInstance());
         this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
@@ -934,6 +941,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        return nodeMgr.getQueryStatisticsInfoFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -1305,6 +1316,7 @@ public class GlobalStateMgr {
         loadMgr.prepareJobs();
         loadJobScheduler.start();
         loadTimeoutChecker.start();
+        loadsHistorySyncer.start();
         loadEtlChecker.start();
         loadLoadingChecker.start();
         // Export checker
@@ -1397,6 +1409,8 @@ public class GlobalStateMgr {
         lockChecker.start();
 
         refreshDictionaryCacheTaskDaemon.start();
+
+        procProfileCollector.start();
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();

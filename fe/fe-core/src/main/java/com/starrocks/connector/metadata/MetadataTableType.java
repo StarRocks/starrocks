@@ -18,7 +18,11 @@ public enum MetadataTableType {
     LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
     REFS("refs"),
     HISTORY("history"),
-    METADATA_LOG_ENTRIES("metadata_log_entries");
+    METADATA_LOG_ENTRIES("metadata_log_entries"),
+    SNAPSHOTS("snapshots"),
+    MANIFESTS("manifests"),
+    FILES("files"),
+    PARTITIONS("partitions");
 
     public final String typeString;
 

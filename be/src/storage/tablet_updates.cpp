@@ -1932,6 +1932,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     context.is_pk_compaction = true;
+    context.is_compaction = true;
     std::unique_ptr<RowsetWriter> rowset_writer;
     Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {
@@ -3283,7 +3284,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     rapidjson::Value last_version_value;
     std::string last_version_str =
             strings::Substitute("$0_$1", last_version.major_number(), last_version.minor_number());
-    rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
+    last_version_value.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
     root.AddMember("last_version", last_version_value, root.GetAllocator());
 
     rapidjson::Document rowset_details;

@@ -17,11 +17,14 @@
 #include <numeric>
 #include <utility>
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/race_detect.h"
+
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -165,6 +168,10 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     _join_builder->enter_probe_phase();
 
     return Status::OK();
+}
+
+bool HashJoinBuildOperator::is_finished() const {
+    return _is_finished || _join_builder->is_finished();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(

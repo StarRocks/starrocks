@@ -335,6 +335,8 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
+    void try_release_resource_before_core_dump();
+
 private:
     void _wait_for_fragments_finish();
 

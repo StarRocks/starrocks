@@ -87,11 +87,11 @@ SELECT * FROM mv2 ORDER BY event_day;
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER TABLE ss SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:

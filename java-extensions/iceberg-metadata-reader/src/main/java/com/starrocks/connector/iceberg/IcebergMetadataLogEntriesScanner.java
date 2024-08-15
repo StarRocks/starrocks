@@ -15,14 +15,11 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -34,7 +31,6 @@ import static com.google.common.collect.Streams.mapWithIndex;
 import static org.apache.iceberg.MetadataTableUtils.createMetadataTableInstance;
 
 public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergMetadataLogEntriesScanner.class);
 
     private CloseableIterator<StructLike> reader;
     Map<String, Integer> columnNameToPosition = new HashMap<>();
@@ -48,45 +44,34 @@ public class IcebergMetadataLogEntriesScanner extends AbstractIcebergMetadataSca
     }
 
     @Override
-    public void close() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            if (reader != null) {
-                reader.close();
+    public int doGetNext() {
+        int numRows = 0;
+        for (; numRows < getTableSize(); numRows++) {
+            if (reader == null) {
+                break;
             }
-        } catch (IOException e) {
-            LOG.error("Failed to close the iceberg metadata log entries reader.", e);
-            throw new IOException("Failed to close the iceberg metadata log entries reader.", e);
+            if (!reader.hasNext()) {
+                break;
+            }
+
+            StructLike dataRow = reader.next();
+            for (int i = 0; i < requiredFields.length; i++) {
+                Object fieldData = get(requiredFields[i], dataRow);
+                if (fieldData == null) {
+                    appendData(i, null);
+                } else {
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
+                    appendData(i, fieldValue);
+                }
+            }
         }
+        return numRows;
     }
 
     @Override
-    public int getNext() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            for (; numRows < getTableSize(); numRows++) {
-                if (reader == null) {
-                    break;
-                }
-                if (!reader.hasNext()) {
-                    break;
-                }
-
-                StructLike dataRow = reader.next();
-                for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = get(requiredFields[i], dataRow);
-                    if (fieldData == null) {
-                        appendData(i, null);
-                    } else {
-                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
-                        appendData(i, fieldValue);
-                    }
-                }
-            }
-            return numRows;
-        } catch (Exception e) {
-            close();
-            LOG.error("Failed to get the next off-heap table chunk of iceberg metadata log entries table.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of iceberg metadata log entries table.", e);
+    public void doClose() throws IOException {
+        if (reader != null) {
+            reader.close();
         }
     }
 

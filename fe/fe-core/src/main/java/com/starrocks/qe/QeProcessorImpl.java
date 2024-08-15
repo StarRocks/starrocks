@@ -165,6 +165,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+                    .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())

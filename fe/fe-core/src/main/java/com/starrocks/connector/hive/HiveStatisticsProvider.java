@@ -26,6 +26,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
@@ -146,9 +147,8 @@ public class HiveStatisticsProvider {
                 Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
                 Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
 
-        List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions,
-                RemoteFileOperations.Options.toUseHudiTableLocation(hmsTbl.getTableLocation()));
-
+        List<RemoteFileInfo> remoteFileInfos =
+                fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
         long totalBytes = 0;
         for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
             for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {

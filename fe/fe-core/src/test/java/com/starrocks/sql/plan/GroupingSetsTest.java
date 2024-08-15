@@ -164,6 +164,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  5:EXCHANGE"));
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
     }
+
     @Test
     public void testRollupToUnionRewrite1() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
@@ -180,9 +181,9 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  |  <slot 15> : 15: sum\n" +
                 "  |  <slot 18> : 0"));
         Assert.assertTrue(plan.contains("  7:Project\n" +
-                        "  |  <slot 8> : 8: sum\n" +
-                        "  |  <slot 9> : NULL\n" +
-                        "  |  <slot 12> : 1"));
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 9> : NULL\n" +
+                "  |  <slot 12> : 1"));
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
     }
 
@@ -326,6 +327,26 @@ public class GroupingSetsTest extends PlanTestBase {
                     "  0:OlapScanNode");
             assertContains(plan, "  7:REPEAT_NODE\n" +
                     "  |  repeat: repeat 3 lines [[], [14], [14], [14]]\n");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetDecimal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getCostExplain(sql);
+            System.out.println(plan);
+            assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([13: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  aggregate: sum[([17: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }

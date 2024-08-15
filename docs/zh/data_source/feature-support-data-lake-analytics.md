@@ -86,17 +86,17 @@ Hive Catalog 对 Hive Metastore（HMS）和 AWS Glue 的支持基本重合，仅
 元数据获取的性能很大程度取决于用户的 HMS 或 HDFS NameNode 的性能。请综合考虑所有因素并根据测试结果做出判断。
 
 - **[默认设置 推荐] 性能最佳，可以容忍分钟级别的数据不一致**
-  - **设置**：通过将 Catalog 属性 `enable_hms_events_incremental_sync` 设置为 `true` 启用自动增量更新。默认情况下，10 分钟内更新的数据不可见。在此期间，查询将返回旧数据。
+  - **设置**：无需设置，默认情况下，10 分钟内更新的数据不可见。在此期间，查询将返回旧数据。
   - **优点**：查询性能最佳
   - **缺点**：延迟引起的数据不一致
   - **支持版本**：v2.5.5+（在 v2.5 中默认禁用，在 v3.0+ 中默认启用）
 - **数据导入（产生新文件）立即可见，不依赖手动 Refresh**
-  - **设置**：通过将 Catalog 属性 `enable_hms_events_incremental_sync` 设置为 `true` 启用自动增量更新，并将 `enable_remote_file_cache` 设置为 `false` 禁用底层数据文件的元数据缓存。
+  - **设置**：通过将 Catalog 属性 `enable_remote_file_cache` 设置为 `false` 禁用底层数据文件的元数据缓存。
   - **优点**：文件变更无延迟可见
   - **缺点**：禁用文件元数据缓存后，由于每次查询必须访问文件列表，导致性能较低。
   - **支持版本**：v2.5.5+
 - **分区增减立即可见，不依赖手动 Refresh**
-  - **设置**：通过将 Catalog 属性 `enable_hms_events_incremental_sync` 设置为 `true` 启用自动增量更新，并将 `enable_cache_list_names` 设置为 `false` 禁用 Hive 分区名缓存。
+  - **设置**：通过将 Catalog 属性 `enable_cache_list_names` 设置为 `false` 禁用 Hive 分区名缓存。
   - **优点**：分区变更无延迟可见
   - **缺点**：禁用分区列表缓存后，由于每次查询必须访问分区列表，导致性能较低。
   - **支持版本**：v2.5.5+
@@ -185,7 +185,7 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
 
 ### Iceberg 视图
 
-StarRocks 从 v3.3.0 版本开始支持查询 Iceberg 视图。
+StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持读取通过 StarRocks 创建的视图。
 
 :::note
 

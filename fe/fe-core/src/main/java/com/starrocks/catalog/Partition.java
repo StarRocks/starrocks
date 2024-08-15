@@ -231,6 +231,9 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     public void addSubPartition(PhysicalPartition subPartition) {
         if (subPartition instanceof PhysicalPartitionImpl) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
             idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
             nameToSubPartition.put(subPartition.getName(), (PhysicalPartitionImpl) subPartition);
         }

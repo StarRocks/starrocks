@@ -27,6 +27,7 @@ import java.util.Map;
 
 public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean isTransformed;
 
     public LogicalIcebergMetadataScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -65,6 +66,14 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    public boolean isTransformed() {
+        return isTransformed;
+    }
+
+    public void setTransformed(boolean transformed) {
+        isTransformed = transformed;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalIcebergMetadataScan(this, context);
@@ -82,6 +91,7 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         public LogicalIcebergMetadataScanOperator.Builder withOperator(LogicalIcebergMetadataScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates;
+            builder.isTransformed = scanOperator.isTransformed;
             return this;
         }
     }

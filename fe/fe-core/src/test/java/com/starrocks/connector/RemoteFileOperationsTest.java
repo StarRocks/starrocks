@@ -73,7 +73,7 @@ public class RemoteFileOperationsTest {
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         List<RemoteFileInfo> remoteFileInfos =
-                ops.getRemoteFiles(Lists.newArrayList(partitions.values()), RemoteFileOperations.Options.DEFAULT);
+                ops.getRemoteFiles(null, Lists.newArrayList(partitions.values()), GetRemoteFilesParams.newBuilder().build());
         Assert.assertEquals(2, remoteFileInfos.size());
         Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
@@ -307,7 +307,29 @@ public class RemoteFileOperationsTest {
 
         RemoteFileOperations ops = new RemoteFileOperations(null, null, null,
                 false, true, null);
-        List<RemoteFileInfo> remoteFileInfos = ops.getRemotePartitions(partitionList);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitions = ops.getRemotePartitions(partitionList);
+        Assert.assertEquals(3, partitions.size());
+        for (int i = 0; i < partitionNames.size(); i++) {
+            Assert.assertEquals(partitions.get(i).getFullPath(), "hdfs://path_to_table/" + partitionNames.get((i)));
+        }
     }
+
+    @Test
+    public void testAnonPartitionInfo() {
+        {
+            PartitionInfo x = new PartitionInfo() {
+                @Override
+                public long getModifiedTime() {
+                    return 0;
+                }
+            };
+            Assert.assertThrows(UnsupportedOperationException.class, () -> {
+                x.getFileFormat();
+            });
+            Assert.assertThrows(UnsupportedOperationException.class, () -> {
+                x.getFullPath();
+            });
+        }
+    }
+
 }

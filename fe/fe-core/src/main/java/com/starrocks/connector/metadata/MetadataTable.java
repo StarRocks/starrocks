@@ -89,7 +89,7 @@ public class MetadataTable extends Table {
                 .collect(Collectors.toList()));
         hdfsTable.setHive_column_names(columnNames);
 
-        String columnTypes = Joiner.on(',').join(columns.stream()
+        String columnTypes = Joiner.on('#').join(columns.stream()
                 .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
                 .collect(Collectors.toList()));
         hdfsTable.setHive_column_types(columnTypes);

@@ -1520,6 +1520,7 @@ showTriggersStatement
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
+    | SHOW PROPERTIES (FOR string)? (LIKE string)?
     ;
 
 showVariablesStatement
@@ -1537,7 +1538,7 @@ helpStatement
 // ------------------------------------------- Authz Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? properties?
     ;
 
 dropUserStatement
@@ -1547,6 +1548,7 @@ dropUserStatement
 alterUserStatement
     : ALTER USER (IF EXISTS)? user authOption
     | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
+    | ALTER USER (IF EXISTS)? user SET properties
     ;
 
 showUserStatement

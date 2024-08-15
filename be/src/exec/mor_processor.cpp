@@ -14,6 +14,8 @@
 
 #include "exec/mor_processor.h"
 
+#include "exec/hash_joiner.h"
+
 namespace starrocks {
 
 Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& params) {

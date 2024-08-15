@@ -4,6 +4,12 @@ displayed_sidebar: "Chinese"
 
 # key_column_usage
 
+:::note
+
+该视图不适用于 StarRocks 当前支持的功能。
+
+:::
+
 `key_column_usage` 用于识别受某些唯一、主键或外键约束限制的所有列。
 
 `key_column_usage` 提供以下字段：

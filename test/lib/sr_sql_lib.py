@@ -2320,6 +2320,15 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
 
+    def assert_explain_verbose_contains(self, query, *expects):
+        """
+        assert explain verbose result contains expect string
+        """
+        sql = "explain verbose %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
     def assert_explain_costs_contains(self, query, *expects):
         """
         assert explain costs result contains expect string
@@ -2390,3 +2399,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(res["status"], "show schema change task error")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
+
+    def wait_table_rowcount_not_empty(self, table, time_out=300):
+        times = 0
+        rc = 0
+        sql = 'show partitions from ' + table
+        while times < time_out and times < time_out:
+            result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
+            if len(result["result"]) > 0:
+                rc = int(result["result"][0][-4])
+                log.info(rc)
+                if rc > 0:
+                    break
+            time.sleep(1)
+            times += 1
+        tools.assert_true(True, "wait row count > 0 error, timeout 300s")
+

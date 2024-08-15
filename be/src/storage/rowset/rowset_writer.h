@@ -177,6 +177,8 @@ private:
 
     Status _flush_update_file(const SegmentPB& segment_pb, butil::IOBuf& data);
 
+    Status _flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data);
+
 protected:
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
@@ -187,6 +189,7 @@ protected:
     int _num_segment = 0;
     int _num_delfile = 0;
     int _num_uptfile = 0;
+    int _num_indexfile = 0;
     vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush

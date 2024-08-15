@@ -440,7 +440,7 @@ public class ShowMaterializedViewStatus {
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
             long totalProcessDuration = lastJobTaskRunStatus.stream()
-                    .map(x -> x.calculateRefreshProcessDuration())
+                    .map(TaskRunStatus::calculateRefreshProcessDuration)
                     .collect(Collectors.summingLong(Long::longValue));
             status.setTotalProcessDuration(totalProcessDuration);
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));

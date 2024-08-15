@@ -125,6 +125,10 @@ drop table tab1;
 drop database test_add_drop_field_struct;
 -- result:
 -- !result
+
+
+
+
 -- name: test_add_drop_field_array
 create database test_add_drop_field_array;
 -- result:
@@ -260,6 +264,10 @@ drop table tab1;
 drop database test_add_drop_field_array;
 -- result:
 -- !result
+
+
+
+
 -- name: test_add_drop_field_not_allowed
 create database test_add_drop_field_not_allowed;
 -- result:
@@ -326,6 +334,10 @@ drop table tab1;
 drop database test_drop_last_field;
 -- result:
 -- !result
+
+
+
+
 -- name: test_drop_add_same_name_field
 create database test_drop_add_same_name_field;
 -- result:

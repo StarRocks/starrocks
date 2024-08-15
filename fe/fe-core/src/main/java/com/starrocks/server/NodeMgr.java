@@ -61,6 +61,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
@@ -70,6 +71,8 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetQueryStatisticsRequest;
+import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1078,6 +1081,38 @@ public class NodeMgr {
         this.leaderRpcPort = info.getRpcPort();
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
+    }
+
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        List<QueryStatisticsInfo> statisticsItems = Lists.newArrayList();
+        TGetQueryStatisticsRequest request = new TGetQueryStatisticsRequest();
+
+        List<Frontend> allFrontends = getAllFrontends();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.getQueryStatistics(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetQueryStatistics_infos()) {
+                    response.getQueryStatistics_infos().stream()
+                            .map(QueryStatisticsInfo::fromThrift)
+                            .forEach(statisticsItems::add);
+                }
+            } catch (Exception e) {
+                LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
+
+        return statisticsItems;
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

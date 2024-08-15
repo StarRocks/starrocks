@@ -29,8 +29,9 @@ public class IcebergMetaSplit implements RemoteMetaSplit {
     public static final List<MetadataTableType> ONLY_NEED_SINGLE_SPLIT = List.of(
             MetadataTableType.REFS,
             MetadataTableType.HISTORY,
-            MetadataTableType.METADATA_LOG_ENTRIES);
-
+            MetadataTableType.METADATA_LOG_ENTRIES,
+            MetadataTableType.SNAPSHOTS,
+            MetadataTableType.MANIFESTS);
 
     private final String manifestFile;
     private final long length;

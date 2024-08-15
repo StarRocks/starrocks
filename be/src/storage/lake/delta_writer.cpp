@@ -229,7 +229,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                                                                         _txn_id, nullptr, false /** no compaction**/);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                             _txn_id);
+                                                                             _txn_id, false);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());

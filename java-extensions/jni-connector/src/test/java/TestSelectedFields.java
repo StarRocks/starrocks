@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import com.starrocks.jni.connector.SelectedFields;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TestSelectedFields {
 
@@ -23,12 +23,12 @@ public class TestSelectedFields {
         String s = "e.a,e.b,e.c";
         SelectedFields ssf = new SelectedFields();
         ssf.addMultipleNestedPath(s);
-        Assert.assertEquals(ssf.getFields().size(), 1);
-        Assert.assertEquals(ssf.getFields().get(0), "e");
+        Assertions.assertEquals(ssf.getFields().size(), 1);
+        Assertions.assertEquals(ssf.getFields().get(0), "e");
 
         SelectedFields ssf2 = ssf.findChildren("e");
-        Assert.assertEquals(ssf2.getFields().size(), 3);
-        Assert.assertEquals(String.join(",", ssf2.getFields()), "a,b,c");
+        Assertions.assertEquals(ssf2.getFields().size(), 3);
+        Assertions.assertEquals(String.join(",", ssf2.getFields()), "a,b,c");
     }
 }
 

@@ -24,6 +24,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
@@ -162,6 +163,18 @@ public class TableFunctionTableTest {
             Assert.assertEquals(true, table.getCsvTrimSpace());
         });
 
+        // csv column separator / row delimiter
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            properties.put("format", "csv");
+            properties.put("csv.column_separator", "\\x01");
+            properties.put("csv.row_delimiter", "0x02");
+            TableFunctionTable table = new TableFunctionTable(properties);
+            Assert.assertEquals("csv", Deencapsulation.getField(table, "format"));
+            Assert.assertEquals("\1", table.getCsvColumnSeparator());
+            Assert.assertEquals("\2", table.getCsvRowDelimiter());
+        });
+
         // abnormal case.
         Assertions.assertThrows(DdlException.class, () -> {
             Map<String, String> properties = newProperties();
@@ -197,8 +210,8 @@ public class TableFunctionTableTest {
                     "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
                     () -> new TableFunctionTable(properties));
             properties.put("csv.row_delimiter", "");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
                     () -> new TableFunctionTable(properties));
         }
 
@@ -211,8 +224,8 @@ public class TableFunctionTableTest {
                     () -> new TableFunctionTable(properties));
 
             properties.put("csv.column_separator", "");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
                     () -> new TableFunctionTable(properties));
         }
     }

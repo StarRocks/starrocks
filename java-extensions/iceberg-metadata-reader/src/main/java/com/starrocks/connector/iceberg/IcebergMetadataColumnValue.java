@@ -16,13 +16,16 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.iceberg.data.GenericRecord;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 public class IcebergMetadataColumnValue implements ColumnValue {
     private static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
@@ -86,7 +89,7 @@ public class IcebergMetadataColumnValue implements ColumnValue {
         for (Object item : items) {
             IcebergMetadataColumnValue cv = null;
             if (item != null) {
-                cv = new IcebergMetadataColumnValue(item);
+                cv = new IcebergMetadataColumnValue(item, timezone);
             }
             values.add(cv);
         }
@@ -94,12 +97,24 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
-
+        Map data = (Map) fieldData;
+        data.forEach((key, value) -> {
+            keys.add(new IcebergMetadataColumnValue(key, timezone));
+            values.add(new IcebergMetadataColumnValue(value, timezone));
+        });
     }
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
-
+        GenericRecord record = (GenericRecord) fieldData;
+        for (Integer fieldIndex : structFieldIndex) {
+            IcebergMetadataColumnValue value = null;
+            Object rawValue = record.get(fieldIndex);
+            if (rawValue != null) {
+                value = new IcebergMetadataColumnValue(record.get(fieldIndex), timezone);
+            }
+            values.add(value);
+        }
     }
 
     @Override
@@ -114,6 +129,9 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public LocalDate getDate() {
+        if (fieldData instanceof Integer) {
+            return Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).plusDays((int) fieldData).toLocalDate();
+        }
         return null;
     }
 

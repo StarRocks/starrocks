@@ -7,7 +7,7 @@ admin set frontend config ("max_automatic_partition_number"="0");
 -- !result
 insert into ss values('2002-01-01', 1, 2);
 -- result:
-[REGEX].*Automatically created partitions exceeded the maximum limit: 0.*
+[REGEX].*created partitions exceeded the maximum limit: 0.*
 -- !result
 admin set frontend config ("max_automatic_partition_number"="4096");
 -- result:
