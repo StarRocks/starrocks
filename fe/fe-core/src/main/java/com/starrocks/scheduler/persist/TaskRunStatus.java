@@ -470,7 +470,7 @@ public class TaskRunStatus implements Writable {
     /**
      * Only used for deserialization of ResultBatch
      */
-    static class TaskRunStatusJSONRecord {
+    public static class TaskRunStatusJSONRecord {
         /**
          * Only one item in the array, like:
          * { data: [ {TaskRunStatus} ] }
