@@ -776,8 +776,8 @@ void Tablet::delete_expired_stale_rowset() {
         }
         delete_rowset_time = timer.elapsed_time() / MICROS_PER_SEC;
 
-#ifndef BE_TEST
         _delete_stale_schema();
+#ifndef BE_TEST
         save_meta();
 #endif
     }

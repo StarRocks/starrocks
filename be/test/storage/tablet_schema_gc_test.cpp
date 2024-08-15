@@ -20,6 +20,7 @@
 #include <thread>
 
 #include "storage/chunk_helper.h"
+#include "storage/horizontal_compaction_task.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -67,7 +68,8 @@ class TabletSchemaGCTest : public testing::Test {
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void create_rowset(int version, std::vector<int32_t> rows_per_segment, RowsetSharedPtr& rowset) {
+    void create_rowset(int min_version, int spec_version, std::vector<int32_t> rows_per_segment,
+                       RowsetSharedPtr& rowset) {
         RowsetId rowset_id;
         rowset_id.init(2, ++_next_rowset_uid, 1, 1);
         RowsetWriterContext writer_context;
@@ -75,9 +77,8 @@ class TabletSchemaGCTest : public testing::Test {
         writer_context.tablet_id = _tablet->tablet_id();
         writer_context.tablet_schema_hash = _tablet->schema_hash();
         writer_context.partition_id = 0;
-        writer_context.version = Version(0, version);
+        writer_context.version = Version(min_version, spec_version);
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
-        ;
         writer_context.rowset_state = VISIBLE;
         writer_context.tablet_schema = _tablet->tablet_schema();
         writer_context.writer_type = kHorizontal;
@@ -135,7 +136,7 @@ TEST_F(TabletSchemaGCTest, test_stale_schema_gc) {
     _tablet->update_max_version_schema(tablet_schema1);
 
     RowsetSharedPtr rowset1;
-    create_rowset(2, {1, 2, 3}, rowset1);
+    create_rowset(2, 2, {1, 2, 3}, rowset1);
     ASSERT_TRUE(_tablet->insert_committed_rowset_schema(rowset1->rowset_id(), rowset1->tablet_schema()->id()));
     rowset1->rowset_meta()->set_tablet_schema_id();
     ASSERT_OK(_tablet->add_rowset(rowset1, false));
@@ -150,7 +151,7 @@ TEST_F(TabletSchemaGCTest, test_stale_schema_gc) {
     auto schema_id2 = _tablet->tablet_schema()->id();
 
     RowsetSharedPtr rowset2;
-    create_rowset(3, {1, 2, 3}, rowset2);
+    create_rowset(3, 3, {1, 2, 3}, rowset2);
     ASSERT_TRUE(_tablet->insert_committed_rowset_schema(rowset1->rowset_id(), rowset1->tablet_schema()->id()));
     rowset2->rowset_meta()->set_tablet_schema_id();
     ASSERT_OK(_tablet->add_inc_rowset(rowset2, 3));
@@ -205,6 +206,25 @@ TEST_F(TabletSchemaGCTest, test_stale_schema_gc) {
         ASSERT_TRUE(new_meta._history_schema.count(schema_id0) > 0);
         ASSERT_TRUE(new_meta._schema->id() == schema_id2);
     }
+
+    RowsetSharedPtr rowset3;
+    create_rowset(0, 2, {1, 2, 3}, rowset3);
+    std::vector<RowsetSharedPtr> input_rowsets;
+    _tablet->capture_consistent_rowsets(Version(0, 2), &input_rowsets);
+    ASSERT_TRUE(input_rowsets.size() == 2);
+    _tablet->modify_rowsets({rowset3}, input_rowsets, nullptr);
+
+    input_rowsets.clear();
+    _tablet->capture_consistent_rowsets(Version(0, 2), &input_rowsets);
+    ASSERT_TRUE(input_rowsets.size() == 1);
+    int64_t ori_sweep_time = config::tablet_rowset_stale_sweep_time_sec;
+    config::tablet_rowset_stale_sweep_time_sec = 0;
+    _tablet->delete_expired_stale_rowset();
+    {
+        const std::map<int64_t, TabletSchemaCSPtr> history_schema = _tablet->tablet_meta()->history_schema();
+        ASSERT_TRUE(history_schema.size() == 0);
+    }
+    config::tablet_rowset_stale_sweep_time_sec = ori_sweep_time;
 }
 
 TEST_F(TabletSchemaGCTest, test_pk_stale_schema_gc) {
@@ -217,7 +237,7 @@ TEST_F(TabletSchemaGCTest, test_pk_stale_schema_gc) {
     _tablet->update_max_version_schema(tablet_schema1);
 
     RowsetSharedPtr rowset1;
-    create_rowset(4, {1, 2, 3}, rowset1);
+    create_rowset(0, 4, {1, 2, 3}, rowset1);
     rowset1->rowset_meta()->set_tablet_schema_id();
     ASSERT_OK(_tablet->rowset_commit(4, rowset1));
     auto schema_id1 = _tablet->tablet_schema()->id();
@@ -231,7 +251,7 @@ TEST_F(TabletSchemaGCTest, test_pk_stale_schema_gc) {
     auto schema_id2 = _tablet->tablet_schema()->id();
 
     RowsetSharedPtr rowset2;
-    create_rowset(2, {1, 2, 3}, rowset2);
+    create_rowset(0, 2, {1, 2, 3}, rowset2);
     rowset2->rowset_meta()->set_tablet_schema_id();
     ASSERT_OK(_tablet->rowset_commit(2, rowset2));
     _tablet->tablet_meta()->delete_stale_schema();
@@ -283,7 +303,7 @@ TEST_F(TabletSchemaGCTest, test_pk_stale_schema_gc) {
     }
 
     RowsetSharedPtr rowset3;
-    create_rowset(3, {1, 2, 3}, rowset3);
+    create_rowset(0, 3, {1, 2, 3}, rowset3);
     rowset3->rowset_meta()->set_tablet_schema_id();
     ASSERT_OK(_tablet->rowset_commit(3, rowset3));
     _tablet->tablet_meta()->delete_stale_schema();
