@@ -48,7 +48,7 @@ import java.util.Map;
  * Responsible for determining whether the corresponding statement
  * needs to encrypt sensitive information in the audit log
  */
-public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
+public class AuditEncryptionChecker extends AstVisitor<Boolean, Void> {
     private static final AuditEncryptionChecker INSTANCE = new AuditEncryptionChecker();
 
     private AuditEncryptionChecker() {
