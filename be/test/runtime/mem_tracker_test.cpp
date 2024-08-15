@@ -132,8 +132,8 @@ TEST_F(MemTrackerTest, release_without_root) {
     ASSERT_EQ(_process_mem_tracker->consumption(), 10);
 
     _query_mem_tracker->release_without_root(-8);
-    ASSERT_EQ(_query_mem_tracker->consumption(), -3);
-    ASSERT_EQ(_query_pool_mem_tracker->consumption(), -3);
+    ASSERT_EQ(_query_mem_tracker->consumption(), 13);
+    ASSERT_EQ(_query_pool_mem_tracker->consumption(), 13);
     ASSERT_EQ(_process_mem_tracker->consumption(), 10);
 }
 
