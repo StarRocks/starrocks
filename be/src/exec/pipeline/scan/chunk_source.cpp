@@ -99,4 +99,13 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     return _status;
 }
 
+const workgroup::WorkGroupScanSchedEntity* ChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    if (_scan_op->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
+    }
+}
+
 } // namespace starrocks::pipeline
