@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -59,11 +60,14 @@ public class OptimizerContext {
     private Set<OlapTable>  queryTables;
 
     private long updateTableId = -1;
-    private boolean enableLeftRightJoinEquivalenceDerive = true;
+
     private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
+    // The context for join predicate pushdown rule
+    private JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
+            new JoinPredicatePushdown.JoinPredicatePushDownContext();
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
@@ -183,12 +187,8 @@ public class OptimizerContext {
         return queryMaterializationContext.getValidCandidateMVs();
     }
 
-    public void setEnableLeftRightJoinEquivalenceDerive(boolean enableLeftRightJoinEquivalenceDerive) {
-        this.enableLeftRightJoinEquivalenceDerive = enableLeftRightJoinEquivalenceDerive;
-    }
-
-    public boolean isEnableLeftRightJoinEquivalenceDerive() {
-        return enableLeftRightJoinEquivalenceDerive;
+    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
+        return joinPredicatePushDownContext;
     }
 
     public void setUpdateTableId(long updateTableId) {
