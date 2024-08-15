@@ -2053,7 +2053,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         try:
             if params:
-                cursor.execute(query, ['2'])
+                cursor.execute(query, params)
             else:
                 cursor.execute(query)
             cursor.fetchall()
