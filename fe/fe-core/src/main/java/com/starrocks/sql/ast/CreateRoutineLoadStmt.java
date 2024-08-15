@@ -998,9 +998,4 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
-    }
 }
