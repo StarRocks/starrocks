@@ -10,13 +10,11 @@ PROPERTIES (
  "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 CREATE MATERIALIZED VIEW `mv1` AS
 SELECT `v1`, SUM(`v2`) FROM `t0`
 GROUP BY `v1`;
 -- result:
-[]
 -- !result
 LOOP {
   PROPERTY: {"timeout": 60, "interval": 10, "desc": "wait alter table finish"}
@@ -28,7 +26,6 @@ CREATE MATERIALIZED VIEW `mv2` AS
 SELECT `v1`, MAX(`v3`) FROM `t0`
 GROUP BY `v1`;
 -- result:
-[]
 -- !result
 LOOP {
   PROPERTY: {"timeout": 60, "interval": 10, "desc": "wait alter table finish2"}
@@ -50,7 +47,6 @@ INSERT INTO `t0` (v1, v2, v3) values
     (2, 4, 11),
     (2, 4, 12);
 -- result:
-[]
 -- !result
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
 -- result:

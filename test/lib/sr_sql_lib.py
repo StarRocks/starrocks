@@ -160,8 +160,9 @@ class StarrocksSQLApiLib(object):
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
 
         # thread
-        self.thread_res = []
+        self.thread_res = {}
         self.thread_var = {}
+        self.thread_res_log = {}
 
         # trino client config
         self.trino_host = ""
@@ -607,7 +608,7 @@ class StarrocksSQLApiLib(object):
                 if ori:
                     return {"status": True, "result": result, "msg": cursor._result.message}
 
-                if isinstance(result, tuple):
+                if isinstance(result, tuple) or isinstance(result, list):
                     if len(result) > 0:
                         if isinstance(result[0], tuple):
                             res_log.extend(["\t".join([str(y) for y in x]) for x in result])
@@ -747,6 +748,7 @@ class StarrocksSQLApiLib(object):
         record_container.append("%s" % shell_res[0])
 
         if shell_cmd.endswith("_stream_load"):
+            self_print(shell_res[1])
             record_container.append(
                 json.dumps(
                     {"Status": json.loads(shell_res[1])["Status"], "Message": json.loads(shell_res[1])["Message"]},
@@ -815,17 +817,7 @@ class StarrocksSQLApiLib(object):
             cmd = cmd[len(var):]
             var = var[:-1]
 
-        # replace variable dynamically, only replace right of '='
         match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
-        for each_word in copy.copy(match_words):
-            if each_word in self.__dict__:
-                if unfold:
-                    cmd = cmd.replace("${%s}" % each_word, str(eval("self.%s" % each_word)))
-                else:
-                    cmd = cmd.replace("${%s}" % each_word, "self.%s" % each_word)
-
-                match_words.remove(each_word)
-
         # replace thread variable dynamically
         if thread_key:
             tools.assert_in(thread_key, self.thread_var, f"Thread{thread_key} var dict is not found!")
@@ -838,6 +830,16 @@ class StarrocksSQLApiLib(object):
                         cmd = cmd.replace("${%s}" % each_word, f"self.thread_var[{thread_key}][{each_word}]")
 
                     match_words.remove(each_word)
+
+        # replace variable dynamically, only replace right of '='
+        for each_word in copy.copy(match_words):
+            if each_word in self.__dict__:
+                if unfold:
+                    cmd = cmd.replace("${%s}" % each_word, str(eval("self.%s" % each_word)))
+                else:
+                    cmd = cmd.replace("${%s}" % each_word, "self.%s" % each_word)
+
+                match_words.remove(each_word)
 
         if len(match_words) > 0:
             error_msg = f"[{self.case_info.name}] Some vars not been resolved yet: %s" % ",".join(match_words)
@@ -883,24 +885,45 @@ class StarrocksSQLApiLib(object):
 
         # print(trace_stack, file=sys.stderr, end="")
         self.thread_res[args.thread.name] = trace_stack
-        tools.ok_(False, "Thread exit with exception!")
+        # tools.ok_(False, "Thread exit with exception!")
 
-    def execute_thread(self, exec_id, cmd_list, res_list, record_mode):
+    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode):
 
         this_res = []
         self.thread_var[exec_id] = {}
+        _t_info = exec_id[:str(exec_id).rindex("-")]
+        _t_exec_id = exec_id.split("-")[-1]
 
         for _cmd_id, _each_cmd in enumerate(cmd_list):
             uncheck = False
             _cmd_id_str = f'Thread-{exec_id}.{_cmd_id}'
+            this_res.append(ori_cmd_list[_cmd_id])
+            prefix_s_count = len(ori_cmd_list[_cmd_id]) - len(ori_cmd_list[_cmd_id].lstrip())
 
             # uncheck flag, owns the highest priority
             if _each_cmd.startswith(UNCHECK_FLAG):
                 uncheck = True
                 _each_cmd = _each_cmd[len(UNCHECK_FLAG):]
 
+            old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(_each_cmd, _cmd_id_str, record_mode,
                                                                                    this_res, var_key=exec_id)
+
+            if record_mode:
+                for new_res_lino in range(old_this_res_len, len(this_res)):
+                    # add prefix ' '
+                    _old_res = this_res[new_res_lino]
+                    if "\n" in _old_res and _old_res.startswith("{") and _old_res.endswith("}"):
+                        try:
+                            json.loads(_old_res)
+                            _tmp_old_json = _old_res.split("\n")
+                            for json_line_id in range(len(_tmp_old_json)):
+                                _tmp_old_json[json_line_id] = " " * prefix_s_count + _tmp_old_json[json_line_id]
+                            this_res[new_res_lino] = "\n".join(_tmp_old_json)
+                            continue
+                        except Exception:
+                            pass
+                    this_res[new_res_lino] = " " * prefix_s_count + _old_res
 
             if not record_mode and not uncheck:
                 # check mode only work in validating mode
@@ -908,16 +931,16 @@ class StarrocksSQLApiLib(object):
                 expect_res = res_list[_cmd_id]
                 expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
 
-                log.info(f"""[{_cmd_id_str}.result]: 
-    - [exp]: {expect_res_for_log}
-    - [act]: {actual_res}""")
+                log.info(f"""[{_cmd_id_str}.result]: \n\t- [exp]: {expect_res_for_log}\n\t- [act]: {actual_res}""")
 
                 # -------------------------------------------
                 #               [CHECKER]
                 # -------------------------------------------
                 self.check(_cmd_id_str, _each_cmd, expect_res, actual_res, order, ori_sql=cmd_list[_cmd_id].lstrip())
 
-        return this_res
+        if record_mode and len(this_res) > 0:
+            self.thread_res_log.setdefault(_t_info, [])
+            self.thread_res_log[_t_info].append(this_res)
 
     def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None):
         """
@@ -1041,7 +1064,7 @@ class StarrocksSQLApiLib(object):
                 _tmp_log = f"thread({var_key}) attr: {var} → {actual_res}"
                 log.info(f"Update {_tmp_log}" if var in self.thread_var[var_key] else f"New {_tmp_log}")
 
-                self.thread_var[var_key] = actual_res
+                self.thread_var[var_key][var] = actual_res
 
         return actual_res, actual_res_log, var, order
 
@@ -1164,12 +1187,12 @@ class StarrocksSQLApiLib(object):
                 except Exception as e:
                     log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
-                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n[act]: %s" % (exp_std, act_std))
 
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
-                    tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                    tools.assert_true(False, "shell result str not match,\n[exp]: %s\n[act]: %s" % (exp_std, act_std))
 
         elif tmp_ori_sql.startswith(FUNCTION_FLAG):
             # only support str result

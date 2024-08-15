@@ -128,7 +128,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        log.info("[TearDown end]: %s" % self.case_info.name)
+        self_print(f"{'*' * 30} {self.case_info.name} {'*' * 30}", ColorEnum.GREEN, bold=True)
 
     def _init_data(self, sql_list: List) -> List:
         self.db = list()
@@ -391,46 +391,73 @@ Start to run: %s
             elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.CONCURRENCY_FLAG:
                 # concurrency statement
                 self_print(f"[CONCURRENCY] start...", color=ColorEnum.CYAN, logout=True)
+                if record_mode:
+                    self.res_log.append("\n" + CONCURRENCY_FLAG + " {")
 
                 t_info_list: List[dict] = sql["thread"]
                 thread_list = []
-                self.thread_res = {}
 
+                # thread group
                 for _t_info_id, _thread in enumerate(t_info_list):
 
                     # _thread prop: name, count, info, ori, cmd, res
                     _t_count = _thread["count"]
                     _t_name = _thread["name"]
+                    _t_ori_cmd = _thread["ori"]
                     _t_cmd = _thread["cmd"]
                     _t_res = _thread["res"]
 
+                    # thread exec, set count in (*)
                     for _t_exec_id in range(_t_count):
                         this_t_id = f'{_t_name}-{_t_info_id}-{_t_exec_id}'
                         t = threading.Thread(name=f"Thread-{this_t_id}",
                                              target=self.execute_thread,
-                                             args=(this_t_id, _t_cmd, _t_res, record_mode))
+                                             args=(this_t_id, _t_cmd, _t_res, _t_ori_cmd, record_mode))
                         thread_list.append(t)
 
-                    threading.excepthook = self.custom_except_hook
+                threading.excepthook = self.custom_except_hook
 
-                    for thread in thread_list:
-                        thread.start()
+                for thread in thread_list:
+                    thread.start()
 
-                    for thread in thread_list:
-                        thread.join()
+                for thread in thread_list:
+                    thread.join()
 
-                if len(self.thread_res) == 0:
-                    self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
-                else:
+                if len(self.thread_res) != 0:
                     err_t_name = "\n\t- ".join(self.thread_res.keys())
                     err_msg = f"[CONCURRENCY] FAIL:\n\t- {err_t_name}"
                     self_print(err_msg, color=ColorEnum.RED, bold=True, logout=True)
 
                     # console detail
-                    for t_name, t_err in self.thread_res.items():
-                        self_print({t_err}, bold=True, logout=True)
+                    for _, t_err in self.thread_res.items():
+                        self_print(t_err, bold=True, logout=True)
 
                     tools.ok_(False, err_msg)
 
+                # record mode
+                if record_mode:
+                    for _t_info_id, _thread in enumerate(t_info_list):
+                        _t_name = _thread["name"]
+                        _t_count = _thread["count"]
+                        _t_uid = f'{_t_name}-{_t_info_id}'
 
+                        _t_info_line = _thread["info"]
+                        self.res_log.append(_t_info_line)
+
+                        # check thread result info
+                        tools.assert_in(_t_uid, self.thread_res_log, f"Thread log of {_t_uid} is not found!")
+                        tools.eq_(len(self.thread_res_log[_t_uid]), _t_count,
+                                  f"Thread log size: {len(self.thread_res_log[_t_uid])} error!")
+
+                        s_thread_log = self.thread_res_log[_t_uid][0]
+                        for exec_res_log in self.thread_res_log[_t_uid]:
+                            if exec_res_log != s_thread_log:
+                                self_print("Thread result of exec not equal: \n - %s\n - %s" % (exec_res_log, s_thread_log), color=ColorEnum.RED, logout=True, bold=True)
+
+                        self.res_log.extend(s_thread_log)
+                        self.res_log.append("")
+
+                self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
+                if record_mode:
+                    self.res_log.append("} " + END_CONCURRENCY_FLAG + "\n")
 
