@@ -14,8 +14,10 @@
 
 package com.starrocks.scheduler.history;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
@@ -26,10 +28,16 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.text.MessageFormat;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,33 +68,28 @@ public class TaskRunHistoryTest {
 
     @Test
     public void testCRUD(@Mocked RepoExecutor repo) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setQueryId("aaa");
+        status.setTaskName("t1");
+        status.setState(Constants.TaskRunState.SUCCESS);
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
                 return true;
             }
         };
+        String jsonString = StringEscapeUtils.escapeJava(GsonUtils.GSON.toJson(status));
         new Expectations() {
             {
-                repo.executeDML("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
+                repo.executeDML(String.format("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
                         "task_state, create_time, finish_time, expire_time, history_content_json) " +
                         "VALUES(0, 'aaa', 't1', 'SUCCESS', '1970-01-01 08:00:00', " +
                         "'1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
-                        "'{\"queryId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
-                        "\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\"," +
-                        "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\"," +
-                        "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
-                        "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
-                        "\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true," +
-                        "\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}')");
+                        "'%s')", jsonString));
             }
         };
 
         TaskRunHistoryTable history = new TaskRunHistoryTable();
-        TaskRunStatus status = new TaskRunStatus();
-        status.setQueryId("aaa");
-        status.setTaskName("t1");
-        status.setState(Constants.TaskRunState.SUCCESS);
         history.addHistory(status);
 
         // lookup by params
@@ -143,7 +146,6 @@ public class TaskRunHistoryTest {
             }
         };
         history.lookupByTaskNames(dbName, taskNames);
-
     }
 
     @Test
@@ -225,14 +227,18 @@ public class TaskRunHistoryTest {
                         "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, task_state, " +
                                 "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'q2', 't2'," +
                                 " 'SUCCESS', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', " +
-                                "'{\"queryId\":\"q2\",\"taskId\":0,\"taskName\":\"t2\",\"createTime\":0," +
-                                "\"expireTime\":1720165080904,\"priority\":0,\"mergeRedundant\":false," +
-                                "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0," +
-                                "\"state\":\"SUCCESS\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false," +
-                                "\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
-                                "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
-                                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false," +
-                                "\"isSync\":false,\"isReplay\":false}}}')");
+                                "'{\\\"queryId\\\":\\\"q2\\\",\\\"taskId\\\":0,\\\"taskName\\\":\\\"t2\\\"," +
+                                "\\\"createTime\\\":0," +
+                                "\\\"expireTime\\\":1720165080904,\\\"priority\\\":0,\\\"mergeRedundant\\\":false," +
+                                "\\\"source\\\":\\\"CTAS\\\",\\\"errorCode\\\":0,\\\"finishTime\\\":0,\\\"" +
+                                "processStartTime\\\":0," +
+                                "\\\"state\\\":\\\"SUCCESS\\\",\\\"progress\\\":0,\\\"mvExtraMessage\\\":{\\\"" +
+                                "forceRefresh\\\":false," +
+                                "\\\"mvPartitionsToRefresh\\\":[],\\\"refBasePartitionsToRefreshMap\\\":{}," +
+                                "\\\"basePartitionsToRefreshMap\\\":{},\\\"processStartTime\\\":0," +
+                                "\\\"executeOption\\\":{\\\"priority\\\":0,\\\"isMergeRedundant\\\":true,\\\"" +
+                                "isManual\\\":false," +
+                                "\\\"isSync\\\":false,\\\"isReplay\\\":false}}}')");
 
             }
         };
@@ -282,5 +288,61 @@ public class TaskRunHistoryTest {
         Assert.assertEquals(0, history.getInMemoryHistory().size());
 
         Config.enable_task_history_archive = true;
+    }
+
+    @Test
+    public void testLookBadHistory() {
+        try {
+            String jsonString = "{\"data\":[{\"createTime\": 1723679736257, \"dbName\": " +
+                    "\"default_cluster:test_rename_columnb190692a_5a98_11ef_aa5e_00163e0e489a\", \"errorCode\": 0, " +
+                    "\"expireTime\": 1723765136257, \"finishTime\": 1723679737239, \"mergeRedundant\": true, " +
+                    "\"mvExtraMessage\": {\"basePartitionsToRefreshMap\": {\"t1\": [\"p3\"]}, \"executeOption\": " +
+                    "{\"isManual\": false, \"isMergeRedundant\": true, \"isReplay\": false, \"isSync\": false, " +
+                    "\"priority\": 100, \"taskRunProperties\": {\"PARTITION_END\": \"4\", " +
+                    "\"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": \"b1f755a8-5a98-11ef-9acf-00163e08a129\", " +
+                    "\"compression\": \"LZ4\", \"datacache\": {\"enable\": \"true\"}, \"enable_async_write_back\": " +
+                    "\"false\", \"mvId\": \"490884\", \"replicated_storage\": \"true\", \"replication_num\": \"1\"}}, " +
+                    "\"forceRefresh\": false, \"mvPartitionsToRefresh\": [\"p3\"], \"partitionEnd\": \"4\", " +
+                    "\"partitionStart\": \"3\", \"processStartTime\": 1723679736946, \"refBasePartitionsToRefreshMap\": " +
+                    "{\"t1\": [\"p3\"]}}, \"postRun\": \"ANALYZE SAMPLE TABLE mv1 WITH ASYNC MODE\", \"priority\": 100, " +
+                    "\"processStartTime\": 1723679736946, \"progress\": 100, \"properties\": " +
+                    "{\"PARTITION_END\": \"4\", \"PARTITION_START\": \"3\", \"START_TASK_RUN_ID\": " +
+                    "\"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"compression\": \"LZ4\", \"datacache\": " +
+                    "{\"enable\": \"true\"}, \"enable_async_write_back\": \"false\", \"mvId\": \"490884\", " +
+                    "\"replicated_storage\": \"true\", \"replication_num\": \"1\"}, \"queryId\": " +
+                    "\"b35dc350-5a98-11ef-9acf-00163e08a129\", \"source\": \"MV\", \"startTaskRunId\": " +
+                    "\"b1f755a8-5a98-11ef-9acf-00163e08a129\", \"state\": \"SUCCESS\", \"taskId\": 490886, " +
+                    "\"taskName\": \"mv-490884\", \"user\": \"root\", \"userIdentity\": {\"host\": \"%\", " +
+                    "\"isDomain\": false, \"user\": \"root\"}}]}";
+            List<TaskRunStatus> ans = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(jsonString).data;
+            Preconditions.checkArgument(ans == null);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Expected a string but was BEGIN_OBJECT at line 1 column 568"));
+        }
+    }
+
+    @Test
+    public void testTaskRunStatusSerDer() {
+        TaskRunStatus status = new TaskRunStatus();
+        Map<String, String> properties = new HashMap<>();
+        properties.put("datacache", "{\"enable\": \"true\"}");
+        status.setProperties(properties);
+        String json = GsonUtils.GSON.toJson(status);
+        System.out.println(json);
+        TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
+        System.out.println(dst);
+        Assert.assertEquals(json, GsonUtils.GSON.toJson(status));
+    }
+    @Test
+    public void testCase1() {
+        TaskRunStatus status = new TaskRunStatus();
+        Map<String, String> properties = new HashMap<>();
+        properties.put("datacache", "{\"enable\": \"true\"}");
+        status.setProperties(properties);
+        String json = GsonUtils.GSON.toJson(status);
+        System.out.println(json);
+        String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
+        System.out.println(res);
+        Assert.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
     }
 }
