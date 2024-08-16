@@ -17,6 +17,7 @@
 #include <filesystem>
 
 #include "connector/hive_chunk_sink.h"
+#include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -95,42 +96,78 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
-    _use_datacache = config::datacache_enable && BlockCache::instance()->available();
-    if (state->query_options().__isset.enable_scan_datacache) {
-        _use_datacache &= state->query_options().enable_scan_datacache;
+    // Check that the system meets the requirements for enabling DataCache
+    if (config::datacache_enable && BlockCache::instance()->available()) {
+        // setup priority & ttl seconds
+        int8_t datacache_priority = 0;
+        int64_t datacache_ttl_seconds = 0;
+        if (state->query_options().__isset.datacache_priority) {
+            datacache_priority = state->query_options().datacache_priority;
+        }
+        if (state->query_options().__isset.datacache_ttl_seconds) {
+            datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
+        }
+
+        if (state->query_options().__isset.enable_cache_select && state->query_options().enable_cache_select) {
+            // set datacache options for cache select
+            _datacache_options = DataCacheOptions{.enable_datacache = true,
+                                                  .enable_cache_select = true,
+                                                  .enable_populate_datacache = true,
+                                                  .enable_datacache_async_populate_mode = false,
+                                                  .enable_datacache_io_adaptor = false,
+                                                  .modification_time = _scan_range.modification_time,
+                                                  .datacache_evict_probability = 100,
+                                                  .datacache_priority = datacache_priority,
+                                                  .datacache_ttl_seconds = datacache_ttl_seconds};
+        } else if (state->query_options().__isset.enable_scan_datacache &&
+                   state->query_options().enable_scan_datacache) {
+            // set datacache options for normal query
+            bool enable_populate_datacache = false;
+            if (hdfs_scan_node.__isset.datacache_options &&
+                hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
+                enable_populate_datacache = hdfs_scan_node.datacache_options.enable_populate_datacache;
+            } else if (state->query_options().__isset.enable_populate_datacache) {
+                // Compatible with old parameter
+                enable_populate_datacache = state->query_options().enable_populate_datacache;
+            }
+
+            const bool enable_datacache_aync_populate_mode =
+                    state->query_options().__isset.enable_datacache_async_populate_mode &&
+                    state->query_options().enable_datacache_async_populate_mode;
+            const bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
+                                                     state->query_options().enable_datacache_io_adaptor;
+
+            int32_t datacache_evict_probability = 100;
+            if (state->query_options().__isset.datacache_evict_probability) {
+                datacache_evict_probability = state->query_options().datacache_evict_probability;
+            }
+
+            _datacache_options =
+                    DataCacheOptions{.enable_datacache = true,
+                                     .enable_cache_select = false,
+                                     .enable_populate_datacache = enable_populate_datacache,
+                                     .enable_datacache_async_populate_mode = enable_datacache_aync_populate_mode,
+                                     .enable_datacache_io_adaptor = enable_datacache_io_adaptor,
+                                     .modification_time = _scan_range.modification_time,
+                                     .datacache_evict_probability = datacache_evict_probability,
+                                     .datacache_priority = datacache_priority,
+                                     .datacache_ttl_seconds = datacache_ttl_seconds};
+        }
     }
-    if (hdfs_scan_node.__isset.datacache_options &&
-        hdfs_scan_node.datacache_options.__isset.enable_populate_datacache) {
-        _enable_populate_datacache = hdfs_scan_node.datacache_options.enable_populate_datacache;
-    } else if (state->query_options().__isset.enable_populate_datacache) {
-        _enable_populate_datacache = state->query_options().enable_populate_datacache;
-    }
-    if (state->query_options().__isset.enable_datacache_async_populate_mode) {
-        _enable_datacache_aync_populate_mode = state->query_options().enable_datacache_async_populate_mode;
-    }
-    if (state->query_options().__isset.enable_datacache_io_adaptor) {
-        _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
-    }
-    if (state->query_options().__isset.datacache_evict_probability) {
-        _datacache_evict_probability = state->query_options().datacache_evict_probability;
-    }
-    if (state->query_options().__isset.datacache_priority) {
-        _datacache_priority = state->query_options().datacache_priority;
-    }
-    if (state->query_options().__isset.datacache_ttl_seconds) {
-        _datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
-    }
-    if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
-        _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
-    }
+
     // Don't use datacache when priority = -1
+    // todo: should remove it later
     if (_scan_range.__isset.datacache_options && _scan_range.datacache_options.__isset.priority &&
         _scan_range.datacache_options.priority == -1) {
-        _use_datacache = false;
+        _datacache_options.enable_datacache = false;
     }
     _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
     if (state->query_options().__isset.enable_file_metacache) {
         _use_file_metacache &= state->query_options().enable_file_metacache;
+    }
+
+    if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
+        _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
@@ -423,11 +460,13 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
     }
 
-    if (_use_datacache) {
+    if (_datacache_options.enable_datacache) {
         static const char* prefix = "DataCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        _profile.runtime_profile->add_info_string("DataCachePriority", std::to_string(_datacache_priority));
-        _profile.runtime_profile->add_info_string("DataCacheTTLSeconds", std::to_string(_datacache_ttl_seconds));
+        _profile.runtime_profile->add_info_string("DataCachePriority",
+                                                  std::to_string(_datacache_options.datacache_priority));
+        _profile.runtime_profile->add_info_string("DataCacheTTLSeconds",
+                                                  std::to_string(_datacache_options.datacache_ttl_seconds));
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
@@ -531,7 +570,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
-    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -576,16 +614,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
         scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
-    scanner_params.use_datacache = _use_datacache;
-    scanner_params.enable_populate_datacache = _enable_populate_datacache;
-    scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
-    scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
-    scanner_params.datacache_evict_probability = _datacache_evict_probability;
-    scanner_params.datacache_priority = _datacache_priority;
-    scanner_params.datacache_ttl_seconds = _datacache_ttl_seconds;
+
+    // setup options for datacache
+    scanner_params.datacache_options = _datacache_options;
+    scanner_params.use_file_metacache = _use_file_metacache;
+
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
-    scanner_params.use_file_metacache = _use_file_metacache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -615,8 +650,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
                                                             .scan_node = &hdfs_scan_node};
-
-    if (_use_partition_column_value_only) {
+    if (_datacache_options.enable_cache_select) {
+        scanner = new CacheSelectScanner();
+    } else if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
@@ -642,7 +678,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
-        std::string msg = fmt::format("unsupported hdfs file format: {}", format);
+        std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }

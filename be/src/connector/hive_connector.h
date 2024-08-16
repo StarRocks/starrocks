@@ -109,15 +109,9 @@ private:
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
-    bool _use_datacache = false;
-    bool _enable_populate_datacache = false;
-    bool _enable_datacache_aync_populate_mode = false;
-    bool _enable_datacache_io_adaptor = false;
-    int32_t _datacache_evict_probability = 0;
-    int8_t _datacache_priority = 0;
-    int64_t _datacache_ttl_seconds = 0;
-    bool _enable_dynamic_prune_scan_range = true;
+    DataCacheOptions _datacache_options{};
     bool _use_file_metacache = false;
+    bool _enable_dynamic_prune_scan_range = true;
     bool _enable_split_tasks = false;
 
     // ============ conjuncts =================
