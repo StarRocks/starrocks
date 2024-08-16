@@ -761,7 +761,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
 
     // Fill in month and day
     bool isEmptyDay = !content->_day && !content->_hour && !content->_minute &&
-            !content->_second && !content->_microsecond && !content->_neg;
+                      !content->_second && !content->_microsecond && !content->_neg;
     if (isEmptyDay) {
         content->_day = 1;
     }
