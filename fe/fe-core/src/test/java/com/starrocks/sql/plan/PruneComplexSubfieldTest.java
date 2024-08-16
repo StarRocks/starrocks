@@ -1156,4 +1156,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "ColumnAccessPath: [/ar1/INDEX/a/b/c(bigint(20)), /mp1/INDEX/a/b/c(bigint(20))]");
     }
 
+    @Test
+    public void testCantPruneComplexJsonOnJoin() throws Exception {
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+        String sql = "select x.v4 -> 'platform_id', x.v3 -> 'p2' " +
+                "from (select JSON_OBJECT('p1', t0.v1, 'p2', js0.v1, 'p3', 3) as v3, js0.j1 as v4 " +
+                "      from t0 left join js0 on js0.v1 = t0.v2 where cast(js0.j1 -> 'v4' as int) + t0.v2 > 1) x";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [3: v1, BIGINT, true] = [2: v2, BIGINT, true]\n" +
+                "  |  other join predicates: " +
+                "cast(cast([13: json_query, JSON, true] as INT) as BIGINT) + [2: v2, BIGINT, true] > 1");
+    }
+
 }
