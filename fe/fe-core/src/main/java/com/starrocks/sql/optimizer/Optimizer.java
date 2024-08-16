@@ -179,19 +179,11 @@ public class Optimizer {
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
-<<<<<<< HEAD
-
-=======
->>>>>>> fff5c5d86f ([Enhancement] Enhance mv rewrite by rule(Part 2) (#42245))
             try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
                 logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
                         .transform(logicOperatorTree, context).get(0);
             }
-<<<<<<< HEAD
-          
-=======
 
->>>>>>> fff5c5d86f ([Enhancement] Enhance mv rewrite by rule(Part 2) (#42245))
             OptExpression result = optimizerConfig.isRuleBased() ?
                     optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
                     optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
