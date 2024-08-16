@@ -19,7 +19,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.Pair;
@@ -168,17 +167,6 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     @Override
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
-    }
-
-    @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(Maps.newHashMap(jsonCache.asMap())) +
-                SizeEstimator.estimate(Maps.newHashMap(checkpointCache.asMap()));
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
     }
 
     public void invalidateAll() {

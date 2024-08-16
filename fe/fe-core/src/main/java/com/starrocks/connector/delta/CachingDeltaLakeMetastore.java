@@ -28,7 +28,6 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
@@ -122,21 +121,6 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
     public List<String> getPartitionKeys(String dbName, String tableName) {
         // todo(Youngwb): cache partition keys
         return delegate.getPartitionKeys(dbName, tableName);
-    }
-
-    @Override
-    public long estimateSize() {
-        long delegateSize = delegate.estimateSize();
-        return delegateSize + SizeEstimator.estimate(Maps.newHashMap(databaseCache.asMap())) +
-                SizeEstimator.estimate(Maps.newHashMap(tableCache.asMap()));
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        Map<String, Long> delegateCount = Maps.newHashMap(delegate.estimateCount());
-        delegateCount.put("databaseCache", databaseCache.size());
-        delegateCount.put("tableCache", tableCache.size());
-        return delegateCount;
     }
 
     @Override

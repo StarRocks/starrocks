@@ -15,7 +15,6 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
@@ -38,17 +37,6 @@ public class DeltaLakeConnectorTest {
         DeltaLakeMetadata deltaLakeMetadata = (DeltaLakeMetadata) metadata;
         Assert.assertEquals("delta0", deltaLakeMetadata.getCatalogName());
         Assert.assertEquals(deltaLakeMetadata.getMetastoreType(), MetastoreType.HMS);
-    }
-
-    @Test
-    public void testDeltaLakeConnectorMemUsage() {
-        Map<String, String> properties = ImmutableMap.of("type", "deltalake",
-                "hive.metastore.type", "hive", "hive.metastore.uris", "thrift://localhost:9083");
-        CatalogConnector catalogConnector = ConnectorFactory.createConnector(
-                new ConnectorContext("delta0", "deltalake", properties), false);
-        Assert.assertTrue(catalogConnector.supportMemoryTrack());
-        Assert.assertEquals(192, catalogConnector.estimateSize());
-        Assert.assertEquals(4, catalogConnector.estimateCount().size());
     }
 
     @Test

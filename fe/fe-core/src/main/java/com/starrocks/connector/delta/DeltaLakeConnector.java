@@ -81,19 +81,4 @@ public class DeltaLakeConnector implements Connector {
         updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
     }
-
-    @Override
-    public boolean supportMemoryTrack() {
-        return metastore != null;
-    }
-
-    @Override
-    public long estimateSize() {
-        return metastore.estimateSize();
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return metastore.estimateCount();
-    }
 }
