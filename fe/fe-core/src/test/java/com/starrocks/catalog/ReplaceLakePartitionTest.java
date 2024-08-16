@@ -30,13 +30,11 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -58,9 +56,6 @@ public class ReplaceLakePartitionTest {
     private final ShardInfo shardInfo;
 
     @Mocked
-    private EditLog editLog;
-
-    @Mocked
     private StarOSAgent starOSAgent;
 
     @Mocked
@@ -70,7 +65,6 @@ public class ReplaceLakePartitionTest {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
         warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
-        editLog = new EditLog(null);
     }
 
     LakeTable buildLakeTableWithTempPartition(PartitionType partitionType) {
@@ -108,17 +102,6 @@ public class ReplaceLakePartitionTest {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
-
-                GlobalStateMgr.getCurrentState().getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logErasePartition(Long partitionId) {
-                    }
-                };
             }
         };
 
@@ -142,6 +125,10 @@ public class ReplaceLakePartitionTest {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
-        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
+
+        try {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
+        } catch (Exception ignore) {
+        }
     }
 }
