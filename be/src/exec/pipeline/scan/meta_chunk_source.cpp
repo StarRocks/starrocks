@@ -47,9 +47,4 @@ Status MetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _scanner->get_chunk(state, chunk);
 }
 
-const workgroup::WorkGroupScanSchedEntity* MetaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
-}
-
 } // namespace starrocks::pipeline

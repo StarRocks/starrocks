@@ -367,7 +367,7 @@ int64_t WorkGroupScanTaskQueue::_bandwidth_quota_ns() const {
 }
 
 workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(workgroup::WorkGroup* wg) {
-    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+    if (_sched_entity_type == ScanSchedEntityType::CONNECTOR) {
         return wg->connector_scan_sched_entity();
     } else {
         return wg->scan_sched_entity();
@@ -375,7 +375,7 @@ workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(workg
 }
 
 const workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(const workgroup::WorkGroup* wg) const {
-    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+    if (_sched_entity_type == ScanSchedEntityType::CONNECTOR) {
         return wg->connector_scan_sched_entity();
     } else {
         return wg->scan_sched_entity();

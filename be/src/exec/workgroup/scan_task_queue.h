@@ -206,9 +206,7 @@ private:
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    enum SchedEntityType { OLAP, CONNECTOR };
-
-    WorkGroupScanTaskQueue(SchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
+    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -252,7 +250,7 @@ private:
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
 
-    const SchedEntityType _sched_entity_type;
+    const ScanSchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;

@@ -69,6 +69,10 @@ private:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
 
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+
     SchemaScanContextPtr _ctx;
 };
 } // namespace starrocks::pipeline
