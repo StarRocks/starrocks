@@ -22,19 +22,20 @@ public class DeltaLakeCatalogProperties {
     public static final String ENABLE_DELTA_LAKE_TABLE_CACHE = "enable_deltalake_table_cache";
     public static final String ENABLE_DELTA_LAKE_JSON_META_CACHE = "enable_deltalake_json_meta_cache";
     public static final String DELTA_LAKE_JSON_META_CACHE_TTL = "deltalake_json_meta_cache_ttl_sec";
-    public static final String DELTA_LAKE_JSON_META_CACHE_MAX_NUM = "deltalake_json_meta_cache_max_num";
+    public static final String DELTA_LAKE_JSON_META_CACHE_MEMORY_USAGE_RATIO = "deltalake_json_meta_cache_memory_usage_ratio";
     public static final String ENABLE_DELTA_LAKE_CHECKPOINT_META_CACHE = "enable_deltalake_checkpoint_meta_cache";
     public static final String DELTA_LAKE_CHECKPOINT_META_CACHE_TTL = "deltalake_checkpoint_meta_cache_ttl_sec";
-    public static final String DELTA_LAKE_CHECKPOINT_META_CACHE_MAX_NUM = "deltalake_checkpoint_meta_cache_max_num";
+    public static final String DELTA_LAKE_CHECKPOINT_META_CACHE_MEMORY_USAGE_RATIO =
+            "deltalake_checkpoint_meta_cache_memory_usage_ratio";
 
     private final Map<String, String> properties;
     private boolean enableDeltaLakeTableCache;
     private boolean enableDeltaLakeJsonMetaCache;
     private boolean enableDeltaLakeCheckpointMetaCache;
     private long deltaLakeJsonMetaCacheTtlSec;
-    private long deltaLakeJsonMetaCacheMaxNum;
+    private double deltaLakeJsonMetaCacheMemoryUsageRatio;
     private long deltaLakeCheckpointMetaCacheTtlSec;
-    private long deltaLakeCheckpointMetaCacheMaxNum;
+    private double deltaLakeCheckpointMetaCacheMemoryUsageRatio;
 
     public DeltaLakeCatalogProperties(Map<String, String> properties) {
         this.properties = properties;
@@ -47,15 +48,15 @@ public class DeltaLakeCatalogProperties {
         this.enableDeltaLakeJsonMetaCache =
                 PropertyUtil.propertyAsBoolean(properties, ENABLE_DELTA_LAKE_JSON_META_CACHE, true);
         this.enableDeltaLakeCheckpointMetaCache =
-                PropertyUtil.propertyAsBoolean(properties, ENABLE_DELTA_LAKE_CHECKPOINT_META_CACHE, false);
+                PropertyUtil.propertyAsBoolean(properties, ENABLE_DELTA_LAKE_CHECKPOINT_META_CACHE, true);
         this.deltaLakeJsonMetaCacheTtlSec =
                 PropertyUtil.propertyAsLong(properties, DELTA_LAKE_JSON_META_CACHE_TTL, 48 * 60 * 60);
-        this.deltaLakeJsonMetaCacheMaxNum =
-                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_JSON_META_CACHE_MAX_NUM, 1000);
+        this.deltaLakeJsonMetaCacheMemoryUsageRatio =
+                PropertyUtil.propertyAsDouble(properties, DELTA_LAKE_JSON_META_CACHE_MEMORY_USAGE_RATIO, 0.1);
         this.deltaLakeCheckpointMetaCacheTtlSec =
                 PropertyUtil.propertyAsLong(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_TTL, 48 * 60 * 60);
-        this.deltaLakeCheckpointMetaCacheMaxNum =
-                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_MAX_NUM, 100);
+        this.deltaLakeCheckpointMetaCacheMemoryUsageRatio =
+                PropertyUtil.propertyAsDouble(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_MEMORY_USAGE_RATIO, 0.1);
     }
 
     public boolean isEnableDeltaLakeTableCache() {
@@ -74,16 +75,16 @@ public class DeltaLakeCatalogProperties {
         return deltaLakeJsonMetaCacheTtlSec;
     }
 
-    public long getDeltaLakeJsonMetaCacheMaxNum() {
-        return deltaLakeJsonMetaCacheMaxNum;
+    public double getDeltaLakeJsonMetaCacheMemoryUsageRatio() {
+        return deltaLakeJsonMetaCacheMemoryUsageRatio;
     }
 
     public long getDeltaLakeCheckpointMetaCacheTtlSec() {
         return deltaLakeCheckpointMetaCacheTtlSec;
     }
 
-    public long getDeltaLakeCheckpointMetaCacheMaxNum() {
-        return deltaLakeCheckpointMetaCacheMaxNum;
+    public double getDeltaLakeCheckpointMetaCacheMemoryUsageRatio() {
+        return deltaLakeCheckpointMetaCacheMemoryUsageRatio;
     }
 
     public Map<String, String> getProperties() {

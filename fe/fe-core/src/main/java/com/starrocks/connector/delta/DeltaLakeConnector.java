@@ -37,6 +37,7 @@ public class DeltaLakeConnector implements Connector {
     private final String catalogName;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
+    private IDeltaLakeMetastore metastore;
 
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -54,7 +55,7 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IDeltaLakeMetastore metastore = internalMgr.createDeltaLakeMetastore();
+        metastore = internalMgr.createDeltaLakeMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
