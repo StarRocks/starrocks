@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnDef;
@@ -99,9 +100,15 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -1212,6 +1219,34 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
         }
 
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
+        String tableOperationName = clause.getTableOperationName();
+        if (tableOperationName == null) {
+            throw new SemanticException("Table operation name should be null");
+        }
+
+        List<ConstantOperator> args = new ArrayList<>();
+        for (Expr expr : clause.getExprs()) {
+            ScalarOperator result;
+            try {
+                Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
+                ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+                result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
+                if (result instanceof ConstantOperator) {
+                    args.add((ConstantOperator) result);
+                } else {
+                    throw new SemanticException("invalid arg " + expr);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to resolve table operation args %s. msg: %s", expr, e.getMessage());
+            }
+        }
+        clause.setArgs(args);
         return null;
     }
 }
