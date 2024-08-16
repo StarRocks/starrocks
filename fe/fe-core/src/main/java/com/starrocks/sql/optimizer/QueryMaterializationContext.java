@@ -94,6 +94,8 @@ public class QueryMaterializationContext {
         }
     }
 
+    private boolean hasRewrittenSuccess = false;
+
     public QueryMaterializationContext() {
     }
 
@@ -231,5 +233,13 @@ public class QueryMaterializationContext {
         Tracers.record(Tracers.Module.BASE, "MVQueryContextCacheStats", mvQueryContextCache.stats().toString());
         Tracers.record(Tracers.Module.BASE, "MVQueryCacheStats", queryCacheStats.toString());
         this.mvQueryContextCache.invalidateAll();
+    }
+
+    public void markRewriteSuccess(boolean val) {
+        this.hasRewrittenSuccess = val;
+    }
+
+    public boolean hasRewrittenSuccess() {
+        return this.hasRewrittenSuccess;
     }
 }
