@@ -149,6 +149,7 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
+WITH_COMPRESS=ON
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
@@ -267,6 +268,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
+    WITH_COMPRESS       -- $WITH_COMPRESS
     WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
@@ -355,6 +357,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     else
         CXX_COMPILER_LAUNCHER=${CCACHE}
     fi
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        # this option cannot work with clang-14
+        WITH_COMPRESS=OFF
+    fi
+
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
