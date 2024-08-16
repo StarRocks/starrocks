@@ -90,7 +90,11 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
         if (auto* scan_operator = driver->source_scan_operator()) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
+<<<<<<< HEAD
             if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+=======
+            if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
+>>>>>>> 18621ecb40 ([Refactor] Unify sched_entity_type logic for scan task (#49889))
                 scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
             } else {
                 scan_operator->set_scan_executor(state->exec_env()->scan_executor());

@@ -42,8 +42,6 @@ public:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
-
     const TupleDescriptor* _dest_tuple_desc;
     std::unique_ptr<SchemaScanner> _schema_scanner;
 

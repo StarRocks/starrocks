@@ -68,6 +68,14 @@ private:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
 
+<<<<<<< HEAD:be/src/exec/pipeline/scan/olap_schema_scan_operator.h
     OlapSchemaScanContextPtr _ctx;
+=======
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+
+    SchemaScanContextPtr _ctx;
+>>>>>>> 18621ecb40 ([Refactor] Unify sched_entity_type logic for scan task (#49889)):be/src/exec/pipeline/scan/schema_scan_operator.h
 };
 } // namespace starrocks::pipeline

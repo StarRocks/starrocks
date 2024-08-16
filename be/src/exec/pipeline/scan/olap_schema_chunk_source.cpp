@@ -162,9 +162,12 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/pipeline/scan/olap_schema_chunk_source.cpp
 const workgroup::WorkGroupScanSchedEntity* OlapSchemaChunkSource::_scan_sched_entity(
         const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }
+=======
+>>>>>>> 18621ecb40 ([Refactor] Unify sched_entity_type logic for scan task (#49889)):be/src/exec/pipeline/scan/schema_chunk_source.cpp
 } // namespace starrocks::pipeline

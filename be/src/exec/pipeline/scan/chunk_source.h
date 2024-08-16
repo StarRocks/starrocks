@@ -78,7 +78,7 @@ protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;
     // The schedule entity of this workgroup for resource group.
-    virtual const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const = 0;
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const;
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;

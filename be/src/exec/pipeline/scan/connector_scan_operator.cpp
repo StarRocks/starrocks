@@ -586,10 +586,16 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return Status::EndOfFile("");
 }
 
+<<<<<<< HEAD
 const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(
         const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->connector_scan_sched_entity();
+=======
+uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
+    if (_chunk_rows_read == 0) return 0;
+    return _chunk_mem_bytes / _chunk_rows_read;
+>>>>>>> 18621ecb40 ([Refactor] Unify sched_entity_type logic for scan task (#49889))
 }
 
 } // namespace starrocks::pipeline
