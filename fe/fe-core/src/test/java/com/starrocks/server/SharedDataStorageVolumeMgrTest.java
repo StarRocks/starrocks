@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.google.gson.stream.JsonReader;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -44,10 +45,13 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -66,6 +70,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -764,11 +769,13 @@ public class SharedDataStorageVolumeMgrTest {
         // v4
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        svm.save(dos);
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        imageWriter.setOutputStream(dos);
+        svm.save(imageWriter);
 
         InputStream in = new ByteArrayInputStream(out.toByteArray());
         DataInputStream dis = new DataInputStream(in);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
         Assert.assertEquals(svId, svm1.getDefaultStorageVolumeId());
@@ -960,11 +967,12 @@ public class SharedDataStorageVolumeMgrTest {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        svm.save(dos);
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        imageWriter.setOutputStream(dos);
+        svm.save(imageWriter);
 
         InputStream in = new ByteArrayInputStream(out.toByteArray());
-        DataInputStream dis = new DataInputStream(in);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
         Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getDefaultStorageVolume().getName());
