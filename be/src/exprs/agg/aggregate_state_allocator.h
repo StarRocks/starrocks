@@ -80,6 +80,8 @@ public:
 private:
     Allocator* _prev = nullptr;
 };
+#define SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalAggregateStateAllocatorSetter(allocator)
 
 template <typename T>
 using HashSetWithAggStateAllocator =
