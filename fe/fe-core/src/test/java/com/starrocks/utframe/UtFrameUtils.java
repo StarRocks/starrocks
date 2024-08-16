@@ -77,11 +77,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.ConnectProcessor;
-import com.starrocks.qe.DefaultCoordinator;
->>>>>>> ed0bab36b2 ([Enhancement] add digest for error query (#49417))
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
