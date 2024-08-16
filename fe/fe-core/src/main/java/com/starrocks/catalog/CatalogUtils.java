@@ -213,21 +213,21 @@ public class CatalogUtils {
         Set<Object> tempSet = new HashSet<>();
         Set<List<Object>> tempMultiSet = new HashSet<>();
         for (Partition partition : tempPartitionList) {
-            if (!listMap.isEmpty()) {
-                listMap.get(partition.getId()).forEach(item -> {
-                    tempSet.add(item.getRealObjectValue());
-                });
-                newListMap.remove(partition.getId());
-            }
-            if (!multiListMap.isEmpty()) {
-                multiListMap.get(partition.getId()).forEach(itemList -> {
-                    List<Object> cur = new ArrayList<>();
-                    itemList.forEach(item -> {
-                        cur.add(item.getRealObjectValue());
-                    });
-                    tempMultiSet.add(cur);
-                });
+            if (listPartitionInfo.isMultiColumnPartition()) {
+                tempMultiSet = multiListMap.get(partition.getId())
+                        .stream()
+                        .map(literalExprs -> literalExprs
+                                .stream()
+                                .map(LiteralExpr::getRealObjectValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toSet());
                 newMultiListMap.remove(partition.getId());
+            } else {
+                tempSet = listMap.get(partition.getId())
+                        .stream()
+                        .map(LiteralExpr::getRealObjectValue)
+                        .collect(Collectors.toSet());
+                newListMap.remove(partition.getId());
             }
         }
 
