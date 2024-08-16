@@ -433,6 +433,7 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public void createAutomaticShadowPartition(long partitionId, String replicateNum) {
         idToValues.put(partitionId, Collections.emptyList());
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
@@ -440,6 +441,88 @@ public class ListPartitionInfo extends PartitionInfo {
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
+=======
+    public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) {
+        if (isMultiColumnPartition()) {
+            idToMultiValues.put(partitionId, Collections.emptyList());
+            idToMultiLiteralExprValues.put(partitionId, Collections.emptyList());
+        } else {
+            idToValues.put(partitionId, Collections.emptyList());
+            idToLiteralExprValues.put(partitionId, Collections.emptyList());
+        }
+
+        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
+        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToInMemory.put(partitionId, false);
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
+    }
+
+    public static int compareByValue(List<List<String>> left, List<List<String>> right) {
+        int valueSize = left.size();
+        for (int i = 0; i < valueSize; i++) {
+            int partitionSize = left.get(i).size();
+            for (int j = 0; j < partitionSize; j++) {
+                int compareResult = left.get(i).get(j).compareTo(right.get(i).get(j));
+                if (compareResult != 0) {
+                    return compareResult;
+                }
+            }
+        }
+        return 0;
+    }
+
+    public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+        idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
+                    .sorted((x, y) -> compareRow(x.getValue(), y.getValue(), asc))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
+            return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
+                    .sorted((x, y) -> compareMultiValueList(x.getValue(), y.getValue(), asc))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            throw new NotImplementedException("todo");
+        }
+    }
+
+    /**
+     * Compare based on the max/min value in the list
+     */
+    private static int compareRow(List<LiteralExpr> lhs, List<LiteralExpr> rhs, boolean asc) {
+        ListPartitionValue lhsValue =
+                asc ? ListPartitionCell.single(lhs).minValue() : ListPartitionCell.single(lhs).maxValue();
+        ListPartitionValue rhsValue =
+                asc ? ListPartitionCell.single(rhs).minValue() : ListPartitionCell.single(rhs).maxValue();
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
+    }
+
+    private static int compareColumns(List<LiteralExpr> lhs, List<LiteralExpr> rhs) {
+        assert lhs.size() == rhs.size();
+        for (int i = 0; i < lhs.size(); i++) {
+            int x = lhs.get(i).compareTo(rhs.get(i));
+            if (x != 0) {
+                return x;
+            }
+        }
+        return 0;
+    }
+
+    private static int compareMultiValueList(List<List<LiteralExpr>> lhs, List<List<LiteralExpr>> rhs, boolean asc) {
+        ListPartitionValue lhsValue =
+                asc ? ListPartitionCell.multi(lhs).minValue() : ListPartitionCell.multi(lhs).maxValue();
+        ListPartitionValue rhsValue =
+                asc ? ListPartitionCell.multi(rhs).minValue() : ListPartitionCell.multi(rhs).maxValue();
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
+>>>>>>> 4c585a7b93 ([BugFix] Fix replace temp partition bug for multi column partition table (#49764))
     }
 
     @Override
