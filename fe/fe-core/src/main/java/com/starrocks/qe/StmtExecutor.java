@@ -635,7 +635,7 @@ public class StmtExecutor {
                             isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord.isShortCircuit()) {
+                                if (coord != null && coord.isShortCircuit()) {
                                     throw new UserException(
                                             "short circuit point query doesn't suppot explain analyze stmt, " +
                                                     "you can set it off by using  set enable_short_circuit=false");
