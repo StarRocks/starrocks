@@ -200,11 +200,11 @@ public class StreamLoadManagerTest {
         String tableName = "test_tbl";
         String labelName = "label2";
         long timeoutMillis = 100000;
-        long warehouseId = 0;
+        int channelNum = 1;
+        int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
-
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
