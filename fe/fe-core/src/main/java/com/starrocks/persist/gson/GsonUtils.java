@@ -110,6 +110,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
+import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -125,6 +126,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.RecycleLakeListPartitionInfo;
 import com.starrocks.lake.RecycleLakeRangePartitionInfo;
+import com.starrocks.lake.RecycleLakeUnPartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
@@ -296,7 +298,9 @@ public class GsonUtils {
             .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
             .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
             .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
-            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo");
+            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
+            .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
+            .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo");
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
