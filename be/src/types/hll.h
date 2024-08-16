@@ -142,7 +142,7 @@ public:
 
     uint64_t serialize_size() const { return max_serialized_size(); }
 
-    uint64_t mem_usage() const { return max_serialized_size(); }
+    int64_t mem_usage() const { return max_serialized_size(); }
 
     // common interface
     void clear();
