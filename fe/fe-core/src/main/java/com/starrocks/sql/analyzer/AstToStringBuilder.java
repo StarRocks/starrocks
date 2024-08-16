@@ -144,10 +144,12 @@ import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
@@ -768,7 +770,8 @@ public class AstToStringBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -793,7 +796,8 @@ public class AstToStringBuilder {
             TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
-            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(Optional.ofNullable(tableFunction.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
