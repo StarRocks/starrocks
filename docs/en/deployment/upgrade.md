@@ -51,7 +51,7 @@ If you want to upgrade your StarRocks cluster to a later minor or major version,
 
 - **Universal compatibility configuration**
 
-Before upgrading your StarRocks cluster, you must disable tablet clone.
+Before upgrading your StarRocks cluster, you must disable tablet clone. You can skip this step if you have disabled the balancer.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");

@@ -53,7 +53,7 @@ StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级
 
 - **通用兼容性配置**
 
-升级前，请关闭 Tablet Clone。
+升级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
