@@ -296,7 +296,8 @@ jobs:
         if: (matrix.build_type == 'Release' && matrix.linux == 'centos7') || env.ALL_LINUX == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }}
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
+            --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }} --with-trivy
 
       - name: BUILD RESULT
         run: |
@@ -490,10 +491,14 @@ jobs:
       ASAN_CONF_FILE: ${{ needs.system-test-asan.outputs.CONF_FILE }}
       RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release.outputs.MYSQL_ECI_ID }}
       ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan.outputs.MYSQL_ECI_ID }}
+      RELEASE_RESULT: ${{ needs.system-test-release.result }}
+      ASAN_RESULT: ${{ needs.system-test-asan.result }}
       UBUNTU_RELEASE_CONF_FILE: ${{ needs.system-test-release-ubuntu.outputs.CONF_FILE }}
       UBUNTU_ASAN_CONF_FILE: ${{ needs.system-test-asan-ubuntu.outputs.CONF_FILE }}
       UBUNTU_RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release-ubuntu.outputs.MYSQL_ECI_ID }}
       UBUNTU_ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan-ubuntu.outputs.MYSQL_ECI_ID }}
+      UBUNTU_RELEASE_RESULT: ${{ needs.system-test-release-ubuntu.result }}
+      UBUNTU_ASAN_RESULT: ${{ needs.system-test-asan-ubuntu.result }}
       BE_UT_LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
       RETAIN_ENV: ${{ needs.info.outputs.RETAIN_ENV }}
     steps:
