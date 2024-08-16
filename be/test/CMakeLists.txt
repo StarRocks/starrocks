@@ -191,6 +191,11 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
+<<<<<<< HEAD
+=======
+        ./formats/parquet/statistics_helper_test.cpp
+        ./formats/disk_range_test.cpp
+>>>>>>> 888e20136b ([Enhancement] Improve cache select performance (#48262))
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp

@@ -74,6 +74,11 @@ add_library(Formats STATIC
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
+<<<<<<< HEAD
+=======
+        parquet/statistics_helper.cpp
+        disk_range.hpp
+>>>>>>> 888e20136b ([Enhancement] Improve cache select performance (#48262))
         )
 
 add_subdirectory(orc/apache-orc)

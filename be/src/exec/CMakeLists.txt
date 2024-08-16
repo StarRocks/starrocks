@@ -98,6 +98,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    cache_select_scanner.cpp
     mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
