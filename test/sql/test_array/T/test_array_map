@@ -55,3 +55,28 @@ where
 order by
     w1.k1;
 
+-- union const with array_map won't crash
+INSERT INTO t1 (k1, c1)
+VALUES 
+(1, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(2, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(3, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(4, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(5, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+));
+
+
