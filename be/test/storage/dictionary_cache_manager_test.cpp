@@ -220,7 +220,7 @@ public:
 
         ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(schema.get(), vids), 0);
         auto st = DictionaryCacheManager::probe_given_dictionary_cache(
-                *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk);
+                *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk, nullptr);
         ASSERT_TRUE(st.ok());
         ASSERT_TRUE(value_chunk->num_rows() == 1);
         for (int i = 0; i < value_chunk->num_columns(); ++i) {
@@ -333,7 +333,7 @@ TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
 
     auto res_column = std::move(res.value());
     ASSERT_TRUE(res_column->size() == 1);
-    auto struct_column = down_cast<StructColumn*>(res_column.get());
+    auto struct_column = down_cast<StructColumn*>(down_cast<NullableColumn*>(res_column.get())->data_column().get());
     ASSERT_TRUE(struct_column->fields_column().size() == 2);
 }
 
