@@ -43,7 +43,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 - **通用兼容性配置**
 
-降级前，请关闭 Tablet Clone。
+降级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
