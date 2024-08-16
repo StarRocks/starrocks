@@ -3300,6 +3300,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - Default: 60
@@ -3308,7 +3309,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
@@ -3317,7 +3320,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
@@ -3326,6 +3331,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
+-->
 
 <!--
 ##### starlet_cache_dir_allocate_policy
