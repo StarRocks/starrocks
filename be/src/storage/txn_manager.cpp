@@ -278,8 +278,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         if (tablet->insert_committed_rowset_schema(rowset_ptr->rowset_id(), rowset_ptr->tablet_schema()->id())) {
             rowset_ptr->rowset_meta()->set_tablet_schema_id();
         }
-        LOG(INFO) << "rowset: " << rowset_ptr->rowset_id_str()
-                  << " has schema id: " << rowset_ptr->rowset_meta()->has_tablet_schema_id();
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
