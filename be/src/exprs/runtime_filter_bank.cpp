@@ -154,6 +154,20 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     return Status::OK();
 }
 
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
+                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    for (const auto& column : columns) {
+        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
+    }
+    return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
+                                                      LogicalType type, JoinRuntimeFilter* filter,
+                                                      size_t column_offset) {
+    return fill_runtime_bloom_filter(param.columns, type, filter, column_offset, param.eq_null);
+}
+
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
                                                                                       ExprContext* conjunct,
                                                                                       Chunk* chunk) {
