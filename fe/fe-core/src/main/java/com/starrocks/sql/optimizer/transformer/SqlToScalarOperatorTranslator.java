@@ -875,7 +875,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
 
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
-                    node.getDictionaryTxnId(), node.getKeySize());
+                    node.getDictionaryTxnId(), node.getKeySize(), node.getNullIfNotExist());
             return op;
         }
     }

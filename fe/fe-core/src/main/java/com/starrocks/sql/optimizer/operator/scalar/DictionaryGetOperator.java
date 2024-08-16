@@ -30,14 +30,16 @@ public class DictionaryGetOperator extends ScalarOperator {
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
+    private boolean nullIfNotExist;
 
     public DictionaryGetOperator(List<ScalarOperator> arguments, Type returnType, long dictionaryId, long dictionaryTxnId,
-                                  int keySize) {
+                                  int keySize, boolean nullIfNotExist) {
         super(OperatorType.DICTIONARY_GET, returnType);
         this.arguments = new ArrayList<>(arguments);
         this.dictionaryId = dictionaryId;
         this.dictionaryTxnId = dictionaryTxnId;
         this.keySize = keySize;
+        this.nullIfNotExist = nullIfNotExist;
     }
 
     @Override
@@ -120,6 +122,10 @@ public class DictionaryGetOperator extends ScalarOperator {
 
     public int getKeySize() {
         return this.keySize;
+    }
+
+    public boolean getNullIfNotExist() {
+        return this.nullIfNotExist;
     }
 
     @Override

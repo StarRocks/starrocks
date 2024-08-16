@@ -41,6 +41,8 @@ namespace starrocks {
 #define PREFETCH_ADDR(addr) __builtin_prefetch(static_cast<const void*>(addr), 0 /* rw==read */, 3 /* locality */)
 #endif // __GNUC__
 
+#define SKIP_DECODE_FLAG 2
+
 enum DictionaryCacheEncoderType {
     PK_ENCODE = 0,
 };
@@ -69,7 +71,8 @@ public:
 
     virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) = 0;
 
-    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags) = 0;
+    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
+                                 Column* null_column) = 0;
 
     virtual inline size_t memory_usage() = 0;
 
@@ -154,7 +157,8 @@ public:
         return Status::OK();
     }
 
-    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags) override {
+    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
+                                 Column* null_column) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
@@ -203,8 +207,13 @@ public:
 
                     for (size_t j = 0; j < PREFETCHN; j++) {
                         auto iter = _dictionary.find(raw_data[beg_index + j], prefetch_hashes[j]);
+                        bool null_if_not_exist = false;
                         if (iter == _dictionary.end()) {
-                            return Status::NotFound("key not found in dictionary cache");
+                            if (null_column == nullptr) {
+                                return Status::NotFound("key not found in dictionary cache");
+                            } else {
+                                null_if_not_exist = true;
+                            }
                         }
 
                         // Save the Slice instead of appending data here.
@@ -212,12 +221,12 @@ public:
                         // and it may pollutes the cpu cache which contain the
                         // prefetched content using for the following look up.
                         if constexpr (std::is_same_v<ValueCppType, Slice>) {
-                            slices[beg_index + j].data = iter->second.data;
-                            slices[beg_index + j].size = iter->second.size;
+                            slices[beg_index + j].data = (null_if_not_exist ? nullptr : iter->second.data);
+                            slices[beg_index + j].size = (null_if_not_exist ? 0 : iter->second.size);
 
                             slice_size += slices[beg_index + j].size;
                         } else {
-                            _append_value(dest, iter->second);
+                            null_if_not_exist ? _append_nullable(dest, null_column) : _append_value(dest, iter->second);
                         }
                     }
                 }
@@ -225,11 +234,16 @@ public:
                 if constexpr (std::is_same_v<ValueCppType, Slice>) {
                     for (size_t i = loop * PREFETCHN; i < size; i++) {
                         auto iter = _dictionary.find(raw_data[i]);
+                        bool null_if_not_exist = false;
                         if (iter == _dictionary.end()) {
-                            return Status::NotFound("key not found in dictionary cache");
+                            if (null_column == nullptr) {
+                                return Status::NotFound("key not found in dictionary cache");
+                            } else {
+                                null_if_not_exist = true;
+                            }
                         }
-                        slices[i].data = iter->second.data;
-                        slices[i].size = iter->second.size;
+                        slices[i].data = (null_if_not_exist ? nullptr : iter->second.data);
+                        slices[i].size = (null_if_not_exist ? 0 : iter->second.size);
 
                         slice_size += slices[i].size;
                     }
@@ -237,6 +251,11 @@ public:
                     // avoid memory reallocation when looking up hash table
                     down_cast<BinaryColumn*>(dest)->reserve(size, slice_size);
                     for (size_t i = 0; i < size; i++) {
+                        if (slices[i].data == nullptr) {
+                            value_encode_flags[i] = SKIP_DECODE_FLAG;
+                            _append_nullable(dest, null_column);
+                            continue;
+                        }
                         value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(slices[i].data) - 1);
                         _append_value(dest, slices[i]);
                     }
@@ -244,21 +263,38 @@ public:
                     beg_index = loop * PREFETCHN;
                     for (size_t i = beg_index; i < size; i++) {
                         auto iter = _dictionary.find(raw_data[i]);
+                        bool null_if_not_exist = false;
                         if (iter == _dictionary.end()) {
-                            return Status::NotFound("key not found in dictionary cache");
+                            if (null_column == nullptr) {
+                                return Status::NotFound("key not found in dictionary cache");
+                            } else {
+                                null_if_not_exist = true;
+                            }
                         }
-                        _append_value(dest, iter->second);
+                        null_if_not_exist ? _append_nullable(dest, null_column) : _append_value(dest, iter->second);
+                        if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                            value_encode_flags[i] = null_if_not_exist
+                                                            ? SKIP_DECODE_FLAG
+                                                            : *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
+                        }
                     }
                 }
             } else {
                 for (size_t i = 0; i < size; i++) {
                     auto iter = _dictionary.find(raw_data[i]);
+                    bool null_if_not_exist = false;
                     if (iter == _dictionary.end()) {
-                        return Status::NotFound("key not found in dictionary cache");
+                        if (null_column == nullptr) {
+                            return Status::NotFound("key not found in dictionary cache");
+                        } else {
+                            null_if_not_exist = true;
+                        }
                     }
-                    _append_value(dest, iter->second);
+                    null_if_not_exist ? _append_nullable(dest, null_column) : _append_value(dest, iter->second);
                     if constexpr (std::is_same_v<ValueCppType, Slice>) {
-                        value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
+                        value_encode_flags[i] = null_if_not_exist
+                                                        ? SKIP_DECODE_FLAG
+                                                        : *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
                     }
                 }
             }
@@ -278,6 +314,11 @@ public:
 private:
     // Avoid creating Datum
     inline void _append_value(Column* dest, const ValueCppType& v) { down_cast<ValueColumnType*>(dest)->append(v); }
+
+    inline void _append_nullable(Column* dest, Column* null_column) {
+        down_cast<ValueColumnType*>(dest)->append_default(1);
+        down_cast<UInt8Column*>(null_column)->get_data()[dest->size() - 1] = 1;
+    }
 
     template <class KeyCppType, class ValueCppType>
     inline size_t _get_element_memory_usage(const KeyCppType& k, const ValueCppType& v) {
@@ -556,7 +597,7 @@ public:
 
     inline static Status probe_given_dictionary_cache(const Schema& key_schema, const Schema& value_schema,
                                                       DictionaryCachePtr dictionary, const ChunkPtr& key_chunk,
-                                                      ChunkPtr& value_chunk) {
+                                                      ChunkPtr& value_chunk, Column* null_column) {
         DCHECK(value_chunk->num_rows() == 0);
         size_t size = key_chunk->num_rows();
 
@@ -568,7 +609,8 @@ public:
         }
 
         std::vector<uint8_t> value_encode_flags(size, 1);
-        RETURN_IF_ERROR(dictionary->lookup(encoded_key_column.get(), encoded_value_column.get(), value_encode_flags));
+        RETURN_IF_ERROR(dictionary->lookup(encoded_key_column.get(), encoded_value_column.get(), value_encode_flags,
+                                           null_column));
         DCHECK(encoded_value_column->size() == size);
 
         return DictionaryCacheUtil::decode_columns(value_schema, encoded_value_column.get(), value_chunk.get(),

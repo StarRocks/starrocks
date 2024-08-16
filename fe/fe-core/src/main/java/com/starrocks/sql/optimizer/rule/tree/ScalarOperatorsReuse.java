@@ -270,7 +270,7 @@ public class ScalarOperatorsReuse {
                     predicate.getChildren().stream().map(
                         argument -> argument.accept(this, null)).collect(Collectors.toList()),
                             predicate.getType(), predicate.getDictionaryId(),
-                                predicate.getDictionaryTxnId(), predicate.getKeySize());
+                                predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
             return tryRewrite(operator);
         }
 
