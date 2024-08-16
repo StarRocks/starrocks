@@ -113,11 +113,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
-import java.util.Objects;
 import java.util.Optional;
->>>>>>> ed0bab36b2 ([Enhancement] add digest for error query (#49417))
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 

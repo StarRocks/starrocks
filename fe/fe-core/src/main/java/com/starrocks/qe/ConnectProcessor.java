@@ -83,11 +83,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-<<<<<<< HEAD
-import java.security.NoSuchAlgorithmException;
-=======
-import java.util.ArrayList;
->>>>>>> ed0bab36b2 ([Enhancement] add digest for error query (#49417))
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
