@@ -220,5 +220,6 @@ public class StreamLoadManagerTest {
         state.setCommitTime(task.endTimeMs());
         task.replayOnCommitted(state);
         Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+
     }
 }
