@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
@@ -82,6 +83,10 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
@@ -144,6 +149,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
@@ -1059,6 +1065,7 @@ public class UtFrameUtils {
     public static class PseudoImage {
         private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
+        private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
         public static void setUpImageVersion() {
@@ -1071,10 +1078,16 @@ public class UtFrameUtils {
         public PseudoImage() throws IOException {
             assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter.setOutputStream(buffer);
         }
 
         public DataOutputStream getDataOutputStream() {
             return buffer;
+        }
+
+        public ImageWriter getImageWriter() {
+            return imageWriter;
         }
 
         /**
@@ -1082,6 +1095,17 @@ public class UtFrameUtils {
          */
         public DataInputStream getDataInputStream() throws IOException {
             return new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+        }
+
+        public SRMetaBlockReader getMetaBlockReader() throws IOException {
+            JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                    0, buffer.getLength())));
+            return new SRMetaBlockReaderV2(jsonReader);
+        }
+
+        public JsonReader getJsonReader() throws IOException {
+            return new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                    0, buffer.getLength())));
         }
     }
 

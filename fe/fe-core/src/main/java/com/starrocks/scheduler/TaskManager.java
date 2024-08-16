@@ -30,6 +30,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -54,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -585,18 +585,18 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveTasksV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
         List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
         LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
-        writer.writeJson(nameToTaskMap.size());
+        writer.writeInt(nameToTaskMap.size());
         for (Task task : nameToTaskMap.values()) {
             writer.writeJson(task);
         }
 
-        writer.writeJson(runStatusList.size());
+        writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
             // TODO: compatible with old version, remove this later.
             if (status.getState().equals(Constants.TaskRunState.MERGED)) {

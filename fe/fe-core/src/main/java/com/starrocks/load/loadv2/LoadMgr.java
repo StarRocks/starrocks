@@ -57,6 +57,7 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -802,12 +803,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void saveLoadJobsV2JsonFormat(DataOutputStream out) throws IOException, SRMetaBlockException {
+    public void saveLoadJobsV2JsonFormat(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
-        writer.writeJson(loadJobs.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.LOAD_MGR, cnt);
+        writer.writeInt(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);
         }

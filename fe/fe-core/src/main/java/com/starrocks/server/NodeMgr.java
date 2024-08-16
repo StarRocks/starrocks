@@ -52,6 +52,9 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -78,7 +81,6 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -696,25 +698,31 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        long localImageVersion = 0;
         String dirStr = this.imageDir + subDir;
-        Storage storage = new Storage(dirStr);
-        localImageVersion = storage.getImageJournalId();
+        ImageLoader imageLoader = new ImageLoader(dirStr);
+        long localImageVersion = imageLoader.getImageJournalId();
 
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
-        StorageInfo info = getStorageInfo(infoUrl);
-        long version = info.getImageJournalId();
-        if (version > localImageVersion) {
-            String url = "http://" + accessibleHostPort + "/image?version=" + version + "&subdir=" + subDir;
-            LOG.info("start to download image.{} from {}", version, url);
-            String filename = Storage.IMAGE + "." + version;
-            File dir = new File(dirStr);
-            MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
-            MetaHelper.complete(filename, dir);
+        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
+        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
+        if (remoteImageVersion > localImageVersion) {
+            String url = "http://" + accessibleHostPort + "/image?"
+                    + "version=" + remoteImageVersion
+                    + "&subdir=" + subDir
+                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+                    remoteStorageInfo.getImageFormatVersion(), url);
+            File dir;
+            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
+                dir = new File(dirStr);
+            } else {
+                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
+            }
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    dirStr, localImageVersion, version, helperNode);
+                    dirStr, localImageVersion, remoteImageVersion, helperNode);
         }
     }
 
@@ -1133,8 +1141,8 @@ public class NodeMgr {
         return frontends;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.NODE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

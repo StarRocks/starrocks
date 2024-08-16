@@ -51,6 +51,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -65,7 +66,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -1020,24 +1020,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return Lists.newArrayList(idToDatabase.keySet());
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
                 + 1 + idToPartition.size() + 1;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
-        writer.writeJson(idToDatabase.size());
+        writer.writeInt(idToDatabase.size());
         for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
             writer.writeJson(recycleDatabaseInfo);
         }
 
-        writer.writeJson(idToTableInfo.size());
+        writer.writeInt(idToTableInfo.size());
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (RecycleTableInfo recycleTableInfo : tableEntry.values()) {
                 writer.writeJson(recycleTableInfo);
             }
         }
 
-        writer.writeJson(idToPartition.size());
+        writer.writeInt(idToPartition.size());
         for (RecyclePartitionInfo recyclePartitionInfo : idToPartition.values()) {
             if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
                 RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;

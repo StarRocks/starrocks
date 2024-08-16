@@ -53,6 +53,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -785,10 +786,10 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         return checksum;
     }
 
-    public void saveRoutineLoadJobsV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveRoutineLoadJobsV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         final int cnt = 1 + idToRoutineLoadJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
-        writer.writeJson(idToRoutineLoadJob.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
+        writer.writeInt(idToRoutineLoadJob.size());
         for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
             writer.writeJson(loadJob);
         }

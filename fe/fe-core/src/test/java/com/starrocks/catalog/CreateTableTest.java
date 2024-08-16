@@ -44,7 +44,6 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -1030,7 +1029,7 @@ public class CreateTableTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
 
         createTable("CREATE TABLE test.`test_location_persist_t1` (\n" +
                 "    k1 int,\n" +
@@ -1047,11 +1046,11 @@ public class CreateTableTest {
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
 
         // ** test replay from edit log
         LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
         CreateTableInfo info = (CreateTableInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
         localMetastoreFollower.replayCreateTable(info);
@@ -1063,7 +1062,7 @@ public class CreateTableTest {
 
         // ** test load from image(simulate restart)
         LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        localMetastoreLeader.load(finalImage.getMetaBlockReader());
         olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());

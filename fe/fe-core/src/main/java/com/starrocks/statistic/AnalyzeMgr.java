@@ -33,6 +33,7 @@ import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -774,7 +775,7 @@ public class AnalyzeMgr implements Writable {
         return checksum;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
                 .distinct().collect(Collectors.toList());
 
@@ -785,34 +786,34 @@ public class AnalyzeMgr implements Writable {
                 + 1 + externalBasicStatsMetaMap.size()
                 + 1 + externalHistogramStatsMetaMap.size();
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ANALYZE_MGR, numJson);
 
-        writer.writeJson(analyzeJobMap.size());
+        writer.writeInt(analyzeJobMap.size());
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
             writer.writeJson(analyzeJob);
         }
 
-        writer.writeJson(analyzeStatuses.size());
+        writer.writeInt(analyzeStatuses.size());
         for (AnalyzeStatus analyzeStatus : analyzeStatuses) {
             writer.writeJson(analyzeStatus);
         }
 
-        writer.writeJson(basicStatsMetaMap.size());
+        writer.writeInt(basicStatsMetaMap.size());
         for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
             writer.writeJson(basicStatsMeta);
         }
 
-        writer.writeJson(histogramStatsMetaMap.size());
+        writer.writeInt(histogramStatsMetaMap.size());
         for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
         }
 
-        writer.writeJson(externalBasicStatsMetaMap.size());
+        writer.writeInt(externalBasicStatsMetaMap.size());
         for (ExternalBasicStatsMeta basicStatsMeta : externalBasicStatsMetaMap.values()) {
             writer.writeJson(basicStatsMeta);
         }
 
-        writer.writeJson(externalHistogramStatsMetaMap.size());
+        writer.writeInt(externalHistogramStatsMetaMap.size());
         for (ExternalHistogramStatsMeta histogramStatsMeta : externalHistogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
         }

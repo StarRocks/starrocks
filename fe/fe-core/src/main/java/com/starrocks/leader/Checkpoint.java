@@ -34,6 +34,7 @@
 
 package com.starrocks.leader;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
@@ -41,6 +42,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
@@ -53,8 +55,12 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -136,11 +142,17 @@ public class Checkpoint extends FrontendDaemon {
 
         // Step4: Delete old image files from local storage.
         if (newImageCreated) {
-            MetaCleaner cleaner = new MetaCleaner(imageDir);
-            try {
-                cleaner.clean();
-            } catch (IOException e) {
-                LOG.error("Leader delete old image file fail.", e);
+            List<String> dirsToClean = Lists.newArrayList(imageDir);
+            if (belongToGlobalStateMgr) {
+                dirsToClean.add(imageDir + "/v2");
+            }
+            for (String dirToClean : dirsToClean) {
+                MetaCleaner cleaner = new MetaCleaner(dirToClean);
+                try {
+                    cleaner.clean();
+                } catch (IOException e) {
+                    LOG.error("Leader delete old image file from dir {} fail.", dirsToClean, e);
+                }
             }
         }
     }
@@ -169,6 +181,7 @@ public class Checkpoint extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
                     + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
             try {
@@ -178,14 +191,50 @@ public class Checkpoint extends FrontendDaemon {
                 LOG.info("push image successfully, url = {}", url);
                 if (MetricRepo.hasInit) {
                     MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
+=======
+            boolean allFormatSuccess = true;
+            for (ImageFormatVersion formatVersion : getImageFormatVersionToPush(imageVersion)) {
+                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                        + "/put?version=" + imageVersion
+                        + "&port=" + Config.http_port
+                        + "&subdir=" + subDir
+                        + "&for_global_state=" + belongToGlobalStateMgr
+                        + "&image_format_version=" + formatVersion.toString();
+                try {
+                    MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
+                    LOG.info("push image successfully, url = {}", url);
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
+                    }
+                } catch (IOException e) {
+                    allFormatSuccess = false;
+                    LOG.error("Exception when pushing image file. url = {}", url, e);
+>>>>>>> 78715a708a ([Enhancement] Support large json in image (#48569))
                 }
-            } catch (IOException e) {
-                LOG.error("Exception when pushing image file. url = {}", url, e);
+            }
+            if (allFormatSuccess) {
+                iterator.remove();
+                successPushedCnt++;
             }
         }
 
         LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
                 imageVersion, subDir, needToPushCnt, successPushedCnt);
+    }
+
+    private List<ImageFormatVersion> getImageFormatVersionToPush(long imageVersion) {
+        List<ImageFormatVersion> result = new ArrayList<>();
+        if (belongToGlobalStateMgr) {
+            // for global state mgr, the creation of v1 format image may fail, so check the existence of image file
+            if (Files.exists(Path.of(imageDir + "/image." + imageVersion))) {
+                result.add(ImageFormatVersion.v1);
+            }
+            result.add(ImageFormatVersion.v2);
+        } else {
+            // for staros mgr, there is only v1 format image.
+            result.add(ImageFormatVersion.v1);
+        }
+        return result;
     }
 
     private boolean createImage(long logVersion) {
