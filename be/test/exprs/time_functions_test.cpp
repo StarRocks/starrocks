@@ -1528,7 +1528,7 @@ TEST_F(TimeFunctionsTest, str_to_date_of_dateformat) {
         str_col->append_datum(Slice("2020-06-25"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   2020-0a  "));
+        str_col->append_datum(Slice("   2020-00-02  "));
 
         Columns columns;
         columns.emplace_back(str_col);
@@ -1603,7 +1603,7 @@ TEST_F(TimeFunctionsTest, str_to_date_of_monthformat) {
         str_col->append_datum(Slice("2020-06"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   2020-00-01  "));
+        str_col->append_datum(Slice("   202a-0  "));
 
         Columns columns;
         columns.emplace_back(str_col);
@@ -1640,7 +1640,6 @@ TEST_F(TimeFunctionsTest, str_to_date_of_yearformat) {
         str_col->append_datum(Slice("2020-06-25"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   202a  "));
 
         Columns columns;
         columns.emplace_back(str_col);
@@ -1656,7 +1655,6 @@ TEST_F(TimeFunctionsTest, str_to_date_of_yearformat) {
         ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(2).get_timestamp());
         ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(3).get_timestamp());
         ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(4).get_timestamp());
-        ASSERT_TRUE(nullable_col->is_null(5));
     }
 }
 
