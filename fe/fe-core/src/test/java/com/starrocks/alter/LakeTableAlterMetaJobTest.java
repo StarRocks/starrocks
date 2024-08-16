@@ -28,7 +28,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -49,10 +48,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -265,9 +262,8 @@ public class LakeTableAlterMetaJobTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, "all");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        List<AlterClause> alterList = Collections.singletonList(modify);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
-                () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
     }
 }

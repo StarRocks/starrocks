@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "exec/mor_processor.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -303,6 +304,10 @@ struct HdfsScannerContext {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     int64_t connector_max_split_size = 0;
+
+    // update none_existed_slot
+    // update conjunct
+    void update_with_none_existed_slot(SlotDescriptor* slot);
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.

@@ -226,7 +226,6 @@ public class MaterializedViewHandler extends AlterHandler {
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
 
-
     /**
      * There are 2 main steps.
      * Step1: validate the request
@@ -734,36 +733,30 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
-        try {
-            // check drop rollup index operation
-            for (AlterClause alterClause : dropRollupClauses) {
-                DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-                checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
-            }
-
-            // drop data in memory
-            Set<Long> indexIdSet = new HashSet<>();
-            Set<String> rollupNameSet = new HashSet<>();
-            for (AlterClause alterClause : dropRollupClauses) {
-                DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-                String rollupIndexName = dropRollupClause.getRollupName();
-                long rollupIndexId = dropMaterializedView(rollupIndexName, olapTable);
-                indexIdSet.add(rollupIndexId);
-                rollupNameSet.add(rollupIndexName);
-            }
-
-            // batch log drop rollup operation
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            long dbId = db.getId();
-            long tableId = olapTable.getId();
-            editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexIdSet));
-            LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
-                    olapTable.getName());
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        // check drop rollup index operation
+        for (AlterClause alterClause : dropRollupClauses) {
+            DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
+            checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
         }
+
+        // drop data in memory
+        Set<Long> indexIdSet = new HashSet<>();
+        Set<String> rollupNameSet = new HashSet<>();
+        for (AlterClause alterClause : dropRollupClauses) {
+            DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
+            String rollupIndexName = dropRollupClause.getRollupName();
+            long rollupIndexId = dropMaterializedView(rollupIndexName, olapTable);
+            indexIdSet.add(rollupIndexId);
+            rollupNameSet.add(rollupIndexName);
+        }
+
+        // batch log drop rollup operation
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexIdSet));
+        LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
+                olapTable.getName());
     }
 
     public void processDropMaterializedView(DropMaterializedViewStmt dropMaterializedViewStmt, Database db,

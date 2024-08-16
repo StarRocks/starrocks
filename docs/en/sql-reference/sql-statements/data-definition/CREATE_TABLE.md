@@ -524,7 +524,7 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
-#### Specify the bucket size for tables configured with random bucketing
+#### Specify the bucket size (`bucket_size`) for tables configured with random bucketing
 
 Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
 
@@ -544,6 +544,22 @@ The valid values of `compression` are:
 - `ZSTD`: the Zstandard algorithm.
 - `ZLIB`: the zlib algorithm.
 - `SNAPPY`: the Snappy algorithm.
+
+From v3.3.2 onwards, StarRocks supports specifying the compression level for zstd compression format during table creation.
+
+Syntax:
+
+```sql
+PROPERTIES ("compression" = "zstd(<compression_level>)")
+```
+
+`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22]. Default: `3` (Recommended). The greater the number, the higher the compression ratio. The higher the compression level, the more time consumption for compression and decompression.
+
+Example:
+
+```sql
+PROPERTIES ("compression" = "zstd(3)")
+```
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 

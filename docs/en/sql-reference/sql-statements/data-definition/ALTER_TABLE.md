@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Modifies an existing table, including:
 
-- [Rename table, partition, index](#rename)
+- [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
@@ -32,7 +32,7 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition.
+- rename: renames a table, rollup index, partition, or column (supported from **v3.3.2 onwards**).
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
@@ -75,6 +75,22 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
 
+#### Rename a column
+
+From v3.3.2 onwards, StarRocks supports renaming columns.
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- After renaming a column from A to B, adding a new column named A is not supported.
+- Materialized views built on a renamed column will not take effect. You must rebuild them upon the column with the new name.
+
+:::
+
 ### Alter table comment (from v3.1)
 
 Syntax:
@@ -89,7 +105,7 @@ Currently, column comments cannot be modified.
 
 ### Modify partition
 
-#### Add a partition
+#### ADD PARTITION(S)
 
 You can choose to add range partitions or list partitions.
 
@@ -183,24 +199,41 @@ Examples:
     );
     ```
 
-#### Drop a partition
+#### DROP PARTITION(S)
 
-Syntax:
+- Drop a single partition:
 
 ```sql
--- Before 2.0
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>
--- 2.0 or later
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-Note:
+- Drop partitions in batch (Supported from v3.3.1):
 
-1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
-3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally, this operation is not recommended.
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
+```
+
+Notes for `multi_range_partitions`:
+
+- It only appiles to Range Partitioning.
+- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+- It only supports partitions with a single Partition Key.
+
+:::note
+
+- Keep at least one partition for partitioned tables.
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
+
+:::
 
 #### Add a temporary partition
 
@@ -532,6 +565,40 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
+
+#### Modify a STRUCT column to add or drop a field
+
+From v3.2.10 and v3.3.2 onwards, StarRocks supports modifying a STRUCT column to add or drop a field, which can be nested or within an ARRAY type.
+
+Syntax:
+
+```sql
+-- Add a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+
+-- Drop a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> DROP FIELD <field_name>
+```
+
+Parameters:
+
+- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+
+For more usage instructions, see [Example - Column -14](#column).
+
+:::note
+
+- Currently, this feature is only supported in shared-nothing clusters.
+- The table must have the `fast_schema_evolution` property enabled.
+- Adding or dropping fields in the STRUCT type within a MAP type is not supported.
+- Newly added fields cannot have default values or attributes such as Nullable specified. They default to being Nullable, with a default value of null.
+- After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
+
+:::
+
 
 ### Modify rollup index
 
@@ -937,6 +1004,128 @@ The `be_compactions` table in the `information_schema` database records compacti
      DROP COLUMN col2
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
+
+13. Modify the data type of multiple columns in a single statement.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
+14. Add and drop fields in STRUCT-type data.
+
+    **Prerequisites**: Create a table and insert a row of data.
+
+    ```sql
+    CREATE TABLE struct_test(
+        c0 INT,
+        c1 STRUCT<v1 INT, v2 STRUCT<v4 INT, v5 INT>, v3 INT>,
+        c2 STRUCT<v1 INT, v2 ARRAY<STRUCT<v3 INT, v4 STRUCT<v5 INT, v6 INT>>>>
+    )
+    DUPLICATE KEY(c0)
+    DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+    PROPERTIES (
+        "fast_schema_evolution" = "true"
+    );
+    INSERT INTO struct_test VALUES (
+        1, 
+        ROW(1, ROW(2, 3), 4), 
+        ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
+    );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v4 INT AFTER v2;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v2.v6 INT FIRST;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 ADD FIELD v2.[*].v7 INT AFTER v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v2.v4;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 DROP FIELD v2.[*].v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
 
 ### Table property
 

@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -34,14 +35,23 @@ public class PushDownPredicateJoinRule extends TransformationRule {
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))));
     }
 
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        JoinPredicatePushdown.JoinPredicatePushDownContext params = context.getJoinPushDownParams();
+        OptExpression joinOpt = input.getInputs().get(0);
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
+        if (joinOperator.getJoinType().isOuterJoin() && !params.enableJoinPredicatePushDown) {
+            return false;
+        }
+        return true;
+    }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
-                joinOpt, false, false, context.getColumnRefFactory(),
-                context.isEnableLeftRightJoinEquivalenceDerive(), context);
+                joinOpt, false, false, context.getColumnRefFactory(), context);
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }

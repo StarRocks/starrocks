@@ -240,7 +240,7 @@ DROP DICTIONARY test_dictionary_definition_7;
 
 DROP TABLE t_dictionary_definition;
 
--- name: test_dictionary_error
+-- name: test_dictionary_error @slow
 CREATE TABLE `t_dictionary_error` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",
@@ -588,3 +588,45 @@ DROP TABLE t_dictionary_multiple_row;
 DROP TABLE t_dictionary_multiple_row_fact;
 DROP DICTIONARY test_dictionary_multiple_row_multi_value;
 DROP DICTIONARY test_dictionary_multiple_row_single_value;
+
+-- name: test_dictionary_show_create_table_gen_col
+CREATE TABLE `t_dictionary_show_create_table_gen_col_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_show_create_table_gen_col_1 VALUES (1,1);
+
+[UC]DROP DICTIONARY test_dictionary_show_create_table_gen_col;
+CREATE DICTIONARY test_dictionary_show_create_table_gen_col USING t_dictionary_show_create_table_gen_col_1 (k KEY, v VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_show_create_table_gen_col", "FINISHED")
+
+CREATE TABLE `t_dictionary_show_create_table_gen_col_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS dictionary_get("test_dictionary_show_create_table_gen_col", k)[1] COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_show_create_table_gen_col_2 VALUES (1);
+SELECT * FROM t_dictionary_show_create_table_gen_col_2;
+
+SHOW CREATE TABLE t_dictionary_show_create_table_gen_col_2;
+
+DROP TABLE t_dictionary_show_create_table_gen_col_1;
+DROP TABLE t_dictionary_show_create_table_gen_col_2;
+DROP DICTIONARY test_dictionary_show_create_table_gen_col;

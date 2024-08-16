@@ -15,17 +15,12 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.SnapshotRef;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
 public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergRefsTableScanner.class);
     private Iterator<Map.Entry<String, SnapshotRef>> reader;
 
     public IcebergRefsTableScanner(int fetchSize, Map<String, String> params) {
@@ -38,44 +33,37 @@ public class IcebergRefsTableScanner extends AbstractIcebergMetadataScanner {
     }
 
     @Override
-    public void close() {
-        if (reader != null) {
-            reader = null;
+    public int doGetNext() {
+        int numRows = 0;
+        for (; numRows < getTableSize(); numRows++) {
+            if (!reader.hasNext()) {
+                break;
+            }
+            Map.Entry<String, SnapshotRef> refEntry = reader.next();
+            String refName = refEntry.getKey();
+            SnapshotRef ref = refEntry.getValue();
+            for (int i = 0; i < requiredFields.length; i++) {
+                Object fieldData = get(requiredFields[i], refName, ref);
+                if (fieldData == null) {
+                    appendData(i, null);
+                } else {
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
+                    appendData(i, fieldValue);
+                }
+            }
         }
+        return numRows;
     }
+
+    @Override
+    public void doClose() {
+        reader = null;
+    }
+
 
     @Override
     protected void initReader() {
         reader = table.refs().entrySet().iterator();
-    }
-
-    @Override
-    public int getNext() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            for (; numRows < getTableSize(); numRows++) {
-                if (!reader.hasNext()) {
-                    break;
-                }
-                Map.Entry<String, SnapshotRef> refEntry = reader.next();
-                String refName = refEntry.getKey();
-                SnapshotRef ref = refEntry.getValue();
-                for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = get(requiredFields[i], refName, ref);
-                    if (fieldData == null) {
-                        appendData(i, null);
-                    } else {
-                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
-                        appendData(i, fieldValue);
-                    }
-                }
-            }
-            return numRows;
-        } catch (Exception e) {
-            close();
-            LOG.error("Failed to get the next off-heap table chunk of iceberg refs table.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of iceberg refs table.", e);
-        }
     }
 
     private Object get(String columnName, String refName, SnapshotRef ref) {

@@ -180,6 +180,21 @@ public class ScalarOperationToDeltaLakeExpr {
         }
 
         @Override
+        public Predicate visitVariableReference(ColumnRefOperator variable, DeltaLakeContext context) {
+            // StarRocks will simplify predicate "column = true" to "column" in the optimizer,
+            // so we need to handle this case here, transform it back to "column = true"
+            String columnName = variable.getName();
+            if (columnName == null) {
+                return null;
+            }
+            Column column = context.getColumn(columnName);
+            if (column == null) {
+                return null;
+            }
+            return new Predicate("=", column, Literal.ofBoolean(true));
+        }
+
+        @Override
         public Predicate visit(ScalarOperator scalarOperator, DeltaLakeContext context) {
             return null;
         }
@@ -206,6 +221,7 @@ public class ScalarOperationToDeltaLakeExpr {
                 case BOOLEAN:
                     return destType != DeltaDataType.BOOLEAN;
                 case TINYINT:
+                    return destType != DeltaDataType.BYTE;
                 case SMALLINT:
                     return destType != DeltaDataType.SMALLINT;
                 case INT:
@@ -238,6 +254,11 @@ public class ScalarOperationToDeltaLakeExpr {
             switch (destType) {
                 case BOOLEAN:
                     res = operator.castTo(Type.BOOLEAN);
+                    break;
+                case BYTE:
+                    if (srcType.isIntegerType()) {
+                        res = operator.castTo(Type.TINYINT);
+                    }
                     break;
                 case SMALLINT:
                     if (srcType.isIntegerType()) {

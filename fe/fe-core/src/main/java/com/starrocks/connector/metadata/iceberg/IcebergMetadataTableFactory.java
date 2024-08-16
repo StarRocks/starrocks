@@ -36,6 +36,14 @@ public class IcebergMetadataTableFactory implements AbstractMetadataTableFactory
                 return IcebergHistoryTable.create(catalogName, dbName, tableName);
             case METADATA_LOG_ENTRIES:
                 return IcebergMetadataLogEntriesTable.create(catalogName, dbName, tableName);
+            case SNAPSHOTS:
+                return IcebergSnapshotsTable.create(catalogName, dbName, tableName);
+            case MANIFESTS:
+                return IcebergManifestsTable.create(catalogName, dbName, tableName);
+            case FILES:
+                return IcebergFilesTable.create(catalogName, dbName, tableName);
+            case PARTITIONS:
+                return IcebergPartitionsTable.create(catalogName, dbName, tableName);
             default:
                 LOG.error("Unrecognized iceberg metadata table type {}", tableType);
                 throw new StarRocksConnectorException("Unrecognized iceberg metadata table type %s", tableType);

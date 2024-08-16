@@ -14,12 +14,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -291,7 +294,15 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
             Function aggFunc = Expr.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            aggregations.put(x, new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
+
+            Preconditions.checkState(aggFunc instanceof AggregateFunction);
+            if (k.getType().isDecimalOfAnyVersion()) {
+                aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) aggFunc, k.getType(),
+                        v.getType());
+            }
+
+            aggregations.put(x,
+                    new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
             outputs.put(k, x);
         });
 

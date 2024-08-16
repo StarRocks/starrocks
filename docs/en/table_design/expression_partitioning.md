@@ -53,7 +53,7 @@ expression ::=
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
-- StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
 - The naming rule for partitions is consistent with the naming rule for dynamic partitioning.
 
 ### **Examples**
@@ -136,7 +136,6 @@ However, in some special scenarios, such as when the table contains a column `ci
 ```sql
 PARTITION BY expression
 ...
-[ PROPERTIES("partition_live_number" = "xxx") ]
 
 expression ::=
     ( partition_columns )
@@ -152,16 +151,11 @@ partition_columns ::=
 **Required**: YES<br/>
 **Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
 
-#### `partition_live_number` 
-
-**Required**: No<br/>
-**Description**: The number of partitions to be retained. Compare the values of partition columns among partitions, and periodically delete partitions with smaller values while retaining those with larger values.<br/>StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes).<br/>**NOTE**<br/>If the values in the partition column are strings, StarRocks compares the lexicographical order of the partition names and periodically retains the partitions that come earlier while deleting the partitions that come later. <br/>
-
 
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
-- StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
 - The naming rule for partitions: if multiple partition columns are specified, the values of different partition columns are connected with an underscore `_` in the partition name, and the format is `p<value in partition column 1>_<value in partition column 2>_...`. For example, if two columns `dt` and `province` are specified as partition columns, both of which are string types, and a data row with values `2022-04-01` and `beijing` is loaded, the corresponding partition automatically created is named `p20220401_beijing`.
 
 ### Examples
@@ -215,24 +209,6 @@ LastConsistencyCheckTime: NULL
               IsInMemory: false
                 RowCount: 1
 1 row in set (0.00 sec)
-```
-
-Example 2: You can also configure the `partition_live_number` property at table creation for partition lifecycle management, for example, specifying that the table should only retain 3 partitions.
-
-```SQL
-CREATE TABLE t_recharge_detail2 (
-    id bigint,
-    user_id bigint,
-    recharge_money decimal(32,2), 
-    city varchar(20) not null,
-    dt varchar(20) not null
-)
-DUPLICATE KEY(id)
-PARTITION BY (dt,city)
-DISTRIBUTED BY HASH(`id`) 
-PROPERTIES(
-    "partition_live_number" = "3" -- only retains the most recent three partitions
-);
 ```
 
 ## Manage partitions

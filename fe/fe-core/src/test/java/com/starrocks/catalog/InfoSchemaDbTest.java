@@ -30,8 +30,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
-import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -278,7 +278,7 @@ public class InfoSchemaDbTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<PrivilegeStmtAnalyzer>() {
+        new MockUp<AuthorizationAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }

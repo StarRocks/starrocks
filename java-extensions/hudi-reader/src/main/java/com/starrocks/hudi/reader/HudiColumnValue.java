@@ -165,15 +165,19 @@ public class HudiColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        ZoneId zoneId = ZoneId.systemDefault();
+        if (timezone != null) {
+            zoneId = ZoneId.of(timezone);
+        }
         if (fieldData instanceof Timestamp) {
             return ((Timestamp) fieldData).toLocalDateTime();
         } else if (fieldData instanceof TimestampWritableV2) {
             return LocalDateTime.ofInstant(Instant.ofEpochSecond((((TimestampObjectInspector) fieldInspector)
-                    .getPrimitiveJavaObject(fieldData)).toEpochSecond()), ZoneId.of(timezone));
+                    .getPrimitiveJavaObject(fieldData)).toEpochSecond()), zoneId);
         } else {
             Long dateTime = ((LongWritable) fieldData).get();
             TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
-            return HudiScannerUtils.getTimestamp(dateTime, timeUnit, timezone);
+            return HudiScannerUtils.getTimestamp(dateTime, timeUnit, zoneId);
         }
     }
 }

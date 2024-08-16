@@ -55,6 +55,71 @@ select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_t
 0
 0
 -- !result
+select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null limit 1;
+-- result:
+0
+-- !result
+select added_data_files_count,added_rows_count,existing_data_files_count,partitions from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests order by added_data_files_count;
+-- result:
+1	1	0	[]
+1	1	0	[]
+1	1	0	[]
+-- !result
+select record_count,lower_bounds from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$files order by element_at(lower_bounds, 1);
+-- result:
+1	{1:"1"}
+1	{1:"2"}
+1	{1:"3"}
+-- !result
+select operation from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$snapshots order by operation;
+-- result:
+append
+append
+append
+-- !result
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} (k1 int, p1 int, p2 int) partition by (p1, p2);
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 1,1,2;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 3,3,4;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 3,3,4;
+-- result:
+-- !result
+select partition_value,record_count,file_count from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions where partition_value.p2=4;
+-- result:
+{"p1":3,"p2":4}	2	2
+-- !result
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions;
+-- result:
+partition_value	struct<p1 int(11), p2 int(11)>	Yes	false	None		
+spec_id	INT	Yes	false	None		
+record_count	BIGINT	Yes	false	None		
+file_count	BIGINT	Yes	false	None		
+total_data_file_size_in_bytes	BIGINT	Yes	false	None		
+position_delete_record_count	BIGINT	Yes	false	None		
+position_delete_file_count	BIGINT	Yes	false	None		
+equality_delete_record_count	BIGINT	Yes	false	None		
+equality_delete_file_count	BIGINT	Yes	false	None		
+last_updated_at	DATETIME	Yes	false	None		
+-- !result
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
+-- result:
+record_count	BIGINT	Yes	false	None		
+file_count	BIGINT	Yes	false	None		
+total_data_file_size_in_bytes	BIGINT	Yes	false	None		
+position_delete_record_count	BIGINT	Yes	false	None		
+position_delete_file_count	BIGINT	Yes	false	None		
+equality_delete_record_count	BIGINT	Yes	false	None		
+equality_delete_file_count	BIGINT	Yes	false	None		
+last_updated_at	DATETIME	Yes	false	None		
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} force;
+-- result:
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result

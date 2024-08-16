@@ -37,10 +37,12 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2.JobState;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -50,11 +52,13 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -249,7 +253,22 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         olapTable.setUseFastSchemaEvolution(false);
-        schemaChangeHandler.process(alterClauses, db, olapTable);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return olapTable;
+            }
+        };
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
+
+        //schemaChangeHandler.process(alterClauses, db, olapTable);
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExists());
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals("day", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
@@ -261,38 +280,45 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         ArrayList<AlterClause> tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
         Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals("week", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         // set dynamic_partition.end = 10
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.END, "10");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals(10, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         // set dynamic_partition.prefix = p1
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.PREFIX, "p1");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals("p1", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
         // set dynamic_partition.buckets = 3
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.BUCKETS, "3");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
     }
+
     @Test
     public void testModifyDynamicPropertyTrim() throws Exception {
         String sql = "ALTER TABLE testDb1.testTable1 SET(\"dynamic_partition.buckets \"=\"1\")";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals("1", stmt.getAlterClauseList().get(0).getProperties().get("dynamic_partition.buckets"));
+
+        ModifyTablePropertiesClause modifyTablePropertiesClause = (ModifyTablePropertiesClause) stmt.getAlterClauseList().get(0);
+        Assert.assertEquals("1", modifyTablePropertiesClause.getProperties().get("dynamic_partition.buckets"));
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
@@ -306,13 +332,26 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
 
-        expectedEx.expect(DdlException.class);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return olapTable;
+            }
+        };
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
+
+        expectedEx.expect(AlterJobException.class);
         expectedEx.expectMessage(expectErrMsg);
-        schemaChangeHandler.process(alterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
     }
 
     @Test
-    public void testModifyDynamicPartitionWithoutTableProperty() throws UserException {
+    public void testModifyDynamicPartitionWithoutTableProperty() throws AlterJobException, UserException {
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.ENABLE, "false",
                 "not a dynamic partition table");
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.TIME_UNIT, "day",
@@ -444,7 +483,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
-     
+
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);

@@ -747,14 +747,17 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     auto schema_id1 = next_id();
     auto& schema_pb1 = (*tablet_metadata->mutable_historical_schemas())[schema_id1];
     schema_pb1.set_id(schema_id1);
+    schema_pb1.set_schema_version(0);
 
     auto schema_id2 = next_id();
     auto& schema_pb2 = (*tablet_metadata->mutable_historical_schemas())[schema_id2];
     schema_pb2.set_id(schema_id2);
+    schema_pb2.set_schema_version(1);
 
     auto schema_id3 = tablet_metadata->schema().id();
     auto& schema_pb3 = (*tablet_metadata->mutable_historical_schemas())[schema_id3];
     schema_pb3.set_id(schema_id3);
+    schema_pb3.set_schema_version(2);
 
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
@@ -786,12 +789,19 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
         input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
         auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
-        ASSERT_EQ(res.value()->id(), schema_id1);
+        ASSERT_EQ(res.value()->id(), schema_id3);
 
         input_rowsets.emplace_back(tablet_metadata->rowsets(2).id());
         res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
-        ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+        ASSERT_EQ(res.value()->id(), schema_id3);
+
+        input_rowsets.clear();
+        input_rowsets.emplace_back(tablet_metadata->rowsets(3).id());
+        input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
+        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), schema_id2);
     }
 
     {

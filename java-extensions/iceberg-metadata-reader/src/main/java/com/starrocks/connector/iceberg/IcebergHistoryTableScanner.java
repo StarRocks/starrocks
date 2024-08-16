@@ -16,20 +16,14 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.jni.connector.ColumnValue;
-import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.util.SnapshotUtil;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
 public class IcebergHistoryTableScanner extends AbstractIcebergMetadataScanner {
-    private static final Logger LOG = LogManager.getLogger(IcebergHistoryTableScanner.class);
-
     private Iterator<Snapshot> reader;
     private Set<Long> ancestorIds;
 
@@ -43,37 +37,29 @@ public class IcebergHistoryTableScanner extends AbstractIcebergMetadataScanner {
     }
 
     @Override
-    public void close() {
-        if (reader != null) {
-            reader = null;
+    public int doGetNext() {
+        int numRows = 0;
+        for (; numRows < getTableSize(); numRows++) {
+            if (!reader.hasNext()) {
+                break;
+            }
+            Snapshot snapshot = reader.next();
+            for (int i = 0; i < requiredFields.length; i++) {
+                Object fieldData = get(requiredFields[i], snapshot);
+                if (fieldData == null) {
+                    appendData(i, null);
+                } else {
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
+                    appendData(i, fieldValue);
+                }
+            }
         }
+        return numRows;
     }
 
     @Override
-    public int getNext() throws IOException {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            for (; numRows < getTableSize(); numRows++) {
-                if (!reader.hasNext()) {
-                    break;
-                }
-                Snapshot snapshot = reader.next();
-                for (int i = 0; i < requiredFields.length; i++) {
-                    Object fieldData = get(requiredFields[i], snapshot);
-                    if (fieldData == null) {
-                        appendData(i, null);
-                    } else {
-                        ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
-                        appendData(i, fieldValue);
-                    }
-                }
-            }
-            return numRows;
-        } catch (Exception e) {
-            close();
-            LOG.error("Failed to get the next off-heap table chunk of iceberg history table.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of iceberg history table.", e);
-        }
+    public void doClose() {
+        reader = null;
     }
 
     @Override

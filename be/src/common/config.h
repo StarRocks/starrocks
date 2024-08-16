@@ -321,6 +321,8 @@ CONF_mInt64(update_compaction_result_bytes, "1073741824");
 CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 // This config defines the maximum percentage of data allowed per compaction
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
+// This config controls max memory that we can use for partial update.
+CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -795,6 +797,8 @@ CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
+
+CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -851,6 +855,9 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage specialized for rename_file operation.
+// if this parameter is 0, use object_storage_request_timeout_ms instead.
+CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
@@ -941,6 +948,9 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // if runtime filter size is larger than send_runtime_filter_via_http_rpc_min_size, be will transmit runtime filter via http protocol.
 // this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
 CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
+
+// -1: ulimited, 0: limit by memory use, >0: limit by queue_size
+CONF_mInt64(runtime_filter_queue_limit, "-1");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
@@ -1317,17 +1327,17 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// extract flat json column when row_num * null_factor < null_row_num
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
-// only flatten json when the number of sub-field in the JSON exceeds the limit
-CONF_mInt32(json_flat_internal_column_min_limit, "5");
-
 // the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "20");
+CONF_mInt32(json_flat_column_max, "100");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1380,8 +1390,48 @@ CONF_mBool(enable_pk_strict_memcheck, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// Current supported modules:
+// 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
+// 2. connector_scan_executor
+// 3. non_pipeline_scan_thread_pool
+// 4. pipeline_prepare_thread_pool
+// 5. pipeline_sink_io_thread_pool
+// 6. query_rpc_thread_pool
+// 7. publish_version_worker_pool
+// 8. olap_scan_executor
+// 9. wg_driver_executor
+// use commas to separate:
+// * means release all above
+CONF_mString(try_release_resource_before_core_dump, "data_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
+
+// vector index
+// Enable caching index blocks for IVF-family vector indexes
+CONF_mBool(enable_vector_index_block_cache, "true");
+
+// concurrency of building index
+CONF_mInt32(config_vector_index_build_concurrency, "8");
+
+// default not to build the empty index
+CONF_mInt32(config_vector_index_default_build_threshold, "0");
+
+// When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
+// The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
+// This will cause FE to fail during deserialization when the returned result set is larger than 100M. Therefore,
+// we set a default value of 1G and the maximum configurable value is 2G.
+CONF_mInt32(thrift_max_message_size, "1073741824");
+
+// MaxFrameSize limits the size of one frame of data for the TFramedTransport. Since all implementations currently send
+// messages in one frame only if TFramedTransport is used, this value may interfere with MaxMessageSize.
+// In the case of an conflict, the smaller value of the two is used (see remark below). The default value is called
+// DEFAULT_MAX_FRAME_SIZE and has a value of 16384000 bytes. This value is used consistently across all Thrift libraries,
+// so we use the same value with the old version.
+CONF_mInt32(thrift_max_frame_size, "16384000");
+
+// The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
+// allows for structures nested up to 64 levels deep.
+CONF_mInt32(thrift_max_recursion_depth, "64");
 
 } // namespace starrocks::config

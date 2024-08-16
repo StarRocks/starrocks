@@ -41,12 +41,13 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 class TabletWriter {
 public:
     explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id, ThreadPool* flush_pool = nullptr)
+                          int64_t txn_id, bool is_compaction, ThreadPool* flush_pool = nullptr)
             : _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
               _schema(std::move(schema)),
               _txn_id(txn_id),
-              _flush_pool(flush_pool) {}
+              _flush_pool(flush_pool),
+              _is_compaction(is_compaction) {}
 
     virtual ~TabletWriter() = default;
 
@@ -141,6 +142,8 @@ protected:
     uint32_t _seg_id = 0;
     bool _finished = false;
     OlapWriterStatistics _stats;
+
+    bool _is_compaction = false;
 };
 
 } // namespace lake

@@ -1184,14 +1184,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
-    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+    if (tablet->get_enable_persistent_index()) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
         DCHECK(_persistent_index == nullptr);
-        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        _persistent_index = std::make_shared<PersistentIndex>(tablet->schema_hash_path());
         return _persistent_index->load_from_tablet(tablet);
     }
 
@@ -1555,8 +1554,14 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
 }
 
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->major_compaction(data_dir, tablet_id, mutex);
+    // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
+    std::shared_ptr<PersistentIndex> pindex;
+    {
+        std::lock_guard<std::mutex> lg(_lock);
+        pindex = _persistent_index;
+    }
+    if (pindex != nullptr) {
+        return pindex->major_compaction(data_dir, tablet_id, mutex);
     } else {
         return Status::OK();
     }
@@ -1574,13 +1579,11 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
-
-    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+    if (tablet->get_enable_persistent_index()) {
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }
-        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        _persistent_index = std::make_shared<PersistentIndex>(tablet->schema_hash_path());
         RETURN_IF_ERROR(_persistent_index->reset(tablet, version, index_meta));
     } else {
         if (_pkey_to_rssid_rowid != nullptr) {

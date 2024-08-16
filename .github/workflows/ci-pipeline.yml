@@ -313,6 +313,8 @@ jobs:
       src_filter: ${{ steps.path-filter.outputs.fe }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
       java_filter: ${{ steps.path-filter.outputs.java }}
+      extension_filter: ${{ steps.path-filter.outputs.extension }}
+      pom_filter: ${{ steps.path-filter.outputs.pom }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -328,6 +330,10 @@ jobs:
               - 'run-fe-ut.sh'
             java:
               - '**.java'
+            extension:
+              - 'java-extensions/**'
+            pom:
+              - '**/pom.xml'
 
   fe-codestyle-check:
     runs-on: ubuntu-latest
@@ -336,6 +342,8 @@ jobs:
     name: FE Code Style Check
     env:
       PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      extension_filter: ${{ needs.fe-checker.outputs.extension_filter }}
     steps:
       - name: clean
         run: |
@@ -372,7 +380,7 @@ jobs:
 
       - name: Run java checkstyle
         if: needs.fe-checker.outputs.java_filter == 'true'
-        uses: dbelyaev/action-checkstyle@v1.5.6
+        uses: dbelyaev/action-checkstyle@v1.15.0
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -460,56 +468,6 @@ jobs:
           cd ${{ github.workspace }}/fe
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
-  trivy-fe-checker:
-    runs-on: [self-hosted, normal]
-    needs: fe-checker
-    if: needs.fe-checker.outputs.src_filter == 'true'
-    name: TRIVY CHECKER
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      CODE_PATH: ${{ github.workspace }}
-      BRANCH: ${{ github.base_ref }}
-      GH_TOKEN: ${{ github.token }}
-      REPORT_FILE: trivy-result-${{ github.event.number }}.txt
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Checkout PR
-        run: |
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
-
-      - name: Run
-        run: |
-          rm -rf /root/.cache/trivy
-          /var/local/env/trivy fs . --scanners vuln --vuln-type library --severity CRITICAL,HIGH \
-            --output ${REPORT_FILE}
-          cat ${REPORT_FILE}
-
-      - name: Publish Trivy Output to Summary
-        if: always()
-        run: |
-          if [[ -s ${REPORT_FILE} ]]; then
-            {
-              echo "### Security Output"
-              echo "<details><summary>Click to expand</summary>"
-              echo ""
-              echo '```terraform'
-              cat ${REPORT_FILE}
-              echo '```'
-              echo "</details>"
-            } >> $GITHUB_STEP_SUMMARY
-          fi
-
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: [fe-codestyle-check]
@@ -537,6 +495,8 @@ jobs:
         id: run_ut
         shell: bash
         timeout-minutes: 60
+        env:
+          EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
@@ -634,6 +594,7 @@ jobs:
         timeout-minutes: 90
         env:
           package: ${{ env.package }}
+          pom_filter: ${{ needs.fe-checker.outputs.pom_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
@@ -642,7 +603,7 @@ jobs:
           fi
           
           if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
             echo "is_self_build=true" >> $GITHUB_OUTPUT
           else
             echo "Use latest tar: ${package}" 
