@@ -425,11 +425,15 @@ public class ScalarOperatorFunctions {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
         TemporalAccessor temporal = builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t "));
-        int year = temporal.isSupported(ChronoField.YEAR) ? temporal.get(ChronoField.YEAR) : 0;
-        int month = temporal.isSupported(ChronoField.MONTH_OF_YEAR) ? temporal.get(ChronoField.MONTH_OF_YEAR) : 1;
-        int day = temporal.isSupported(ChronoField.DAY_OF_MONTH) ? temporal.get(ChronoField.DAY_OF_MONTH) : 1;
-        LocalDate ld = LocalDate.of(year, month, day);
-        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+        if (temporal.isSupported(ChronoField.YEAR)) {
+            int year = temporal.get(ChronoField.YEAR);
+            int month = temporal.isSupported(ChronoField.MONTH_OF_YEAR) ? temporal.get(ChronoField.MONTH_OF_YEAR) : 1;
+            int day = temporal.isSupported(ChronoField.DAY_OF_MONTH) ? temporal.get(ChronoField.DAY_OF_MONTH) : 1;
+            LocalDate ld = LocalDate.of(year, month, day);
+            return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+        } else {
+            throw new IllegalArgumentException("Illegal data, Can't explain the correct year.");
+        }
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
