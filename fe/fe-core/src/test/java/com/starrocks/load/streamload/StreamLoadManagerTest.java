@@ -248,11 +248,8 @@ public class StreamLoadManagerTest {
         long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
-<<<<<<< HEAD
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
-=======
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false, warehouseId);
->>>>>>> ab0ea8dc2b ([BugFix] Fix remove task NPE since db not exists (#49843))
+
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false, warehouseId);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
