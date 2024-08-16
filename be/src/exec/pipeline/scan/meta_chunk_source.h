@@ -35,8 +35,6 @@ public:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
-
     MetaScanContextPtr _scan_ctx;
 
     std::shared_ptr<MetaScanner> _scanner;
