@@ -904,14 +904,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
                         leftOpt.getFieldMappings().stream(),
                         rightOpt.getFieldMappings().stream())
-                .collect(Collectors.toList()),
-                Streams.concat(
-                                leftConstMap.entrySet().stream(),
-                                rightConstMap.entrySet().stream())
-                        .collect(Collectors.toMap(
-                                Map.Entry::getKey,
-                                Map.Entry::getValue,
-                                (existing, replacement) -> existing)));
+                .collect(Collectors.toList()), generateNewConstMap(leftConstMap, rightConstMap, node.getJoinOp()));
 
         ScalarOperator onPredicate = null;
         if (node.getOnPredicate() != null) {
@@ -952,13 +945,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                                     leftOpt.getFieldMappings().stream(),
                                     rightOpt.getFieldMappings().stream())
                             .collect(Collectors.toList()),
-                    Streams.concat(
-                                    leftConstMap.entrySet().stream(),
-                                    rightConstMap.entrySet().stream())
-                            .collect(Collectors.toMap(
-                                    Map.Entry::getKey,
-                                    Map.Entry::getValue,
-                                    (existing, replacement) -> existing)));
+                    generateNewConstMap(leftConstMap, rightConstMap, node.getJoinOp()));
         }
 
         ScalarOperator skewColumn = null;
@@ -1279,5 +1266,27 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             subqueryStmt = ((SubqueryRelation) subqueryStmt.getQueryRelation()).getQueryStatement();
         }
         return (SelectRelation) subqueryStmt.getQueryRelation();
+    }
+
+    private Map<ColumnRefOperator, ScalarOperator> generateNewConstMap(
+            Map<ColumnRefOperator, ScalarOperator> leftConstMap, Map<ColumnRefOperator, ScalarOperator> rightConstMap,
+            JoinOperator joinOperator) {
+        // outJoin may generate null values, so it may not safe to use const value
+        if (joinOperator.isLeftOuterJoin()) {
+            rightConstMap = new HashMap<>();
+        } else if (joinOperator.isRightJoin()) {
+            leftConstMap = new HashMap<>();
+        } else if (joinOperator.isFullOuterJoin()) {
+            leftConstMap = new HashMap<>();
+            rightConstMap = new HashMap<>();
+        }
+
+        return Streams.concat(
+                        leftConstMap.entrySet().stream(),
+                        rightConstMap.entrySet().stream())
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (existing, replacement) -> existing));
     }
 }

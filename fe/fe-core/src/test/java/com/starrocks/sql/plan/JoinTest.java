@@ -3204,4 +3204,90 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v6 = 8: v8");
     }
+
+    @Test
+    public void testOuterJoinOnConstValue() throws Exception {
+        String query = "WITH `ID_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        \"A\" AS `ID`\n" +
+                "),\n" +
+                "`MAP_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        [\"A\", \"B\", \"C\"] AS `MAP_KEYS`\n" +
+                "),\n" +
+                "`AGGED_MAP_TABLE_EX` AS (\n" +
+                "    SELECT\n" +
+                "        ARRAY_AGG(\n" +
+                "            `AGGED_MAP_TABLE`.`MAP_KEYS`\n" +
+                "        ) AS `AGGED_MAP_KEYS`\n" +
+                "    FROM\n" +
+                "        `MAP_TABLE` AS `AGGED_MAP_TABLE`\n" +
+                "),\n" +
+                "`AGGED_MAP_FIND_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        [\"A\", \"B\", \"C\"] AS `FIND_AGGED_KEY`\n" +
+                "    FROM\n" +
+                "        `AGGED_MAP_TABLE_EX`\n" +
+                "),\n" +
+                "`GROUPED_FIND_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        `GROUPED_AGGED_MAP_FIND_TABLE`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`\n" +
+                "    FROM\n" +
+                "        `AGGED_MAP_FIND_TABLE` AS `GROUPED_AGGED_MAP_FIND_TABLE`\n" +
+                "    GROUP BY\n" +
+                "        `GROUPED_AGGED_MAP_FIND_TABLE`.`FIND_AGGED_KEY`\n" +
+                "),\n" +
+                "`AGGED_GROUPED_FIND_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `AGGED_GROUPED_FIND_TABLE`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`,\n" +
+                "        123 AS `GROUPED_FIND_LITERAL`\n" +
+                "    FROM\n" +
+                "        `GROUPED_FIND_TABLE` AS `AGGED_GROUPED_FIND_TABLE`\n" +
+                "),\n" +
+                "`HANDLE_SEQUENCE_TABLE` AS (\n" +
+                "    SELECT\n" +
+                "        `MockTOSQL_UNNEST`.`FIND_AGGED_KEY` AS `FIND_AGGED_KEY`,\n" +
+                "        `SEQUENCE_TABLE`.`GROUPED_FIND_LITERAL` AS `GROUPED_FIND_LITERAL`\n" +
+                "    FROM\n" +
+                "        `AGGED_GROUPED_FIND_SEQUENCE` AS `SEQUENCE_TABLE`,\n" +
+                "        UNNEST(\n" +
+                "            `SEQUENCE_TABLE`.`FIND_AGGED_KEY`\n" +
+                "        ) AS MockTOSQL_UNNEST(\n" +
+                "            `FIND_AGGED_KEY`\n" +
+                "        )\n" +
+                "),\n" +
+                "`JOINED_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `R_TABLE`.`ID` AS `JOINED_ID`,\n" +
+                "        `HANDLE_SEQUENCE_TABLE_JOINED`.`GROUPED_FIND_LITERAL` AS `JOINED_LITERAL`\n" +
+                "    FROM\n" +
+                "        `HANDLE_SEQUENCE_TABLE` AS `HANDLE_SEQUENCE_TABLE_JOINED`\n" +
+                "        LEFT JOIN `ID_TABLE` AS `R_TABLE` ON (\n" +
+                "            `HANDLE_SEQUENCE_TABLE_JOINED`.`FIND_AGGED_KEY` = `R_TABLE`.`ID`\n" +
+                "        )\n" +
+                "),\n" +
+                "`JOINED_AGGED_SEQUENCE` AS (\n" +
+                "    SELECT\n" +
+                "        `JOINED_TABLE_SEQUENCE`.`JOINED_LITERAL` AS `JOINED_LITERAL`,\n" +
+                "            `JOINED_TABLE_SEQUENCE`.`JOINED_ID`\n" +
+                "         AS `JOINED_TABLE_AGGED_SEQUENCE`\n" +
+                "    FROM\n" +
+                "        `JOINED_SEQUENCE` AS `JOINED_TABLE_SEQUENCE`\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    `JOINED_AGGED_SEQUENCE_R_TABLE`.`JOINED_TABLE_AGGED_SEQUENCE` AS `RENAME_9`\n" +
+                "FROM\n" +
+                "    `AGGED_GROUPED_FIND_SEQUENCE` AS `AGGED_GROUP_FIND_L_TABLE`\n" +
+                "    LEFT JOIN `JOINED_AGGED_SEQUENCE` AS `JOINED_AGGED_SEQUENCE_R_TABLE` ON (\n" +
+                "        `AGGED_GROUP_FIND_L_TABLE`.`GROUPED_FIND_LITERAL` = `JOINED_AGGED_SEQUENCE_R_TABLE`.`JOINED_LITERAL`\n" +
+                "    );";
+        String plan = getFragmentPlan(query);
+        // left outer join can not use const expr replacement optimization because it may generate null values
+        assertContains(plan, "16:Project\n" +
+                "  |  <slot 29> : 29: expr\n" +
+                "  |  \n" +
+                "  15:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN\n" +
+                "  |  colocate: false, reason:");
+    }
 }
