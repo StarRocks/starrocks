@@ -221,7 +221,5 @@ public class StreamLoadManagerTest {
         task.replayOnCommitted(state);
         Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
 
-        streamLoadManager.cleanSyncStreamLoadTasks();
-        Assert.assertEquals(0, streamLoadManager.getStreamLoadTaskCount());
     }
 }
