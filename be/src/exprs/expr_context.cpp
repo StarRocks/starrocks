@@ -186,7 +186,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
             ASSIGN_OR_RETURN(ptr, e->evaluate_with_filter(this, chunk, filter));
         }
         DCHECK(ptr != nullptr);
-        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
+        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant() && ptr->size() > 0) {
             ptr->resize(chunk->num_rows());
         }
         return ptr;
