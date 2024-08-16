@@ -833,7 +833,6 @@ alterClause
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
-    | distributionClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
