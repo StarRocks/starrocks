@@ -17,6 +17,8 @@ package com.starrocks.connector.delta;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
 import io.delta.kernel.exceptions.KernelEngineException;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static java.lang.String.format;
 
 public class DeltaLakeParquetHandler extends DefaultParquetHandler {
@@ -46,16 +49,19 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
     }
 
     public static List<ColumnarBatch> readParquetFile(String filePath, StructType physicalSchema, Configuration hadoopConf) {
-        io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =
-                new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(hadoopConf);
-        CloseableIterator<ColumnarBatch> currentFileReader = batchReader.read(filePath, physicalSchema, Optional.empty());
+        try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL,
+                "DeltaLakeParquetHandler.readParquetFileAndGetColumnarBatch")) {
+            io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =
+                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(hadoopConf);
+            CloseableIterator<ColumnarBatch> currentFileReader = batchReader.read(filePath, physicalSchema, Optional.empty());
 
-        List<ColumnarBatch> result = Lists.newArrayList();
-        while (currentFileReader != null && currentFileReader.hasNext()) {
-            result.add(currentFileReader.next());
+            List<ColumnarBatch> result = Lists.newArrayList();
+            while (currentFileReader != null && currentFileReader.hasNext()) {
+                result.add(currentFileReader.next());
+            }
+            Utils.closeCloseables(currentFileReader);
+            return result;
         }
-        Utils.closeCloseables(currentFileReader);
-        return result;
     }
 
     @Override
@@ -117,7 +123,12 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
                 if (fileIter.hasNext()) {
                     currentFile = fileIter.next().getPath();
                     if (LogReplay.containsAddOrRemoveFileActions(physicalSchema)) {
-                        currentColumnarBatchList = checkpointCache.get(new Pair<>(currentFile, physicalSchema));
+                        Pair<String, StructType> key = Pair.create(currentFile, physicalSchema);
+                        if (checkpointCache.getIfPresent(key) != null || predicate.isEmpty()) {
+                            currentColumnarBatchList = checkpointCache.get(key);
+                        } else {
+                            currentColumnarBatchList = readParquetFile(currentFile, physicalSchema, hadoopConf);
+                        }
                     } else {
                         currentColumnarBatchList = readParquetFile(currentFile, physicalSchema, hadoopConf);
                     }

@@ -234,7 +234,7 @@ public class SelectUsingAliasTest extends PlanTestBase {
     private void testSqlRewrite(String sql, String expected, boolean withoutTbl) {
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
-        String afterSql = new AstToSQLBuilder.AST2SQLBuilderVisitor(false, withoutTbl).visit(stmt);
+        String afterSql = new AstToSQLBuilder.AST2SQLBuilderVisitor(false, withoutTbl, true).visit(stmt);
         Assert.assertEquals(expected, afterSql.replaceAll("`", ""));
     }
 }

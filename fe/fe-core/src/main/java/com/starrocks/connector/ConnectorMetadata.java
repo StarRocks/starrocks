@@ -151,11 +151,18 @@ public interface ConnectorMetadata {
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
      * 2. Get file scan tasks for iceberg/deltalake metadata by query predicate.
+     * <p>
+     * There is an implicit contract here:
+     * the order of remote file information in the list, must be identical to order of partition keys in params.
      *
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList();
+    }
+
+    default RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return RemoteFileInfoDefaultSource.EMPTY;
     }
 
     default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
@@ -169,8 +176,7 @@ public interface ConnectorMetadata {
      * @param tableName
      * @param snapshotId
      * @param serializedPredicate serialized predicate string of lake format expression
-     * @param metadataTableType metadata table type
-     *
+     * @param metadataTableType   metadata table type
      * @return table meta serialized specification
      */
     default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,

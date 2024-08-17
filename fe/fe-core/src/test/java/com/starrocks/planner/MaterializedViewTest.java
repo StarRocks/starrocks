@@ -913,7 +913,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregateWithGroupByKeyExpr1() {
-        setTracLogModule("MV");
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",

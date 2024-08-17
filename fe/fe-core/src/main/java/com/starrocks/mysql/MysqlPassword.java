@@ -263,12 +263,12 @@ public class MysqlPassword {
         passwdString = passwdString.toUpperCase();
         passwd = passwdString.getBytes(StandardCharsets.UTF_8);
         if (passwd.length != SCRAMBLE_LENGTH_HEX_LENGTH || passwd[0] != PVERSION41_CHAR) {
-            ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+            throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
         }
 
         for (int i = 1; i < passwd.length; ++i) {
             if (!((passwd[i] <= '9' && passwd[i] >= '0') || passwd[i] >= 'A' && passwd[i] <= 'F')) {
-                ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+                throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
             }
         }
 

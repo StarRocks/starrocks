@@ -23,6 +23,19 @@
 
 namespace starrocks {
 
+// Options to control how to create DataCache instance
+struct DataCacheOptions {
+    bool enable_datacache = false;
+    bool enable_cache_select = false;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int64_t modification_time = 0;
+    int32_t datacache_evict_probability = 100;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+};
+
 struct DirSpace {
     std::string path;
     size_t size;

@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "exec/mor_processor.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -173,9 +174,6 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
-    // The file last modification time
-    int64_t modification_time = 0;
-
     const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
@@ -213,18 +211,12 @@ struct HdfsScannerParams {
 
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
 
-    bool use_datacache = false;
-    bool enable_populate_datacache = false;
-    bool enable_datacache_async_populate_mode = false;
-    bool enable_datacache_io_adaptor = false;
-    int32_t datacache_evict_probability = 0;
-    int8_t datacache_priority = 0;
-    int64_t datacache_ttl_seconds = 0;
+    DataCacheOptions datacache_options{};
+    bool use_file_metacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
-    bool use_file_metacache = false;
     bool orc_use_column_names = false;
     MORParams mor_params;
 
@@ -292,8 +284,6 @@ struct HdfsScannerContext {
 
     bool use_file_metacache = false;
 
-    int32_t datacache_evict_probability = 0;
-
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -303,6 +293,10 @@ struct HdfsScannerContext {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     int64_t connector_max_split_size = 0;
+
+    // update none_existed_slot
+    // update conjunct
+    void update_with_none_existed_slot(SlotDescriptor* slot);
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
@@ -330,6 +324,20 @@ struct HdfsScannerContext {
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 
     void merge_split_tasks();
+};
+
+struct OpenFileOptions {
+    FileSystem* fs = nullptr;
+    std::string path;
+    int64_t file_size = -1;
+    HdfsScanStats* fs_stats = nullptr;
+    HdfsScanStats* app_stats = nullptr;
+
+    // for datacache
+    DataCacheOptions datacache_options;
+
+    // for compressed text file
+    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
 };
 
 class HdfsScanner {
@@ -362,6 +370,9 @@ public:
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:
+    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
+            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
     Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 

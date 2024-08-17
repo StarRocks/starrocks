@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "clucene_inverted_writer.h"
+#include "storage/index/inverted/clucene/clucene_inverted_writer.h"
 
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
 #include <CLucene/util/Misc.h>

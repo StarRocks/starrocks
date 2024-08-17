@@ -315,7 +315,7 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     int64_t leaf_size = 0;
     for (const auto& path : *paths) {
         auto& root = path->path();
-        int32_t index = _tablet->field_index_with_max_version(root);
+        int32_t index = _tablet_schema->field_index(root);
         auto field = schema->get_field_by_name(root);
         if (index >= 0 && field != nullptr) {
             auto res = path->convert_by_index(field.get(), index);
@@ -484,11 +484,6 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                                                _runtime_state->use_column_pool()));
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
-}
-
-const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
 }
 
 // mapping a slot-column-id to schema-columnid
@@ -663,6 +658,14 @@ void OlapChunkSource::_update_counter() {
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             auto* path_counter = _runtime_profile->get_counter(fmt::format("[Hit]{}", k));
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[HitMerge]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
             }

@@ -274,7 +274,8 @@ public class OlapTableSink extends DataSink {
                 enableAutomaticPartition, automaticBucketSize, getOpenPartitions());
         tSink.setPartition(partitionParam);
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
-        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId));
+        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId,
+                getSystemInfoService(dstTable)));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         if (canUseColocateMVIndex(dstTable)) {
@@ -732,6 +733,14 @@ public class OlapTableSink extends DataSink {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
+    public static SystemInfoService getSystemInfoService(OlapTable table) {
+        if (table instanceof ExternalOlapTable) {
+            return ((ExternalOlapTable) table).getExternalSystemInfoService();
+        } else {
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        }
+    }
+
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
                                                          long warehouseId) throws UserException {
@@ -739,7 +748,7 @@ public class OlapTableSink extends DataSink {
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        SystemInfoService infoService = getSystemInfoService(table);
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
@@ -762,7 +771,7 @@ public class OlapTableSink extends DataSink {
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap();
+                                localTablet.getNormalReplicaBackendPathMap(infoService);
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +

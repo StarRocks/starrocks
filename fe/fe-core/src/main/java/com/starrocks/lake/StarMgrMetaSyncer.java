@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -122,6 +123,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
+            boolean forceDelete = Config.meta_sync_force_delete_shard_meta;
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
@@ -130,7 +132,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
+                    if (stCode != TStatusCode.INVALID_ARGUMENT && !forceDelete) {
                         response.failedTablets.forEach(shards::remove);
                     }
                 }
@@ -139,7 +141,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                continue;
+                if (!forceDelete) {
+                    continue;
+                }
             }
 
             // 2. delete shard
@@ -281,7 +285,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     // return true if starmgr shard meta changed
-    private boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
+    @VisibleForTesting
+    public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
@@ -296,6 +301,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .stream()
                     .map(Partition::getSubPartitions)
                     .forEach(physicalPartitions::addAll);
+            table.setShardGroupChanged(false);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -303,13 +309,27 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             locker.lockDatabase(db, LockType.READ);
             try {
+                // schema change might replace the shards in the original shard group
                 if (table.getState() != OlapTable.OlapTableState.NORMAL) {
-                    return false; // table might be in schema change
+                    return false;
+                }
+                // automatic bucketing will create new shards in the original shard group
+                if (table.isAutomaticBucketing()) {
+                    return false;
+                }
+                // automatic bucketing will change physicalPartitions make shard group changed even after it's done
+                if (table.hasShardGroupChanged()) {
+                    return false;
                 }
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
-                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
-                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                Set<Long> starmgrShardIdsSet = null;
+                if (redundantGroupToShards.get(groupId) != null) {
+                    starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                } else {
+                    List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                    starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                }
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : materializedIndex.getTablets()) {

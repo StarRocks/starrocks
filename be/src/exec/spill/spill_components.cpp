@@ -14,6 +14,8 @@
 
 #include "exec/spill/spill_components.h"
 
+#include <glog/logging.h>
+
 #include <any>
 #include <cstdint>
 #include <memory>
@@ -546,11 +548,16 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
                                    flush_ctx.right.get());
         RETURN_IF_YIELD(yield_ctx.need_yield);
         RETURN_IF(!st.is_ok_or_eof(), st);
+        DCHECK_EQ(flush_ctx.reader.get()->read_rows(), partition->num_rows);
         TRACE_SPILL_LOG << "reader:" << flush_ctx.reader.get() << " read rows:" << flush_ctx.reader->read_rows();
         DCHECK_EQ(flush_ctx.left->num_rows + flush_ctx.right->num_rows, partition->num_rows);
 
         flush_ctx.left->spill_writer->acquire_mem_table();
         flush_ctx.right->spill_writer->acquire_mem_table();
+
+        DCHECK_EQ(flush_ctx.left->spill_output_stream->append_rows(), flush_ctx.left->num_rows);
+        DCHECK_EQ(flush_ctx.left->spill_writer->block_group_num_rows(), flush_ctx.left->num_rows);
+        DCHECK_EQ(flush_ctx.right->spill_writer->block_group_num_rows(), flush_ctx.right->num_rows);
 
         _add_partition(std::move(flush_ctx.right));
         _add_partition(std::move(flush_ctx.left));
@@ -587,17 +594,25 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
         };
 
         auto defer = DeferOp([&]() {
+            RETURN_IF(yield_ctx.need_yield, (void)0);
             RETURN_IF(st = flush_partition(left_partition); !st.ok(), (void)0);
             RETURN_IF(yield_ctx.need_yield, (void)0);
             RETURN_IF(st = flush_partition(right_partition); !st.ok(), (void)0);
             RETURN_IF(yield_ctx.need_yield, (void)0);
         });
+
+        // is mem table is done we should flush them firstly
+        if (left_mem_table->is_done() || right_mem_table->is_done()) {
+            return Status::OK();
+        }
+
         TRY_CATCH_ALLOC_SCOPE_START()
         while (true) {
             {
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
                 RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
+                    DCHECK_EQ(reader->read_rows(), partition->num_rows);
                     break;
                 }
                 ASSIGN_OR_RETURN(auto chunk, reader->restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));

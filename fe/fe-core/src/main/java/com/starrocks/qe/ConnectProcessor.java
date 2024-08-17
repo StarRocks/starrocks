@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.AuditEncryptionChecker;
@@ -94,7 +95,6 @@ import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -191,19 +191,9 @@ public class ConnectProcessor {
             return;
         }
 
-        // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-        String errorCode = "";
-        if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
-            // error happens in FE execution.
-            errorCode = ctx.getState().getErrType().name();
-        } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
-            // error happens in BE execution.
-            errorCode = ctx.getErrorCode();
-        }
-
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
-                .setErrorCode(errorCode)
+                .setErrorCode(ctx.getNormalizedErrorCode())
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
@@ -225,6 +215,7 @@ public class ConnectProcessor {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             } else {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
@@ -265,18 +256,19 @@ public class ConnectProcessor {
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
-    public String computeStatementDigest(StatementBase queryStmt) {
+    public static String computeStatementDigest(StatementBase queryStmt) {
         if (queryStmt == null) {
             return "";
         }
 
-        String digest = SqlDigestBuilder.build(queryStmt);
         try {
+            String digest = SqlDigestBuilder.build(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
             return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
+        } catch (Exception e) {
+            LOG.warn("Failed to compute statement digest", e);
             return "";
         }
     }
@@ -306,6 +298,7 @@ public class ConnectProcessor {
 
         // execute this query.
         StatementBase parsedStmt = null;
+        boolean onlySetStmt = true;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
@@ -332,6 +325,9 @@ public class ConnectProcessor {
                     if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
                     }
+                }
+                if (!(parsedStmt instanceof SetStmt)) {
+                    onlySetStmt = false;
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
@@ -379,10 +375,14 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             Tracers.close();
+            if (!onlySetStmt) {
+                // custom_query_id session is temporary, should be cleared after query finished
+                ctx.getSessionVariable().setCustomQueryId("");
+            }
         }
 
         // audit after exec
@@ -539,7 +539,7 @@ public class ConnectProcessor {
         ctx.setCommand(command);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
 
         switch (command) {
             case COM_INIT_DB:
@@ -822,7 +822,7 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
         }
 
         // If stmt is also forwarded during execution, just return the forward result.

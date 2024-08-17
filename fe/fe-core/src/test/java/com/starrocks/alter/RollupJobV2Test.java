@@ -55,6 +55,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -92,11 +93,12 @@ public class RollupJobV2Test extends DDLTestBase {
         super.setUp();
         clause = new AddRollupClause(GlobalStateMgrTestUtil.testRollupIndex2, Lists.newArrayList("v1"), null,
                 GlobalStateMgrTestUtil.testTable1, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+        analyzer.analyze(null, clause);
 
         clause2 = new AddRollupClause(GlobalStateMgrTestUtil.testRollupIndex3, Lists.newArrayList("v1", "v2"), null,
                 GlobalStateMgrTestUtil.testTable1, null);
-        clause2.analyze(analyzer);
+        analyzer.analyze(null, clause2);
 
         AgentTaskQueue.clearAllTasks();
     }

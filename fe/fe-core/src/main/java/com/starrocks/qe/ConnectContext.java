@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -81,6 +82,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -592,12 +594,23 @@ public class ConnectContext {
         this.state = state;
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public String getNormalizedErrorCode() {
+        // TODO: how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
+        if (StringUtils.isNotEmpty(errorCode)) {
+            // error happens in BE execution.
+            return errorCode;
+        }
+
+        if (state.getErrType() != QueryState.ErrType.UNKNOWN) {
+            // error happens in FE execution.
+            return state.getErrType().name();
+        }
+
+        return "";
     }
 
-    public void setErrorCode(String errorCode) {
-        this.errorCode = errorCode;
+    public void resetErrorCode() {
+        this.errorCode = "";
     }
 
     public void setErrorCodeOnce(String errorCode) {
@@ -671,6 +684,10 @@ public class ConnectContext {
 
     public void setLastQueryId(UUID queryId) {
         this.lastQueryId = queryId;
+    }
+
+    public String getCustomQueryId() {
+        return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
     public boolean isProfileEnabled() {
@@ -1109,6 +1126,11 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+                String currentValue = VariableMgr.getValue(sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(VariableMgr.getDefaultValue(entry.getKey()))) {
+                    // If the current session variable is not default value, we should respect it.
+                    continue;
+                }
                 SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
                 modifySystemVariable(variable, true);
             }

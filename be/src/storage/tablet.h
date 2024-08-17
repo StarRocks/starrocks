@@ -330,6 +330,10 @@ public:
     void remove_all_delta_column_group_cache() const;
     void remove_all_delta_column_group_cache_unlocked() const;
 
+    [[nodiscard]] bool is_dropping() const { return _is_dropping; }
+    // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
+    void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
+
 protected:
     void on_shutdown() override;
 
@@ -449,6 +453,8 @@ private:
     // another tablet with the same tablet id
     // currently, it will be used in Restore process
     bool _will_be_force_replaced = false;
+
+    std::atomic<bool> _is_dropping{false};
 };
 
 inline bool Tablet::init_succeeded() {

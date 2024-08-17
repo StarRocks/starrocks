@@ -77,6 +77,7 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_compactor.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
     rowset/cast_column_iterator.cpp
@@ -247,10 +248,14 @@ add_library(Storage STATIC
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
     index/inverted/inverted_index_iterator.cpp
-    index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
     index/inverted/clucene/clucene_plugin.cpp
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
-    index/inverted/clucene/match_operator.cpp)
+    index/inverted/clucene/match_operator.cpp
+    index/vector/vector_index_builder_factory.cpp
+    index/vector/vector_index_writer.cpp
+    index/vector/vector_index_builder.cpp
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp)

@@ -78,8 +78,8 @@ public class TimeWatcher {
 
         public void close() {
             reentrantCount--;
+            levels--;
             if (reentrantCount == 0) {
-                levels--;
                 stopWatch.stop();
             }
         }

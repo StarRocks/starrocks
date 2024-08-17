@@ -84,7 +84,7 @@ public class UserProperty {
             return;
         }
 
-        String newDatabase = "";
+        String newDatabase = getDatabase();
         for (Pair<String, String> entry : properties) {
             String key = entry.first;
             String value = entry.second;
@@ -112,7 +112,7 @@ public class UserProperty {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
         }
-        if (!newDatabase.isEmpty()) {
+        if (!newDatabase.equalsIgnoreCase(getDatabase())) {
             checkDatabase(newDatabase);
             setDatabase(newDatabase);
         }

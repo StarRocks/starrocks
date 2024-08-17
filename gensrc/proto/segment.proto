@@ -161,6 +161,10 @@ message JsonMetaPB {
     // Version 1: encode each JSON datum individually, as so called row-oriented format
     // Version 2(WIP): columnar encoding for JSON
     optional uint32 format_version = 1;
+
+    optional bool is_flat = 2;
+
+    optional bool has_remain = 3;
 }
 
 message ColumnMetaPB {

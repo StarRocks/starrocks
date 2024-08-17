@@ -144,6 +144,11 @@ enum TAlterJobType {
     DECOMMISSION_BACKEND = 2
 }
 
+struct TAlterMaterializedViewParam {
+    1: required string column_name
+    2: optional string origin_column_name
+    3: optional Exprs.TExpr mv_expr
+}
 
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
@@ -167,12 +172,6 @@ struct TAlterTabletReqV2 {
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
-}
-
-struct TAlterMaterializedViewParam {
-    1: required string column_name
-    2: optional string origin_column_name
-    3: optional Exprs.TExpr mv_expr
 }
 
 struct TClusterInfo {
@@ -413,7 +412,8 @@ enum TTabletMetaType {
     BINLOG_CONFIG,
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE
+    STORAGE_TYPE,
+    MUTABLE_BUCKET_NUM
 }
 
 struct TTabletMetaInfo {
