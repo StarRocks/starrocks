@@ -3110,7 +3110,7 @@ TEST_F(TimeFunctionsTest, str2date_of_dateformat) {
         str_col->append_datum(Slice("2020-06-25"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   2020-0  "));
+        str_col->append_datum(Slice("   2020-00-02  "));
 
         Columns columns;
         columns.emplace_back(str_col);
