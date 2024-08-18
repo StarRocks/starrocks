@@ -751,6 +751,9 @@ public class GlobalStateMgr {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
                     loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
+                if (Config.max_broker_load_job_concurrency != pendingLoadTaskScheduler.getCorePoolSize()) {
+                    pendingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
