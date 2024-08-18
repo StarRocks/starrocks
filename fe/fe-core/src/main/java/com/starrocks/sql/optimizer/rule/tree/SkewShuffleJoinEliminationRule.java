@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -57,8 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static com.starrocks.sql.plan.PlanFragmentBuilder.getShuffleColumns;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
@@ -146,6 +143,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             OptExpression rightExchangeOptExp = opt.inputAt(1);
             PhysicalDistributionOperator rightExchangeOp = (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
+            ColumnRefSet usedColumnsOfRightExchangeOp =
+                    rightExchangeOp.getRowOutputInfo(rightExchangeOptExp.getInputs())
+                            .getUsedColumnRefSet();
 
             PhysicalSplitProduceOperator leftSplitProduceOperator =
                     new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
@@ -289,9 +289,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             OptExpression rightChildOfMerge = newBroadcastJoin;
             if (!parentRequireEmpty) {
+                PhysicalDistributionOperator newExchangeForBroadcastJoin =
+                        new PhysicalDistributionOperator(rightExchangeOp.getDistributionSpec());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
                 OptExpression exchangeOptExpForBroadcastJoin =
-                        OptExpression.builder().setOp(rightExchangeOp)
+                        OptExpression.builder().setOp(newExchangeForBroadcastJoin)
                                 .setInputs(Collections.singletonList(newBroadcastJoin))
                                 .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
                                 .setStatistics(newBroadcastJoin.getStatistics())
@@ -300,13 +302,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 if (projectionOnJoin != null) {
                     // broadcast join's projection should keep the columns used in exchange
                     Projection projectionForBroadcast = projectionOnJoin.deepClone();
-                    ColumnRefSet usedColumn = projectionForBroadcast.getUsedColumns();
-                    for (ColumnRefOperator shuffleColumn : getShuffleColumns(
-                            (HashDistributionSpec) rightExchangeOp.getDistributionSpec(), columnRefFactory)) {
-                        if (!usedColumn.contains(shuffleColumn)) {
-                            projectionForBroadcast.getColumnRefMap().putIfAbsent(shuffleColumn, shuffleColumn);
-                        }
-                    }
+
+                    usedColumnsOfRightExchangeOp.except(projectionOnJoin.getOutputColumns());
+                    usedColumnsOfRightExchangeOp.getColumnRefOperators(columnRefFactory).stream()
+                            .forEach(columnRefOperator -> {
+                                projectionForBroadcast.getColumnRefMap()
+                                        .putIfAbsent(columnRefOperator, columnRefOperator);
+                            });
+                    newBroadcastJoinOpt.setProjection(projectionForBroadcast);
                 }
             }
 
@@ -342,7 +345,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private boolean isShuffleJoin(OptExpression opt) {
-            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) opt.getOp();
+            if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
+                return false;
+            }
             if (!isExchangeWithDistributionType(opt.getInputs().get(0).getOp(),
                     DistributionSpec.DistributionType.SHUFFLE) ||
                     !isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
@@ -353,8 +358,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private boolean isBroadCastJoin(OptExpression opt) {
-            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) opt.getOp();
-
+            if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
+                return false;
+            }
             return isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
                     DistributionSpec.DistributionType.BROADCAST);
         }
