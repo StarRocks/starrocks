@@ -114,6 +114,14 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, type);
     }
 
+    public static ConstantOperator createNullableObject(Object value, Type type) {
+        if (value == null) {
+            return createNull(type);
+        } else {
+            return createObject(value, type);
+        }
+    }
+
     public static ConstantOperator createNull(Type type) {
         return new ConstantOperator(type);
     }

@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.SchemaTableEvaluateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
@@ -473,6 +474,7 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
