@@ -287,17 +287,26 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private String computeNodesToString() {
         StringBuilder out = new StringBuilder("compute node: ");
-        id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+                out.append(
+                        String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
     }
 
     private String backendsToString() {
         StringBuilder out = new StringBuilder("backend: ");
-        id2Backend.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
+        id2Backend.forEach((backendID, backend) -> {
+            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+                out.append(
+                        String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
     }
 
