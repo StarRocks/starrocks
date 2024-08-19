@@ -150,12 +150,7 @@ import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.DropPartitionsInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
->>>>>>> 78715a708a ([Enhancement] Support large json in image (#48569))
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;

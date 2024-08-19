@@ -181,17 +181,6 @@ public class Checkpoint extends FrontendDaemon {
                 continue;
             }
 
-<<<<<<< HEAD
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
-            try {
-                MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
-                successPushedCnt++;
-                iterator.remove();
-                LOG.info("push image successfully, url = {}", url);
-                if (MetricRepo.hasInit) {
-                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-=======
             boolean allFormatSuccess = true;
             for (ImageFormatVersion formatVersion : getImageFormatVersionToPush(imageVersion)) {
                 String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
@@ -209,7 +198,6 @@ public class Checkpoint extends FrontendDaemon {
                 } catch (IOException e) {
                     allFormatSuccess = false;
                     LOG.error("Exception when pushing image file. url = {}", url, e);
->>>>>>> 78715a708a ([Enhancement] Support large json in image (#48569))
                 }
             }
             if (allFormatSuccess) {

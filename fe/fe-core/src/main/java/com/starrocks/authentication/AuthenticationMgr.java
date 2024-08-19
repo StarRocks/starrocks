@@ -22,11 +22,8 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
-<<<<<<< HEAD
 import com.starrocks.mysql.privilege.AuthPlugin;
-=======
 import com.starrocks.persist.ImageWriter;
->>>>>>> 78715a708a ([Enhancement] Support large json in image (#48569))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;

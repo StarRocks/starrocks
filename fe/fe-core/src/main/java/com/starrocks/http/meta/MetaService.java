@@ -199,11 +199,7 @@ public class MetaService {
         private static final String VERSION = "version";
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
-<<<<<<< HEAD
-=======
-        private static final String FOR_GLOBAL_STATE = "for_global_state";
         private static final String IMAGE_FORMAT_VERSION = "image_format_version";
->>>>>>> 78715a708a ([Enhancement] Support large json in image (#48569))
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
