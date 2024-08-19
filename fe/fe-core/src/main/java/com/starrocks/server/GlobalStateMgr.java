@@ -57,6 +57,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.catalog.DomainResolver;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -65,6 +66,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -522,6 +524,20 @@ public class GlobalStateMgr {
         }
 
         return nodesInfo;
+    }
+
+    public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService, OlapTable table) {
+        if (table instanceof ExternalOlapTable) {
+            TNodesInfo nodesInfo = new TNodesInfo();
+            for (Long id : systemInfoService.getBackendIds(false)) {
+                Backend backend = systemInfoService.getBackend(id);
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
+            }
+            return nodesInfo;
+        } else {
+            return createNodesInfo(warehouseId, systemInfoService);
+        }
+
     }
 
     public HeartbeatMgr getHeartbeatMgr() {
