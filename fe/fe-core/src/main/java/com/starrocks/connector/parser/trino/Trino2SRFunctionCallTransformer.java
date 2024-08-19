@@ -145,13 +145,28 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("to_unixtime", 1, "unix_timestamp",
                 List.of(Expr.class));
 
-        //from_unixtime -> convert_tz
+        // from_unixtime(unixtime) -> from_unixtime
+        registerFunctionTransformer("from_unixtime", 1, "from_unixtime",
+                List.of(Expr.class));
+
+        //from_unixtime(unixtime, zone) -> convert_tz, from_unixtime
         registerFunctionTransformer("from_unixtime", 2,
                 new FunctionCallExpr("convert_tz", List.of(
                         new FunctionCallExpr("from_unixtime", List.of(
                                 new PlaceholderExpr(1, Expr.class))),
                         new VariableExpr("time_zone"),
                         new PlaceholderExpr(2, Expr.class)
+                )));
+
+        //from_unixtime(unixtime, hours, minutes) -> hours_add, minutes_add, from_unixtime
+        registerFunctionTransformer("from_unixtime", 3,
+                new FunctionCallExpr("hours_add", List.of(
+                        new FunctionCallExpr("minutes_add", List.of(
+                                new FunctionCallExpr("from_unixtime", List.of(
+                                        new PlaceholderExpr(1, Expr.class))),
+                                new PlaceholderExpr(3, Expr.class))),
+                        new PlaceholderExpr(2, Expr.class)
+
                 )));
 
         //at_timezone -> convert_tz
