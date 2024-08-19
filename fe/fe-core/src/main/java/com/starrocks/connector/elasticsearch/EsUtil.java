@@ -38,6 +38,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -223,7 +224,8 @@ public class EsUtil {
      * @param mappings
      * @return
      */
-    private static JSONObject parsePropertiesRoot(JSONObject mappings) {
+    @VisibleForTesting
+    protected static JSONObject parsePropertiesRoot(JSONObject mappings) {
         if (mappings.has("properties")) {
             return mappings;
         }
