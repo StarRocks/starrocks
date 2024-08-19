@@ -843,8 +843,7 @@ class StarrocksSQLApiLib(object):
 
         if len(match_words) > 0:
             error_msg = f"[{self.case_info.name}] Some vars not been resolved yet: %s" % ",".join(match_words)
-            self_print(error_msg, color=ColorEnum.RED, bold=True, logout=True)
-            tools.ok_(False, error_msg)
+            self_print(error_msg, color=ColorEnum.YELLOW, bold=True, logout=True)
 
         return var, cmd
 

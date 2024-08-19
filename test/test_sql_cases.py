@@ -129,7 +129,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        self_print(f"{'*' * 30} {self.case_info.name} {'*' * 30}", ColorEnum.GREEN, bold=True)
+        self_print(f"{'*' * 20} [FINISH] {self.case_info.name} {'*' * 20}", ColorEnum.GREEN, bold=True)
 
     def _init_data(self, sql_list: List) -> List:
         self.db = list()
@@ -319,10 +319,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         # replace all db_name with each run
         self.case_info = case_info
-        self_print("-" * 60)
+        self_print("-" * 60, ColorEnum.GREEN, bold=True)
         self_print(f"[case name]: {case_info.name}", ColorEnum.GREEN, bold=True)
         self_print(f"[case file]: {case_info.file}", ColorEnum.GREEN, bold=True)
-        self_print("-" * 60)
+        self_print("-" * 60, ColorEnum.GREEN, bold=True)
 
         sql_list = self._init_data(case_info.sql)
 

@@ -164,7 +164,7 @@ class ChooseCase(object):
             # init _loop_stat_list
             _loop_stat_list = [] if _loop_stat_list is None else _loop_stat_list
             # Multi lines SQL, lstrip the same ' '
-            first_line_lstrip = len(_line_content) - len(_line_content.lstrip())
+            first_line_lstrip = len(f_lines[_line_id]) - len(f_lines[_line_id].lstrip())
             _line_content = _line_content.lstrip()
 
             this_line_res = []
@@ -191,7 +191,7 @@ class ChooseCase(object):
                 else:
                     # SQL support lines, read the SQL lines
                     while _line_id < len(f_lines):
-                        _line_content = f_lines[_line_id].rstrip("\n").lstrip(" " * first_line_lstrip)
+                        _line_content = re.sub(r"^ {%s}" % first_line_lstrip, '', f_lines[_line_id].rstrip("\n"))
                         _line_id += 1
                         if not _line_content.startswith("--"):
                             this_line_command.append(_line_content)
@@ -202,7 +202,7 @@ class ChooseCase(object):
             # SQL result
             if _line_id < len(f_lines) and f_lines[_line_id].lstrip().startswith(RESULT_FLAG):
                 while _line_id < len(f_lines):
-                    _line_content = f_lines[_line_id].rstrip("\n").lstrip()
+                    _line_content = re.sub(r"^ {%s}" % first_line_lstrip, '', f_lines[_line_id].rstrip("\n"))
                     this_line_res.append(_line_content)
                     _line_id += 1
 
