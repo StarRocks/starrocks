@@ -77,6 +77,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
@@ -99,7 +100,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -126,7 +126,6 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
@@ -138,8 +137,6 @@ import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -553,16 +550,7 @@ public class UtFrameUtils {
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
-        QueryStatement queryStmt = (QueryStatement) statementBase;
-        String digest = SqlDigestBuilder.build(queryStmt);
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(digest.getBytes());
-            return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
+        return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
