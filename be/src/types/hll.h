@@ -179,10 +179,13 @@ private:
 
 class DataSketchesHll {
 public:
+    // default lg_k value for HLL
     static const datasketches::target_hll_type DEFAULT_HLL_TGT_TYPE = datasketches::HLL_6;
-    DataSketchesHll(uint8_t log_k, datasketches::target_hll_type tgt_type) : _tgt_type(tgt_type) {
+
+    explicit DataSketchesHll(uint8_t log_k, datasketches::target_hll_type tgt_type) : _tgt_type(tgt_type) {
         this->_sketch_union = std::make_unique<datasketches::hll_union>(log_k);
     }
+
     DataSketchesHll(const DataSketchesHll& other) = delete;
     DataSketchesHll& operator=(const DataSketchesHll& other) = delete;
 
@@ -200,10 +203,7 @@ public:
 
     ~DataSketchesHll() = default;
 
-    /**
-     * Returns sketch's configured lg_k value.
-     * @return Configured lg_k value.
-     */
+    // Returns sketch's configured lg_k value.
     uint8_t get_lg_config_k() const {
         if (UNLIKELY(_sketch_union == nullptr)) {
             return DEFAULT_HLL_LOG_K;
@@ -211,10 +211,7 @@ public:
         return _sketch_union->get_lg_config_k();
     }
 
-    /**
-     * Returns the sketch's target HLL mode (from #target_hll_type).
-     * @return The sketch's target HLL mode.
-     */
+    // Returns the sketch's target HLL mode (from #target_hll_type).
     datasketches::target_hll_type get_target_type() const {
         if (UNLIKELY(_sketch_union == nullptr)) {
             return DEFAULT_HLL_TGT_TYPE;
@@ -226,6 +223,7 @@ public:
     // NOTE: input must be a hash_value
     void update(uint64_t hash_value);
 
+    // merge with other HLL value
     void merge(const DataSketchesHll& other);
 
     // Return max size of serialized binary
@@ -254,6 +252,7 @@ public:
     // common interface
     void clear() { _sketch_union->reset(); }
 
+    // get hll_sketch object which is lazy initialized
     datasketches::hll_sketch* get_hll_sketch() const {
         if (_is_changed) {
             _sketch = std::make_unique<datasketches::hll_sketch>(_sketch_union->get_result(_tgt_type));

@@ -39,7 +39,9 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
-        this->data(state).hll_sketch->clear();
+        if (this->data(state).hll_sketch != nullptr) {
+            this->data(state).hll_sketch->clear();
+        }
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -57,17 +59,15 @@ public:
             const auto& v = column->get_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
-
-        if (value != 0) {
-            this->data(state).hll_sketch->update(value);
-        }
+        this->data(state).hll_sketch->update(value);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
+        // init state if needed
+        _init_if_needed(ctx, columns, state);
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
-
         if constexpr (lt_is_string<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
@@ -142,11 +142,11 @@ public:
         uint64_t value = 0;
         uint8_t log_k;
         datasketches::target_hll_type tgt_type;
+        // convert to const Column*
         std::vector<const Column*> src_datas;
         src_datas.reserve(src.size());
-        for (const auto& col : src) {
-            src_datas.push_back(col.get());
-        }
+        std::transform(src.begin(), src.end(), std::back_inserter(src_datas),
+                       [](const ColumnPtr& col) { return col.get(); });
         const Column** src_datas_ptr = src_datas.data();
         std::tie(log_k, tgt_type) = _parse_hll_sketch_args(ctx, src_datas_ptr);
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -186,6 +186,7 @@ public:
     std::string get_name() const override { return "ds_hll_count_distinct"; }
 
 private:
+    // init hll sketch if needed
     void _init_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
         if (UNLIKELY(this->data(state).hll_sketch == nullptr)) {
             uint8_t log_k;
@@ -195,6 +196,7 @@ private:
         }
     }
 
+    // parse log_k and target type from args
     std::tuple<uint8_t, datasketches::target_hll_type> _parse_hll_sketch_args(FunctionContext* ctx,
                                                                               const Column** columns) const {
         uint8_t log_k = DEFAULT_HLL_LOG_K;
@@ -216,6 +218,7 @@ private:
         return {log_k, tgt_type};
     }
 
+    // init hll sketch with default log_k and target type
     std::unique_ptr<DataSketchesHll> _init_hll_sketch(
             uint8_t log_k = DEFAULT_HLL_LOG_K, datasketches::target_hll_type tgt_type = datasketches::HLL_6) const {
         return std::make_unique<DataSketchesHll>(log_k, tgt_type);
