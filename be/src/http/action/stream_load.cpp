@@ -357,16 +357,19 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(ctx->status, ctx->buffer, ByteBuffer::allocate_with_tracker(
-                    ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len));
+            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                    ctx->status, ctx->buffer,
+                    ByteBuffer::allocate_with_tracker(ctx->format == TFileFormatType::FORMAT_JSON
+                                                              ? std::max(len, ctx->kDefaultBufferSize)
+                                                              : len));
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
                 // For json format, we need build a complete json before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
                 ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
-                    ctx->status, ByteBufferPtr buf,
-                    ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len)));
+                        ctx->status, ByteBufferPtr buf,
+                        ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len)));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
@@ -382,7 +385,8 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                 }
 
                 ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
-                    ctx->status, ctx->buffer,ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize)));
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize)));
             }
         }
 
