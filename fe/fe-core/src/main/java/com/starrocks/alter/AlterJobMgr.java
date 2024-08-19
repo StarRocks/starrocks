@@ -57,6 +57,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -313,24 +314,20 @@ public class AlterJobMgr {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        MaterializedView oldMaterializedView = null;
-        try {
-            oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-            db.dropTable(oldMaterializedView.getName());
-            oldMaterializedView.setName(newMaterializedViewName);
-            db.registerTableUnlocked(oldMaterializedView);
-            updateTaskDefinition(oldMaterializedView);
-            LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                    newMaterializedViewName, oldMaterializedView.getId());
-        } catch (Throwable e) {
-            if (oldMaterializedView != null) {
+        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+        if (oldMaterializedView != null) {
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db,
+                    Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE)) {
+                db.dropTable(oldMaterializedView.getName());
+                oldMaterializedView.setName(newMaterializedViewName);
+                db.registerTableUnlocked(oldMaterializedView);
+                updateTaskDefinition(oldMaterializedView);
+                LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                        newMaterializedViewName, oldMaterializedView.getId());
+            } catch (Throwable e) {
                 oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
