@@ -61,7 +61,7 @@ public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
         DCHECK(t_cloud_configuration.cloud_type == TCloudType::AWS);
-        std::map<std::string, std::string> properties;
+        std::map<std::string, std::string> properties{};
         if (t_cloud_configuration.__isset.cloud_properties) {
             properties = t_cloud_configuration.cloud_properties;
         }
@@ -96,7 +96,7 @@ public:
     static const AliyunCloudConfiguration create_aliyun(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
         DCHECK(t_cloud_configuration.cloud_type == TCloudType::ALIYUN);
-        std::map<std::string, std::string> properties;
+        std::map<std::string, std::string> properties{};
         if (t_cloud_configuration.__isset.cloud_properties) {
             properties = t_cloud_configuration.cloud_properties;
         }
