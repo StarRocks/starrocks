@@ -54,7 +54,7 @@ public:
                 {"zzz", "zzz0"},
         };
         if (v2) {
-            cloud_configuration->__set_cloud_properties_v2(kvs);
+            cloud_configuration->__set_cloud_properties(kvs);
         } else {
             std::vector<TCloudProperty> props;
             for (const auto& kv : kvs) {
@@ -63,7 +63,7 @@ public:
                 prop.value = kv.second;
                 props.push_back(prop);
             }
-            cloud_configuration->__set_cloud_properties(props);
+            cloud_configuration->__set_deprecated_cloud_properties(props);
         }
     }
 

@@ -171,6 +171,49 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureADLS2ManagedIdentity() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("client-secret", conf.get("fs.azure.account.oauth2.client.secret"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+        Assert.assertEquals("endpoint", conf.get("fs.azure.account.oauth2.client.endpoint"));
+    }
+
+    @Test
+    public void testAzureADLS2Oauth2() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
     public void testGCPCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
