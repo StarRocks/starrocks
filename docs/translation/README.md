@@ -1,13 +1,16 @@
+# Translating from English to Chinese with GPT
 
-## Environment
+To translate an English doc:
 
-There are three environment variables that need to be set:
+## Set up the environment
+
+There are three environment variables that need to be set in the file starrocks/docs/translation/.env:
 
 - OPENAI_API_KEY
 - WANDB_API_KEY
 - GIT_PYTHON_REFRESH
 
-`GIT_PYTHON_REFRESH` should be set to `quiet` because we are not interacting with Git within the container. The other two environment variables will be provided by the Documenttion Team leader.
+`GIT_PYTHON_REFRESH` should be set to `quiet` because we are not interacting with Git within the container. The other two environment variables will be provided by the Documentation Team leader.
 
 These should be set in the file in `starrocks/docs/translation/.env`
 
@@ -30,12 +33,24 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 ../en/deployment/helm.md
 ```
 
-## Command
+## Build the Docker image
+
+This probably only needs to be done once unless the folks from Weights and Biases modify the Python package `gpt_translate`.
 
 ```bash
 cd docs/translation
-docker build -f translation.Dockerfile .
+docker build -f translation.Dockerfile -t translate .
 ```
+
+## Translate the docs
+
+Change dir back up to the `starrocks` folder so that you can mount the `docs/` folder in the container.
+
+```bash
+cd ../../
+```
+
+Translate the files:
 
 ```bash
 docker run -v ./docs:/docs \
@@ -43,3 +58,7 @@ docker run -v ./docs:/docs \
   translate \
   bash /docs/translation/scripts/translate.sh
 ```
+## Check the files
+
+Once the translation is complete the container will exit. Check the status with `git status` and check the translated file(s).
+
