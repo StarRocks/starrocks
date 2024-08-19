@@ -455,7 +455,7 @@ PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
     ASSERT_EQ(double_json.value().to_string_uncheck(), big_integer_json.value().to_string_uncheck());
 
     // a is simdjson::ondemand::number_type::big_integer, but is overflow for double
-    padded_string double_overflow_str = std::string(400, '1');
+    padded_string double_overflow_str = strings::Substitute("{\"a\":$0}", std::string(400, '1'));
     ondemand::document double_overflow_doc = parser.iterate(double_overflow_str);
     ondemand::object double_overflow_obj = double_overflow_doc.get_object();
     auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
