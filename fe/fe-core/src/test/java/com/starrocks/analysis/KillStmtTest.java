@@ -47,7 +47,13 @@ public class KillStmtTest {
         String sql_3 = "kill connection 3";
         AnalyzeTestUtil.analyzeSuccess(sql_3);
 
-        String sql_4 = "kill q 4";
-        AnalyzeTestUtil.analyzeFail(sql_4);
+        String sql_4 = "kill query 'abc'";
+        AnalyzeTestUtil.analyzeSuccess(sql_4);
+
+        String sql_6 = "kill connection '1'";
+        AnalyzeTestUtil.analyzeFail(sql_6);
+
+        String sql_7 = "kill q 4";
+        AnalyzeTestUtil.analyzeFail(sql_7);
     }
 }
