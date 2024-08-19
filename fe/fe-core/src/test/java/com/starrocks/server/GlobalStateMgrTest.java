@@ -51,6 +51,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
@@ -88,9 +90,11 @@ public class GlobalStateMgrTest {
     public void testSaveLoadHeader() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        globalStateMgr.saveHeader(image2.getDataOutputStream());
+        imageWriter.setOutputStream(image2.getDataOutputStream());
+        globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
         MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
         globalStateMgr.loadHeader(image2.getDataInputStream());
     }

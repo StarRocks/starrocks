@@ -370,11 +370,11 @@ public class AlterJobV2Test {
         AlterJobV2 alterJobV2Old = new ArrayList<>(alterJobs.values()).get(0);
 
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getImageWriter());
 
-        SRMetaBlockReader reader = new SRMetaBlockReader(alterImage.getDataInputStream());
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().load(reader);
-        reader.close();
+        SRMetaBlockReader srMetaBlockReader = alterImage.getMetaBlockReader();
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().load(srMetaBlockReader);
+        srMetaBlockReader.close();
 
         AlterJobV2 alterJobV2New =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().get(alterJobV2Old.jobId);

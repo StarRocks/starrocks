@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -604,10 +605,10 @@ public class ResourceGroupMgr implements Writable {
         public List<ResourceGroup> resourceGroups;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + resourceGroupMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
-        writer.writeJson(resourceGroupMap.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
+        writer.writeInt(resourceGroupMap.size());
         for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
             writer.writeJson(resourceGroup);
         }

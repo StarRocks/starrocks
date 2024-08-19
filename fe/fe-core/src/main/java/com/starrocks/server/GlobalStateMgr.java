@@ -157,7 +157,10 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageHeader;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
@@ -230,12 +233,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -1074,6 +1078,10 @@ public class GlobalStateMgr {
                 if (!imageDir.exists()) {
                     imageDir.mkdirs();
                 }
+                File imageV2Dir = new File(this.imageDir + "/v2");
+                if (!imageV2Dir.exists()) {
+                    imageV2Dir.mkdirs();
+                }
             } else {
                 LOG.error("Invalid edit log type: {}", Config.edit_log_type);
                 System.exit(-1);
@@ -1444,14 +1452,14 @@ public class GlobalStateMgr {
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
     // since Checkpoint uses a separate memory.
     public void loadImage(String imageDir) throws IOException {
-        Storage storage = new Storage(imageDir);
-        File curFile = storage.getCurrentImageFile();
+        ImageLoader imageLoader = new ImageLoader(imageDir);
+        File curFile = imageLoader.getImageFile();
         if (!curFile.exists()) {
             // image.0 may not exist
             LOG.info("image does not exist: {}", curFile.getAbsolutePath());
             return;
         }
-        replayedJournalId.set(storage.getImageJournalId());
+        replayedJournalId.set(imageLoader.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
@@ -1491,15 +1499,17 @@ public class GlobalStateMgr {
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
-        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())))) {
-            loadHeader(dis);
+        InputStream in = Files.newInputStream(curFile.toPath());
+        try {
+            imageLoader.setInputStream(in);
+            loadHeader(new DataInputStream(imageLoader.getCheckedInputStream()));
             while (true) {
-                SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                SRMetaBlockReader reader = imageLoader.getBlockReader();
                 SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
 
                 try {
-                    SRMetaBlockLoader imageLoader = loadImages.get(srMetaBlockID);
-                    if (imageLoader == null) {
+                    SRMetaBlockLoader metaBlockLoader = loadImages.get(srMetaBlockID);
+                    if (metaBlockLoader == null) {
                         /*
                          * The expected read module does not match the module stored in the image,
                          * and the json chunk is skipped directly. This usually occurs in several situations.
@@ -1512,7 +1522,7 @@ public class GlobalStateMgr {
                         continue;
                     }
 
-                    imageLoader.apply(reader);
+                    metaBlockLoader.apply(reader);
                     metaMgrMustExists.remove(srMetaBlockID);
                     LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
                 } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
@@ -1540,7 +1550,12 @@ public class GlobalStateMgr {
         } catch (SRMetaBlockException e) {
             LOG.error("load meta block failed ", e);
             throw new IOException("load meta block failed ", e);
+        } finally {
+            imageLoader.readTheRemainingBytes();
+            in.close();
         }
+
+        imageLoader.checkCheckSum();
 
         try {
             postLoadImage();
@@ -1549,7 +1564,7 @@ public class GlobalStateMgr {
         }
 
         long loadImageEndTime = System.currentTimeMillis();
-        this.imageJournalId = storage.getImageJournalId();
+        this.imageJournalId = imageLoader.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -1600,11 +1615,27 @@ public class GlobalStateMgr {
 
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
+        try {
+            saveImage(ImageFormatVersion.v1);
+        } catch (Throwable t) {
+            // image v1 may fail because of byte[] size overflow, ignore
+            LOG.warn("save image v1 failed, ignore", t);
+        }
+        saveImage(ImageFormatVersion.v2);
+    }
+
+    public void saveImage(ImageFormatVersion formatVersion) throws IOException {
+        String destDir;
+        if (formatVersion == ImageFormatVersion.v1) {
+            destDir = this.imageDir;
+        } else {
+            destDir = this.imageDir + "/v2";
+        }
         // Write image.ckpt
-        Storage storage = new Storage(this.imageDir);
+        Storage storage = new Storage(destDir);
         File curFile = storage.getImageFile(replayedJournalId.get());
-        File ckpt = new File(this.imageDir, Storage.IMAGE_NEW);
-        saveImage(ckpt, replayedJournalId.get());
+        File ckpt = new File(destDir, Storage.IMAGE_NEW);
+        saveImage(new ImageWriter(destDir, formatVersion, replayedJournalId.get()), ckpt);
 
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
@@ -1618,7 +1649,7 @@ public class GlobalStateMgr {
 
     // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
     // since Checkpoint uses a separate memory.
-    public void saveImage(File curFile, long replayedJournalId) throws IOException {
+    public void saveImage(ImageWriter imageWriter, File curFile) throws IOException {
         if (!curFile.exists()) {
             if (!curFile.createNewFile()) {
                 LOG.warn("Failed to create file, filepath={}", curFile.getAbsolutePath());
@@ -1629,44 +1660,47 @@ public class GlobalStateMgr {
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
         long saveImageStartTime = System.currentTimeMillis();
-        try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
+        try (OutputStream outputStream = Files.newOutputStream(curFile.toPath())) {
+            imageWriter.setOutputStream(outputStream);
             try {
-                saveHeader(dos);
-                nodeMgr.save(dos);
-                localMetastore.save(dos);
-                alterJobMgr.save(dos);
-                recycleBin.save(dos);
-                VariableMgr.save(dos);
-                resourceMgr.saveResourcesV2(dos);
-                exportMgr.saveExportJobV2(dos);
-                backupHandler.saveBackupHandlerV2(dos);
-                globalTransactionMgr.saveTransactionStateV2(dos);
-                colocateTableIndex.saveColocateTableIndexV2(dos);
-                routineLoadMgr.saveRoutineLoadJobsV2(dos);
-                loadMgr.saveLoadJobsV2JsonFormat(dos);
-                smallFileMgr.saveSmallFilesV2(dos);
-                pluginMgr.save(dos);
-                deleteMgr.save(dos);
-                analyzeMgr.save(dos);
-                resourceGroupMgr.save(dos);
-                authenticationMgr.saveV2(dos);
-                authorizationMgr.saveV2(dos);
-                taskManager.saveTasksV2(dos);
-                catalogMgr.save(dos);
-                insertOverwriteJobMgr.save(dos);
-                compactionMgr.save(dos);
-                streamLoadMgr.save(dos);
-                materializedViewMgr.save(dos);
-                globalFunctionMgr.save(dos);
-                storageVolumeMgr.save(dos);
-                dictionaryMgr.save(dos);
-                replicationMgr.save(dos);
-                keyMgr.save(dos);
-                pipeManager.getRepo().save(dos);
+                saveHeader(imageWriter.getDataOutputStream());
+                nodeMgr.save(imageWriter);
+                localMetastore.save(imageWriter);
+                alterJobMgr.save(imageWriter);
+                recycleBin.save(imageWriter);
+                VariableMgr.save(imageWriter);
+                resourceMgr.saveResourcesV2(imageWriter);
+                exportMgr.saveExportJobV2(imageWriter);
+                backupHandler.saveBackupHandlerV2(imageWriter);
+                globalTransactionMgr.saveTransactionStateV2(imageWriter);
+                colocateTableIndex.saveColocateTableIndexV2(imageWriter);
+                routineLoadMgr.saveRoutineLoadJobsV2(imageWriter);
+                loadMgr.saveLoadJobsV2JsonFormat(imageWriter);
+                smallFileMgr.saveSmallFilesV2(imageWriter);
+                pluginMgr.save(imageWriter);
+                deleteMgr.save(imageWriter);
+                analyzeMgr.save(imageWriter);
+                resourceGroupMgr.save(imageWriter);
+                authenticationMgr.saveV2(imageWriter);
+                authorizationMgr.saveV2(imageWriter);
+                taskManager.saveTasksV2(imageWriter);
+                catalogMgr.save(imageWriter);
+                insertOverwriteJobMgr.save(imageWriter);
+                compactionMgr.save(imageWriter);
+                streamLoadMgr.save(imageWriter);
+                materializedViewMgr.save(imageWriter);
+                globalFunctionMgr.save(imageWriter);
+                storageVolumeMgr.save(imageWriter);
+                dictionaryMgr.save(imageWriter);
+                replicationMgr.save(imageWriter);
+                keyMgr.save(imageWriter);
+                pipeManager.getRepo().save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
             }
+
+            imageWriter.saveChecksum();
 
             long saveImageEndTime = System.currentTimeMillis();
             LOG.info("Finished save meta block {} in {} ms.",
@@ -2431,7 +2465,7 @@ public class GlobalStateMgr {
             dumpFilePath = dumpFile.getAbsolutePath();
             try {
                 LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(dumpFile, journalId);
+                saveImage(new ImageWriter(Config.meta_dir, ImageFormatVersion.v2, journalId), dumpFile);
             } catch (IOException e) {
                 LOG.error("failed to dump image to {}", dumpFilePath, e);
             }

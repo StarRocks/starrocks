@@ -101,10 +101,10 @@ public class KeyMgrTest {
         keyMgr.replayAddKey(pb);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        keyMgr.save(image.getDataOutputStream());
+        keyMgr.save(image.getImageWriter());
 
         KeyMgr keyMgr2 = new KeyMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = image.getMetaBlockReader();
         keyMgr2.load(reader);
         reader.close();
 
@@ -125,10 +125,10 @@ public class KeyMgrTest {
             Assert.assertEquals(1, tGetKeysResponse.getKey_metasSize());
 
             UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-            keyMgr.save(image.getDataOutputStream());
+            keyMgr.save(image.getImageWriter());
 
             KeyMgr keyMgr2 = new KeyMgr();
-            SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+            SRMetaBlockReader reader = image.getMetaBlockReader();
             keyMgr2.load(reader);
             reader.close();
 

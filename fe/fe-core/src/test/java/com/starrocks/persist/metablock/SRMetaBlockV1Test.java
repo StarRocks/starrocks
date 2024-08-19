@@ -16,6 +16,7 @@ package com.starrocks.persist.metablock;
 
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
 import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -27,6 +28,7 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,12 +39,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SRMetaBlockTest {
+public class SRMetaBlockV1Test {
     private static Path tmpDir;
 
     @BeforeClass
     public static void setUp() throws Exception {
-        tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockTest");
+        tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockV1Test");
     }
 
     @AfterClass
@@ -88,7 +90,7 @@ public class SRMetaBlockTest {
         String name = "simple";
         // will write 5 json
         DataOutputStream dos = openOutput(name);
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 5);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.RESOURCE_MGR, 5);
         // 1. String
         writer.writeJson(simpleStruct.str);
         // 2. int
@@ -103,7 +105,7 @@ public class SRMetaBlockTest {
         dos.close();
 
         DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV1(dis);
 
         // 1. String
         String retStr = reader.readJson(String.class);
@@ -149,8 +151,6 @@ public class SRMetaBlockTest {
         simpleStruct.map = new HashMap<>();
         simpleStruct.map.put("uno", 1);
         simpleStruct.map.put("dos", 2);
-        String block1 = "block1";
-        String block2 = "block2";
         String name = "multiblock";
 
         //
@@ -159,7 +159,7 @@ public class SRMetaBlockTest {
         DataOutputStream dos = openOutput(name);
 
         // first block, 4 json
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, block1, 4);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.RESOURCE_MGR, 4);
         // 1. String
         writer.writeJson(simpleStruct.str);
         // 2. int
@@ -171,7 +171,7 @@ public class SRMetaBlockTest {
         writer.close();
 
         // second block, 1 json
-        writer = new SRMetaBlockWriter(dos, block2, 1);
+        writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 1);
         writer.writeJson(simpleStruct);
         writer.close();
 
@@ -182,9 +182,10 @@ public class SRMetaBlockTest {
         //
 
         DataInputStream dis = openInput(name);
+        JsonReader jsonReader = new JsonReader(new InputStreamReader(dis));
 
         // first block, 4 json
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV1(dis);
         // 1. String
         String retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
@@ -206,7 +207,7 @@ public class SRMetaBlockTest {
         reader.close();
 
         // second block, 1 json
-        reader = new SRMetaBlockReader(dis);
+        reader = new SRMetaBlockReaderV1(dis);
         SimpleStruct ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
@@ -228,7 +229,7 @@ public class SRMetaBlockTest {
         dis = openInput(name);
 
         // first block, only read 1 string
-        reader = new SRMetaBlockReader(dis);
+        reader = new SRMetaBlockReaderV1(dis);
         // 1. String
         retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
@@ -236,7 +237,7 @@ public class SRMetaBlockTest {
         reader.close();
 
         // second block, 1 json
-        reader = new SRMetaBlockReader(dis);
+        reader = new SRMetaBlockReaderV1(dis);
         ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
@@ -260,7 +261,7 @@ public class SRMetaBlockTest {
         DataOutputStream dos = openOutput(name);
         // write 0 json
         try {
-            new SRMetaBlockWriter(dos, name, 0);
+            new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 0);
             Assert.fail();
         } catch (SRMetaBlockException e) {
             Assert.assertTrue(e.getMessage().contains("invalid numJson: 0"));
@@ -271,7 +272,7 @@ public class SRMetaBlockTest {
     public void testWriteBadBlockMoreJson() throws Exception {
         String name = "badWriterMoreJson";
         DataOutputStream dos = openOutput(name);
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 1);
         writer.writeJson("xxx");
         // write more json than declared
         try {
@@ -286,7 +287,7 @@ public class SRMetaBlockTest {
     public void testWriteBadBlockLessJson() throws Exception {
         String name = "badWriterLessJson";
         DataOutputStream dos = openOutput(name);
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 2);
         writer.writeJson("xxx");
         // write less json than declared
         try {
@@ -299,7 +300,7 @@ public class SRMetaBlockTest {
 
     private void write2String(String name) throws Exception {
         DataOutputStream dos = openOutput(name);
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 2);
         writer.writeJson("Muchos años después");
         writer.writeJson("frente al pelotón de fusilamiento");
         writer.close();
@@ -309,14 +310,14 @@ public class SRMetaBlockTest {
     @Test
     public void testReadBadBlockBadID() throws Exception {
         DataOutputStream dos = openOutput("blockid");
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, 2);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.CATALOG_MGR, 2);
         writer.writeJson("Muchos años después");
         writer.writeJson("frente al pelotón de fusilamiento");
         writer.close();
         dos.close();
 
         DataInputStream dis = openInput("blockid");
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV1(dis);
         Assert.assertEquals(reader.getHeader().getSrMetaBlockID(), SRMetaBlockID.CATALOG_MGR);
     }
 
@@ -326,7 +327,7 @@ public class SRMetaBlockTest {
         write2String(name);
         // read more than expect
         DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV1(dis);
         reader.readJson(String.class);
         reader.readJson(String.class);
         try {
@@ -344,20 +345,20 @@ public class SRMetaBlockTest {
         String name = "empty";
         DataOutputStream dos = openOutput(name);
         // only 1 block
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV1(dos, SRMetaBlockID.TASK_MGR, 1);
         writer.writeJson("Muchos años después");
         writer.close();
         dos.close();
 
         DataInputStream dis = openInput(name);
         // first block, everything's fine
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV1(dis);
         reader.readJson(String.class);
         reader.close();
         // second block, get EOF
 
         try {
-            reader = new SRMetaBlockReader(dis);
+            reader = new SRMetaBlockReaderV1(dis);
             reader.readJson(String.class);
             Assert.fail();
         } catch (EOFException exception) {

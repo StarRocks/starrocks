@@ -41,6 +41,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
@@ -4724,7 +4725,7 @@ public class CreateMaterializedViewTest {
         // init empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
 
         // Create a mv with specific location, we should expect the tablets of that mv will only distribute on
         // that single labeled backend.
@@ -4744,11 +4745,11 @@ public class CreateMaterializedViewTest {
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
 
         // test replay
         LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        localMetastoreFollower.load(new SRMetaBlockReaderV2(initialImage.getJsonReader()));
         CreateTableInfo info = (CreateTableInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
         localMetastoreFollower.replayCreateTable(info);
@@ -4760,7 +4761,7 @@ public class CreateMaterializedViewTest {
 
         // test restart
         LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        localMetastoreLeader.load(new SRMetaBlockReaderV2(finalImage.getJsonReader()));
         mv = (MaterializedView) localMetastoreLeader.getDb("test")
                 .getTable("mv_with_location");
         System.out.println(mv.getLocation());

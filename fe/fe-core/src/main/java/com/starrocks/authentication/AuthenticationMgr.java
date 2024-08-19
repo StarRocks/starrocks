@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -41,7 +42,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -626,15 +626,15 @@ public class AuthenticationMgr {
         return authClazz;
     }
 
-    public void saveV2(DataOutputStream dos) throws IOException {
+    public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHENTICATION_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.AUTHENTICATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
-            writer.writeJson(userToAuthenticationInfo.size());
+            writer.writeInt(userToAuthenticationInfo.size());
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
                 // 2 json for each user(kv)
                 writer.writeJson(entry.getKey());
@@ -656,7 +656,7 @@ public class AuthenticationMgr {
             ret = reader.readJson(AuthenticationMgr.class);
             ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
             // 1 json for num user
-            int numUser = reader.readJson(int.class);
+            int numUser = reader.readInt();
             LOG.info("loading {} users", numUser);
             for (int i = 0; i != numUser; ++i) {
                 // 2 json for each user(kv)
