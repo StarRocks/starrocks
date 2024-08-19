@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
+#include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/compression_utils.h"
@@ -25,7 +26,7 @@
 
 namespace starrocks {
 
-class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
     explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
@@ -143,7 +144,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
-    ctx.datacache_evict_probability = _scanner_params.datacache_evict_probability;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
@@ -217,45 +217,51 @@ void HdfsScanner::close() noexcept {
     _mor_processor->close(_runtime_state);
 }
 
-Status HdfsScanner::open_random_access_file() {
-    CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file,
-                     _scanner_params.fs->new_random_access_file(_scanner_params.path))
-    const int64_t file_size = _scanner_params.file_size;
+StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
+        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
+    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
+    const int64_t file_size = options.file_size;
     raw_file->set_size(file_size);
     const std::string& filename = raw_file->filename();
 
     std::shared_ptr<io::SeekableInputStream> input_stream = raw_file->stream();
 
-    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_fs_stats);
+    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, options.fs_stats);
 
-    _shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
-    const io::SharedBufferedInputStream::CoalesceOptions options = {
+    shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
+    const io::SharedBufferedInputStream::CoalesceOptions shared_options = {
             .max_dist_size = config::io_coalesce_read_max_distance_size,
             .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-    _shared_buffered_input_stream->set_coalesce_options(options);
-    input_stream = _shared_buffered_input_stream;
+    shared_buffered_input_stream->set_coalesce_options(shared_options);
+    input_stream = shared_buffered_input_stream;
 
     // input_stream = CacheInputStream(input_stream)
-    if (_scanner_params.use_datacache) {
-        _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename, file_size,
-                                                                     _scanner_params.modification_time);
-        _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
-        _cache_input_stream->set_enable_async_populate_mode(_scanner_params.enable_datacache_async_populate_mode);
-        _cache_input_stream->set_enable_cache_io_adaptor(_scanner_params.enable_datacache_io_adaptor);
-        _cache_input_stream->set_priority(_scanner_params.datacache_priority);
-        _cache_input_stream->set_ttl_seconds(_scanner_params.datacache_ttl_seconds);
-        _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
-        _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
-        input_stream = _cache_input_stream;
+    const DataCacheOptions& datacache_options = options.datacache_options;
+    if (datacache_options.enable_datacache) {
+        if (datacache_options.enable_cache_select) {
+            cache_input_stream = std::make_shared<io::CacheSelectInputStream>(
+                    shared_buffered_input_stream, filename, file_size, datacache_options.modification_time);
+        } else {
+            cache_input_stream = std::make_shared<io::CacheInputStream>(shared_buffered_input_stream, filename,
+                                                                        file_size, datacache_options.modification_time);
+            cache_input_stream->set_enable_populate_cache(datacache_options.enable_populate_datacache);
+            cache_input_stream->set_enable_async_populate_mode(datacache_options.enable_datacache_async_populate_mode);
+            cache_input_stream->set_enable_cache_io_adaptor(datacache_options.enable_datacache_io_adaptor);
+            cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
+            input_stream = cache_input_stream;
+        }
+        cache_input_stream->set_priority(datacache_options.datacache_priority);
+        cache_input_stream->set_ttl_seconds(datacache_options.datacache_ttl_seconds);
+        shared_buffered_input_stream->set_align_size(cache_input_stream->get_align_size());
     }
 
     // if compression
     // input_stream = DecompressInputStream(input_stream)
-    if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
+    if (options.compression_type != CompressionTypePB::NO_COMPRESSION) {
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
         std::unique_ptr<StreamCompression> dec;
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(_compression_type, &dec));
+        RETURN_IF_ERROR(StreamCompression::create_decompressor(options.compression_type, &dec));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
@@ -263,11 +269,24 @@ Status HdfsScanner::open_random_access_file() {
 
     // input_stream = CountedInputStream(input_stream)
     // NOTE: make sure `CountedInputStream` is last applied, so io time can be accurately timed.
-    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_app_stats);
+    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, options.app_stats);
 
     // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream (CountedInputStream x))))
-    _file = std::make_unique<RandomAccessFile>(input_stream, filename);
-    _file->set_size(file_size);
+    auto file = std::make_unique<RandomAccessFile>(input_stream, filename);
+    file->set_size(file_size);
+    return file;
+}
+
+Status HdfsScanner::open_random_access_file() {
+    OpenFileOptions options{.fs = _scanner_params.fs,
+                            .path = _scanner_params.path,
+                            .file_size = _scanner_params.file_size,
+                            .fs_stats = &_fs_stats,
+                            .app_stats = &_app_stats,
+                            .datacache_options = _scanner_params.datacache_options,
+                            .compression_type = _compression_type};
+
+    ASSIGN_OR_RETURN(_file, create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, options));
     return Status::OK();
 }
 
@@ -359,7 +378,7 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
 
-    if (_scanner_params.use_datacache && _cache_input_stream) {
+    if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_cache_bytes);
@@ -376,17 +395,17 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
 
-        if (_runtime_state->query_options().__isset.query_type &&
-            _runtime_state->query_options().query_type == TQueryType::LOAD) {
-            // For load query type, we will update load datacache metrics, these metrics are retrived by cache select
+        if (_scanner_params.datacache_options.enable_cache_select) {
+            // For cache select, we will update load datacache metrics
             _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
             _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
             _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
             _runtime_state->update_num_datacache_count(1);
+        } else {
+            // For none cache select sql, we will update DataCache app hit rate
+            BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
         }
-
-        BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

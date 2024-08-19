@@ -1722,6 +1722,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private long datacacheTTLSeconds = 0L;
 
+    private boolean enableCacheSelect = false;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -2475,6 +2477,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
         this.datacacheTTLSeconds = datacacheTTLSeconds;
+    }
+
+    public void setEnableCacheSelect(boolean enableCacheSelect) {
+        this.enableCacheSelect = enableCacheSelect;
     }
 
     public boolean isCboUseDBLock() {
@@ -4472,6 +4478,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setDatacache_priority(datacachePriority);
         tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
+        tResult.setEnable_cache_select(enableCacheSelect);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

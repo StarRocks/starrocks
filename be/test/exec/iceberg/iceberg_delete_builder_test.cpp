@@ -35,8 +35,9 @@ protected:
 };
 
 TEST_F(IcebergDeleteBuilderTest, TestParquetBuilder) {
+    const DataCacheOptions data_cache_options{};
     std::unique_ptr<ParquetPositionDeleteBuilder> parquet_builder(
-            new ParquetPositionDeleteBuilder(FileSystem::Default(), _parquet_data_path));
+            new ParquetPositionDeleteBuilder(FileSystem::Default(), data_cache_options, _parquet_data_path));
     ASSERT_OK(parquet_builder->build(TQueryGlobals().time_zone, _parquet_delete_path, 845, &_need_skip_rowids));
     ASSERT_EQ(1, _need_skip_rowids.size());
 }

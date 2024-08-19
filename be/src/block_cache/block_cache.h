@@ -59,6 +59,8 @@ public:
     // function, the corresponding pointer will never be freed by the cache system.
     Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
 
+    bool exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const;
+
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 

@@ -21,15 +21,12 @@
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks::parquet {
 
@@ -280,7 +277,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                 std::cout << "file path: " << file_path << ", " << _print_predicate(single_flag) << std::endl;
 
                 auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                                std::filesystem::file_size(file_path), 100000);
+                                                                std::filesystem::file_size(file_path));
 
                 Status status = file_reader->init(ctx);
                 ASSERT_TRUE(status.ok());
@@ -362,7 +359,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
+                                                    std::filesystem::file_size(small_page_file));
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -441,9 +438,9 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
 
     auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
                                                                          std::filesystem::file_size(small_page_file));
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                         std::filesystem::file_size(small_page_file), 100000, shared_buffer.get());
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                    shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -525,9 +522,9 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
 
     auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
                                                                          std::filesystem::file_size(small_page_file));
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                         std::filesystem::file_size(small_page_file), 100000, shared_buffer.get());
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                    shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
