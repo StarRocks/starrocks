@@ -374,7 +374,7 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             Tracers.close();
@@ -821,7 +821,7 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
         }
 
         // If stmt is also forwarded during execution, just return the forward result.

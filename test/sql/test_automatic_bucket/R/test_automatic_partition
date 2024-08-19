@@ -53,7 +53,7 @@ alter table t set('bucket_size'='0');
 -- !result
 alter table t set('bucket_size'='-1');
 -- result:
-E: (5064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
 -- !result
 alter table t set('bucket_size'='2048');
 -- result:
@@ -587,9 +587,9 @@ select * from t;
 -- !result
 alter table t set('mutable_bucket_num'='-1');
 -- result:
-E: (5064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: -1.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: -1.')
 -- !result
 alter table t set('mutable_bucket_num'='a');
 -- result:
-E: (5064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+E: (1064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
 -- !result

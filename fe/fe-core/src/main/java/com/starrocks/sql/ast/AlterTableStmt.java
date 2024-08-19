@@ -76,8 +76,7 @@ public class AlterTableStmt extends DdlStmt {
 
     public boolean hasSchemaChangeOp() {
         List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY)
-                || currentOps.contains(AlterOpType.OPTIMIZE);
+        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.OPTIMIZE);
     }
 
     public boolean hasRollupOp() {

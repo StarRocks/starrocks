@@ -34,10 +34,8 @@
 
 package com.starrocks.alter;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -59,10 +57,8 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -85,18 +81,14 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
-import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
-import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.thrift.TTabletMetaType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -176,7 +168,7 @@ public class AlterJobMgr {
             // check table type
             if (table.getType() != TableType.OLAP) {
                 throw new DdlException(
-                        "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
+                            "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
             // check table state
             OlapTable olapTable = (OlapTable) table;
@@ -199,7 +191,7 @@ public class AlterJobMgr {
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
-                materializedView.getName(), status, isReplay);
+                    materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = new ConnectContext();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -213,13 +205,13 @@ public class AlterJobMgr {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [%s]" +
-                        " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getDetailMsg());
+                            " because analyze materialized view define sql: \n\n%s" +
+                            "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getDetailMsg());
             }
 
             // Skip checks to maintain eventual consistency when replay
             List<BaseTableInfo> baseTableInfos =
-                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
+                        Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             materializedView.onReload();
@@ -241,7 +233,7 @@ public class AlterJobMgr {
 
         // check database existing
         String dbName = mayDb.orElseThrow(() ->
-                new SemanticException("database " + materializedView.getDbId() + " not exists")).getFullName();
+                    new SemanticException("database " + materializedView.getDbId() + " not exists")).getFullName();
         context.setDatabase(dbName);
 
         // Try to parse and analyze the creation sql
@@ -251,21 +243,21 @@ public class AlterJobMgr {
 
         // validate the schema
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
-                .sorted(Comparator.comparing(Column::getName))
-                .collect(Collectors.toList());
+                    .sorted(Comparator.comparing(Column::getName))
+                    .collect(Collectors.toList());
         List<Column> existedColumns = materializedView.getColumns().stream()
-                .sorted(Comparator.comparing(Column::getName))
-                .collect(Collectors.toList());
+                    .sorted(Comparator.comparing(Column::getName))
+                    .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
             throw new SemanticException(String.format("number of columns changed: %d != %d",
-                    existedColumns.size(), newColumns.size()));
+                        existedColumns.size(), newColumns.size()));
         }
         for (int i = 0; i < existedColumns.size(); i++) {
             Column existed = existedColumns.get(i);
             Column created = newColumns.get(i);
             if (!existed.isSchemaCompatible(created)) {
                 String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
-                        existed.toString(), created.toString());
+                            existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
                 throw new SemanticException(message);
             }
@@ -331,7 +323,7 @@ public class AlterJobMgr {
             db.registerTableUnlocked(oldMaterializedView);
             updateTaskDefinition(oldMaterializedView);
             LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                    newMaterializedViewName, oldMaterializedView.getId());
+                        newMaterializedViewName, oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
                 oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
@@ -344,7 +336,7 @@ public class AlterJobMgr {
 
     private void updateTaskDefinition(MaterializedView materializedView) {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
-                TaskBuilder.getMvTaskName(materializedView.getId()));
+                    TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
@@ -378,21 +370,21 @@ public class AlterJobMgr {
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
 
             long maxChangedTableRefreshTime =
-                    MvUtils.getMaxTablePartitionInfoRefreshTime(
-                            log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
+                        MvUtils.getMaxTablePartitionInfoRefreshTime(
+                                    log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
-                    "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                            "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
-                    oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
-                    asyncRefreshContext.getStep(),
-                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
+                        "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
+                                    "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
+                        oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
+                        asyncRefreshContext.getStep(),
+                        asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
         } catch (Throwable e) {
             oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());
             LOG.warn("replay change materialized-view refresh scheme failed: {}",
-                    oldMaterializedView.getName(), e);
+                        oldMaterializedView.getName(), e);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE);
         }
@@ -429,119 +421,6 @@ public class AlterJobMgr {
         }
     }
 
-    public void processAlterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
-        TableName dbTableName = stmt.getTbl();
-        String dbName = dbTableName.getDb();
-        String tableName = dbTableName.getTbl();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-        Table table = db.getTable(tableName);
-        if (table == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-        }
-
-        // some operations will take long time to process, need to be done outside the databse lock
-        boolean needProcessOutsideDatabaseLock = false;
-        boolean isSynchronous = true;
-
-        if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
-            throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
-        }
-        OlapTable olapTable = (OlapTable) table;
-
-        List<AlterClause> alterClauses = stmt.getAlterClauseList();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
-            }
-            if (stmt.hasSchemaChangeOp()) {
-                // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
-                schemaChangeHandler.process(stmt.getAlterClauseList(), db, olapTable);
-                isSynchronous = false;
-            } else if (stmt.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
-                    olapTable.isCloudNativeTable()) {
-                schemaChangeHandler.processLakeTableAlterMeta(alterClauses, db, olapTable);
-                isSynchronous = false;
-            } else if (stmt.hasRollupOp()) {
-                materializedViewHandler.process(alterClauses, db, olapTable);
-                isSynchronous = false;
-            } else if (stmt.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
-                needProcessOutsideDatabaseLock = true;
-            } else {
-                ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt, context);
-                executor.execute();
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
-
-        // the following ops should be done outside db lock. because it contains synchronized create operation
-        if (needProcessOutsideDatabaseLock) {
-            Preconditions.checkState(alterClauses.size() == 1);
-            AlterClause alterClause = alterClauses.get(0);
-            if (alterClause instanceof ModifyTablePropertiesClause) {
-                Map<String, String> properties = alterClause.getProperties();
-                Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
-
-                olapTable = (OlapTable) db.getTable(tableName);
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName,
-                            properties, TTabletMetaType.INMEMORY);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.ENABLE_PERSISTENT_INDEX);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.WRITE_QUORUM);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.REPLICATED_STORAGE);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.BUCKET_SIZE);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.MUTABLE_BUCKET_NUM);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
-                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                    boolean isSuccess = schemaChangeHandler.updateBinlogConfigMeta(db, olapTable.getId(),
-                            properties, TTabletMetaType.BINLOG_CONFIG);
-                    if (!isSuccess) {
-                        throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
-                    }
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                    schemaChangeHandler.updateTableConstraint(db, olapTable.getName(), properties);
-                } else {
-                    throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
-                }
-            }
-        }
-
-        if (isSynchronous) {
-            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-        }
-    }
-
     public void replaySwapTable(SwapTableOperationLog log) {
         try {
             swapTableInternal(log);
@@ -555,7 +434,7 @@ public class AlterJobMgr {
         OlapTable origTable = (OlapTable) db.getTable(origTblId);
         OlapTable newTbl = (OlapTable) db.getTable(newTblId);
         LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
-                newTbl.getName());
+                    newTbl.getName());
     }
 
     /**
@@ -618,7 +497,7 @@ public class AlterJobMgr {
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
             LocalMetastore.inactiveRelatedMaterializedView(db, view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
+                        MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
