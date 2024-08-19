@@ -177,6 +177,7 @@ jobs:
         with:
           name: be-path-filter
           path: be-path-filter
+          run_id: ${{ github.event.workflow_run.id }}
 
       - name: Parsing path-filter file
         id: parsing-path-filter
@@ -616,6 +617,7 @@ jobs:
           name: be-path-filter
           path: be-path-filter
           if_no_artifact_found: fail
+          run_id: ${{ github.event.workflow_run.id }}
       
       - name: Download FE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
@@ -623,6 +625,7 @@ jobs:
           name: fe-path-filter
           path: fe-path-filter
           if_no_artifact_found: fail
+          run_id: ${{ github.event.workflow_run.id }}
 
       - name: Parsing BE path-filter file
         id: parsing-be-path-filter
