@@ -1186,8 +1186,12 @@ public class ExpressionAnalyzer {
                         Type toBitmapArg0Type = toBitmapArg0.getType();
                         if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
                                 || toBitmapArg0Type.isLargeIntType()) {
+                            argumentTypes = new Type[] {toBitmapArg0Type};
                             node.setChild(0, toBitmapArg0);
                             node.resetFnName("", FunctionSet.BITMAP_AGG);
+                            node.getParams().setExprs(Lists.newArrayList(toBitmapArg0));
+                            fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
+                                    Function.CompareMode.IS_IDENTICAL);
                         }
                     }
                 }
