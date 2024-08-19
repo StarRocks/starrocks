@@ -1051,11 +1051,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
                 "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 6:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: expr = 5: expr\n" +
-                "  |  other join predicates: 6: expr[3: expr] = 1");
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 'a'\n" +
+                "  |  <slot 3> : 'x'\n" +
+                "  |  <slot 5> : 'a'\n" +
+                "  |  <slot 6> : map{'x':1}\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
     }
 
     @Test
