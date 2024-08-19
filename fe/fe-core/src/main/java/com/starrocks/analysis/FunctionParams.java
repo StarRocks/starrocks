@@ -134,6 +134,10 @@ public class FunctionParams implements Writable {
         isDistinct = v;
     }
 
+    public void setExprs(List<Expr> exprs) {
+        this.exprs = exprs;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeBoolean(isStar);
