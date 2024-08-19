@@ -903,6 +903,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
+    @VisibleForTesting
+    public synchronized boolean isContainedInidToRecycleTime(long id) {
+        return idToRecycleTime.get(id) != null;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         int count = idToDatabase.size();

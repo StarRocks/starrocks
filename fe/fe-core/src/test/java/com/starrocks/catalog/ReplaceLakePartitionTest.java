@@ -14,6 +14,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -39,7 +41,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class ReplaceLakePartitionTest {
     long dbId = 9010;
@@ -51,6 +56,8 @@ public class ReplaceLakePartitionTest {
     long nextTxnId = 20000;
     String partitionName = "p0";
     String tempPartitionName = "temp_" + partitionName;
+    long[] newTabletId = {9030, 90031};
+    long newPartitionId = 9040;
 
     LakeTable tbl = null;
     private final ShardInfo shardInfo;
@@ -78,7 +85,21 @@ public class ReplaceLakePartitionTest {
         Partition partition = new Partition(partitionId, partitionName, index, null);
         Partition tempPartition = new Partition(tempPartitionId, tempPartitionName, index, null);
 
-        PartitionInfo partitionInfo = new PartitionInfo(partitionType);
+        PartitionInfo partitionInfo = null;
+        if (partitionType == PartitionType.UNPARTITIONED) {
+            partitionInfo = new PartitionInfo(partitionType);
+        } else if (partitionType == PartitionType.LIST) {
+            partitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            List<String> values = Lists.newArrayList();
+            values.add("123");
+            ((ListPartitionInfo) partitionInfo).setValues(partitionId, values);
+        } else if (partitionType == PartitionType.RANGE) {
+            PartitionKey partitionKey = new PartitionKey();
+            Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
+            partitionInfo = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            ((RangePartitionInfo) partitionInfo).setRange(partitionId, false, range);
+        }
+
         partitionInfo.setReplicationNum(partitionId, (short) 1);
         partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
@@ -91,11 +112,24 @@ public class ReplaceLakePartitionTest {
         table.addTempPartition(tempPartition);
         return table;
     }
+    
+    Partition buildPartitionForTruncateTable() {
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long id : newTabletId) {
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, newPartitionId, 0, 0, TStorageMedium.HDD, true);
+            invertedIndex.addTablet(id, tabletMeta);
+            index.addTablet(new LakeTablet(id), tabletMeta);
+        }
+
+        return new Partition(newPartitionId, partitionName, index, null);
+    }
 
     @Test
     public void testUnPartitionedLakeTableReplacePartition() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         tbl.replacePartition(partitionName, tempPartitionName);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
 
         new Expectations() {
             {
@@ -130,5 +164,135 @@ public class ReplaceLakePartitionTest {
             GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
         } catch (Exception ignore) {
         }
+        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+    }
+
+    @Test
+    public void testUnPartitionedLakeTableReplacePartitionForTruncateTable() {
+        LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
+        Partition newPartition = buildPartitionForTruncateTable();
+        tbl.replacePartition(newPartition);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getBackgroundWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
+        } catch (Exception ignore) {
+        }
+        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+    }
+
+    @Test
+    public void testListPartitionedLakeTableReplacePartitionForTruncateTable() {
+        LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
+        Partition newPartition = buildPartitionForTruncateTable();
+        tbl.replacePartition(newPartition);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getBackgroundWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
+        } catch (Exception ignore) {
+        }
+        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+    }
+
+    @Test
+    public void testRangePartitionedLakeTableReplacePartitionForTruncateTable() {
+        LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
+        Partition newPartition = buildPartitionForTruncateTable();
+        tbl.replacePartition(newPartition);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getBackgroundWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
+        } catch (Exception ignore) {
+        }
+        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
     }
 }
