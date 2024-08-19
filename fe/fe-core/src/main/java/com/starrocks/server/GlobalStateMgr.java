@@ -177,6 +177,7 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.JournalObservable;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
@@ -935,6 +936,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        return nodeMgr.getQueryStatisticsInfoFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
