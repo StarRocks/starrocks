@@ -11,7 +11,7 @@ set(EXEC_FILES
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
-        #./column/json_column_test.cpp
+        ./column/json_column_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
@@ -404,6 +404,10 @@ set(EXEC_FILES
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/int96_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/internal_service_recoverable_stub_test.cpp
+>>>>>>> b0aa825066 ([BugFix] Allow big integer in json column when stream load with json format (#49927))
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
