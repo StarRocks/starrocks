@@ -438,7 +438,7 @@ select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t
 -- !result
 select sum(t1.c_key), t1.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t1.c_bigint order by c_bigint limit 1;
 -- result:
-6	1
+6	3
 -- !result
 select sum(t1.c_key), t2.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t2.c_bigint;
 -- result:
