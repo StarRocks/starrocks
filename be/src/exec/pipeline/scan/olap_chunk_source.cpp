@@ -400,6 +400,61 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+// Temporary fix solution, add some check
+// In the vast majority of cases, a schema id can identify an unique tablet schema.
+// However, there are still scenarios where the same schema ID maps to different tablet schemas.
+// e.g.
+// 1. create table in old version sr which has three columns, with the column names and unique IDs being:
+//    {c1:1, c2:3, c3:2} and tablet schema id is 'x'
+// 2. do some replace partition operations such as optimize table. Because the table is created in old version,
+//    the unique is is assigned by BE. So the new created tablet schema is {c1:1, c2:2, c3:3} and schema id is
+//    'x'
+// 3. when we try to insert a new tablet schema with id is 'x' into `GlobalTableSchemaMap', we will check the
+//    the column unique id. If check failed, we do not update the `GlobalTableSchemaMap' but new a new tablet
+//    schema to the new tablet.
+// 4. when we init olap_reader, the `schema_id` assigned by FE is 'x', we try to get the tablet schema from
+//    'GlobalSchemaMap' which maybe not correct.
+void OlapChunkSource::_check_tablet_schema() {
+    if (_tablet_schema == nullptr) {
+        return;
+    }
+
+    bool schema_mismatch = false;
+    if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+        !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+        _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+
+        if (_tablet_schema->num_columns() != _scan_node->thrift_olap_scan_node().columns_desc.size()) {
+            schema_mismatch = true;
+        } else {
+            for (int32_t i = 0; i < _tablet_schema->num_columns(); i++) {
+                if (_scan_node->thrift_olap_scan_node().columns_desc[i].col_unique_id !=
+                    _tablet_schema->column(i).unique_id()) {
+                    schema_mismatch = true;
+                    break;
+                }
+            }
+        }
+        
+    } else {
+        auto tmp_schema = _tablet->tablet_schema();
+        if (_tablet_schema->num_columns() != tmp_schema->num_columns()) {
+            schema_mismatch = true;
+        } else {
+            for (int32_t i = 0; i < _tablet_schema->num_columns(); i++) {
+                if (tmp_schema->column(i).unique_id() != _tablet_schema->column(i).unique_id()) {
+                    schema_mismatch = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (schema_mismatch) {
+        _tablet_schema.reset();
+    }
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -415,6 +470,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0) {
         _tablet_schema = GlobalTabletSchemaMap::Instance()->get(_scan_node->thrift_olap_scan_node().schema_id);
     }
+    _check_tablet_schema();
 
     if (_tablet_schema == nullptr) {
         // if column_desc come from fe, reset tablet schema
