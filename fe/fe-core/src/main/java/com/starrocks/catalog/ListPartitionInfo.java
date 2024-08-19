@@ -505,58 +505,6 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     @Override
-<<<<<<< HEAD
-=======
-    public List<Long> getSortedPartitions(boolean asc) {
-        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
-            return idToLiteralExprValues.entrySet().stream()
-                    .filter(e -> !e.getValue().isEmpty())
-                    .sorted((x, y) -> compareRow(x.getValue(), y.getValue(), asc))
-                    .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
-        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
-            return idToMultiLiteralExprValues.entrySet().stream()
-                    .filter(e -> !e.getValue().isEmpty())
-                    .sorted((x, y) -> compareMultiValueList(x.getValue(), y.getValue(), asc))
-                    .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
-        } else {
-            throw new NotImplementedException("todo");
-        }
-    }
-
-    /**
-     * Compare based on the max/min value in the list
-     */
-    private static int compareRow(List<LiteralExpr> lhs, List<LiteralExpr> rhs, boolean asc) {
-        ListPartitionValue lhsValue =
-                asc ? ListPartitionCell.single(lhs).minValue() : ListPartitionCell.single(lhs).maxValue();
-        ListPartitionValue rhsValue =
-                asc ? ListPartitionCell.single(rhs).minValue() : ListPartitionCell.single(rhs).maxValue();
-        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
-    }
-
-    private static int compareColumns(List<LiteralExpr> lhs, List<LiteralExpr> rhs) {
-        assert lhs.size() == rhs.size();
-        for (int i = 0; i < lhs.size(); i++) {
-            int x = lhs.get(i).compareTo(rhs.get(i));
-            if (x != 0) {
-                return x;
-            }
-        }
-        return 0;
-    }
-
-    private static int compareMultiValueList(List<List<LiteralExpr>> lhs, List<List<LiteralExpr>> rhs, boolean asc) {
-        ListPartitionValue lhsValue =
-                asc ? ListPartitionCell.multi(lhs).minValue() : ListPartitionCell.multi(lhs).maxValue();
-        ListPartitionValue rhsValue =
-                asc ? ListPartitionCell.multi(rhs).minValue() : ListPartitionCell.multi(rhs).maxValue();
-        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
-    }
-
-    @Override
->>>>>>> 4c585a7b93 ([BugFix] Fix replace temp partition bug for multi column partition table (#49764))
     public Object clone() {
         ListPartitionInfo info = (ListPartitionInfo) super.clone();
         info.deprecatedColumns = Lists.newArrayList(this.deprecatedColumns);
