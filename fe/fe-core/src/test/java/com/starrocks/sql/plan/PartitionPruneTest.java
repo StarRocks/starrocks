@@ -378,6 +378,12 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.query("select min(c1)+1, max(c1)-1 from t2_dup").explainContains("partitions=2/5");
         starRocksAssert.query("select min(c1) from t2_dup limit 10").explainContains("partitions=1/5");
 
+        // manually specify partition
+        starRocksAssert.query("select min(c1) from t2_dup partition p20240101").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t2_dup partition p20240101").explainContains("partitions=1/5");
+        starRocksAssert.query("select min(c1) from t2_dup partition p20240105").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t2_dup partition p20240105").explainContains("partitions=1/5");
+
         // NOT SUPPORTED for complicated MIN/MAX
         starRocksAssert.query("select min(c1-1)+1, max(c1+1)-1 from t2_dup").explainContains("partitions=5/5");
 
