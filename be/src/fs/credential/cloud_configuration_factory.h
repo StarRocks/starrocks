@@ -111,14 +111,14 @@ public:
 private:
     static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
                                    const TCloudConfiguration& t_cloud_configuration) {
-        if (t_cloud_configuration.__isset.cloud_properties) {
-            for (const auto& property : t_cloud_configuration.cloud_properties) {
+        if (t_cloud_configuration.__isset.deprecated_cloud_properties) {
+            for (const auto& property : t_cloud_configuration.deprecated_cloud_properties) {
                 properties.insert({property.key, property.value});
             }
         } else {
-            DCHECK(t_cloud_configuration.__isset.cloud_properties_v2);
-            properties.insert(t_cloud_configuration.cloud_properties_v2.begin(),
-                              t_cloud_configuration.cloud_properties_v2.end());
+            DCHECK(t_cloud_configuration.__isset.cloud_properties);
+            properties.insert(t_cloud_configuration.cloud_properties.begin(),
+                              t_cloud_configuration.cloud_properties.end());
         }
     }
 

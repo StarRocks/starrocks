@@ -61,8 +61,8 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.AWS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
                 "false");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
@@ -88,7 +88,7 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
@@ -237,7 +237,7 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
