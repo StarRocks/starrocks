@@ -65,6 +65,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.BatchDropInfo;
@@ -836,14 +837,13 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void replayDropRollup(DropInfo dropInfo, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(dropInfo.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            long tableId = dropInfo.getTableId();
-            long rollupIndexId = dropInfo.getIndexId();
+        long tableId = dropInfo.getTableId();
+        long rollupIndexId = dropInfo.getIndexId();
+        OlapTable olapTable = (OlapTable) db.getTable(tableId);
 
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-            OlapTable olapTable = (OlapTable) db.getTable(tableId);
+
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexId);
 
@@ -857,8 +857,6 @@ public class MaterializedViewHandler extends AlterHandler {
 
             String rollupIndexName = olapTable.getIndexNameById(rollupIndexId);
             olapTable.deleteIndexInfo(rollupIndexName);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
         LOG.info("replay drop rollup {}", dropInfo.getIndexId());
     }

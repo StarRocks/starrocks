@@ -1561,16 +1561,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
             if (db != null) {
-                Locker locker = new Locker();
-                try {
-                    locker.lockDatabase(db, LockType.READ);
-                    Table table = db.getTable(statement.getTableName());
-                    if (table == null || !table.isMaterializedView()) {
-                        // ignore privilege check for old mv
-                        return null;
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                Table table = db.getTable(statement.getTableName());
+                if (table == null || !table.isMaterializedView()) {
+                    // ignore privilege check for old mv
+                    return null;
                 }
             }
 
