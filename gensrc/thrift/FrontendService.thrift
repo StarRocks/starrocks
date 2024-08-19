@@ -82,6 +82,7 @@ struct TColumnDesc {
   // Let FE control the type, which makes it easier to modify and display complex types
   26: optional string columnTypeStr
   27: optional string dataType
+  28: optional string generatedColumnExprStr
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -876,7 +877,7 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
-    
+
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
     102: optional i64 backend_id
@@ -945,7 +946,7 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
-    56: optional string payload_compression_type 
+    56: optional string payload_compression_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1562,6 +1563,31 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+struct TGetQueryStatisticsRequest {
+}
+
+struct TQueryStatisticsInfo {
+    1: optional i64 queryStartTime
+    2: optional string feIp
+    3: optional string queryId
+    4: optional string connId
+    5: optional string db
+    6: optional string user
+    7: optional i64 cpuCostNs
+    8: optional i64 scanBytes
+    9: optional i64 scanRows
+    10: optional i64 memUsageBytes
+    11: optional i64 spillBytes
+    12: optional i64 execTime
+    13: optional string wareHouseName
+    14: optional string customQueryId
+}
+
+struct TGetQueryStatisticsResponse {
+    1: optional Status.TStatus status
+    2: optional list<TQueryStatisticsInfo> queryStatistics_infos;
+}
+
 struct TResourceLogicalSlot {
     1: optional Types.TUniqueId slot_id
     2: optional string request_fe_name
@@ -1890,6 +1916,8 @@ service FrontendService {
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
+
+    TGetQueryStatisticsResponse getQueryStatistics(1: TGetQueryStatisticsRequest request)
 
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)

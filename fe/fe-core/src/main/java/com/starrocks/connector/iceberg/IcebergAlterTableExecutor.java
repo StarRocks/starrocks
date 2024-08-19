@@ -16,7 +16,9 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.TagOptions;
@@ -26,6 +28,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
@@ -37,6 +40,8 @@ import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
 import org.apache.iceberg.Snapshot;
@@ -47,6 +52,8 @@ import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -405,4 +412,87 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
+    @Override
+    public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
+        IcebergTableOperation op = IcebergTableOperation.fromString(clause.getTableOperationName());
+        if (op == IcebergTableOperation.UNKNOWN) {
+            throw new StarRocksConnectorException("Unknown iceberg table operation : %s", clause.getTableOperationName());
+        }
+        List<ConstantOperator> args = clause.getArgs();
+
+        switch (op) {
+            case FAST_FORWARD:
+                fastForward(args);
+                break;
+            case CHERRYPICK_SNAPSHOT:
+                cherryPickSnapshot(args);
+                break;
+            case EXPIRE_SNAPSHOTS:
+                expireSnapshots(args);
+                break;
+            default:
+                throw new StarRocksConnectorException("Unsupported table operation %s", op);
+        }
+
+        return null;
+    }
+
+    private void fastForward(List<ConstantOperator> args) {
+        if (args.size() != 2) {
+            throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
+        }
+
+        String from = args.get(0)
+                .castTo(Type.VARCHAR)
+                .map(ConstantOperator::getChar)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+
+        String to = args.get(1)
+                .castTo(Type.VARCHAR)
+                .map(ConstantOperator::getChar)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(1)));
+
+        actions.add(() -> {
+            transaction.manageSnapshots().fastForwardBranch(from, to).commit();
+        });
+    }
+
+    private void cherryPickSnapshot(List<ConstantOperator> args) {
+        if (args.size() != 1) {
+            throw new StarRocksConnectorException("invalid args. cherrypick snapshot must contain `snapshot id`");
+        }
+
+        long snapshotId = args.get(0)
+                .castTo(Type.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+
+        actions.add(() -> {
+            transaction.manageSnapshots().cherrypick(snapshotId).commit();
+        });
+    }
+
+    private void expireSnapshots(List<ConstantOperator> args) {
+        if (args.size() > 1) {
+            throw new StarRocksConnectorException("invalid args. only support `older_than` in the expire snapshot operation");
+        }
+
+        long olderThanMillis;
+        if (args.isEmpty()) {
+            olderThanMillis = -1L;
+        } else {
+            LocalDateTime time = Optional.ofNullable(args.get(0))
+                    .flatMap(arg -> arg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime))
+                    .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+            olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+        }
+
+        actions.add(() -> {
+            ExpireSnapshots expireSnapshots = transaction.expireSnapshots();
+            if (olderThanMillis != -1) {
+                expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
+            }
+            expireSnapshots.commit();
+        });
+    }
 }

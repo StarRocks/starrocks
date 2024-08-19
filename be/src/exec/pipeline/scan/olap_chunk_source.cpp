@@ -486,11 +486,6 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
-const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
-}
-
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -663,6 +658,14 @@ void OlapChunkSource::_update_counter() {
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             auto* path_counter = _runtime_profile->get_counter(fmt::format("[Hit]{}", k));
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[HitMerge]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
             }

@@ -2877,6 +2877,7 @@ TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact) {
         }
     }
     config::l0_max_mem_usage = old_config;
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact2) {
@@ -2961,6 +2962,7 @@ TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact2) {
         }
     }
     config::l0_max_mem_usage = old_config;
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_snapshot_with_minor_compact) {
@@ -3058,6 +3060,7 @@ TEST_P(PersistentIndexTest, test_snapshot_with_minor_compact) {
         }
     }
     config::l0_max_mem_usage = old_config;
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {

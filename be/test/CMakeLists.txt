@@ -196,6 +196,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
+        ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -368,6 +369,7 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
+        ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
@@ -455,6 +457,7 @@ set(EXEC_FILES
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
+        ./util/numeric_types_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

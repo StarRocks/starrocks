@@ -422,10 +422,7 @@ Status TabletMetaManager::save(DataDir* store, const TabletMetaPB& meta_pb) {
     if (meta_pb.has_updates() && meta_pb.updates().has_next_log_id()) {
         std::string lower = encode_meta_log_key(meta_pb.tablet_id(), 0);
         std::string upper = encode_meta_log_key(meta_pb.tablet_id(), meta_pb.updates().next_log_id());
-        st = batch.DeleteRange(cf, lower, upper);
-        if (!st.ok()) {
-            return to_status(st);
-        }
+        RETURN_IF_ERROR(store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, &batch));
     }
     return store->get_meta()->write_batch(&batch);
 }
@@ -837,10 +834,7 @@ Status TabletMetaManager::rowset_delete(DataDir* store, TTabletId tablet_id, uin
     if (segments > 0) {
         std::string lower = encode_del_vector_key(tablet_id, rowset_id + 0, INT64_MAX);
         std::string upper = encode_del_vector_key(tablet_id, rowset_id + segments, INT64_MAX);
-        st = batch.DeleteRange(cf_meta, lower, upper);
-        if (UNLIKELY(!st.ok())) {
-            return Status::InternalError("remove delete vector failed");
-        }
+        RETURN_IF_ERROR(store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, &batch));
     }
     return meta->write_batch(&batch);
 }
@@ -1203,12 +1197,8 @@ Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId table
     // Note that delete vectors are sorted by version in reverse order in RocksDB.
     std::string begin_key = encode_del_vector_key(tablet_id, segment_id, end_version - 1);
     std::string end_key = encode_del_vector_key(tablet_id, segment_id, start_version - 1);
-    auto cf_handle = meta->handle(META_COLUMN_FAMILY_INDEX);
     WriteBatch batch;
-    rocksdb::Status st = batch.DeleteRange(cf_handle, begin_key, end_key);
-    if (!st.ok()) {
-        return to_status(st);
-    }
+    RETURN_IF_ERROR(meta->OptDeleteRange(META_COLUMN_FAMILY_INDEX, begin_key, end_key, &batch));
     return meta->write_batch(&batch);
 }
 
@@ -1332,12 +1322,8 @@ Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tab
                                                     uint32_t segments) {
     std::string lower = encode_delta_column_group_key(tablet_id, rowset_id, INT64_MAX);
     std::string upper = encode_delta_column_group_key(tablet_id, rowset_id + segments, INT64_MAX);
-    auto h = meta->handle(META_COLUMN_FAMILY_INDEX);
     WriteBatch batch;
-    rocksdb::Status st = batch.DeleteRange(h, lower, upper);
-    if (!st.ok()) {
-        return to_status(st);
-    }
+    RETURN_IF_ERROR(meta->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, &batch));
     return meta->write_batch(&batch);
 }
 
@@ -1352,12 +1338,8 @@ Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tab
                                                     uint32_t segments) {
     std::string lower = encode_delta_column_group_key(tablet_id, rowsetid, 0, INT64_MAX);
     std::string upper = encode_delta_column_group_key(tablet_id, rowsetid, segments - 1, INT64_MAX);
-    auto h = meta->handle(META_COLUMN_FAMILY_INDEX);
     WriteBatch batch;
-    rocksdb::Status st = batch.DeleteRange(h, lower, upper);
-    if (!st.ok()) {
-        return to_status(st);
-    }
+    RETURN_IF_ERROR(meta->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, &batch));
     return meta->write_batch(&batch);
 }
 
@@ -1431,29 +1413,25 @@ Status TabletMetaManager::put_tablet_meta(DataDir* store, WriteBatch* batch, con
 Status TabletMetaManager::clear_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_meta_rowset_key(tablet_id, 0);
     auto upper = encode_meta_rowset_key(tablet_id, UINT32_MAX);
-    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    return to_status(batch->DeleteRange(h, lower, upper));
+    return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
 Status TabletMetaManager::clear_log(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_meta_log_key(tablet_id, 0);
     auto upper = encode_meta_log_key(tablet_id, UINT64_MAX);
-    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    return to_status(batch->DeleteRange(h, lower, upper));
+    return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
 Status TabletMetaManager::clear_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
     auto upper = encode_del_vector_key(tablet_id, UINT32_MAX, INT64_MAX);
-    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    return to_status(batch->DeleteRange(h, lower, upper));
+    return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
 Status TabletMetaManager::clear_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
     auto upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
-    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    return to_status(batch->DeleteRange(h, lower, upper));
+    return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
 Status TabletMetaManager::clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
@@ -1825,8 +1803,7 @@ Status TabletMetaManager::delete_pending_rowset(DataDir* store, TTabletId tablet
 Status TabletMetaManager::clear_pending_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_meta_pending_rowset_key(tablet_id, 0);
     auto upper = encode_meta_pending_rowset_key(tablet_id, INT64_MAX);
-    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    return to_status(batch->DeleteRange(h, lower, upper));
+    return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
 } // namespace starrocks

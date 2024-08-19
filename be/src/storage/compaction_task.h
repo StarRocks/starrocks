@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "storage/background_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
@@ -309,6 +311,8 @@ protected:
     std::shared_lock<std::shared_mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
 };
 
 } // namespace starrocks

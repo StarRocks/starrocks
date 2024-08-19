@@ -1327,8 +1327,11 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.4");
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
@@ -1373,6 +1376,10 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
+
+// When the keys that we want to delete, number of them is larger than this config,
+// we will fallback and using `DeleteRange` in rocksdb.
+CONF_mInt32(rocksdb_opt_delete_range_limit, "10000");
 
 // python envs config
 // create time worker timeout

@@ -41,7 +41,13 @@ select count(*) from t1;
 -- !result
 create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
-    select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+    select * from files(
+        'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+        'format' = 'parquet',
+        'aws.s3.access_key' = '${oss_ak}',
+        'aws.s3.secret_key' = '${oss_sk}',
+        'aws.s3.endpoint' = '${oss_endpoint}'
+        );
 -- result:
 -- !result
 alter pipe p1 suspend;

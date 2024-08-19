@@ -49,7 +49,7 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 
 - **Universal compatibility configuration**
 
-Before downgrading your StarRocks cluster, you must disable tablet clone.
+Before downgrading your StarRocks cluster, you must disable tablet clone. You can skip this step if you have disabled the balancer.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
