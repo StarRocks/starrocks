@@ -84,9 +84,12 @@ public:
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
-    virtual void reset() = 0;
+    virtual void reset();
 
     size_t num_rows() const { return _num_rows; }
+
+    // mem table is done. we can't append data any more
+    bool is_done() const { return _is_done; }
 
 protected:
     RuntimeState* _runtime_state;
