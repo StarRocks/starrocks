@@ -1428,6 +1428,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
             {
                 SCOPED_TIMER(_agg_stat->agg_append_timer);
+                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                 if (!use_intermediate) {
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                         TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
@@ -1457,6 +1458,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     DCHECK(group_by_columns[0]->is_nullable());
                     group_by_columns[0]->append_default();
 
+                    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                     if (!use_intermediate) {
                         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     } else {
