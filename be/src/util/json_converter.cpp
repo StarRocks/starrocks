@@ -127,6 +127,7 @@ private:
     static inline Status convert_number(SimdJsonValue value, std::string_view field_name, bool is_object,
                                         vpack::Builder* builder) {
         DCHECK(value.type() == so::json_type::number);
+        // can't use value.get_number().get_number_type() because it will throw exception if it's a big integer
         switch (value.get_number_type()) {
         case SimdJsonNumberType::floating_point_number: {
             SimdJsonNumber num = value.get_number().value();
@@ -174,9 +175,8 @@ private:
             break;
         }
         default:
-            std::stringstream ss;
-            ss << "Unsupported json number type. field=" << field_name << ", type=" << value.get_number_type();
-            return Status::InternalError(ss.str());
+            return Status::InternalError(
+                    fmt::format("unsupported json number: {}", static_cast<int>(value.get_number_type().value())));
         }
         return Status::OK();
     }
