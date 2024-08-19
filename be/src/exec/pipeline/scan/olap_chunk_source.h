@@ -68,7 +68,6 @@ private:
     void _decide_chunk_size(bool has_predicate);
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
-    void _check_tablet_schema();
 
 private:
     TabletReaderParams _params{};
