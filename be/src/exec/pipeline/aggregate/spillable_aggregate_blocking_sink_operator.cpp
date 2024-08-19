@@ -56,7 +56,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-    if (!_aggregator->spiller()->spilled()) {
+    if (!_aggregator->spiller()->spilled() && _streaming_chunks.empty()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
