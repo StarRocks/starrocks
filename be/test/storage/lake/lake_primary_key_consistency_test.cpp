@@ -50,13 +50,16 @@ enum PICT_OP {
     GET = 2,
     COMPACT = 3,
     RELOAD = 4,
-    MAX = 5,
+    UPSERT_WITH_BATCH_PUB = 5,
+    MAX = 6,
 };
 
 static const std::string kTestGroupPath = "./test_lake_primary_key_consistency";
 static const int64_t MaxNumber = 1000000;
 static const int64_t MaxN = 10000;
 static const size_t MaxUpsert = 4;
+static const size_t MaxBatchCnt = 5;
+static const int64_t io_failure_percent = 3;
 
 class Replayer {
 public:
@@ -125,12 +128,15 @@ public:
 
         _random_generator = std::make_unique<DeterRandomGenerator<int, PICT_OP>>(MaxNumber, MaxN, _seed, 0, INT64_MAX);
         std::vector<WeightedItem<PICT_OP>> items;
-        items.emplace_back(PICT_OP::UPSERT, 60);
+        items.emplace_back(PICT_OP::UPSERT, 35);
         items.emplace_back(PICT_OP::DELETE, 15);
         items.emplace_back(PICT_OP::GET, 5);
         items.emplace_back(PICT_OP::COMPACT, 10);
         items.emplace_back(PICT_OP::RELOAD, 10);
+        items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 25);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
+        _io_failure_generator =
+                std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), io_failure_percent);
         _replayer = std::make_unique<Replayer>();
     }
 
@@ -222,6 +228,39 @@ public:
         return Status::OK();
     }
 
+    Status upsert_with_batch_pub_op() {
+        size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
+        std::vector<int64_t> txn_ids;
+        for (int i = 0; i < batch_cnt; i++) {
+            auto txn_id = next_id();
+            txn_ids.push_back(txn_id);
+            ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                       .set_tablet_manager(_tablet_mgr.get())
+                                                       .set_tablet_id(_tablet_metadata->id())
+                                                       .set_txn_id(txn_id)
+                                                       .set_partition_id(_partition_id)
+                                                       .set_mem_tracker(_mem_tracker.get())
+                                                       .set_schema_id(_tablet_schema->id())
+                                                       .set_slot_descriptors(&_slot_pointers)
+                                                       .build());
+            RETURN_IF_ERROR(delta_writer->open());
+            size_t upsert_size = _random_generator->random() % MaxUpsert;
+            for (int i = 0; i < upsert_size; i++) {
+                auto chunk_index = gen_upsert_data(true);
+                RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
+                                                    chunk_index.second.size()));
+                _replayer->upsert(chunk_index.first);
+            }
+            RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+        }
+        // Batch Publish version
+        auto new_version = _version + batch_cnt;
+        RETURN_IF_ERROR(batch_publish(_tablet_metadata->id(), _version, new_version, txn_ids).status());
+        _version = new_version;
+        return Status::OK();
+    }
+
     Status delete_op() {
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
@@ -275,6 +314,7 @@ public:
     Status run_random_tests() {
         size_t start_second = time(nullptr);
         while (start_second + _run_second >= time(nullptr)) {
+            auto io_failure_guard = _io_failure_generator->generate();
             auto op = _random_op_selector->select();
             switch (op) {
             case UPSERT:
@@ -291,6 +331,9 @@ public:
                 break;
             case RELOAD:
                 RETURN_IF_ERROR(reload_op());
+                break;
+            case UPSERT_WITH_BATCH_PUB:
+                RETURN_IF_ERROR(upsert_with_batch_pub_op());
                 break;
             default:
                 break;
@@ -316,6 +359,7 @@ protected:
     int _run_second = 0;
     std::unique_ptr<DeterRandomGenerator<int, PICT_OP>> _random_generator;
     std::unique_ptr<WeightedRandomOpSelector<int, PICT_OP>> _random_op_selector;
+    std::unique_ptr<IOFailureGenerator> _io_failure_generator;
     std::unique_ptr<Replayer> _replayer;
 
     int64_t _old_l0_size = 0;
