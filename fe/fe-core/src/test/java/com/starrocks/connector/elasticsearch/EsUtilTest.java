@@ -22,6 +22,7 @@ import org.junit.Test;
 
 import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -94,5 +95,53 @@ public class EsUtilTest {
     public void testGetJsonArray() {
         EsRestClient.EsIndex[] esIndices = getFromJSONArray(jsonArray, EsRestClient.EsIndex[].class);
         System.out.println(JSONObject.valueToString(esIndices));
+    }
+
+    @Test
+    public void testEs7MappingProperties() {
+
+        String mapping = "{\n" +
+                "  \"dynamic_templates\" : [ {\n" +
+                "    \"dataFormat\" : {\n" +
+                "      \"mapping\" : {\n" +
+                "        \"type\" : \"date\"\n" +
+                "      },\n" +
+                "      \"match\" : \"*Date\"\n" +
+                "    }\n" +
+                "  }, {\n" +
+                "    \"timeFormat\" : {\n" +
+                "      \"mapping\" : {\n" +
+                "        \"type\" : \"date\"\n" +
+                "      },\n" +
+                "      \"match\" : \"*Time\"\n" +
+                "    }\n" +
+                "  }, {\n" +
+                "    \"noAnalyzed\" : {\n" +
+                "      \"mapping\" : {\n" +
+                "        \"type\" : \"keyword\"\n" +
+                "      },\n" +
+                "      \"match_mapping_type\" : \"string\"\n" +
+                "    }\n" +
+                "  } ],\n" +
+                "  \"properties\" : {\n" +
+                "    \"name\" : {\n" +
+                "      \"type\" : \"text\"\n" +
+                "    },\n" +
+                "    \"created_at\" : {\n" +
+                "      \"format\" : \"yyyy-MM-dd\",\n" +
+                "      \"type\" : \"date\"\n" +
+                "    },\n" +
+                "    \"age\" : {\n" +
+                "      \"type\" : \"integer\"\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        JSONObject json = new JSONObject(mapping);
+
+        JSONObject jsonObject = EsUtil.parsePropertiesRoot(json);
+
+        assertNotNull(jsonObject);
+        assertTrue(jsonObject.has("properties"));
     }
 }
