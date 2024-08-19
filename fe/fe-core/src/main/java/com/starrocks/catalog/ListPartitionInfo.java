@@ -480,7 +480,6 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public void createAutomaticShadowPartition(long partitionId, String replicateNum) {
-        idToValues.put(partitionId, Collections.emptyList());
         if (isMultiColumnPartition()) {
             idToMultiValues.put(partitionId, Collections.emptyList());
             idToMultiLiteralExprValues.put(partitionId, Collections.emptyList());
