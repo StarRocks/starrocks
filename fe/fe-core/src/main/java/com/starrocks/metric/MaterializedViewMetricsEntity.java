@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
@@ -22,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
@@ -124,37 +124,37 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     protected void initMaterializedViewMetrics() {
         // refresh metrics
         counterRefreshJobTotal = new LongCounterMetric("mv_refresh_jobs", MetricUnit.REQUESTS,
-                "total materialized view's refresh jobs");
+                    "total materialized view's refresh jobs");
         metrics.add(counterRefreshJobTotal);
         counterRefreshJobSuccessTotal = new LongCounterMetric("mv_refresh_total_success_jobs", MetricUnit.REQUESTS,
-                "total materialized view's refresh success jobs");
+                    "total materialized view's refresh success jobs");
         metrics.add(counterRefreshJobSuccessTotal);
         counterRefreshJobFailedTotal = new LongCounterMetric("mv_refresh_total_failed_jobs", MetricUnit.REQUESTS,
-                "total materialized view's refresh failed jobs");
+                    "total materialized view's refresh failed jobs");
         metrics.add(counterRefreshJobFailedTotal);
         counterRefreshJobEmptyTotal = new LongCounterMetric("mv_refresh_total_empty_jobs", MetricUnit.REQUESTS,
-                "total materialized view's refresh empty jobs");
+                    "total materialized view's refresh empty jobs");
         metrics.add(counterRefreshJobEmptyTotal);
         counterRefreshJobRetryCheckChangedTotal = new LongCounterMetric("mv_refresh_total_retry_meta_count", MetricUnit.REQUESTS,
-                "total materialized view's retry to check table change count");
+                    "total materialized view's retry to check table change count");
         metrics.add(counterRefreshJobRetryCheckChangedTotal);
 
         // query metrics
         counterQueryMaterializedViewTotal = new LongCounterMetric("mv_query_total_count", MetricUnit.REQUESTS,
-                "total materialized view's query count");
+                    "total materialized view's query count");
         metrics.add(counterQueryMaterializedViewTotal);
         counterQueryHitTotal = new LongCounterMetric("mv_query_total_hit_count", MetricUnit.REQUESTS,
-                "total hit materialized view's query count");
+                    "total hit materialized view's query count");
         metrics.add(counterQueryHitTotal);
         counterQueryConsideredTotal = new LongCounterMetric("mv_query_total_considered_count", MetricUnit.REQUESTS,
-                "total considered materialized view's query count");
+                    "total considered materialized view's query count");
         metrics.add(counterQueryConsideredTotal);
         counterQueryMatchedTotal = new LongCounterMetric("mv_query_total_matched_count", MetricUnit.REQUESTS,
-                "total matched materialized view's query count");
+                    "total matched materialized view's query count");
         metrics.add(counterQueryMatchedTotal);
         // text based rewrite
         counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
-                MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+                    MetricUnit.REQUESTS, "total text based matched materialized view's query count");
         metrics.add(counterQueryTextBasedMatchedTotal);
 
         // histogram metrics
@@ -162,14 +162,14 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             histRefreshJobDuration = metricRegistry.histogram(MetricRegistry.name("mv_refresh_duration",
-                    db.getFullName(), mv.getName()));
+                        db.getFullName(), mv.getName()));
         } catch (Exception e) {
             LOG.warn("Ignore histogram metrics for materialized view: {}", mvId);
         }
 
         // gauge metrics
         counterRefreshPendingJobs = new GaugeMetric<Long>("mv_refresh_pending_jobs", MetricUnit.NOUNIT,
-                "current materialized view pending refresh jobs number") {
+                    "current materialized view pending refresh jobs number") {
             @Override
             public Long getValue() {
                 String mvTaskName = TaskBuilder.getMvTaskName(mvId.getId());
@@ -188,7 +188,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterRefreshPendingJobs);
 
         counterRefreshRunningJobs = new GaugeMetric<Long>("mv_refresh_running_jobs", MetricUnit.NOUNIT,
-                "current materialized view running refresh jobs number") {
+                    "current materialized view running refresh jobs number") {
             @Override
             public Long getValue() {
                 String mvTaskName = TaskBuilder.getMvTaskName(mvId.getId());
@@ -211,7 +211,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterRefreshRunningJobs);
 
         counterRowNums = new GaugeMetric<Long>("mv_row_count", MetricUnit.NOUNIT,
-                "current materialized view's row count") {
+                    "current materialized view's row count") {
             @Override
             public Long getValue() {
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
@@ -224,21 +224,18 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                            LockType.READ)) {
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
         metrics.add(counterRowNums);
 
         counterStorageSize = new GaugeMetric<Long>("mv_storage_size", MetricUnit.NOUNIT,
-                "current materialized view's storage size") {
+                    "current materialized view's storage size") {
             @Override
             public Long getValue() {
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
@@ -251,21 +248,18 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
+                try (AutoCloseableLock ignore =
+                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
         metrics.add(counterStorageSize);
 
         counterInactiveState = new GaugeMetric<Integer>("mv_inactive_state", MetricUnit.NOUNIT,
-                "current materialized view's inactive or not, 0: active, 1: inactive") {
+                    "current materialized view's inactive or not, 0: active, 1: inactive") {
             @Override
             public Integer getValue() {
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
@@ -287,7 +281,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterInactiveState);
 
         counterPartitionCount = new GaugeMetric<Integer>("mv_partition_count", MetricUnit.NOUNIT,
-                "current materialized view's partition count, 0 if the materialized view is not partitioned") {
+                    "current materialized view's partition count, 0 if the materialized view is not partitioned") {
             @Override
             public Integer getValue() {
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
@@ -303,14 +297,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
 
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
+                try (AutoCloseableLock ignore =
+                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };

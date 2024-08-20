@@ -59,7 +59,8 @@ static std::string make_value_type_not_matched_error_message(int field_pos, cons
                                                              const SlotDescriptor* slot) {
     std::stringstream error_msg;
     error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
-              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+              << "Type: " << slot->type().debug_string() << ", Value length: " << field.get_size()
+              << ", Value: " << field.to_string();
     return error_msg.str();
 }
 

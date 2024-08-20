@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -143,14 +144,15 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visit(OptExpression optExpression, Context context) {
-            optExpression = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
-            return visitChildren(optExpression, new Context());
+            Optional<Operator> project = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
+            OptExpression result = visitChildren(optExpression, new Context());
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
-        private OptExpression generatePushDownProject(OptExpression optExpression, ColumnRefSet subfieldRefs,
-                                                      Context context) {
+        private Optional<Operator> generatePushDownProject(OptExpression optExpression, ColumnRefSet subfieldRefs,
+                                                           Context context) {
             if (context.pushDownExprRefs.isEmpty()) {
-                return optExpression;
+                return Optional.empty();
             }
 
             hasRewrite = true;
@@ -160,8 +162,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             subfieldRefs.getStream().map(o -> factory.getColumnRef(o)).forEach(k -> newProjectMap.put(k, k));
             newProjectMap.putAll(context.pushDownExprRefs);
 
-            return OptExpression.create(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()),
-                    optExpression);
+            return Optional.of(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()));
         }
 
         @Override
@@ -192,10 +193,10 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                     childSubfieldOutputs.union(context.pushDownExprRefsIndex.get(expr));
                 }
             }
-            if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
-            }
-            return visitChildren(optExpression, childContext);
+
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            OptExpression result = visitChildren(optExpression, childContext);
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
         @Override
@@ -286,17 +287,8 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
                 onPredicate = pushDownExpression(join.getOnPredicate(), context, checkColumns);
             }
-
             // handle predicate
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, checkColumns);
-            if (predicate.isPresent() || onPredicate.isPresent()) {
-                LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);
-                predicate.ifPresent(builder::setPredicate);
-                onPredicate.ifPresent(builder::setOnPredicate);
-
-                join = builder.build();
-                optExpression = OptExpression.create(join, optExpression.getInputs());
-            }
 
             // split push down expressions to left and right child accord by child's output columns
             Context leftContext = new Context();
@@ -326,8 +318,19 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             if (!rightContext.pushDownExprRefs.isEmpty()) {
                 visitChild(optExpression, 1, rightContext);
             }
-            if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            if (predicate.isPresent() || onPredicate.isPresent()) {
+                LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);
+                predicate.ifPresent(builder::setPredicate);
+                onPredicate.ifPresent(builder::setOnPredicate);
+
+                join = builder.build();
+                optExpression = OptExpression.create(join, optExpression.getInputs());
+            }
+
+            if (project.isPresent()) {
+                optExpression = OptExpression.create(project.get(), optExpression);
             }
             return optExpression;
         }
@@ -416,9 +419,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 }
             }
 
-            if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
-            }
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
 
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, windowUseColumns);
 
@@ -429,7 +430,8 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 optExpression = OptExpression.create(window, optExpression.getInputs());
             }
 
-            return visitChildren(optExpression, childContext);
+            OptExpression result = visitChildren(optExpression, childContext);
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
         @Override

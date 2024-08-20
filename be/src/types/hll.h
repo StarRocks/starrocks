@@ -177,40 +177,53 @@ private:
     }
 };
 
-const static datasketches::target_hll_type HLL_TGT_TYPE = datasketches::HLL_6;
-
 class DataSketchesHll {
 public:
-    DataSketchesHll() = default;
+    // default lg_k value for HLL
+    static const datasketches::target_hll_type DEFAULT_HLL_TGT_TYPE = datasketches::HLL_6;
 
-    DataSketchesHll(const DataSketchesHll& other) : _sketch(other._sketch) {}
-
-    DataSketchesHll& operator=(const DataSketchesHll& other) {
-        if (this != &other) {
-            this->_sketch = other._sketch;
-        }
-        return *this;
+    explicit DataSketchesHll(uint8_t log_k, datasketches::target_hll_type tgt_type) : _tgt_type(tgt_type) {
+        this->_sketch_union = std::make_unique<datasketches::hll_union>(log_k);
     }
 
-    DataSketchesHll(DataSketchesHll&& other) noexcept : _sketch(std::move(other._sketch)) {}
+    DataSketchesHll(const DataSketchesHll& other) = delete;
+    DataSketchesHll& operator=(const DataSketchesHll& other) = delete;
 
+    DataSketchesHll(DataSketchesHll&& other) noexcept
+            : _sketch_union(std::move(other._sketch_union)), _tgt_type(other._tgt_type) {}
     DataSketchesHll& operator=(DataSketchesHll&& other) noexcept {
         if (this != &other) {
-            this->_sketch = std::move(other._sketch);
+            this->_sketch_union = std::move(other._sketch_union);
+            this->_tgt_type = other._tgt_type;
         }
         return *this;
     }
-
-    explicit DataSketchesHll(uint64_t hash_value) { this->_sketch.update(hash_value); }
 
     explicit DataSketchesHll(const Slice& src);
 
     ~DataSketchesHll() = default;
 
+    // Returns sketch's configured lg_k value.
+    uint8_t get_lg_config_k() const {
+        if (UNLIKELY(_sketch_union == nullptr)) {
+            return DEFAULT_HLL_LOG_K;
+        }
+        return _sketch_union->get_lg_config_k();
+    }
+
+    // Returns the sketch's target HLL mode (from #target_hll_type).
+    datasketches::target_hll_type get_target_type() const {
+        if (UNLIKELY(_sketch_union == nullptr)) {
+            return DEFAULT_HLL_TGT_TYPE;
+        }
+        return _sketch_union->get_target_type();
+    }
+
     // Add a hash value to this HLL value
     // NOTE: input must be a hash_value
     void update(uint64_t hash_value);
 
+    // merge with other HLL value
     void merge(const DataSketchesHll& other);
 
     // Return max size of serialized binary
@@ -227,13 +240,6 @@ public:
 
     int64_t estimate_cardinality() const;
 
-    static std::string empty() {
-        static DataSketchesHll hll;
-        std::string buf;
-        hll.serialize((uint8_t*)buf.c_str());
-        return buf;
-    }
-
     // No need to check is_valid for datasketches HLL,
     // return ture for compatibility.
     static bool is_valid(const Slice& slice);
@@ -244,10 +250,24 @@ public:
     uint64_t serialize_size() const;
 
     // common interface
-    void clear() { _sketch.reset(); }
+    void clear() { _sketch_union->reset(); }
+
+    // get hll_sketch object which is lazy initialized
+    datasketches::hll_sketch* get_hll_sketch() const {
+        if (_is_changed) {
+            _sketch = std::make_unique<datasketches::hll_sketch>(_sketch_union->get_result(_tgt_type));
+            _is_changed = false;
+        }
+        return _sketch.get();
+    }
+    inline void mark_changed() { _is_changed = true; }
 
 private:
-    datasketches::hll_sketch _sketch{HLL_LOG_K, HLL_TGT_TYPE};
+    std::unique_ptr<datasketches::hll_union> _sketch_union = nullptr;
+    datasketches::target_hll_type _tgt_type = DEFAULT_HLL_TGT_TYPE;
+    // lazy value of union state
+    mutable std::unique_ptr<datasketches::hll_sketch> _sketch = nullptr;
+    mutable bool _is_changed = true;
 };
 
 } // namespace starrocks

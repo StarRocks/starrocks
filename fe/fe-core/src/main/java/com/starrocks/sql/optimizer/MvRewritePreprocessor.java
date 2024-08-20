@@ -69,7 +69,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -225,14 +224,7 @@ public class MvRewritePreprocessor {
         }
     }
 
-    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
-                !sessionVariable.isEnableMaterializedViewRewrite()) {
-            return;
-        }
-
+    public void prepare(OptExpression queryOptExpression) {
         try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
@@ -274,10 +266,6 @@ public class MvRewritePreprocessor {
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
                 }
-
-                // initialize mv rewrite strategy finally
-                MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
-                logMVPrepare(connectContext, "Mv rewrite strategy: {}", strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());

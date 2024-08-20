@@ -570,7 +570,14 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) {
-        idToValues.put(partitionId, Collections.emptyList());
+        if (isMultiColumnPartition()) {
+            idToMultiValues.put(partitionId, Collections.emptyList());
+            idToMultiLiteralExprValues.put(partitionId, Collections.emptyList());
+        } else {
+            idToValues.put(partitionId, Collections.emptyList());
+            idToLiteralExprValues.put(partitionId, Collections.emptyList());
+        }
+
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
@@ -599,11 +606,13 @@ public class ListPartitionInfo extends PartitionInfo {
     public List<Long> getSortedPartitions(boolean asc) {
         if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
             return idToLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
                     .sorted((x, y) -> compareRow(x.getValue(), y.getValue(), asc))
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
         } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
             return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
                     .sorted((x, y) -> compareMultiValueList(x.getValue(), y.getValue(), asc))
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
