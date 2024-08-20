@@ -440,7 +440,7 @@ void Chunk::append_random(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();
     for (size_t i = 0; i < n; i++) {
-        if (i != 0) {
+        if (i >= config::random_num) {
             throw std::bad_alloc();
         } else {
             ColumnPtr& c = get_column_by_index(i);

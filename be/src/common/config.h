@@ -1437,5 +1437,6 @@ CONF_mInt32(thrift_max_frame_size, "16384000");
 // The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
 // allows for structures nested up to 64 levels deep.
 CONF_mInt32(thrift_max_recursion_depth, "64");
+CONF_mInt32(random_num, "1");
 
 } // namespace starrocks::config
