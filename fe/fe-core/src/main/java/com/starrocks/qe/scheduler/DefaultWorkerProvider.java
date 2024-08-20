@@ -294,8 +294,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private String toString(boolean chooseComputeNode, boolean onlyChooseAbnormalNode) {
-        return chooseComputeNode ? abnormalComputeNodesToString(onlyChooseAbnormalNode) :
-                abnormalBackendsToString(onlyChooseAbnormalNode);
+        return chooseComputeNode ? computeNodesToString(onlyChooseAbnormalNode) :
+                backendsToString(onlyChooseAbnormalNode);
     }
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
@@ -303,7 +303,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, true));
     }
 
-    private String abnormalComputeNodesToString(boolean onlyChooseAbnormalNode) {
+    private String computeNodesToString(boolean onlyChooseAbnormalNode) {
         StringBuilder out = new StringBuilder("compute node: ");
 
         id2ComputeNode.forEach((backendID, backend) -> {
@@ -316,7 +316,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return out.toString();
     }
 
-    private String abnormalBackendsToString(boolean onlyChooseAbnormalNode) {
+    private String backendsToString(boolean onlyChooseAbnormalNode) {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> {
             if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID) || (!onlyChooseAbnormalNode)) {
