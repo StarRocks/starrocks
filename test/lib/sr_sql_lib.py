@@ -818,26 +818,51 @@ class StarrocksSQLApiLib(object):
             var = var[:-1]
 
         match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
+
         # replace thread variable dynamically
         if thread_key:
             tools.assert_in(thread_key, self.thread_var, f"Thread{thread_key} var dict is not found!")
 
             for each_word in copy.copy(match_words):
-                if each_word in self.thread_var[thread_key]:
+                # each_word type: xyz | xyz[*]...
+                # each_word: db[0]  match_keywords: [ db ] each_keyword: db
+                match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(cmd)
+                tools.eq_(1, len(match_keywords), f"Var num in {match_keywords} != 1")
+                each_keyword = match_keywords[0]
+
+                # only replace the first keywords
+                if each_keyword in self.thread_var[thread_key]:
+                    each_keyword_value = each_word.replace(each_keyword, f"self.thread_var[{thread_key}][{each_keyword}]")
+
                     if unfold:
-                        cmd = cmd.replace("${%s}" % each_word, self.thread_var[thread_key][each_word])
+                        each_keyword_value = str(eval(each_keyword_value))
                     else:
-                        cmd = cmd.replace("${%s}" % each_word, f"self.thread_var[{thread_key}][{each_word}]")
+                        pass
+
+                    cmd = cmd.replace(f"${{{each_word}}}", each_keyword_value)
+                    log.info(f'Replace {each_keyword} → {each_keyword_value}, {cmd}')
 
                     match_words.remove(each_word)
 
         # replace variable dynamically, only replace right of '='
         for each_word in copy.copy(match_words):
-            if each_word in self.__dict__:
+
+            # each_word type: xyz | xyz[*]...
+            # each_word: db[0]  match_keywords: [ db ] each_keyword: db
+            match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(each_word)
+            tools.eq_(1, len(match_keywords), f"Var num in {match_keywords} != 1")
+            each_keyword = match_keywords[0]
+
+            if each_keyword in self.__dict__:
+                each_keyword_value = each_word.replace(each_keyword, f"self.{each_keyword}")
+
                 if unfold:
-                    cmd = cmd.replace("${%s}" % each_word, str(eval("self.%s" % each_word)))
+                    each_keyword_value = str(eval(each_keyword_value))
                 else:
-                    cmd = cmd.replace("${%s}" % each_word, "self.%s" % each_word)
+                    pass
+
+                cmd = cmd.replace("${%s}" % each_word, each_keyword_value)
+                log.info(f'Replace {each_keyword} → {each_keyword_value}, {cmd}')
 
                 match_words.remove(each_word)
 
@@ -1076,7 +1101,7 @@ class StarrocksSQLApiLib(object):
         loop_check_res = False
         while (time.time() - loop_begin_time) < _timeout:
 
-            self_print(f"→ ROUND: {retry_count}...", color=ColorEnum.CYAN, logout=True)
+            self_print(f"→ ROUND: {retry_count}...", color=ColorEnum.MAGENTA, logout=True)
             retry_count += 1
 
             for each_stat_id, each_statement in enumerate(_loop_stat_list):
@@ -1102,10 +1127,10 @@ class StarrocksSQLApiLib(object):
                         break
 
                     if check_result is True:
-                        self_print(f"[LOOP] SUCCESS: {each_statement}!", color=ColorEnum.CYAN, logout=True)
+                        self_print(f"[LOOP CHECK] SUCCESS: {each_statement}!", color=ColorEnum.GREEN, logout=True)
                         loop_check_res = True
                     else:
-                        self_print(f"[LOOP] FAILURE: {each_statement}, result: {check_result}!",
+                        self_print(f"[LOOP CHECK] FAILURE: {each_statement}, result: {check_result}!",
                                    color=ColorEnum.YELLOW, logout=True)
                         loop_check_res = False
                         break

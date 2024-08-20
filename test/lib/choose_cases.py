@@ -439,29 +439,21 @@ def choose_cases(record_mode=False):
     filename_regex = os.environ.get("file_filter")
     case_name_regex = os.environ.get("case_filter")
 
-    run_info = """
-[DIR]: %s
-[Mode]: %s
-[file regex]: %s
-[case regex]: %s
-[attr]: %s
-    """ % (
-        confirm_case_dir,
-        "RECORD" if record_mode else "VALIDATE",
-        filename_regex,
-        case_name_regex,
-        os.environ.get("attr"),
-    )
-    print(run_info)
-    log.info(run_info)
+    run_info = f"""
+{'-' * 60}
+[DIR]: {confirm_case_dir}
+[Mode]: {"RECORD" if record_mode else "VALIDATE"}
+[file regex]: {filename_regex}
+[case regex]: {case_name_regex}
+[attr]: {os.environ.get("attr")}
+{'-' * 60}"""
+    sr_sql_lib.self_print(run_info, color=ColorEnum.GREEN, bold=False, logout=True)
+
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
 
-    # check db
-    # check_db_unique(cases.case_list)
-
     # log info: case list
-    print("case num: %s" % len(cases.case_list))
-    log.info("case num: %s" % len(cases.case_list))
+    sr_sql_lib.self_print("case num: %s" % len(cases.case_list))
+
     for case in cases.case_list:
         log.info("%s:%s" % (case.file, case.name))
 

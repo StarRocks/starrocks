@@ -380,18 +380,18 @@ Start to run: %s
                 loop_interval = sql["prop"]["interval"]
                 loop_desc = sql["prop"]["desc"]
 
-                self_print(f"[LOOP] start: {loop_desc}...", color=ColorEnum.CYAN, logout=True)
+                self_print(f"\n[LOOP] Start: {loop_desc}...", color=ColorEnum.BLUE, logout=True, bold=True)
                 if record_mode:
                     self.res_log.append("".join(sql["ori"]))
 
                 loop_check_res = self.execute_loop_statement(sql["stat"], sql_id, loop_timeout, loop_interval)
 
-                self_print(f"[LOOP] end!", color=ColorEnum.CYAN, logout=True)
+                self_print(f"[LOOP] Finish!\n", color=ColorEnum.BLUE, logout=True, bold=True)
                 tools.ok_(loop_check_res, f"Loop checker fail: {''.join(sql['ori'])}!")
 
             elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.CONCURRENCY_FLAG:
                 # concurrency statement
-                self_print(f"[CONCURRENCY] start...", color=ColorEnum.CYAN, logout=True)
+                self_print(f"[CONCURRENCY] Start...", color=ColorEnum.CYAN, logout=True)
                 if record_mode:
                     self.res_log.append("\n" + CONCURRENCY_FLAG + " {")
 
