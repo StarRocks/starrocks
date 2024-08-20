@@ -40,7 +40,7 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         if (this->data(state).hll_sketch != nullptr) {
-            ctx->add_mem_usage(-this->data(state).hll_sketch.mem_usage());
+            ctx->add_mem_usage(-this->data(state).hll_sketch->mem_usage());
             this->data(state).hll_sketch->clear();
         }
     }
