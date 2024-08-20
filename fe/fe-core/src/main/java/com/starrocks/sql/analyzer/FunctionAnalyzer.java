@@ -300,7 +300,8 @@ public class FunctionAnalyzer {
         if ((fnName.getFunction().equals(FunctionSet.MIN)
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
-                || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT))
+                || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
@@ -465,6 +466,39 @@ public class FunctionAnalyzer {
             if (rate < 0 || rate > 1) {
                 throw new SemanticException(
                         fnName + " second parameter'value should be between 0 and 1");
+            }
+        }
+
+        // ds_hll_count_distinct
+        if (fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)) {
+            int argSize = functionCallExpr.getChildren().size();
+            if (argSize > 3) {
+                throw new SemanticException(fnName + " requires one/two/three parameters: ds_hll_count_distinct(col, <log_k>, " +
+                        "<tgt_type>)");
+            }
+
+            // check the first parameter: log_k
+            if (argSize >= 2) {
+                if (!(functionCallExpr.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                }
+                long precision = ((LiteralExpr) functionCallExpr.getChild(1)).getLongValue();
+                if (precision < 4 || precision > 21) {
+                    throw new SemanticException(
+                            fnName + " second parameter'value should be between 4 and 21");
+                }
+            }
+
+            // check the second parameter: tgt_type
+            if (argSize == 3) {
+                if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
+                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                }
+                String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
+                if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
+                    throw new SemanticException(
+                            fnName + " third  parameter'value should be in HLL_4/HLL_6/HLL_8");
+                }
             }
         }
 
