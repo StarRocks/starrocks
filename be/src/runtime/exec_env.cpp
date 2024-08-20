@@ -50,6 +50,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
