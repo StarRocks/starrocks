@@ -6,7 +6,9 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-当前StarRocks并不是强一致性的系统，只能保证session一致性，即：在同一个mysql session中发起的数据写入操作，下一时刻能读取到最新的数据。如果需要其他的session也能读取到最新的数据，在查询数据之前，先发送一个sync命令。
+同步不同 Session 之间的数据一致性。
+
+目前，StarRocks 只能保证同一 Session 内的一致性，也就是说，只有发起数据写入操作的 Session 才能在操作成功后立即读取最新数据。如果想立即从其他 Session 读取最新数据，必须使用 SYNC 语句同步数据一致性。如果不执行该语句，Session 之间通常会有毫秒级的延迟。
 
 :::tip
 
@@ -17,12 +19,12 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-sync
+SYNC
 ```
 
 ## 示例
 
 ```Plain
-mysql> sync;
+mysql> SYNC;
 Query OK, 0 rows affected (0.01 sec)
 ```
