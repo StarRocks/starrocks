@@ -57,13 +57,14 @@ public:
 
     static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
 
+    static bool enable_encode_float(const int encode_level) { return encode_level & ENCODE_FLOAT; }
     static bool enable_encode_integer(const int encode_level) { return encode_level & ENCODE_INTEGER; }
-
     static bool enable_encode_string(const int encode_level) { return encode_level & ENCODE_STRING; }
 
 private:
     static constexpr int ENCODE_INTEGER = 2;
     static constexpr int ENCODE_STRING = 4;
+    static constexpr int ENCODE_FLOAT = 8;
 
     // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
     void _adjust(const int col_id);

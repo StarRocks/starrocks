@@ -111,6 +111,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
             buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
+            VLOG_ROW << "pb serialize column " << i << " into size " << buff - buff_begin;
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
             if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
