@@ -808,10 +808,10 @@ public class FunctionAnalyzer {
                                                          FunctionParams params,
                                                          Type[] argumentTypes,
                                                          Boolean[] argumentIsConstants) {
-        io.delta.kernel.internal.util.Preconditions.checkArgument(fnName != null);
-        io.delta.kernel.internal.util.Preconditions.checkArgument(argumentTypes != null);
-        io.delta.kernel.internal.util.Preconditions.checkArgument(argumentIsConstants != null);
-        io.delta.kernel.internal.util.Preconditions.checkArgument(argumentIsConstants.length == argumentTypes.length);
+        Preconditions.checkArgument(fnName != null);
+        Preconditions.checkArgument(argumentTypes != null);
+        Preconditions.checkArgument(argumentIsConstants != null);
+        Preconditions.checkArgument(argumentIsConstants.length == argumentTypes.length);
         Function fn = null;
         int argSize = argumentTypes.length;
         boolean isDistinct = params.isDistinct();
