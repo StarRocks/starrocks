@@ -229,7 +229,7 @@ public:
     // Return max size of serialized binary
     size_t max_serialized_size() const;
     // use max_serialized_size as estimate memory usage
-    uint64_t mem_usage() const { return max_serialized_size(); }
+    int64_t mem_usage() const { return max_serialized_size(); }
 
     // Input slice should have enough capacity for serialize, which
     // can be got through max_serialized_size(). If insufficient buffer
