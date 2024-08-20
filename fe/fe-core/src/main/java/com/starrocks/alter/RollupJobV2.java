@@ -553,20 +553,19 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
                     }
                     // make sure the key columns are in the front of the list which is the limitation of the be `ChunkAggregator`
-                    List<String> usedColIds = Lists.newArrayList();
+                    List<String> usedColNames = Lists.newArrayList();
                     List<String> nonKeyColIds = Lists.newArrayList();
                     for (String name : usedBaseTableColNames) {
                         Column col = tbl.getColumn(name);
                         if (col.isKey()) {
-                            usedColIds.add(name);
+                            usedColNames.add(name);
                         } else {
                             nonKeyColIds.add(name);
                         }
                     }
-                    usedColIds.addAll(nonKeyColIds);
+                    usedColNames.addAll(nonKeyColIds);
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
-                                    Lists.newLinkedList(usedBaseTableColNames));
+                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColNames);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
