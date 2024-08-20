@@ -455,7 +455,7 @@ public class RuleSet {
                 FineGrainedRangePredicateRule.INSTANCE,
                 FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
 
-        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.ELIMINATE_OP_WITH_CONSTANT, ImmutableList.of(
                 EliminateGroupByConstantRule.INSTANCE,
                 EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_LEFT_SINGLE_VALUE_RULE,
                 EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_RIGHT_SINGLE_VALUE_RULE
