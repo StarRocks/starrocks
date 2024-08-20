@@ -266,7 +266,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, 0, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
 
@@ -316,7 +316,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(Int16Column::create());
     writer.non_key_columns.emplace_back(Int32Column::create());
-    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, 0, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     ASSERT_EQ(2, writer.non_key_columns.size());
@@ -375,7 +375,7 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, 0, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
     for (int64_t i = 0; i < pks.size(); i++) {
@@ -424,7 +424,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(Int16Column::create());
     writer.non_key_columns.emplace_back(Int32Column::create());
-    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, 0, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     ASSERT_EQ(2, writer.non_key_columns.size());
