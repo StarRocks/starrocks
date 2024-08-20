@@ -74,13 +74,7 @@ displayed_sidebar: "Chinese"
 - [SHOW PROC](./Administration/SHOW_PROC.md)
 - [SHOW PROCESSLIST](./Administration/SHOW_PROCESSLIST.md)
 - [SHOW RUNNING QUERIES](./Administration/SHOW_RUNNING_QUERIES.md)
-<<<<<<< HEAD
-=======
-- [ADD BACKEND BLACKLIST](./Administration/ADD_BACKEND_BLACKLIST.md)
-- [DELETE BACKEND BLACKLIST](./Administration/DELETE_BACKEND_BLACKLIST.md)
-- [SHOW BACKEND BLACKLIST](./Administration/SHOW_BACKEND_BLACKLIST.md)
 - [SYNC](./Administration/SYNC.md)
->>>>>>> 4fa711e309 ([Doc] Add sync command description (#49980))
 
 ### 资源组
 
