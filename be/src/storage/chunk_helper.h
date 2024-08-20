@@ -107,6 +107,7 @@ public:
     bool empty() const;
     bool reach_limit() const;
     Status push(ChunkPtr&& chunk);
+    Status push_random(ChunkPtr&& chunk);
     ChunkPtr pull();
 
 private:

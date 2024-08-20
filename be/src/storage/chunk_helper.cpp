@@ -495,6 +495,32 @@ void ChunkAccumulator::reset() {
     _accumulate_count = 0;
 }
 
+Status ChunkAccumulator::push_random(ChunkPtr&& chunk) {
+    size_t input_rows = chunk->num_rows();
+    LOG(ERROR) << "PUSH_RANDOM: " << input_rows;
+    // TODO: optimize for zero-copy scenario
+    // Cut the input chunk into pieces if larger than desired
+    for (size_t start = 0; start < input_rows;) {
+        size_t remain_rows = input_rows - start;
+        size_t need_rows = 0;
+        if (_tmp_chunk) {
+            need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append_random(*chunk, start, need_rows));
+        } else {
+            need_rows = std::min(_desired_size, remain_rows);
+            _tmp_chunk = chunk->clone_empty(_desired_size);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append_random(*chunk, start, need_rows));
+        }
+
+        if (_tmp_chunk->num_rows() >= _desired_size) {
+            _output.emplace_back(std::move(_tmp_chunk));
+        }
+        start += need_rows;
+    }
+    _accumulate_count++;
+    return Status::OK();
+}
+
 Status ChunkAccumulator::push(ChunkPtr&& chunk) {
     size_t input_rows = chunk->num_rows();
     // TODO: optimize for zero-copy scenario

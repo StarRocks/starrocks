@@ -36,7 +36,7 @@ Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
         return Status::OK();
     }
     _num_rows += build_chunk->num_rows();
-    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
+    RETURN_IF_ERROR(_accumulator.push_random(std::move(build_chunk)));
     return Status::OK();
 }
 

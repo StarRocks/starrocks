@@ -436,6 +436,19 @@ void Chunk::append(const Chunk& src, size_t offset, size_t count) {
     }
 }
 
+void Chunk::append_random(const Chunk& src, size_t offset, size_t count) {
+    DCHECK_EQ(num_columns(), src.num_columns());
+    const size_t n = src.num_columns();
+    for (size_t i = 0; i < n; i++) {
+        if (i != 0) {
+            throw std::bad_alloc();
+        } else {
+            ColumnPtr& c = get_column_by_index(i);
+            c->append(*src.get_column_by_index(i), offset, count);
+        }
+    }
+}
+
 void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();

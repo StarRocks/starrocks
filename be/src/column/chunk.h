@@ -171,6 +171,7 @@ public:
 
     // Append |count| rows from |src|, started from |offset|, to the |this| chunk.
     void append(const Chunk& src, size_t offset, size_t count);
+    void append_random(const Chunk& src, size_t offset, size_t count);
 
     // columns in chunk may have same column ptr
     // append_safe will check size of all columns in dest chunk
