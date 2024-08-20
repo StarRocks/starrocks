@@ -121,6 +121,7 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
                            << chunk->columns()[1]->size() << ", "
                            << accumulator.tmp_chunk()->debug_columns();
             }
+            chunk->check_or_die();
             RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
         }
         i++;
@@ -134,7 +135,6 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
     }
 
     while (ChunkPtr output = accumulator.pull()) {
-        output->check_or_die();
         _build_chunks.emplace_back(std::move(output));
     }
 
