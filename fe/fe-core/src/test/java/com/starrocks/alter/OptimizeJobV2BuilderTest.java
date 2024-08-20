@@ -19,6 +19,7 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -61,6 +62,7 @@ public class OptimizeJobV2BuilderTest {
 
     @Test
     public void testBuildWithoutOptimizeClause() throws UserException {
+        Config.enable_online_optimize_table = true;
         // Create a mock OlapTable
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);
