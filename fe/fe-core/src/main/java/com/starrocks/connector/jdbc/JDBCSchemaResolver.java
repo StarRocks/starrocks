@@ -90,7 +90,8 @@ public abstract class JDBCSchemaResolver {
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
-                    columnSet.getString("IS_NULLABLE").equals("YES")));
+                    columnSet.getString("IS_NULLABLE").equals("YES"),
+                    columnSet.getString("REMARKS")));
         }
         return fullSchema;
     }
