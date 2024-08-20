@@ -110,6 +110,7 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
     // normalize all incomplete chunks
     ChunkAccumulator accumulator(state->chunk_size());
     int i = 0;
+    LOG(ERROR) << "STREAM start: " << channels.size() << std::endl;
     for (auto& sink : channels) {
         LOG(ERROR) << "STREAM_BUILDER_INIT_1: " << i++;
         if (auto chunk = sink->incomplete_chunk()) {
@@ -117,6 +118,7 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
             RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
         }
     }
+    LOG(ERROR) << "STREAM end: " << channels.size() << std::endl;
     accumulator.finalize();
 
     // collect all complete chunks
