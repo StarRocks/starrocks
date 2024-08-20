@@ -346,7 +346,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<PartitionInfo> hivePartitions;
         try {
-            useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getPartitions(this.getCatalogName(), this, partitionNames);
         } catch (StarRocksConnectorException e) {
