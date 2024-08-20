@@ -89,6 +89,15 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
+    public Map<ColumnRefOperator, ScalarOperator> getTwoMaps() {
+        Map<ColumnRefOperator, ScalarOperator> twoMaps = new HashMap<>();
+        twoMaps.putAll(columnRefMap);
+        if (commonSubOperatorMap != null) {
+            twoMaps.putAll(commonSubOperatorMap);
+        }
+        return twoMaps;
+    }
+
     // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
     // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
     public boolean needApplyStringDict(Set<Integer> childDictColumns) {

@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
-    // skewColumn and
     private ScalarOperator skewColumn;
     private List<ScalarOperator> skewValues;
     private PhysicalHashJoinOperator skewJoinFriend;
