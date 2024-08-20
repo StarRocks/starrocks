@@ -109,6 +109,7 @@ public:
     Status push(ChunkPtr&& chunk);
     Status push_random(ChunkPtr&& chunk);
     ChunkPtr pull();
+    ChunkPtr& tmp_chunk() { return _tmp_chunk; }
 
 private:
     size_t _desired_size;

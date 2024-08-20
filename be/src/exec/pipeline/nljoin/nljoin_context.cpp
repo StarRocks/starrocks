@@ -112,11 +112,18 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
     int i = 0;
     LOG(ERROR) << "STREAM start: " << channels.size() << std::endl;
     for (auto& sink : channels) {
-        LOG(ERROR) << "STREAM_BUILDER_INIT_1: " << i++;
+        LOG(ERROR) << "STREAM_BUILDER_INIT_1: ";
         if (auto chunk = sink->incomplete_chunk()) {
-            LOG(ERROR) << "STREAM_BUILDER_INIT_2: " << i++;
+            if (accumulator.tmp_chunk() == nullptr) {
+                LOG(ERROR) << "STREAM_BUILDER_EMPTY";
+            } else {
+                LOG(ERROR) << "STREAM_BUILDER_INIT_2: " << chunk->columns()[0]->size() << ", "
+                           << chunk->columns()[1]->size() << ", "
+                           << accumulator.tmp_chunk()->debug_columns();
+            }
             RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
         }
+        i++;
     }
     LOG(ERROR) << "STREAM end: " << channels.size() << std::endl;
     accumulator.finalize();
@@ -127,6 +134,7 @@ Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
     }
 
     while (ChunkPtr output = accumulator.pull()) {
+        output->check_or_die();
         _build_chunks.emplace_back(std::move(output));
     }
 
