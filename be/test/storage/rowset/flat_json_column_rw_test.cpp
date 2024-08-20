@@ -1665,4 +1665,34 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson2) {
     EXPECT_EQ(R"(NULL)", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnRWTest, testHyperDeepFlatternJson) {
+    config::json_flat_null_factor = 0.4;
+    config::json_flat_sparsity_factor = 0.5;
+
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {R"({"a": 1, "gg": "te1", "ff": {"f1": [{"e2": 1, "e3": 2}, 2, 3]}})",
+                                     R"({"a": 2, "gg": "te2", "ff": 780})", R"({"a": 3, "gg": "te3", "ff": 781})",
+                                     R"({"a": 5, "gg": "te5", "ff": 782})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(4, read_col->size());
+    EXPECT_EQ(R"({ff.f1: [{"e2": 1, "e3": 2}, 2, 3]})", read_col->debug_item(0));
+    EXPECT_EQ(R"({ff.f1: NULL})", read_col->debug_item(3));
+}
+
 } // namespace starrocks

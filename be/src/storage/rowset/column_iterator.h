@@ -77,6 +77,7 @@ struct ColumnIteratorOptions {
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+    bool has_preaggregation = true;
 };
 
 // Base iterator to read one column data

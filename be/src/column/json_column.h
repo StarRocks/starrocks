@@ -105,7 +105,7 @@ public:
     void check_or_die() const override;
 
     // support flat json on storage
-    bool is_flat_json() const { return !_flat_column_paths.empty(); }
+    bool is_flat_json() const { return !_flat_columns.empty(); }
 
     ColumnPtr& get_flat_field(const std::string& path);
 

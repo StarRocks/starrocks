@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <algorithm>
-
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/json_column_writer.h"
 
