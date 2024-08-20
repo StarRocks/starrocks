@@ -305,6 +305,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
+<<<<<<< HEAD
+=======
+    // schema_id that not greater than 0 is invalid
+>>>>>>> 0eb9a60557 ([BugFix] Fix get error tablet schema during query. (#49977))
     if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0 &&
         _scan_node->thrift_olap_scan_node().schema_id == _tablet->tablet_schema()->id()) {
         _tablet_schema = _tablet->tablet_schema();
