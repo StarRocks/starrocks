@@ -63,17 +63,13 @@ static const int64_t io_failure_percent = 3;
 
 class Replayer {
 public:
-    void upsert(const ChunkPtr& chunk) {
-        for (int i = 0; i < chunk->num_rows(); i++) {
-            _replayer_index[chunk->columns()[0]->get(i).get_int32()] = chunk->columns()[1]->get(i).get_int32();
-        }
-    }
+    enum ReplayerOP {
+        UPSERT,
+        ERASE,
+    };
+    void upsert(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::UPSERT, chunk); }
 
-    void erase(const ChunkPtr& chunk) {
-        for (int i = 0; i < chunk->num_rows(); i++) {
-            _replayer_index.erase(chunk->columns()[0]->get(i).get_int32());
-        }
-    }
+    void erase(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::ERASE, chunk); }
 
     bool check(const ChunkPtr& chunk) {
         std::map<int, int> tmp_chunk;
@@ -100,7 +96,27 @@ public:
         return true;
     }
 
+    void commit() {
+        for (const auto& log : _redo_logs) {
+            auto chunk = log.second;
+            if (log.first == ReplayerOP::UPSERT) {
+                // Upsert
+                for (int i = 0; i < chunk->num_rows(); i++) {
+                    _replayer_index[chunk->columns()[0]->get(i).get_int32()] = chunk->columns()[1]->get(i).get_int32();
+                }
+            } else {
+                // Delete
+                for (int i = 0; i < chunk->num_rows(); i++) {
+                    _replayer_index.erase(chunk->columns()[0]->get(i).get_int32());
+                }
+            }
+        }
+    }
+
+    void abort() { _redo_logs.clear(); }
+
 private:
+    std::vector<std::pair<ReplayerOP, ChunkPtr>> _redo_logs;
     std::map<int, int> _replayer_index;
 };
 
@@ -136,7 +152,7 @@ public:
         items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 25);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
         _io_failure_generator =
-                std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), io_failure_percent);
+                std::make_unique<IOFailureGenerator<int, PICT_OP>>(_random_generator.get(), io_failure_percent);
         _replayer = std::make_unique<Replayer>();
     }
 
@@ -316,27 +332,44 @@ public:
         while (start_second + _run_second >= time(nullptr)) {
             auto io_failure_guard = _io_failure_generator->generate();
             auto op = _random_op_selector->select();
+            auto st = Status::OK();
             switch (op) {
             case UPSERT:
-                RETURN_IF_ERROR(upsert_op());
+                st = upsert_op();
                 break;
             case DELETE:
-                RETURN_IF_ERROR(delete_op());
+                st = delete_op();
                 break;
             case GET:
-                RETURN_IF_ERROR(get_op());
+                st = get_op();
                 break;
             case COMPACT:
-                RETURN_IF_ERROR(compact_op());
+                st = compact_op();
                 break;
             case RELOAD:
-                RETURN_IF_ERROR(reload_op());
+                st = reload_op();
                 break;
             case UPSERT_WITH_BATCH_PUB:
-                RETURN_IF_ERROR(upsert_with_batch_pub_op());
+                st = upsert_with_batch_pub_op();
                 break;
             default:
                 break;
+            }
+            if (io_failure_guard != nullptr) {
+                // failure inject
+                if (st.ok()) {
+                    _replayer->commit();
+                } else {
+                    _replayer->abort();
+                }
+            } else {
+                // No failure inject
+                if (st.ok()) {
+                    _replayer->commit();
+                } else {
+                    _replayer->abort();
+                    return st;
+                }
             }
         }
         // check at last.
@@ -359,7 +392,7 @@ protected:
     int _run_second = 0;
     std::unique_ptr<DeterRandomGenerator<int, PICT_OP>> _random_generator;
     std::unique_ptr<WeightedRandomOpSelector<int, PICT_OP>> _random_op_selector;
-    std::unique_ptr<IOFailureGenerator> _io_failure_generator;
+    std::unique_ptr<IOFailureGenerator<int, PICT_OP>> _io_failure_generator;
     std::unique_ptr<Replayer> _replayer;
 
     int64_t _old_l0_size = 0;
