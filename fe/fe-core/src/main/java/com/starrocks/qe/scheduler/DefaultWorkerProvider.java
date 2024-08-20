@@ -141,6 +141,23 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.preferComputeNode = preferComputeNode;
     }
 
+    @VisibleForTesting
+    public DefaultWorkerProvider(
+            ImmutableMap<Long, ComputeNode> id2ComputeNode,
+            ImmutableMap<Long, ComputeNode> availableID2ComputeNode) {
+        this.id2Backend = ImmutableMap.of();
+        this.id2ComputeNode = id2ComputeNode;
+
+        this.availableID2Backend = ImmutableMap.of();
+        this.availableID2ComputeNode = availableID2ComputeNode;
+
+        this.selectedWorkerIds = Sets.newConcurrentHashSet();
+
+        this.hasComputeNode = true;
+        this.preferComputeNode = true;
+        this.usedComputeNode = true;
+    }
+
     @Override
     public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
@@ -257,7 +274,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
-        return toString(usedComputeNode);
+        return toString(usedComputeNode, false);
     }
 
     @VisibleForTesting
@@ -276,20 +293,21 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return -1;
     }
 
-    private String toString(boolean chooseComputeNode) {
-        return chooseComputeNode ? computeNodesToString() : backendsToString();
+    private String toString(boolean chooseComputeNode, boolean onlyChooseAbnormalNode) {
+        return chooseComputeNode ? abnormalComputeNodesToString(onlyChooseAbnormalNode) :
+                abnormalBackendsToString(onlyChooseAbnormalNode);
     }
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
+                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, true));
     }
 
-    private String computeNodesToString() {
+    private String abnormalComputeNodesToString(boolean onlyChooseAbnormalNode) {
         StringBuilder out = new StringBuilder("compute node: ");
 
         id2ComputeNode.forEach((backendID, backend) -> {
-            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID) || (!onlyChooseAbnormalNode)) {
                 out.append(
                         String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                                 backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
@@ -298,10 +316,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return out.toString();
     }
 
-    private String backendsToString() {
+    private String abnormalBackendsToString(boolean onlyChooseAbnormalNode) {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> {
-            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID) || (!onlyChooseAbnormalNode)) {
                 out.append(
                         String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                                 backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));

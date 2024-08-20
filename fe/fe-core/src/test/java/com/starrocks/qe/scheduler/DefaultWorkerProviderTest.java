@@ -45,8 +45,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultWorkerProviderTest {
-    private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new);
-    private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new);
+    private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new, false);
+    private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new, false);
     private final ImmutableMap<Long, ComputeNode> availableId2Backend = ImmutableMap.of(
             0L, id2Backend.get(0L),
             2L, id2Backend.get(2L),
@@ -63,18 +63,23 @@ public class DefaultWorkerProviderTest {
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> genWorkers(long startId, long endId,
-                                                                            Supplier<C> factory) {
+                                                                            Supplier<C> factory, boolean halfDead) {
         Map<Long, C> res = new TreeMap<>();
         for (long i = startId; i < endId; i++) {
             C worker = factory.get();
             worker.setId(i);
-            worker.setAlive(true);
+            if (halfDead && i % 2 == 0) {
+                worker.setAlive(false);
+            } else {
+                worker.setAlive(true);
+            }
             worker.setHost("host#" + i);
             worker.setBePort(80);
             res.put(i, worker);
         }
         return ImmutableMap.copyOf(res);
     }
+
 
     @Test
     public void testCaptureAvailableWorkers() {
@@ -262,10 +267,27 @@ public class DefaultWorkerProviderTest {
                         false);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
+        ImmutableMap<Long, ComputeNode> id2BackendHalfDead = genWorkers(0, 10, Backend::new, true);
         workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(), false);
+                new DefaultWorkerProvider(id2BackendHalfDead, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(),
+                        false);
         DefaultWorkerProvider finalWorkerProvider = workerProvider;
-        Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+
+        SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assert.assertEquals(
+                "Backend node not found. Check if any backend node is down.backend:" +
+                        " [host#0 alive: false inBlacklist: false] [host#2 alive: false inBlacklist: false] [host#4 alive: false inBlacklist: false]" +
+                        " [host#6 alive: false inBlacklist: false] [host#8 alive: false inBlacklist: false] ",
+                e.getMessage());
+        ImmutableMap<Long, ComputeNode> id2ComputeNodeHalfDead = genWorkers(10, 15, ComputeNode::new, true);
+        workerProvider =
+                new DefaultWorkerProvider(id2ComputeNodeHalfDead, ImmutableMap.of());
+        finalWorkerProvider = workerProvider;
+        e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assert.assertEquals(
+                "Compute node not found. Check if any compute node is down.compute node:" +
+                        " [host#10 alive: false inBlacklist: false] [host#12 alive: false inBlacklist: false] [host#14 alive: false inBlacklist: false] ",
+                e.getMessage());
     }
 
     @Test
