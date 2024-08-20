@@ -62,6 +62,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.ForwardCompatibleAlterJobV2Object;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.OptimizeJobV2;
@@ -84,6 +85,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForwardCompatibleRecyclePartitionInfoV2;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
@@ -253,7 +255,12 @@ public class GsonUtils {
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
+<<<<<<< HEAD
                     .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2");
+=======
+                    .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
+                    .registerSubtypeAsFallback(ForwardCompatibleAlterJobV2Object.class, "AlterJobV2FCObject");
+>>>>>>> 3cfcd6a889 ([Enhancement] Compatibility fix for RecyclePartitionInfo and AlterJobV2 (#49636))
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>
@@ -283,8 +290,19 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2>
             RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
+<<<<<<< HEAD
             = RuntimeTypeAdapterFactory.of(CatalogRecycleBin.RecyclePartitionInfoV2.class, "clazz")
             .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo");
+=======
+            = RuntimeTypeAdapterFactory.of(RecyclePartitionInfoV2.class, "clazz")
+            .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
+            .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
+            .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
+            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
+            .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
+            .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo")
+            .registerSubtypeAsFallback(ForwardCompatibleRecyclePartitionInfoV2.class, "RecyclePartitionInfoV2FC");
+>>>>>>> 3cfcd6a889 ([Enhancement] Compatibility fix for RecyclePartitionInfo and AlterJobV2 (#49636))
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
