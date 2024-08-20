@@ -276,8 +276,11 @@ public class DefaultWorkerProviderTest {
         SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
         Assert.assertEquals(
                 "Backend node not found. Check if any backend node is down.backend:" +
-                        " [host#0 alive: false inBlacklist: false] [host#2 alive: false inBlacklist: false] [host#4 alive: false inBlacklist: false]" +
-                        " [host#6 alive: false inBlacklist: false] [host#8 alive: false inBlacklist: false] ",
+                        " [host#0 alive: false inBlacklist: false] " +
+                        "[host#2 alive: false inBlacklist: false]" +
+                        " [host#4 alive: false inBlacklist: false]" +
+                        " [host#6 alive: false inBlacklist: false]" +
+                        " [host#8 alive: false inBlacklist: false] ",
                 e.getMessage());
         ImmutableMap<Long, ComputeNode> id2ComputeNodeHalfDead = genWorkers(10, 15, ComputeNode::new, true);
         workerProvider =
@@ -286,7 +289,9 @@ public class DefaultWorkerProviderTest {
         e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
         Assert.assertEquals(
                 "Compute node not found. Check if any compute node is down.compute node:" +
-                        " [host#10 alive: false inBlacklist: false] [host#12 alive: false inBlacklist: false] [host#14 alive: false inBlacklist: false] ",
+                        " [host#10 alive: false inBlacklist: false]" +
+                        " [host#12 alive: false inBlacklist: false]" +
+                        " [host#14 alive: false inBlacklist: false] ",
                 e.getMessage());
     }
 
