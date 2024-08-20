@@ -74,6 +74,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW PROC](./Administration/SHOW_PROC.md)
 - [SHOW PROCESSLIST](./Administration/SHOW_PROCESSLIST.md)
 - [SHOW RUNNING QUERIES](./Administration/SHOW_RUNNING_QUERIES.md)
+- [SYNC](./Administration/SYNC.md)
 
 ### Resource group
 
