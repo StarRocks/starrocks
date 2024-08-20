@@ -2735,10 +2735,13 @@ public class PlanFragmentBuilder {
                 // let two node know each other for runtimr filter
                 if (hashJoinNode.isSkewJoin()) {
                     physicalHashJoinOperator.setMySelfAsNode(hashJoinNode);
-                    HashJoinNode hashJoinNodeFriend = physicalHashJoinOperator.getSkewJoinFriend().getMySelfAsNode();
-                    if (hashJoinNodeFriend != null) {
-                        hashJoinNode.setSkewJoinFriend(hashJoinNodeFriend);
-                        hashJoinNodeFriend.setSkewJoinFriend(hashJoinNode);
+                    if (physicalHashJoinOperator.getSkewJoinFriend() != null) {
+                        HashJoinNode hashJoinNodeFriend =
+                                physicalHashJoinOperator.getSkewJoinFriend().getMySelfAsNode();
+                        if (hashJoinNodeFriend != null) {
+                            hashJoinNode.setSkewJoinFriend(hashJoinNodeFriend);
+                            hashJoinNodeFriend.setSkewJoinFriend(hashJoinNode);
+                        }
                     }
                 }
 

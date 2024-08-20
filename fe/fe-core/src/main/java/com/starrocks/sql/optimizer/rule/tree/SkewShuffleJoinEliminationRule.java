@@ -142,10 +142,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalDistributionOperator leftExchangeOp = (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
 
             OptExpression rightExchangeOptExp = opt.inputAt(1);
-            PhysicalDistributionOperator rightExchangeOp = (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
-            ColumnRefSet usedColumnsOfRightExchangeOp =
-                    rightExchangeOp.getRowOutputInfo(rightExchangeOptExp.getInputs())
-                            .getUsedColumnRefSet();
+            PhysicalDistributionOperator rightExchangeOpOfOriginalShuffleJoin =
+                    (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
 
             PhysicalSplitProduceOperator leftSplitProduceOperator =
                     new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
@@ -207,7 +205,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalSplitConsumeOperator rightSplitConsumerOptForShuffleJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
                             notInSkewPredicateForRightTable,
-                            rightExchangeOp.getDistributionSpec(), rightSplitOutputColumnRefMap);
+                            rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), rightSplitOutputColumnRefMap);
 
             PhysicalSplitConsumeOperator rightSplitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
@@ -290,7 +288,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             OptExpression rightChildOfMerge = newBroadcastJoin;
             if (!parentRequireEmpty) {
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
-                        new PhysicalDistributionOperator(rightExchangeOp.getDistributionSpec());
+                        new PhysicalDistributionOperator(rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
                 OptExpression exchangeOptExpForBroadcastJoin =
                         OptExpression.builder().setOp(newExchangeForBroadcastJoin)
@@ -303,6 +301,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     // broadcast join's projection should keep the columns used in exchange
                     Projection projectionForBroadcast = projectionOnJoin.deepClone();
 
+                    ColumnRefSet usedColumnsOfRightExchangeOp =
+                            rightExchangeOpOfOriginalShuffleJoin.getRowOutputInfo(rightExchangeOptExp.getInputs())
+                                    .getUsedColumnRefSet();
                     usedColumnsOfRightExchangeOp.except(projectionOnJoin.getOutputColumns());
                     usedColumnsOfRightExchangeOp.getColumnRefOperators(columnRefFactory).stream()
                             .forEach(columnRefOperator -> {
@@ -397,7 +398,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
 
-            ScalarOperator skewColumn = oldJoinOperator.getSkewColumn();
+            // right now skew hint only support skew in left table, we will add new hint to replace it later
+            ColumnRefOperator skewColumn = (ColumnRefOperator) oldJoinOperator.getSkewColumn();
             ScalarOperator rightSkewColumn = null;
 
             List<BinaryPredicateOperator> equalConjs = JoinHelper.
@@ -421,12 +423,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
                         ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
                         ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
-                        if ((skewColumn.equals(rewriteChild0)) ||
-                                rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0)) ||
-                                (skewColumn.equals(rewriteChild1)) ||
-                                (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0)))) {
-                            skewColumn = child0;
+                        if (rewriteChild0.getUsedColumns().contains(skewColumn)) {
+                            skewColumn = (ColumnRefOperator) child0;
                             rightSkewColumn = child1;
+                            break;
+                        } else if (rewriteChild1.getUsedColumns().contains(skewColumn)) {
+                            skewColumn = (ColumnRefOperator) child1;
+                            rightSkewColumn = child0;
                             break;
                         }
                     }
