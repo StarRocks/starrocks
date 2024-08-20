@@ -210,7 +210,7 @@ void MetaFileBuilder::_collect_del_files_above_rebuild_point(RowsetMetadataPB* r
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                         uint32_t max_compact_input_rowset_id) {
+                                         uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -293,12 +293,6 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
     // update rowset schema id
     if (!_tablet_meta->rowset_to_schema().empty()) {
-        int64_t output_rowset_schema_id = _tablet_meta->schema().id();
-        if (has_output_rowset) {
-            auto last_rowset_id = op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1);
-            output_rowset_schema_id = _tablet_meta->rowset_to_schema().at(last_rowset_id);
-        }
-
         for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
             _tablet_meta->mutable_rowset_to_schema()->erase(op_compaction.input_rowsets(i));
         }
