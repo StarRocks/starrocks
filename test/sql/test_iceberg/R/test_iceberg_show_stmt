@@ -10,8 +10,8 @@ partition_transform_table	CREATE TABLE `partition_transform_table` (
   `t2` datetime DEFAULT NULL,
   `t3` datetime DEFAULT NULL,
   `t4` datetime DEFAULT NULL,
-  `p1` varchar(1073741824) DEFAULT NULL,
-  `p2` varchar(1073741824) DEFAULT NULL
+  `p1` varchar(1048576) DEFAULT NULL,
+  `p2` varchar(1048576) DEFAULT NULL
 )
 PARTITION BY (year(t1), month(t2), day(t3), hour(t4), truncate(p1, 5), bucket(p2, 3))
 PROPERTIES ("location" = "oss://starrocks-ci-test/iceberg_ci_db/partition_transform_table");
