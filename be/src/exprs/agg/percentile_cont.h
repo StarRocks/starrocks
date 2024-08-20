@@ -69,12 +69,13 @@ struct PercentileState {
 
 template <LogicalType LT, typename CppType, bool reverse>
 void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
-                   std::vector<int>& ls, std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm,
+                   std::vector<int>& ls, std::vector<int>& mp, size_t goal, int k, CppType& junior_elm,
                    CppType& senior_elm) {
     CppType minV = RunTimeTypeLimits<LT>::min_value();
     CppType maxV = RunTimeTypeLimits<LT>::max_value();
     b.resize(k + 1);
     ls.resize(k);
+    mp.resize(k);
     for (int i = 0; i < k; ++i) {
         if constexpr (reverse) {
             mp[i] = grid[i].size() - 2;
@@ -426,7 +427,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
         std::vector<InputCppType> b;
         std::vector<int> ls;
-        std::map<int, int> mp;
+        std::vector<int> mp;
 
         size_t k = grid.size();
         size_t rowsNum = 0;
