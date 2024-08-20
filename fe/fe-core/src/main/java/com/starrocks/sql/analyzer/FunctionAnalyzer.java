@@ -843,7 +843,7 @@ public class FunctionAnalyzer {
             for (int i = 0; i < argumentTypes.length; ++i) {
                 argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                 if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argSize - isAscOrder.size()) {
-                    argsTypes[i] = Type.STRING;
+                    argsTypes[i] = Type.VARCHAR;
                 }
             }
             fn.setArgsType(argsTypes); // as accepting various types
@@ -859,7 +859,7 @@ public class FunctionAnalyzer {
                 fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 outputConst = argumentIsConstants[0];
             } else {
-                fn.setRetType(Type.STRING);
+                fn.setRetType(Type.VARCHAR);
                 for (int i = 0; i < argSize - isAscOrder.size() - 1; i++) {
                     if (!argumentIsConstants[i]) {
                         outputConst = false;
