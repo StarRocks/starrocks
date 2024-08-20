@@ -28,7 +28,6 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 
     state->set_per_fragment_instance_idx(_sender_id);
 
-    _sink->set_nonblocking_send_chunk(true);
     _automatic_partition_chunk.reset();
 
     _sink->set_profile(_unique_metrics.get());
@@ -72,7 +71,7 @@ bool OlapTableSinkOperator::pending_finish() const {
         if (_sink->is_full()) {
             return true;
         }
-        auto st = _sink->send_chunk(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+        auto st = _sink->send_chunk_nonblocking(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             _fragment_ctx->cancel(st);
@@ -140,7 +139,7 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     // previous push_chunk() trigger automatic partition creation
     if (_automatic_partition_chunk) {
         // resend previous chunk before send new chunk
-        auto st = _sink->send_chunk(state, _automatic_partition_chunk.get());
+        auto st = _sink->send_chunk_nonblocking(state, _automatic_partition_chunk.get());
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
             return st;
@@ -152,8 +151,8 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         return Status::OK();
     }
 
-    // send_chunk() will return EAGAIN to avoid block
-    auto st = _sink->send_chunk(state, chunk.get());
+    // send_chunk_nonblocking() will return EAGAIN to avoid block
+    auto st = _sink->send_chunk_nonblocking(state, chunk.get());
     if (st.is_eagain()) {
         // temporarily save the chunk, wait for the partition to be created and send again
         _automatic_partition_chunk = chunk;

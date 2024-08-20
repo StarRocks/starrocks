@@ -1073,6 +1073,12 @@ public class Config extends ConfigBase {
     public static int alter_max_worker_queue_size = 4096;
 
     /**
+     * Online optimize table allows to optimize a table without blocking write operations.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_online_optimize_table = false;
+
+    /**
      * If set to true, FE will check backend available capacity by storage medium when create table
      * <p>
      * The default value should better set to true because if user

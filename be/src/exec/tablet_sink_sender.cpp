@@ -22,7 +22,7 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
                                    OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
@@ -355,4 +355,4 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
     return has_immutable_partition;
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks
