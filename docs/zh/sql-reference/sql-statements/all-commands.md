@@ -78,6 +78,7 @@ displayed_sidebar: "Chinese"
 - [ADD BACKEND BLACKLIST](./Administration/ADD_BACKEND_BLACKLIST.md)
 - [DELETE BACKEND BLACKLIST](./Administration/DELETE_BACKEND_BLACKLIST.md)
 - [SHOW BACKEND BLACKLIST](./Administration/SHOW_BACKEND_BLACKLIST.md)
+- [SYNC](./Administration/SYNC.md)
 
 ### 资源组
 
