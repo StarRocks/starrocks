@@ -149,10 +149,12 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         logMap.put("bigQueryLogCPUSecondThreshold", event.bigQueryLogCPUSecondThreshold);
                         logMap.put("bigQueryLogScanBytesThreshold", event.bigQueryLogScanBytesThreshold);
                         logMap.put("bigQueryLogScanRowsThreshold", event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(objectMapper.writeValueAsString(logMap));
                     } else {
                         sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
                         sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
                         sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(sb.toString());
                     }
                 }
                 if (Config.audit_log_json_format) {
