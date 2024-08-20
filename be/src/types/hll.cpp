@@ -578,7 +578,96 @@ void HyperLogLog::_merge_registers(uint8_t* other_registers) {
     for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
         _registers.data[i] = std::max(_registers.data[i], other_registers[i]);
     }
+<<<<<<< HEAD
 #endif
+=======
+
+    const uint8_t preInts = static_cast<const uint8_t*>((uint8_t*)slice.data)[0];
+    if (preInts == datasketches::hll_constants::HLL_PREINTS ||
+        preInts == datasketches::hll_constants::HASH_SET_PREINTS ||
+        preInts == datasketches::hll_constants::LIST_PREINTS) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void DataSketchesHll::update(uint64_t hash_value) {
+    _sketch_union->update(hash_value);
+    this->mark_changed();
+}
+
+void DataSketchesHll::merge(const DataSketchesHll& other) {
+    if (UNLIKELY(_sketch_union == nullptr)) {
+        _sketch_union = std::make_unique<datasketches::hll_union>(other.get_lg_config_k());
+    }
+    auto o_sketch = other.get_hll_sketch();
+    _sketch_union->update(*o_sketch);
+    this->mark_changed();
+}
+
+size_t DataSketchesHll::max_serialized_size() const {
+    if (_sketch_union == nullptr) {
+        return 0;
+    }
+    uint8_t log_k = get_lg_config_k();
+    datasketches::target_hll_type tgt_type = get_target_type();
+    return get_hll_sketch()->get_max_updatable_serialization_bytes(log_k, tgt_type);
+}
+
+size_t DataSketchesHll::serialize_size() const {
+    if (_sketch_union == nullptr) {
+        return 0;
+    }
+    return get_hll_sketch()->get_compact_serialization_bytes();
+}
+
+size_t DataSketchesHll::serialize(uint8_t* dst) const {
+    if (_sketch_union == nullptr) {
+        return 0;
+    }
+    auto serialize_compact = _sketch->serialize_compact();
+    std::copy(serialize_compact.begin(), serialize_compact.end(), dst);
+    return get_hll_sketch()->get_compact_serialization_bytes();
+}
+
+bool DataSketchesHll::deserialize(const Slice& slice) {
+    // can be called only when _sketch_union is empty
+    DCHECK(_sketch_union == nullptr);
+
+    // check if input length is valid
+    if (!is_valid(slice)) {
+        return false;
+    }
+
+    try {
+        auto sketch = std::make_unique<datasketches::hll_sketch>(
+                datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size));
+        _sketch_union = std::make_unique<datasketches::hll_union>(sketch->get_lg_config_k());
+        _sketch_union->update(*sketch);
+        this->mark_changed();
+    } catch (std::logic_error& e) {
+        LOG(WARNING) << "DataSketchesHll deserialize error: " << e.what();
+        return false;
+    }
+
+    return true;
+}
+
+int64_t DataSketchesHll::estimate_cardinality() const {
+    if (_sketch_union == nullptr) {
+        return 0;
+    }
+    return _sketch_union->get_estimate();
+}
+
+std::string DataSketchesHll::to_string() const {
+    if (_sketch_union == nullptr) {
+        return "";
+    }
+
+    return get_hll_sketch()->to_string();
+>>>>>>> 89a6b7741a ([Enhancement] Support configurable hll_sketch and optimize hll_sketch performance (#48939))
 }
 
 } // namespace starrocks

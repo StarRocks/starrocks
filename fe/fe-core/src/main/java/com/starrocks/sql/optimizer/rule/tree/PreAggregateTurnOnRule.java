@@ -70,6 +70,10 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 .add(FunctionSet.NDV)
                 .add(FunctionSet.MULTI_DISTINCT_COUNT)
                 .add(FunctionSet.APPROX_COUNT_DISTINCT)
+<<<<<<< HEAD
+=======
+                .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+>>>>>>> 89a6b7741a ([Enhancement] Support configurable hll_sketch and optimize hll_sketch performance (#48939))
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
