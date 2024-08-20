@@ -47,6 +47,8 @@ import com.google.gson.internal.Streams;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -235,12 +237,18 @@ import java.util.Map;
  * </pre>
  */
 public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
+    private static final Logger LOG = LogManager.getLogger(RuntimeTypeAdapterFactory.class);
+
     private final Class<?> baseType;
     private final String typeFieldName;
     private final Map<String, Class<?>> labelToSubtype = new LinkedHashMap<String, Class<?>>();
     private final Map<Class<?>, String> subtypeToLabel = new LinkedHashMap<Class<?>, String>();
     private final boolean maintainType;
     private String defaultLabel;
+    // fallback to this label if the given label is not recognized.
+    // Usually this is used for forward compatibility, to load the unrecognized subtype to a generic subtype
+    // and let the caller for further processing
+    private String fallbackLabel;
 
     private RuntimeTypeAdapterFactory(Class<?> baseType, String typeFieldName, boolean maintainType) {
         if (typeFieldName == null || baseType == null) {
@@ -250,6 +258,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         this.typeFieldName = typeFieldName;
         this.maintainType = maintainType;
         this.defaultLabel = null;
+        this.fallbackLabel = null;
     }
 
     /**
@@ -337,6 +346,20 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         return registerSubtype(type, type.getSimpleName());
     }
 
+    /**
+     * Registers {@code type} identified by {@code label}. Label is case-sensitive. Make this type as
+     * the fallback type if the subtype is not recognized during deserialization.
+     *
+     * @throws IllegalArgumentException if either {@code type} or its simple name
+     *                                  have already been registered on this type adapter.
+     * @implNote Make sure the caller can handle the {@code type} properly when unknown subtype
+     * is deserialized to the fallback subtype.
+     */
+    public RuntimeTypeAdapterFactory<T> registerSubtypeAsFallback(Class<? extends T> type, String label) {
+        this.fallbackLabel = label;
+        return registerSubtype(type, this.fallbackLabel);
+    }
+
     public <R> TypeAdapter<R> create(Gson gson, TypeToken<R> type) {
         if (type.getRawType() != baseType && !subtypeToLabel.containsKey(type.getRawType())) {
             return null;
@@ -379,6 +402,12 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
 
                 @SuppressWarnings("unchecked") // registration requires that subtype extends T
                 TypeAdapter<R> delegate = (TypeAdapter<R>) labelToDelegate.get(label);
+                if (delegate == null && fallbackLabel != null) {
+                    delegate = (TypeAdapter<R>) labelToDelegate.get(fallbackLabel);
+                    if (delegate != null) {
+                        LOG.warn("Fallback to deserialize object of label:{} to the label:{}", label, fallbackLabel);
+                    }
+                }
                 if (delegate == null) {
                     throw new JsonParseException("cannot deserialize " + baseType + " subtype named " + label
                             + "; did you forget to register a subtype?");
