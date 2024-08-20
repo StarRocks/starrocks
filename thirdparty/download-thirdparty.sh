@@ -536,5 +536,5 @@ if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
         touch "$PATCHED_MARK"
     fi
     cd -
-    echo "Finished pathcing $POCO_SOURCE"
+    echo "Finished patching $POCO_SOURCE"
 fi
