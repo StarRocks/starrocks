@@ -67,6 +67,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
                 long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
             } else if (txnState.isVersionOverwrite()) {
                 // overwrite empty partition, it's next version will less than overwrite version
                 // otherwise, it's next version will not change
