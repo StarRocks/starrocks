@@ -147,6 +147,15 @@ public class DateUtils {
             } else if (str.length() == 8) {
                 // 20200202
                 formatter = STRICT_DATE_NO_SPLIT_FORMATTER;
+            } else if (str.length() == 10) {
+                // 2020020212
+                formatter = HOUR_FORMATTER_UNIX;
+            } else if (str.length() == 12) {
+                // 202002021212
+                formatter = MINUTE_FORMATTER_UNIX;
+            } else if (str.length() == 14) {
+                // 20200202121212
+                formatter = SECOND_FORMATTER_UNIX;
             } else {
                 formatter = STRICT_DATE_FORMATTER;
             }
