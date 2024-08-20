@@ -292,6 +292,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_filter_unused_columns_in_scan_stage";
 
     public static final String JOIN_LATE_MATERIALIZATION = "join_late_materialization";
+    public static final String ENABLE_PARTITION_HASH_JOIN = "enable_partition_hash_join";
 
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
@@ -1238,6 +1239,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = JOIN_LATE_MATERIALIZATION)
     private boolean joinLateMaterialization = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PARTITION_HASH_JOIN)
+    private boolean enablePartitionHashJoin = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enablePruneColumnAfterIndexFilter = true;
@@ -2865,6 +2869,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isJoinLateMaterialization() {
         return joinLateMaterialization;
+    }
+
+    public boolean enablePartitionHashJoin() {
+        return enablePartitionHashJoin;
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {

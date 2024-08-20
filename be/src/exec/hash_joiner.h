@@ -72,7 +72,7 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_late_materialization)
+                    bool enable_late_materialization, bool enable_partition_hash_join)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -90,7 +90,8 @@ struct HashJoinerParam {
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
               _mor_reader_mode(mor_reader_mode),
-              _enable_late_materialization(enable_late_materialization) {}
+              _enable_late_materialization(enable_late_materialization),
+              _enable_partition_hash_join(enable_partition_hash_join) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -115,6 +116,7 @@ struct HashJoinerParam {
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
     const bool _enable_late_materialization;
+    const bool _enable_partition_hash_join;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -143,6 +145,7 @@ struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
+    RuntimeProfile::Counter* partition_probe_overhead = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -156,8 +159,8 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
     RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
-
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
+    RuntimeProfile::Counter* partition_nums = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -210,7 +213,7 @@ public:
     Status build_ht(RuntimeState* state);
     // probe phase
     Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
-    Status probe_input_finished();
+    Status probe_input_finished(RuntimeState* state);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
@@ -274,10 +277,16 @@ public:
         return Status::OK();
     }
 
-    const std::vector<ExprContext*> probe_expr_ctxs() { return _probe_expr_ctxs; }
+    const std::vector<ExprContext*>& probe_expr_ctxs() { return _probe_expr_ctxs; }
+    const std::vector<ExprContext*>& build_expr_ctxs() { return _build_expr_ctxs; }
 
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
-    HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
+    HashJoinBuilder* new_builder(ObjectPool* pool) {
+        // We don't support spill partition hash join now.
+        HashJoinBuildOptions options;
+        options.enable_partitioned_hash_join = false;
+        return HashJoinBuilderFactory::create(pool, options, *this);
+    }
 
     Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
