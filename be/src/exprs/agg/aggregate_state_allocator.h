@@ -80,6 +80,8 @@ public:
 private:
     Allocator* _prev = nullptr;
 };
+#define SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalAggregateStateAllocatorSetter(allocator)
 
 template <typename T>
 using HashSetWithAggStateAllocator =
@@ -87,4 +89,7 @@ using HashSetWithAggStateAllocator =
 
 using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
                                                                AggregateStateAllocator<SliceWithHash>>;
+
+template <typename T>
+using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;
 } // namespace starrocks
