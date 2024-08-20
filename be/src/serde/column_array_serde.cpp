@@ -14,11 +14,17 @@
 
 #include "serde/column_array_serde.h"
 
+#include <fastpfor/codecfactory.h>
+#include <fastpfor/codecs.h>
+#include <fastpfor/deltautil.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
+
+#include <cstdint>
+#include <type_traits>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -31,13 +37,13 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
-#include "serde/protobuf_serde.h"
+#include "common/config.h"
+#include "gutil/strings/fastmem.h"
+#include "serde/encode_context.h"
+#include "storage/rowset/bitshuffle_wrapper.h"
 #include "types/hll.h"
 #include "util/coding.h"
 #include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks::serde {
 namespace {
@@ -76,6 +82,163 @@ inline size_t upper_int32(size_t size) {
     return (3 + size) / 4.0;
 }
 
+enum CodecScheme {
+    VBYTE,
+    FOR,
+    BIT_SHUFFLE,
+};
+
+struct CodecOptions {
+    bool is_input_sorted = false;
+    int encode_level = 0;
+    int element_size = 0;
+};
+
+class Codec {
+public:
+    static constexpr size_t kCompressedSizeField = sizeof(uint64_t);
+
+    virtual ~Codec() = default;
+
+    // @param data: uncompressed data buffer
+    // @param size: input bytes
+    virtual uint8_t* encode(const void* data, size_t size, uint8_t* buff) = 0;
+
+    // @param buff: compressed data buffer
+    // @param count: elements count
+    // @output target: decompressed data
+    virtual const uint8_t* decode(const uint8_t* buff, size_t count, void* target) = 0;
+
+    static std::shared_ptr<Codec> get_for_scheme(CodecScheme scheme, int encode_level);
+};
+
+// StreamVByte: encoding of group-varint
+class VByteCodec : public Codec {
+public:
+    VByteCodec(CodecOptions options) : _sorted_int32s(options.is_input_sorted) {}
+
+    uint8_t* encode(const void* data, size_t size, uint8_t* buff) override {
+        uint64_t encode_size = 0;
+        if (_sorted_int32s) { // only support sorted 32-bit integers
+            encode_size = streamvbyte_delta_encode(reinterpret_cast<const uint32_t*>(data), upper_int32(size),
+                                                   buff + sizeof(uint64_t), 0);
+        } else {
+            encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), upper_int32(size),
+                                             buff + sizeof(uint64_t));
+        }
+        buff = write_little_endian_64(encode_size, buff);
+
+        VLOG_ROW << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
+                                encode_size, encode_size * 1.0 / size);
+        return buff + encode_size;
+    }
+
+    const uint8_t* decode(const uint8_t* buff, size_t count, void* target) override {
+        uint64_t encode_size = 0;
+        buff = read_little_endian_64(buff, &encode_size);
+        uint64_t decode_size = 0;
+        if (_sorted_int32s) {
+            decode_size = streamvbyte_delta_decode(buff, (uint32_t*)target, upper_int32(count), 0);
+        } else {
+            decode_size = streamvbyte_decode(buff, (uint32_t*)target, upper_int32(count));
+        }
+        if (encode_size != decode_size) {
+            throw std::runtime_error(
+                    fmt::format("encode size does not equal when decoding, encode size = {}, but decode get size = {}, "
+                                "raw size = {}.",
+                                encode_size, decode_size, count));
+        }
+        return buff + decode_size;
+    }
+
+private:
+    bool _sorted_int32s;
+};
+
+// FOR is good at compressing big integers but in small ranges
+class FORCodec : public Codec {
+public:
+    FORCodec(CodecOptions options) {}
+
+    uint8_t* encode(const void* in_buff, size_t in_bytes, uint8_t* out_buff) override {
+        FastPForLib::CODECFactory factory;
+        auto codec = factory.getFromName("simdfastpfor256");
+        const uint32_t* input_data = reinterpret_cast<const uint32_t*>(in_buff);
+        uint32_t* output_data = reinterpret_cast<uint32_t*>(out_buff + kCompressedSizeField);
+        uint64_t output_count = 0;
+        codec->encodeArray(input_data, in_bytes, output_data, output_count);
+
+        size_t encode_size = output_count * sizeof(uint32_t);
+        out_buff = write_little_endian_64(encode_size, out_buff);
+        out_buff += encode_size;
+
+        return out_buff;
+    }
+
+    const uint8_t* decode(const uint8_t* in_buff, size_t count, void* output) override {
+        FastPForLib::CODECFactory factory;
+        auto codec = factory.getFromName("simdfastpfor256");
+
+        uint64_t encode_size = 0;
+        in_buff = read_little_endian_64(in_buff, &encode_size);
+        size_t output_count = 0;
+        codec->decodeArray((const uint32_t*)in_buff, encode_size, (uint32_t*)output, output_count);
+        uint64_t decode_size = output_count * sizeof(uint32_t);
+        if (encode_size != decode_size) {
+            throw std::runtime_error(
+                    fmt::format("corrupted data, encode_size={}, decode_size={}", encode_size, decode_size));
+        }
+        in_buff += decode_size;
+
+        return in_buff;
+    }
+};
+
+// BIT_SHUFFLE is good at compressing integers in small ranges
+class BitShuffleCodec : public Codec {
+public:
+    BitShuffleCodec(CodecOptions options) : _element_size(options.element_size) {}
+
+    uint8_t* encode(const void* in_buff, size_t in_bytes, uint8_t* out_buff) override {
+        int64_t encode_size = bitshuffle::compress_lz4((void*)in_buff, (void*)(out_buff + kCompressedSizeField),
+                                                       in_bytes, _element_size, 0);
+        out_buff = write_little_endian_64(encode_size, out_buff);
+        out_buff += encode_size;
+        return out_buff;
+    }
+
+    const uint8_t* decode(const uint8_t* in_buff, size_t count, void* output) override {
+        uint64_t encode_size = 0;
+        in_buff = read_little_endian_64(in_buff, &encode_size);
+
+        uint64_t decode_size = bitshuffle::decompress_lz4((void*)in_buff, (void*)output, encode_size, _element_size, 0);
+        if (encode_size != decode_size) {
+            throw std::runtime_error(
+                    fmt::format("corrupted data, encode_size={}, decode_size={}", encode_size, decode_size));
+        }
+        return in_buff + decode_size;
+    }
+
+private:
+    int _element_size;
+};
+
+std::shared_ptr<Codec> Codec::get_for_scheme(CodecScheme scheme, int encode_level) {
+    // TODO: add element_size
+    CodecOptions options;
+    options.encode_level = encode_level;
+    if (scheme == CodecScheme::VBYTE) {
+        return std::make_shared<VByteCodec>(options);
+    } else if (scheme == CodecScheme::FOR) {
+        return std::make_shared<FORCodec>(options);
+    } else if (scheme == CodecScheme::BIT_SHUFFLE) {
+        return std::make_shared<BitShuffleCodec>(options);
+    } else {
+        throw std::runtime_error(fmt::format("unknown codec: {}", scheme));
+    }
+}
+
+// size: data bytes
 template <bool sorted_32ints>
 uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encode_level) {
     uint64_t encode_size = 0;
@@ -93,6 +256,7 @@ uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encod
     return buff + encode_size;
 }
 
+// size: number of encoded values
 template <bool sorted_32ints>
 const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
     uint64_t encode_size = 0;
@@ -147,6 +311,26 @@ const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size)
     return buff + encode_size;
 }
 
+// FOR encoding
+template <typename C>
+constexpr bool for_encoding = false;
+template <>
+constexpr bool for_encoding<DateValue> = true;
+template <>
+constexpr bool for_encoding<TimestampValue> = true;
+
+// BIT_SHUFFLE encoding
+template <typename C>
+constexpr bool bitshuffle_encoding = false;
+template <>
+inline constexpr bool bitshuffle_encoding<uint8_t> = true;
+template <>
+inline constexpr bool bitshuffle_encoding<int8_t> = true;
+template <>
+inline constexpr bool bitshuffle_encoding<uint16_t> = true;
+template <>
+inline constexpr bool bitshuffle_encoding<int16_t> = true;
+
 template <typename T, bool sorted>
 class FixedLengthColumnSerde {
 public:
@@ -164,15 +348,35 @@ public:
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
-            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
-                buff = encode_integers<true>(column.raw_data(), size, buff, encode_level);
-            } else {
-                buff = encode_integers<false>(column.raw_data(), size, buff, encode_level);
-            }
+            buff = encode(column.raw_data(), size, buff, encode_level);
         } else {
             buff = write_raw(column.raw_data(), size, buff);
         }
         return buff;
+    }
+
+    static uint8_t* encode(const uint8_t* in_buff, size_t in_bytes, uint8_t* buff, const int encode_level) {
+        std::shared_ptr<Codec> codec;
+        if constexpr (for_encoding<T>) {
+            codec = Codec::get_for_scheme(CodecScheme::FOR, encode_level);
+        } else if constexpr (bitshuffle_encoding<T>) {
+            codec = Codec::get_for_scheme(CodecScheme::BIT_SHUFFLE, encode_level);
+        } else {
+            codec = Codec::get_for_scheme(CodecScheme::VBYTE, encode_level);
+        }
+        return codec->encode(in_buff, in_bytes, buff);
+    }
+
+    static const uint8_t* decode(const uint8_t* in_buff, size_t count, uint8_t* out_buff, int encode_level) {
+        std::shared_ptr<Codec> codec;
+        if constexpr (for_encoding<T>) {
+            codec = Codec::get_for_scheme(CodecScheme::FOR, encode_level);
+        } else if constexpr (bitshuffle_encoding<T>) {
+            codec = Codec::get_for_scheme(CodecScheme::BIT_SHUFFLE, encode_level);
+        } else {
+            codec = Codec::get_for_scheme(CodecScheme::VBYTE, encode_level);
+        }
+        return codec->decode(in_buff, count, out_buff);
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, FixedLengthColumnBase<T>* column, const int encode_level) {
@@ -181,11 +385,7 @@ public:
         auto& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
-            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
-                buff = decode_integers<true>(buff, data.data(), size);
-            } else {
-                buff = decode_integers<false>(buff, data.data(), size);
-            }
+            buff = decode(buff, size, (uint8_t*)data.data(), encode_level);
         } else {
             buff = read_raw(buff, data.data(), size);
         }

@@ -364,6 +364,9 @@ set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(simdutf STATIC IMPORTED)
 set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdutf.a)
 
+add_library(fastpfor STATIC IMPORTED)
+set_target_properties(fastpfor PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libFastPFor.a)
+
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
@@ -940,6 +943,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    fastpfor
     ${WL_END_GROUP}
 )
 

@@ -1348,6 +1348,21 @@ build_tenann() {
     cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
 }
 
+build_fastpfor() {
+    check_if_source_exist $FASTPFOR_SOURCE
+    cd "$TP_SOURCE_DIR/${FASTPFOR_SOURCE}"
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+
+    ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    cp -r $TP_SOURCE_DIR/$FASTPFOR_SOURCE/headers $TP_INSTALL_DIR/include/fastpfor
+    cp -r $TP_SOURCE_DIR/$FASTPFOR_SOURCE/build/libFastPFor.a $TP_INSTALL_DIR/lib/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
