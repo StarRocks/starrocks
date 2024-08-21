@@ -267,7 +267,7 @@ public:
                                                     chunk_index.second.size()));
                 _replayer->upsert(chunk_index.first);
             }
-            RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+            RETURN_IF_ERROR(delta_writer->finish());
             delta_writer->close();
         }
         // Batch Publish version
