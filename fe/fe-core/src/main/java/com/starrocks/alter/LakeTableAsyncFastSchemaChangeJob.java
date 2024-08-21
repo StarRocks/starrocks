@@ -65,6 +65,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     private List<IndexSchemaInfo> schemaInfos;
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
+    // for deserialization
+    public LakeTableAsyncFastSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         schemaInfos = new ArrayList<>();
