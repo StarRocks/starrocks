@@ -428,20 +428,20 @@ public class PropertyAnalyzer {
         }
     }
 
-    public static long analyzeMutableBucketNum(Map<String, String> properties) throws AnalysisException {
+    public static long analyzeMutableBucketNum(Map<String, String> properties) {
         long mutableBucketNum = 0;
         if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
             try {
                 mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Mutable bucket num: " + e.getMessage());
+                throw new SemanticException("Mutable bucket num: " + e.getMessage());
             }
             if (mutableBucketNum < 0) {
-                throw new AnalysisException("Illegal mutable bucket num: " + mutableBucketNum);
+                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
             }
             return mutableBucketNum;
         } else {
-            throw new AnalysisException("Mutable bucket num is not set");
+            throw new SemanticException("Mutable bucket num is not set");
         }
     }
 

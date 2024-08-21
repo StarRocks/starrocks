@@ -4115,7 +4115,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     public void modifyTableMutableBucketNum(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
