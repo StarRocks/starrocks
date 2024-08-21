@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.IForwardCompatibleObject;
 
-public class ForwardCompatibleRecyclePartitionInfoV2 extends RecyclePartitionInfoV2 implements
+public class ForwardCompatibleRecyclePartitionInfoV2 extends CatalogRecycleBin.RecyclePartitionInfoV2 implements
         IForwardCompatibleObject {
     public ForwardCompatibleRecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
                                                    DataProperty dataProperty,

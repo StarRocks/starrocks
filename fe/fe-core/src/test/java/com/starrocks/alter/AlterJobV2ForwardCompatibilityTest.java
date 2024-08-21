@@ -18,15 +18,12 @@ import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.persist.ImageFormatVersion;
-import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.gson.RuntimeTypeAdapterFactory;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockReaderV1;
 import com.starrocks.utframe.GsonReflectUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -108,8 +105,7 @@ public class AlterJobV2ForwardCompatibilityTest {
                 RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                         .registerSubtype(RollupJobV2.class, "RollupJobV2")
                         .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
-                        .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
-                        .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2");
+                        .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2");
         if (subType != null) {
             alterJobV2Factory.registerSubtype(subType, label);
         }
@@ -130,7 +126,7 @@ public class AlterJobV2ForwardCompatibilityTest {
         Assert.assertFalse(fcObject.cancelImpl(""));
         ExceptionChecker.expectThrowsNoException(() -> fcObject.getInfo(null));
         ExceptionChecker.expectThrowsNoException(() -> fcObject.replay(null));
-        Assert.assertTrue(fcObject.getTransactionId().isEmpty());
+        Assert.assertFalse(fcObject.getTransactionId().isPresent());
         ExceptionChecker.expectThrowsNoException(() -> fcObject.write(null));
     }
 
@@ -210,31 +206,29 @@ public class AlterJobV2ForwardCompatibilityTest {
         SchemaChangeJobV2 schemaChangeJob =
                 new SchemaChangeJobV2(10086L, 1001L, 2001L, "schemaChangeJob_tbl_name", 1000L);
 
-        SchemaChangeHandler scHandler = new SchemaChangeHandler();
-        MaterializedViewHandler mvHandler = new MaterializedViewHandler();
+        AlterJobMgr mgr = new AlterJobMgr();
+        AlterHandler scHandler = mgr.getSchemaChangeHandler();
+        AlterHandler mvHandler = mgr.getMaterializedViewHandler();
         scHandler.addAlterJobV2(futureJob);
         scHandler.addAlterJobV2(schemaChangeJob);
         mvHandler.addAlterJobV2(futureMVJob);
-        AlterJobMgr mgr = new AlterJobMgr(scHandler, mvHandler, null);
 
         ByteArrayOutputStream baseOS = new ByteArrayOutputStream();
 
         // GsonUtils.GSON = newVersionWithSubType, so the new subtype can be serialized correctly.
         GsonReflectUtils.partialMockGsonExpectations(newVersionWithSubType);
 
-        ImageWriter writer = new ImageWriter("dir", ImageFormatVersion.v1, 0);
-        writer.setOutputStream(new DataOutputStream(baseOS));
-
-        mgr.save(writer);
+        mgr.save(new DataOutputStream(baseOS));
         byte[] rawBytes = baseOS.toByteArray();
 
         // save and restore with the same GSON RuntimeAdaptorFactory
         {
             ByteArrayInputStream baseIn = new ByteArrayInputStream(rawBytes);
-            SchemaChangeHandler replayScHandler = new SchemaChangeHandler();
-            MaterializedViewHandler replayMVHander = new MaterializedViewHandler();
-            AlterJobMgr replayMgr = new AlterJobMgr(replayScHandler, replayMVHander, null);
-            SRMetaBlockReader reader = new SRMetaBlockReaderV1(new DataInputStream(baseIn));
+            AlterJobMgr replayMgr = new AlterJobMgr();
+            AlterHandler replayScHandler = replayMgr.getSchemaChangeHandler();
+            AlterHandler replayMVHandler = replayMgr.getMaterializedViewHandler();
+
+            SRMetaBlockReader reader = new SRMetaBlockReader(new DataInputStream(baseIn));
             replayMgr.load(reader);
             // both partitions should be loaded correctly
             Map<Long, AlterJobV2> jobs = replayScHandler.getAlterJobsV2();
@@ -247,7 +241,7 @@ public class AlterJobV2ForwardCompatibilityTest {
             Assert.assertNotNull(schemaJob2);
             Assert.assertTrue(schemaJob2 instanceof SchemaChangeJobV2);
 
-            Map<Long, AlterJobV2> mvJobs = replayMVHander.getAlterJobsV2();
+            Map<Long, AlterJobV2> mvJobs = replayMVHandler.getAlterJobsV2();
             AlterJobV2 futureMvJob2 = mvJobs.get(futureMVJob.getJobId());
             Assert.assertNotNull(futureMvJob2);
             Assert.assertTrue(futureMvJob2 instanceof SomeSubAlterJobV2FromFuture);
@@ -257,10 +251,8 @@ public class AlterJobV2ForwardCompatibilityTest {
         GsonReflectUtils.partialMockGsonExpectations(oldVersionNoFCFallback);
         {
             ByteArrayInputStream baseIn = new ByteArrayInputStream(rawBytes);
-            SchemaChangeHandler replayScHandler = new SchemaChangeHandler();
-            MaterializedViewHandler replayMVHander = new MaterializedViewHandler();
-            AlterJobMgr replayMgr = new AlterJobMgr(replayScHandler, replayMVHander, null);
-            SRMetaBlockReader reader = new SRMetaBlockReaderV1(new DataInputStream(baseIn));
+            AlterJobMgr replayMgr = new AlterJobMgr();
+            SRMetaBlockReader reader = new SRMetaBlockReader(new DataInputStream(baseIn));
             Assert.assertThrows(JsonParseException.class, () -> replayMgr.load(reader));
         }
 
@@ -269,10 +261,10 @@ public class AlterJobV2ForwardCompatibilityTest {
         GsonReflectUtils.partialMockGsonExpectations(newVersionFCFallback);
         {
             ByteArrayInputStream baseIn = new ByteArrayInputStream(rawBytes);
-            SchemaChangeHandler replayScHandler = new SchemaChangeHandler();
-            MaterializedViewHandler replayMVHander = new MaterializedViewHandler();
-            AlterJobMgr replayMgr = new AlterJobMgr(replayScHandler, replayMVHander, null);
-            SRMetaBlockReader reader = new SRMetaBlockReaderV1(new DataInputStream(baseIn));
+            AlterJobMgr replayMgr = new AlterJobMgr();
+            AlterHandler replayScHandler = replayMgr.getSchemaChangeHandler();
+            AlterHandler replayMVHandler = replayMgr.getMaterializedViewHandler();
+            SRMetaBlockReader reader = new SRMetaBlockReader(new DataInputStream(baseIn));
             replayMgr.load(reader);
             // futureJob is ignored
             Assert.assertFalse(replayScHandler.getAlterJobsV2().containsKey(futureJob.getJobId()));
@@ -280,7 +272,7 @@ public class AlterJobV2ForwardCompatibilityTest {
             Assert.assertTrue(replayScHandler.getAlterJobsV2().containsKey(schemaChangeJob.getJobId()));
 
             // futureMVJob is ignored
-            Map<Long, AlterJobV2> mvJobs = replayMVHander.getAlterJobsV2();
+            Map<Long, AlterJobV2> mvJobs = replayMVHandler.getAlterJobsV2();
             Assert.assertTrue(mvJobs.isEmpty());
         }
     }

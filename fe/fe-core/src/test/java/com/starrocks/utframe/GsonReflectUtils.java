@@ -14,12 +14,11 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.TypeAdapterFactory;
-import com.google.gson.stream.JsonReader;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.gson.RuntimeTypeAdapterFactory;
 import mockit.Delegate;
@@ -37,7 +36,7 @@ public class GsonReflectUtils {
 
     // Remove the `RuntimeTypeAdapterFactory<baseType>` from the GsonBuilder `builder`
     public static GsonBuilder removeRuntimeTypeAdapterFactoryForBaseType(GsonBuilder builder, Class<?> baseType) {
-        List<String> fieldNames = List.of("factories", "hierarchyFactories");
+        List<String> fieldNames = Lists.newArrayList("factories", "hierarchyFactories");
         for (String fieldName : fieldNames) {
             List<TypeAdapterFactory> factories;
             try {
@@ -80,10 +79,10 @@ public class GsonReflectUtils {
                 };
                 minTimes = 0;
 
-                GsonUtils.GSON.fromJson((JsonReader) any, (Type) any);
+                GsonUtils.GSON.fromJson(anyString, (Type) any);
                 result = new Delegate() {
-                    public <T> T fromJson(JsonReader reader, Type typeOfT) throws JsonIOException, JsonSyntaxException {
-                        return gson.fromJson(reader, typeOfT);
+                    public <T> T fromJson(String json, Type typeOfT) throws JsonSyntaxException {
+                        return gson.fromJson(json, typeOfT);
                     }
                 };
             }

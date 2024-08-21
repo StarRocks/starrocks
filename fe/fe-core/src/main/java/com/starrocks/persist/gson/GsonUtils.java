@@ -255,12 +255,8 @@ public class GsonUtils {
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
-<<<<<<< HEAD
-                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2");
-=======
-                    .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
+                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
                     .registerSubtypeAsFallback(ForwardCompatibleAlterJobV2Object.class, "AlterJobV2FCObject");
->>>>>>> 3cfcd6a889 ([Enhancement] Compatibility fix for RecyclePartitionInfo and AlterJobV2 (#49636))
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
     private static final RuntimeTypeAdapterFactory<LoadJobStateUpdateInfo>
@@ -290,19 +286,9 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2>
             RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
-<<<<<<< HEAD
             = RuntimeTypeAdapterFactory.of(CatalogRecycleBin.RecyclePartitionInfoV2.class, "clazz")
-            .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo");
-=======
-            = RuntimeTypeAdapterFactory.of(RecyclePartitionInfoV2.class, "clazz")
-            .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
-            .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
-            .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
-            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
-            .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
-            .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo")
+            .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
             .registerSubtypeAsFallback(ForwardCompatibleRecyclePartitionInfoV2.class, "RecyclePartitionInfoV2FC");
->>>>>>> 3cfcd6a889 ([Enhancement] Compatibility fix for RecyclePartitionInfo and AlterJobV2 (#49636))
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
