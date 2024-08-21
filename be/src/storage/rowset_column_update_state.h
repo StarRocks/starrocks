@@ -246,6 +246,7 @@ private:
     // when generate delta column group finish, these fields will be filled
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
+    std::map<string, string> _column_to_value;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {
