@@ -76,6 +76,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -900,18 +901,16 @@ public class LeaderImpl {
             return response;
         }
 
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db, LockType.READ);
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));
+            response.setStatus(status);
+            return response;
+        }
 
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
-                status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));
-                response.setStatus(status);
-                return response;
-            }
-
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
             // just only support OlapTable, ignore others such as ESTable
             if (!(table instanceof OlapTable)) {
                 TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
@@ -1107,8 +1106,6 @@ public class LeaderImpl {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             LOG.info("error msg: {}", e.getMessage(), e);
             response.setStatus(status);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
         return response;
     }
