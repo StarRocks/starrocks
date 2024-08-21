@@ -21,6 +21,8 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.Constants;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 
 import java.util.Map;
 
@@ -65,25 +67,26 @@ public class AWSCloudConfiguration extends CloudConfiguration {
     @Override
     public void applyToConfiguration(Configuration configuration) {
         super.applyToConfiguration(configuration);
-        configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.s3n.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        final String S3AFileSystem = S3AFileSystem.class.getName();
+        configuration.set("fs.s3.impl", S3AFileSystem);
+        configuration.set("fs.s3a.impl", S3AFileSystem);
+        configuration.set("fs.s3n.impl", S3AFileSystem);
         // Below storage using s3 compatible storage api
-        configuration.set("fs.oss.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.ks3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.obs.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
-        configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.oss.impl", S3AFileSystem);
+        configuration.set("fs.ks3.impl", S3AFileSystem);
+        configuration.set("fs.obs.impl", S3AFileSystem);
+        configuration.set("fs.tos.impl", S3AFileSystem);
+        configuration.set("fs.cosn.impl", S3AFileSystem);
 
         // By default, S3AFileSystem will need 4 minutes to timeout when endpoint is unreachable,
         // after change, it will need 30 seconds.
         // Default value is 7.
-        configuration.set("fs.s3a.retry.limit", "3");
+        configuration.set(Constants.RETRY_LIMIT, "3");
         // Default value is 20
-        configuration.set("fs.s3a.attempts.maximum", "5");
+        configuration.set(Constants.MAX_ERROR_RETRIES, "5");
 
-        configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
-        configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
+        configuration.set(Constants.PATH_STYLE_ACCESS, String.valueOf(enablePathStyleAccess));
+        configuration.set(Constants.SECURE_CONNECTIONS, String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -120,7 +123,7 @@ public class AWSCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(enablePathStyleAccess));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
