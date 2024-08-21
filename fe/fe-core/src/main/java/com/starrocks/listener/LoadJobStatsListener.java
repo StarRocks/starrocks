@@ -45,7 +45,8 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
-        onTransactionFinish(transactionState, true);
+        // For compatibility reasons, broker load still uses async collect.
+        onTransactionFinish(transactionState, false);
     }
 
     @Override
