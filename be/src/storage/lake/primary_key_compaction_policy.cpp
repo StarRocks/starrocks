@@ -158,7 +158,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
     input_rowsets.reserve(rowset_indexes.size());
     for (auto rowset_index : rowset_indexes) {
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index, 0 /* compaction_segment_limit */));
     }
     VLOG(2) << strings::Substitute(
             "lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),

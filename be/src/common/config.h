@@ -1272,4 +1272,10 @@ CONF_mBool(enable_pk_strict_memcheck, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
+
 } // namespace starrocks::config

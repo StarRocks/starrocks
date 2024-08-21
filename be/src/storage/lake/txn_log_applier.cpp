@@ -388,10 +388,18 @@ private:
             }
         }
 
-        const auto end_input_pos = pre_input_pos + 1;
+        auto last_input_pos = pre_input_pos;
+        RowsetMetadataPB last_input_rowset = *last_input_pos;
+        trim_partial_compaction_last_input_rowset(_metadata, op_compaction, last_input_rowset);
 
+        const auto end_input_pos = pre_input_pos + 1;
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
-            _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
+            if (iter != last_input_pos) {
+                _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
+            } else {
+                // might be a partial compaction, use real last input rowset
+                _metadata->mutable_compaction_inputs()->Add(std::move(last_input_rowset));
+            }
         }
 
         auto first_idx = static_cast<uint32_t>(first_input_pos - _metadata->mutable_rowsets()->begin());

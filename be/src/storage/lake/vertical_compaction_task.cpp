@@ -89,17 +89,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     auto op_compaction = txn_log->mutable_op_compaction();
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-    for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-    }
-
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get(),
+                                                 _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
@@ -115,6 +106,12 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+        // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
+        // read_chunk_size might be doubled, in this case, this optimization will not take effect
+        return config::lake_compaction_chunk_size;
+    }
+
     int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         // in vertical compaction, there may be a lot of column groups, it will waste a lot of time to
@@ -136,8 +133,9 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                _total_num_rows, total_mem_footprint, _total_input_segs);
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                config::lake_compaction_chunk_size, _total_num_rows,
+                                                total_mem_footprint, _total_input_segs);
 }
 
 Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,

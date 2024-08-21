@@ -23,9 +23,14 @@
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
+namespace starrocks {
+class TxnLogPB_OpCompaction;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class Rowset;
+class TabletWriter;
 
 class CompactionTask {
 public:
@@ -41,6 +46,8 @@ public:
 
     inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
     inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
+
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer, bool is_pk);
 
 protected:
     int64_t _txn_id;
