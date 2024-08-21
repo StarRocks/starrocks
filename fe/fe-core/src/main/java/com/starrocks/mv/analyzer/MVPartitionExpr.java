@@ -15,6 +15,7 @@ package com.starrocks.mv.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -30,8 +31,8 @@ public class MVPartitionExpr {
     public static final Set<String> FN_NAME_TO_PARTITION = Sets.newHashSet(FunctionSet.DATE_TRUNC,
             FunctionSet.STR2DATE, FunctionSet.TIME_SLICE);
     // Functions that the first slot is the partition column, eg: str2date(dt, 'yyyy-MM-dd'), time_slice(dt, 'day')
-    public static final Set<String> FN_NAMES_WITH_FIRST_SLOT = Sets.newHashSet(FunctionSet.STR2DATE,
-            FunctionSet.TIME_SLICE);
+    public static final Set<String> FN_NAMES_WITH_FIRST_SLOT =
+            Sets.newHashSet(FunctionSet.STR2DATE, FunctionSet.TIME_SLICE);
 
     private Expr expr;
     private SlotRef slotRef;
@@ -58,6 +59,9 @@ public class MVPartitionExpr {
     }
 
     public static boolean isSupportedMVPartitionExpr(Expr expr) {
+        if (expr instanceof CastExpr) {
+            return true;
+        }
         if (expr == null || !(expr instanceof FunctionCallExpr)) {
             return false;
         }
@@ -77,12 +81,16 @@ public class MVPartitionExpr {
             return null;
         }
 
-        FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        functionCallExpr.collect(SlotRef.class, slotRefs);
-        if (slotRefs.size() != 1) {
-            return null;
+        if (expr instanceof CastExpr) {
+            return new MVPartitionExpr(expr, (SlotRef) expr.getChild(0));
+        } else {
+            FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            functionCallExpr.collect(SlotRef.class, slotRefs);
+            if (slotRefs.size() != 1) {
+                return null;
+            }
+            return new MVPartitionExpr(functionCallExpr, slotRefs.get(0));
         }
-        return new MVPartitionExpr(functionCallExpr, slotRefs.get(0));
     }
 }

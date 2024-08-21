@@ -24,6 +24,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -670,6 +671,12 @@ public class MaterializedViewAnalyzer {
                         statement.getPartitionExpDesc().getPos());
             }
 
+            // convert the input expression if needed
+            if (partitionColumnExpr instanceof CastExpr) {
+                Expr param0 = partitionColumnExpr.getChild(0);
+                partitionColumnExpr = new FunctionCallExpr(FunctionSet.STR2DATE, Lists.newArrayList(param0));
+            }
+
             // set partition-ref into statement
             if (expressionPartitionDesc.isFunction()) {
                 // e.g. partition by date_trunc('month', dt)
@@ -696,7 +703,9 @@ public class MaterializedViewAnalyzer {
                 }
                 statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
-                if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
+                if (partitionColumnExpr instanceof FunctionCallExpr ||
+                        partitionColumnExpr instanceof SlotRef ||
+                        partitionColumnExpr instanceof CastExpr) {
                     // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                     statement.setPartitionRefTableExpr(partitionColumnExpr);
                 } else {

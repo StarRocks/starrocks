@@ -40,7 +40,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -1091,6 +1090,34 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("Getting analyzing error. Detail message: Materialized view related base table " +
                     "partition columns only supports single column.", e.getMessage());
         }
+    }
+
+    @Test
+    public void testPartitionByExpr() throws Exception {
+        // cast expression
+        starRocksAssert.withRefreshedMaterializedView(
+                "create materialized view mv_cast_date " + " partition by (dt)" +
+                        " refresh manual as " +
+                        " select *, cast(d as date) as dt from jdbc0.partitioned_db0.tbl1");
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_cast_date` (`a`, `b`, `c`, `d`, `dt`)\n" +
+                        "PARTITION BY (`dt`)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `tbl1`.`a`, `tbl1`.`b`, `tbl1`.`c`, `tbl1`.`d`, CAST(`tbl1`.`d` AS DATE) AS `dt`\n" +
+                        "FROM `jdbc0`.`partitioned_db0`.`tbl1`;",
+                starRocksAssert.showCreateTable("show create table mv_cast_date"));
+        starRocksAssert.query("select *, cast(d as date) from jdbc0.partitioned_db0.tbl1")
+                .explainContains("mv_cast_date");
+        starRocksAssert.dropMaterializedView("mv_cast_date");
+
+        // cast in CTE
+
+        // TODO add more test
     }
 
     @Test
