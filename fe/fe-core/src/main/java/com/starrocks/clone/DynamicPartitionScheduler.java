@@ -388,24 +388,25 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         boolean skipAddPartition = false;
         OlapTable olapTable;
         olapTable = (OlapTable) db.getTable(tableId);
-        // Only OlapTable has DynamicPartitionProperty
-        if (olapTable == null || !olapTable.dynamicPartitionExists() ||
-                    !olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
-            if (olapTable == null) {
-                LOG.warn("Automatically removes the schedule because table does not exist, " +
-                            "tableId: {}", tableId);
-            } else if (!olapTable.dynamicPartitionExists()) {
-                LOG.warn("Automatically removes the schedule because " +
-                            "table[{}] does not have dynamic partition", olapTable.getName());
-            } else {
-                LOG.warn("Automatically removes the schedule because table[{}] " +
-                            "does not enable dynamic partition", olapTable.getName());
-            }
+        if (olapTable == null) {
+            LOG.warn("Automatically removes the schedule because table does not exist, " +
+                        "tableId: {}", tableId);
             return true;
         }
-
+        // Only OlapTable has DynamicPartitionProperty
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+            if (!olapTable.dynamicPartitionExists()) {
+                LOG.warn("Automatically removes the schedule because " +
+                            "table[{}] does not have dynamic partition", olapTable.getName());
+                return true;
+            }
+            if (!olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
+                LOG.warn("Automatically removes the schedule because table[{}] " +
+                            "does not enable dynamic partition", olapTable.getName());
+                return true;
+            }
+
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
                 String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
                             "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
