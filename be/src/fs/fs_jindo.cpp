@@ -101,7 +101,7 @@ bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOption
     return left_endpoint == right_endpoint && left_ak_id == right_ak_id && left_ak_secret == right_ak_secret;
 }
 
-JindoClientFactory::JindoClientFactory() : _rand((int)::time(nullptr)) {
+JindoClientFactory::JindoClientFactory() {
     // Priority order: 1. jindosdk.cfg 2. be.conf
     std::lock_guard l(_lock);
     std::string jindosdk_conf_path = getenv("STARROCKS_HOME");
@@ -211,13 +211,6 @@ StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3UR
     auto jdo_options = get_or_create_jindo_opts(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
 
-    for (size_t i = 0; i < _items; i++) {
-        if (option_equals(_jindo_clients[i]->option, jdo_options)) {
-            jdo_freeOptions(jdo_options);
-            return _jindo_clients[i];
-        }
-    }
-
     LOG(INFO) << "Creating jindo client for " << uri_prefix;
     auto client = std::make_shared<JdoStore_t>(jdo_createStore(jdo_options, uri_prefix.c_str()));
     ASSIGN_OR_RETURN(auto user_name, get_local_user())
@@ -235,23 +228,7 @@ StatusOr<std::shared_ptr<JindoClient>> JindoClientFactory::new_client(const S3UR
         return init_status;
     }
 
-    if (UNLIKELY(_items >= MAX_CLIENTS_ITEMS)) {
-        int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
-
-        LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
-        auto old_client = *(_jindo_clients[idx]->jdo_store);
-        jdo_freeOptions(_jindo_clients[idx]->option);
-        jdo_destroyStore(old_client);
-        jdo_freeStore(old_client);
-        _jindo_clients[idx]->jdo_store = client;
-        _jindo_clients[idx]->option = jdo_options;
-        return _jindo_clients[idx];
-    } else {
-        LOG(INFO) << "Put jindo client for " << uri_prefix << ", index " << _items;
-        auto result = _jindo_clients[_items] = std::make_shared<JindoClient>(client, jdo_options);
-        _items++;
-        return result;
-    }
+    return std::make_shared<JindoClient>(client, jdo_options);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> JindoFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,

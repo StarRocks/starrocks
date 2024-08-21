@@ -58,6 +58,12 @@ struct JindoClient {
         option = opt;
     }
 
+    ~JindoClient() {
+        jdo_freeOptions(option);
+        jdo_destroyStore(*jdo_store);
+        jdo_freeStore(*jdo_store);
+    }
+
     std::shared_ptr<JdoStore_t> jdo_store;
     JdoOptions_t option;
 };
@@ -90,13 +96,8 @@ private:
     static constexpr const char* OSS_ACCESS_KEY_SECRET = "fs.oss.accessKeySecret";
     static constexpr const char* OSS_ENDPOINT_KEY = "fs.oss.endpoint";
     static constexpr const char* OSS_HDFS_BUCKET = "starrocks.internal.jindo.osshdfs.bucket";
-    static constexpr int MAX_CLIENTS_ITEMS = 8;
 
     std::mutex _lock;
-    int _items{0};
-
-    std::shared_ptr<JindoClient> _jindo_clients[MAX_CLIENTS_ITEMS];
-    Random _rand;
 
     HashMap _jindo_config_map;
 };

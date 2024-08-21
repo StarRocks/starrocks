@@ -22,8 +22,8 @@ namespace starrocks::io {
 
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     if (_open_handle == nullptr) {
-        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
-        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777, _option);
+        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*(_jindo_client->jdo_store));
+        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777, _jindo_client->option);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {
@@ -41,7 +41,7 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     int64_t bytes_read = 0;
     int64_t bytes = 0;
     while (bytes_to_read > 0) {
-        JdoHandleCtx_t jdo_read_ctx = jdo_createHandleCtx2(*_jindo_client, _open_handle);
+        JdoHandleCtx_t jdo_read_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _open_handle);
         bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset, nullptr);
         Status read_status = check_jindo_status(jdo_read_ctx);
         jdo_freeHandleCtx(jdo_read_ctx);
@@ -81,7 +81,7 @@ StatusOr<int64_t> JindoInputStream::position() {
 StatusOr<int64_t> JindoInputStream::get_size() {
     if (_size == -1) {
         {
-            auto jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+            auto jdo_ctx = jdo_createHandleCtx1(*(_jindo_client->jdo_store));
             bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str(), nullptr);
             Status status = io::check_jindo_status(jdo_ctx);
             jdo_freeHandleCtx(jdo_ctx);
@@ -96,7 +96,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
             }
         }
         {
-            auto jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+            auto jdo_ctx = jdo_createHandleCtx1(*(_jindo_client->jdo_store));
             JdoFileStatus_t file_status = jdo_getFileStatus(jdo_ctx, _file_path.c_str(), nullptr);
             Status status = io::check_jindo_status(jdo_ctx);
             jdo_freeHandleCtx(jdo_ctx);

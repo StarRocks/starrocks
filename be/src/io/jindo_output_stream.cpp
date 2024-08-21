@@ -22,11 +22,11 @@ namespace starrocks::io {
 
 Status JindoOutputStream::write(const void* data, int64_t size) {
     if (_write_handle == nullptr) {
-        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*(_jindo_client->jdo_store));
         // allow open file whose parent dir not exists by set JDO_CREATE_OPTS_IS_CREATE_PARENT true
-        jdo_setOption(_option, JDO_CREATE_OPTS_IS_CREATE_PARENT, "1");
-        _write_handle =
-                jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777, _option);
+        jdo_setOption(_jindo_client->option, JDO_CREATE_OPTS_IS_CREATE_PARENT, "1");
+        _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777,
+                                 _jindo_client->option);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {
@@ -34,7 +34,7 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
         }
     }
 
-    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _write_handle);
     jdo_write(jdo_write_ctx, static_cast<const char*>(data), size, nullptr);
     Status status = io::check_jindo_status(jdo_write_ctx);
     jdo_freeHandleCtx(jdo_write_ctx);
@@ -46,7 +46,7 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
 }
 
 Status JindoOutputStream::flush() {
-    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _write_handle);
     jdo_flush(jdo_write_ctx, nullptr);
     Status status = io::check_jindo_status(jdo_write_ctx);
     jdo_freeHandleCtx(jdo_write_ctx);
@@ -57,7 +57,7 @@ Status JindoOutputStream::flush() {
 }
 
 Status JindoOutputStream::close() {
-    auto jdo_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    auto jdo_ctx = jdo_createHandleCtx2(*(_jindo_client->jdo_store), _write_handle);
     jdo_close(jdo_ctx, nullptr);
     Status status = io::check_jindo_status(jdo_ctx);
     jdo_freeHandleCtx(jdo_ctx);
