@@ -129,15 +129,9 @@ public:
     [[nodiscard]] Status finish_load_rowsets();
 
     // operation in rowsets
-<<<<<<< HEAD
     [[nodiscard]] Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
-=======
-    Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
     void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
                                      std::vector<RowsetSharedPtr>* to_replace);
->>>>>>> e85793a4f3 ([BugFix] Fix overwrite publish lock issue (#50032))
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -146,12 +140,8 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
-<<<<<<< HEAD
     [[nodiscard]] Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
-=======
-    Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
->>>>>>> e85793a4f3 ([BugFix] Fix overwrite publish lock issue (#50032))
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
