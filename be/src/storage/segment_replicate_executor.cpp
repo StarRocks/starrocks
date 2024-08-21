@@ -88,27 +88,6 @@ Status ReplicateChannel::_init() {
     return Status::OK();
 }
 
-Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
-
-    // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
-
-    // 2. send segment sync request
-    _send_request(segment, data, eos);
-
-    // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
-
-    VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
-
-    return _st;
-}
-
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
