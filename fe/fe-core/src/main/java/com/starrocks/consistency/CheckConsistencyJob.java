@@ -35,6 +35,7 @@
 package com.starrocks.consistency;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -47,6 +48,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
@@ -76,7 +78,7 @@ public class CheckConsistencyJob {
     }
 
     private JobState state;
-    private long tabletId;
+    private final long tabletId;
 
     // backend id -> check sum
     // add backend id to this map only after sending task
@@ -132,17 +134,17 @@ public class CheckConsistencyJob {
             return false;
         }
 
+        Table table = db.getTable(tabletMeta.getTableId());
+        if (table == null) {
+            LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
+            return false;
+        }
+
         LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tabletMeta.getTableId());
-            if (table == null) {
-                LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
-                return false;
-            }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                    LockType.READ)) {
             OlapTable olapTable = (OlapTable) table;
 
             Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
@@ -178,7 +180,7 @@ public class CheckConsistencyJob {
             for (Replica replica : tablet.getImmutableReplicas()) {
                 // 1. if state is CLONE, do not send task at this time
                 if (replica.getState() == ReplicaState.CLONE
-                        || replica.getState() == ReplicaState.DECOMMISSION) {
+                            || replica.getState() == ReplicaState.DECOMMISSION) {
                     continue;
                 }
 
@@ -187,12 +189,12 @@ public class CheckConsistencyJob {
                 }
 
                 CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getBackendId(),
-                        tabletMeta.getDbId(),
-                        tabletMeta.getTableId(),
-                        tabletMeta.getPartitionId(),
-                        tabletMeta.getIndexId(),
-                        tabletId, checkedSchemaHash,
-                        checkedVersion);
+                            tabletMeta.getDbId(),
+                            tabletMeta.getTableId(),
+                            tabletMeta.getPartitionId(),
+                            tabletMeta.getIndexId(),
+                            tabletId, checkedSchemaHash,
+                            checkedVersion);
 
                 // add task to send
                 batchTask.addTask(task);
@@ -212,18 +214,13 @@ public class CheckConsistencyJob {
                 timeoutMs = Math.max(timeoutMs, Config.check_consistency_default_timeout_second * 1000L);
                 state = JobState.RUNNING;
             }
-
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (state != JobState.RUNNING) {
             // failed to send task. set tablet's checked version to avoid choosing it again
-            locker.lockDatabase(db, LockType.WRITE);
-            try {
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                        LockType.WRITE)) {
                 tablet.setCheckedVersion(checkedVersion);
-            } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
             }
             return false;
         }
@@ -263,16 +260,16 @@ public class CheckConsistencyJob {
             return -1;
         }
 
+        Table table = db.getTable(tabletMeta.getTableId());
+        if (table == null) {
+            LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
+            return -1;
+        }
+
         boolean isConsistent = true;
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
         JournalTask journalTask;
-        try {
-            Table table = db.getTable(tabletMeta.getTableId());
-            if (table == null) {
-                LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
-                return -1;
-            }
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
 
             Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
@@ -296,7 +293,7 @@ public class CheckConsistencyJob {
             // check if schema has changed
             if (checkedSchemaHash != olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId())) {
                 LOG.info("index[{}]'s schema hash has been changed. [{} -> {}]. retry", tabletMeta.getIndexId(),
-                        checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
+                            checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
                 return -1;
             }
 
@@ -308,14 +305,14 @@ public class CheckConsistencyJob {
                     Map.Entry<Long, Long> entry = iter.next();
                     if (tablet.getReplicaByBackendId(entry.getKey()) == null) {
                         LOG.debug("tablet[{}]'s replica in backend[{}] does not exist. remove from checksumMap",
-                                tabletId, entry.getKey());
+                                    tabletId, entry.getKey());
                         iter.remove();
                         continue;
                     }
 
                     if (entry.getValue() == -1) {
                         LOG.debug("tablet[{}] has unfinished replica check sum task. backend[{}]",
-                                tabletId, entry.getKey());
+                                    tabletId, entry.getKey());
                         isFinished = false;
                     }
                 }
@@ -369,11 +366,9 @@ public class CheckConsistencyJob {
 
             // log
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
-                    index.getId(), tabletId, lastCheckTime,
-                    checkedVersion, isConsistent);
+                        index.getId(), tabletId, lastCheckTime,
+                        checkedVersion, isConsistent);
             journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // Wait for edit log write finish out of db lock.
