@@ -113,7 +113,7 @@ You can monitor and analyze the resource consumed by an asynchronous materialize
 
 #### Monitor resource consumption during refresh
 
-During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/SHOW_PROC.md).
+During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/cluster-management/nodes_processes/SHOW_PROC.md).
 
 Among all the information returned, you can focus on the following fields:
 

@@ -57,7 +57,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM ADD BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  You can check the status of the new BE by executing [SHOW BACKENDS](../Administration/SHOW_BACKENDS.md).
+  You can check the status of the new BE by executing [SHOW BACKENDS](SHOW_BACKENDS.md).
 
 - Drop a BE node.
 
@@ -75,7 +75,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  Unlike dropping a BE node, which is removing it forcibly from the cluster, decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is first migrated to other BEs, and then the BE is removed from the cluster. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW_BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL_DECOMMISSION.md).
+  Unlike dropping a BE node, which is removing it forcibly from the cluster, decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is first migrated to other BEs, and then the BE is removed from the cluster. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](SHOW_BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](CANCEL_DECOMMISSION.md).
 
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
@@ -90,7 +90,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  You can check the status of the new CN by executing [SHOW COMPUTE NODES](../Administration/SHOW_COMPUTE_NODES.md).
+  You can check the status of the new CN by executing [SHOW COMPUTE NODES](SHOW_COMPUTE_NODES.md).
 
 - Drop a CN node.
 
@@ -109,13 +109,13 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 ### Broker
 
-- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Load data from HDFS](../../../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../../../loading/cloud_storage_load.md).
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
   ```
 
-  You can add multiple Broker nodes with one SQL. Each `<broker_host>:<broker_ipc_port>` pair represents one Broker node. And they share a common `broker_name`. You can check the status of the new Broker node by executing [SHOW BROKER](../Administration/SHOW_BROKER.md).
+  You can add multiple Broker nodes with one SQL. Each `<broker_host>:<broker_ipc_port>` pair represents one Broker node. And they share a common `broker_name`. You can check the status of the new Broker node by executing [SHOW BROKER](SHOW_BROKER.md).
 
 - Drop Broker nodes.
 

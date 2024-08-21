@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Removes a BE node from the BE Blacklist. Please note that StarRocks will not remove the BE nodes that are manually blacklisted by users.
 
-This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../administration/management/BE_blacklist.md).
+This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../../administration/management/BE_blacklist.md).
 
 :::note
 
@@ -36,5 +36,5 @@ DELETE BACKEND BLACKLIST 10001;
 
 - [ADD BACKEND BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
 - [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW BACKENDS](SHOW_BACKENDS.md)
 

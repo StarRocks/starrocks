@@ -126,7 +126,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
-- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 :::
 
@@ -203,7 +203,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
-- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 :::
 

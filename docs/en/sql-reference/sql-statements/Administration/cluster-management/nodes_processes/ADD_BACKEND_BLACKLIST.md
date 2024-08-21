@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Adds a BE node to the BE Blacklist. You can manually add BE nodes to the blacklist to forbid the usage of the nodes in query execution, thereby avoiding frequent query failures or other unexpected behaviors caused by failed connections to the BE nodes.
 
-This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../administration/management/BE_blacklist.md).
+This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../../administration/management/BE_blacklist.md).
 
 :::note
 
@@ -26,7 +26,7 @@ ADD BACKEND BLACKLIST <be_id>[, ...]
 
 ## Parameters
 
-`be_id`: ID of the BE node to be blacklisted. You can obtain the BE ID by executing [SHOW BACKENDS](./SHOW_BACKENDS.md).
+`be_id`: ID of the BE node to be blacklisted. You can obtain the BE ID by executing [SHOW BACKENDS](SHOW_BACKENDS.md).
 
 ## Examples
 
@@ -45,5 +45,5 @@ ADD BACKEND BLACKLIST 10001;
 
 - [DELETE BACKEND BLACKLIST](./DELETE_BACKEND_BLACKLIST.md)
 - [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW BACKENDS](SHOW_BACKENDS.md)
 

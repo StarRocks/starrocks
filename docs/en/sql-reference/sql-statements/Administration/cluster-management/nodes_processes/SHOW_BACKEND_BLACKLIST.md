@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Shows the BE nodes in the BE Blacklist.
 
-This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../administration/management/BE_blacklist.md).
+This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../../administration/management/BE_blacklist.md).
 
 :::note
 
@@ -46,5 +46,5 @@ SHOW BACKEND BLACKLIST;
 
 - [ADD BACKEND BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
 - [DELETE BACKEND BLACKLIST](./DELETE_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW BACKENDS](SHOW_BACKENDS.md)
 

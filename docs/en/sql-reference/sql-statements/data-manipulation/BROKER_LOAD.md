@@ -285,7 +285,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
   > **NOTE**
   >
-  > You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
+  > You can use the [SHOW BROKER](../Administration/cluster-management/nodes_processes/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 #### AWS S3
 
