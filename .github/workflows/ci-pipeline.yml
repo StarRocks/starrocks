@@ -55,7 +55,7 @@ jobs:
           NO_SYNC: ${{ steps.check.outputs.pass }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && git checkout ci-ubuntu 
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
       - name: Check Feature Issue
@@ -193,7 +193,7 @@ jobs:
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
-          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
@@ -223,7 +223,7 @@ jobs:
     steps:
       - name: Check Result
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu >/dev/null
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-thirdparty-result.sh
 
       - name: Download Thirdparty Artifact
@@ -256,7 +256,7 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -314,7 +314,7 @@ jobs:
         shell: bash
         timeout-minutes: 60
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -545,7 +545,7 @@ jobs:
         env:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -688,7 +688,7 @@ jobs:
           package: ${{ env.package }}
           pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${IMAGE_CACHE_ID}
             export image_tag=$BRANCH-$PR_NUMBER
@@ -754,7 +754,7 @@ jobs:
       - name: Choose mode
         id: choose-mode
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           cluster_type=$(./bin/choose-mode.sh)
           if [[ "${cluster_type}" == "cloud" ]]; then
             echo "cloud=true" >> "$GITHUB_OUTPUT"
@@ -845,7 +845,7 @@ jobs:
         env:
           is_self_build: ${{ needs.deploy.outputs.is_self_build }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
@@ -890,7 +890,7 @@ jobs:
 
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/restart-fe.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
 
       - name: Clean ENV
@@ -917,7 +917,7 @@ jobs:
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && skip_gcov="--skip-gcov"
           ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }} ${skip_gcov}
 
@@ -952,7 +952,7 @@ jobs:
 
       - name: Run Case
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
           cd ${{ github.workspace }}
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
@@ -1006,7 +1006,7 @@ jobs:
         if: needs.deploy.outputs.deploy_conf_file != ''
         id: backup
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout ci-ubuntu && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
