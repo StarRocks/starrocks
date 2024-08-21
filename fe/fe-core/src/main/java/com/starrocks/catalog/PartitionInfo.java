@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.validation.constraints.NotNull;
 
 /*
@@ -88,7 +89,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     public PartitionInfo() {
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
-        this.idToInMemory = new HashMap<>();
+        this.idToInMemory = new ConcurrentHashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
@@ -97,7 +98,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         this.type = type;
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
-        this.idToInMemory = new HashMap<>();
+        this.idToInMemory = new ConcurrentHashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
@@ -166,7 +167,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         idToReplicationNum.put(partitionId, replicationNum);
     }
 
-    public boolean getIsInMemory(long partitionId) {
+    public Boolean getIsInMemory(long partitionId) {
         return idToInMemory.get(partitionId);
     }
 
