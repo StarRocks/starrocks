@@ -121,7 +121,7 @@ public class DictionaryCacheSink extends DataSink {
             columnsDesc.add(tColumn);
         }
         TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 0);
-        TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(0, columns, 0);
+        TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(0, columns, 0, null);
         indexSchema.setColumn_param(columnParam);
         schemaParam.addToIndexes(indexSchema);
         return schemaParam;
