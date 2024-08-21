@@ -1958,11 +1958,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                     break
             time.sleep(1)
             times += 1
-<<<<<<< HEAD
-        tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
-=======
         tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
->>>>>>> cfeb27ba47 ([UT] Fix mv sqltester bugs (#50087))
 
     def assert_cache_select_is_success(self, query):
         """

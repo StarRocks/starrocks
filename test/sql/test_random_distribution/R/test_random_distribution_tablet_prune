@@ -18,11 +18,7 @@ insert into t1 select generate_series, "2020-06-18" from table(generate_series(1
 insert into t1 select generate_series, "2020-06-18" from table(generate_series(1, 100));
 -- result:
 -- !result
-<<<<<<< HEAD
-function: wait_table_rowcount_not_empty("t1")
-=======
 function: wait_table_rowcount_not_empty("t1", 30)
->>>>>>> cfeb27ba47 ([UT] Fix mv sqltester bugs (#50087))
 -- result:
 None
 -- !result
