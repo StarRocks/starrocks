@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -231,12 +232,15 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private int compactionTaskLimit() {
+    @VisibleForTesting
+    protected int compactionTaskLimit() {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        return (systemInfoService.getAliveBackendNumber() +
-                systemInfoService.getAliveComputeNodeNumber()) * 16;
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
+        List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(warehouse.getId());
+        return aliveComputeNodes.size() * 16;
     }
 
     private void cleanPartition() {
