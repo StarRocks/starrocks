@@ -93,6 +93,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         default_configs = [
             "'enable_mv_refresh_insert_strict' = 'true'",
             "'enable_mv_refresh_query_rewrite' = 'true'",
+            # enlarge task run concurrency to speed up mv's refresh and find more potential bugs
+            "'task_runs_concurrency' = '16'",
         ]
 
         for config in default_configs:

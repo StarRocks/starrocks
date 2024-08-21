@@ -1,4 +1,8 @@
+<<<<<<< HEAD:test/sql/test_transparent_mv/R/test_transparent_mv_olap
 -- name: test_transparent_mv_olap
+=======
+-- name: test_transparent_mv_olap_part2 @slow
+>>>>>>> cfeb27ba47 ([UT] Fix mv sqltester bugs (#50087)):test/sql/test_transparent_mv/R/test_transparent_mv_olap_part2
 create database db_${uuid0};
 -- result:
 -- !result
@@ -1208,6 +1212,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv10;
 drop materialized view default_catalog.db_${uuid0}.test_mv12;
 -- result:
 -- !result
+<<<<<<< HEAD:test/sql/test_transparent_mv/R/test_transparent_mv_olap
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
@@ -1560,6 +1565,8 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 -- !result
+=======
+>>>>>>> cfeb27ba47 ([UT] Fix mv sqltester bugs (#50087)):test/sql/test_transparent_mv/R/test_transparent_mv_olap_part2
 drop table t1 force;
 -- result:
 -- !result
