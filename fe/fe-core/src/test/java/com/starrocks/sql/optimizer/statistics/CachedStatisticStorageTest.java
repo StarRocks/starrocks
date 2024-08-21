@@ -187,9 +187,9 @@ public class CachedStatisticStorageTest {
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
         ConnectorTableColumnStats connectorTableColumnStats1 =
-                new ConnectorTableColumnStats(columnStatistic1, 5);
+                new ConnectorTableColumnStats(columnStatistic1, 5, "2024-01-01 01:00:00");
         ConnectorTableColumnStats connectorTableColumnStats2 =
-                new ConnectorTableColumnStats(columnStatistic2, 5);
+                new ConnectorTableColumnStats(columnStatistic2, 5, "2024-01-01 02:00:00");
 
         new Expectations() {
             {
@@ -206,6 +206,8 @@ public class CachedStatisticStorageTest {
         Assert.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
         Assert.assertEquals(5, columnStatistics.get(0).getRowCount());
         Assert.assertEquals(5, columnStatistics.get(1).getRowCount());
+        Assert.assertEquals("2024-01-01 01:00:00", columnStatistics.get(0).getUpdateTime());
+        Assert.assertEquals("2024-01-01 02:00:00", columnStatistics.get(1).getUpdateTime());
     }
 
     @Test
@@ -293,10 +295,10 @@ public class CachedStatisticStorageTest {
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
         columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
                 Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
+                        new ColumnStatistic(0, 10, 0, 20, 5), 5, "")));
         columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
                 Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
+                        new ColumnStatistic(0, 100, 0, 200, 50), 50, "")));
 
         new MockUp<StatisticUtils>() {
             @Mock
