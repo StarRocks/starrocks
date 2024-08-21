@@ -43,6 +43,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
@@ -75,14 +76,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-public class OnlineOptimizeJobV2 extends AlterJobV2 {
+public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(OnlineOptimizeJobV2.class);
 
     // The optimize job will wait all transactions before this txn id finished, then send the optimize tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
 
-    private final String postfix;
+    private String postfix;
 
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 
@@ -114,6 +115,11 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
 
     @SerializedName(value = "optimizeOperation")
     private String optimizeOperation = "";
+
+    // for deserialization
+    public OnlineOptimizeJobV2() {
+        super(JobType.OPTIMIZE);
+    }
 
     public OnlineOptimizeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                                OptimizeClause optimizeClause) {
@@ -784,5 +790,10 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 {
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
             throw new AlterCancelException(context.getState().getErrorMessage());
         }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        this.postfix = "_" + jobId;
     }
 }
