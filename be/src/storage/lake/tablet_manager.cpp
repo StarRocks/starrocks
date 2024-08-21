@@ -696,6 +696,10 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                                  TabletSchemaPtr tablet_schema) {
+    // NOTE: if partial compaction is turned on, `segment_id` might not be the same as cached segment id
+    //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
+    //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
+    //       but in meta cache, segment `a` still has segment id 10, it is not changed.
     auto segment = metacache()->lookup_segment(segment_info.path);
     if (segment == nullptr) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_info.path));
