@@ -71,6 +71,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @SerializedName(value = "metaValue")
     private boolean metaValue;
 
+<<<<<<< HEAD
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
 
@@ -81,6 +82,12 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
+=======
+    // for deserialization
+    public LakeTableAlterMetaJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+>>>>>>> f721fd4bec ([BugFix] Fix replaying AlterJob NPE Bug (#50100))
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue) {
