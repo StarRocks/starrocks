@@ -89,6 +89,105 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
 }
 
+<<<<<<< HEAD
+=======
+// delete from protobuf Map and return deleted count
+template <typename T>
+static int delete_from_protobuf_map(T* protobuf_map, const std::vector<std::pair<uint32_t, uint32_t>>& delete_sid_range,
+                                    const std::function<void(const T&)>& gc_func) {
+    // collect item that had been deleted.
+    T gc_map;
+    int erase_cnt = 0;
+    auto it = protobuf_map->begin();
+    while (it != protobuf_map->end()) {
+        bool need_del = false;
+        for (const auto& range : delete_sid_range) {
+            if (it->first >= range.first && it->first <= range.second) {
+                need_del = true;
+                break;
+            }
+        }
+        if (need_del) {
+            gc_map[it->first] = it->second;
+            it = protobuf_map->erase(it);
+            erase_cnt++;
+        } else {
+            it++;
+        }
+    }
+    gc_func(gc_map);
+    return erase_cnt;
+}
+
+// When using cloud native persistent index, the del files which are above rebuild point,
+// need to be transfer to compaction's output rowset.
+// Use this function to collect all del files that need to be transfer.
+void MetaFileBuilder::_collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
+                                                             std::vector<DelfileWithRowsetId>* collect_del_files) {
+    if (!_tablet_meta->enable_persistent_index() ||
+        _tablet_meta->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        // do nothing, unpersisted del files is collect only for cloud native persistent index.
+        return;
+    }
+    if (rowset->del_files_size() == 0) {
+        return;
+    }
+    const auto& sstables = _tablet_meta->sstable_meta().sstables();
+    // Rebuild persistent index from `rebuild_rss_rowid_point`
+    const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+    const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
+    if (LakePersistentIndex::needs_rowset_rebuild(*rowset, rebuild_rss_id)) {
+        // Above rebuild point
+        for (const auto& each : rowset->del_files()) {
+            collect_del_files->push_back(each);
+        }
+        // These del files will be collect and transfer to compaction's output rowset.
+        rowset->clear_del_files();
+    }
+}
+
+// check the last input rowset to determine whether this is partial compaction,
+// if is, modify last intput rowset `segments` info, for example, following
+// `e` and `f` will be removed from last input rowset.
+// before(last rowset input segments): x y a b c d e f
+// segments in compaction: a b c d
+// output segments:                    x y m n e f
+// after (last rowset input segments): a b c d
+void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction,
+                                               RowsetMetadataPB& last_input_rowset) {
+    if (op_compaction.input_rowsets_size() < 1) {
+        return;
+    }
+    if (op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1) != last_input_rowset.id()) {
+        return;
+    }
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0 &&
+        last_input_rowset.segments_size() > 0) {
+        // iterate all segments in last input rowset, find if any of them exists in
+        // compaction output rowset, if is, erase them from last input rowset
+        size_t before = last_input_rowset.segments_size();
+        auto iter = last_input_rowset.mutable_segments()->begin();
+        while (iter != last_input_rowset.mutable_segments()->end()) {
+            auto it = std::find_if(op_compaction.output_rowset().segments().begin(),
+                                   op_compaction.output_rowset().segments().end(),
+                                   [iter](const std::string& segment) { return *iter == segment; });
+            if (it != op_compaction.output_rowset().segments().end()) {
+                iter = last_input_rowset.mutable_segments()->erase(iter);
+            } else {
+                ++iter;
+            }
+        }
+        size_t after = last_input_rowset.segments_size();
+        if (after - before > 0) {
+            LOG(INFO) << "find partial compaction, tablet: " << metadata->id() << ", version: " << metadata->version()
+                      << ", last input rowset id: " << last_input_rowset.id()
+                      << ", uncompacted segment count: " << (before - after);
+        }
+    }
+}
+
+>>>>>>> fecc567fff ([Enhancement] support strict segment count restriction in lake compaction (#48423))
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                          uint32_t max_compact_input_rowset_id) {
     // delete input rowsets

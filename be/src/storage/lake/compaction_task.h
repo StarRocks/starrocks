@@ -23,9 +23,18 @@
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
+<<<<<<< HEAD
+=======
+namespace starrocks {
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
+} // namespace starrocks
+
+>>>>>>> fecc567fff ([Enhancement] support strict segment count restriction in lake compaction (#48423))
 namespace starrocks::lake {
 
 class Rowset;
+class TabletWriter;
 
 class CompactionTask {
 public:
@@ -41,6 +50,8 @@ public:
 
     inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
     inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
+
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
 
 protected:
     int64_t _txn_id;
