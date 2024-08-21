@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/proc/CurrentQueryStatisticsProcDir.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/proc/ProcService.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -35,39 +35,21 @@
 package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
-import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /*
- * show proc "/current_queries"
+ * show proc "/global_current_queries"
  */
-public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
-    private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("StartTime")
-            .add("feIp")
-            .add("QueryId")
-            .add("ConnectionId")
-            .add("Database")
-            .add("User")
-            .add("ScanBytes")
-            .add("ScanRows")
-            .add("MemoryUsage")
-            .add("DiskSpillSize")
-            .add("CPUTime")
-            .add("ExecTime")
-            .add("Warehouse")
-            .add("CustomQueryId")
-            .build();
+public class CurrentGlobalQueryStatisticsProcDir implements ProcDirInterface {
+    private static final Logger LOG = LogManager.getLogger(CurrentGlobalQueryStatisticsProcDir.class);
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -79,20 +61,21 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
         if (Strings.isNullOrEmpty(name)) {
             return null;
         }
-        final Map<String, QueryStatisticsItem> statistic = QeProcessorImpl.INSTANCE.getQueryStatistics();
-        final QueryStatisticsItem item = statistic.get(name);
-        if (item == null) {
-            throw new AnalysisException(name + " does't exist.");
-        }
-        return new CurrentQuerySqlProcDir(item);
+
+        throw new AnalysisException("not implemented");
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         final BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES.asList());
+        result.setNames(CurrentQueryStatisticsProcDir.TITLE_NAMES.asList());
         List<QueryStatisticsInfo> queryInfos = QueryStatisticsInfo.makeListFromMetricsAndMgrs();
-        List<List<String>> sortedRowData = queryInfos
+        List<QueryStatisticsInfo> otherQueryInfos = GlobalStateMgr.getCurrentState().getQueryStatisticsInfoFromOtherFEs();
+
+        List<QueryStatisticsInfo> allInfos = Stream.concat(queryInfos.stream(), otherQueryInfos.stream())
+                .collect(Collectors.toList());
+
+        List<List<String>> sortedRowData = allInfos
                 .stream()
                 .map(QueryStatisticsInfo::formatToList)
                 .collect(Collectors.toList());

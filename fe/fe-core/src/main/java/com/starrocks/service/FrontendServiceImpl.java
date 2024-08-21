@@ -137,6 +137,7 @@ import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.VariableMgr;
@@ -217,6 +218,8 @@ import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
+import com.starrocks.thrift.TGetQueryStatisticsRequest;
+import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
@@ -278,6 +281,7 @@ import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshRoleMappingRequest;
 import com.starrocks.thrift.TRefreshRoleMappingResponse;
 import com.starrocks.thrift.TRefreshTableRequest;
@@ -2559,6 +2563,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         res.setWarehouse_infos(warehouseInfos);
 
         return res;
+    }
+
+    @Override
+    public TGetQueryStatisticsResponse getQueryStatistics(TGetQueryStatisticsRequest request) throws TException {
+        try {
+            List<QueryStatisticsInfo> queryStatisticsInfos = QueryStatisticsInfo.makeListFromMetricsAndMgrs();
+            List<TQueryStatisticsInfo> queryStatisticsThrift = queryStatisticsInfos
+                    .stream()
+                    .map(QueryStatisticsInfo::toThrift)
+                    .collect(Collectors.toList());
+
+            TGetQueryStatisticsResponse res = new TGetQueryStatisticsResponse();
+            res.setStatus(new TStatus(OK));
+            res.setQueryStatistics_infos(queryStatisticsThrift);
+
+            return res;
+        } catch (AnalysisException e) {
+            throw new TException(e.getMessage());
+        }
     }
 
     @Override

@@ -75,20 +75,20 @@ public class CurrentQueryStatisticsProcDirTest {
         List<String> list1 = rows.get(0);
         Assert.assertEquals(list1.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
         // QueryId
-        Assert.assertEquals("queryId1", list1.get(1));
+        Assert.assertEquals("queryId1", list1.get(2));
         // Warehouse
-        Assert.assertEquals("wh1", list1.get(11));
+        Assert.assertEquals("wh1", list1.get(12));
         // CustomQueryId
-        Assert.assertEquals("abc1", list1.get(12));
+        Assert.assertEquals("abc1", list1.get(13));
 
         List<String> list2 = rows.get(1);
         Assert.assertEquals(list2.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());
         // QueryId
-        Assert.assertEquals("queryId2", list2.get(1));
+        Assert.assertEquals("queryId2", list2.get(2));
         // Warehouse
-        Assert.assertEquals("wh1", list2.get(11));
+        Assert.assertEquals("wh1", list2.get(12));
         // CustomQueryId
-        Assert.assertEquals("abc2", list2.get(12));
+        Assert.assertEquals("abc2", list2.get(13));
     }
 
     @Test
