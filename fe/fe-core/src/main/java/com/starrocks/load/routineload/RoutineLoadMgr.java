@@ -77,9 +77,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -773,17 +771,6 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         if (!routineLoadJob.getState().isFinalState()) {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         }
-    }
-
-    public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
-        readFields(dis);
-        LOG.info("finished replay routineLoadJobs from image");
-        return checksum;
-    }
-
-    public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     public void saveRoutineLoadJobsV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
