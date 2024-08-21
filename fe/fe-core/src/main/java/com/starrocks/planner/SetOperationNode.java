@@ -170,7 +170,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
-        Preconditions.checkState(materializedResultExprLists_.size() == children.size());
         List<List<TExpr>> texprLists = Lists.newArrayList();
         for (List<Expr> exprList : materializedResultExprLists_) {
             texprLists.add(Expr.treesToThrift(exprList));
