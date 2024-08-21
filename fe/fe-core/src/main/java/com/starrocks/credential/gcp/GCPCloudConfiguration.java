@@ -37,8 +37,12 @@ public class GCPCloudConfiguration implements CloudConfiguration {
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
+<<<<<<< HEAD
 
         List<TCloudProperty> properties = new LinkedList<>();
+=======
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+>>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
         gcpCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
     }

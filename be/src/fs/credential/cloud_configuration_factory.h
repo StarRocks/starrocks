@@ -54,8 +54,10 @@ public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
         DCHECK(t_cloud_configuration.cloud_type == TCloudType::AWS);
-        std::unordered_map<std::string, std::string> properties;
-        _insert_properties(properties, t_cloud_configuration);
+        std::map<std::string, std::string> properties{};
+        if (t_cloud_configuration.__isset.cloud_properties) {
+            properties = t_cloud_configuration.cloud_properties;
+        }
 
         AWSCloudConfiguration aws_cloud_configuration{};
         AWSCloudCredential aws_cloud_credential{};
@@ -80,6 +82,7 @@ public:
         return aws_cloud_configuration;
     }
 
+<<<<<<< HEAD
 private:
     static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
                                    const TCloudConfiguration& t_cloud_configuration) {
@@ -89,9 +92,32 @@ private:
         }
     }
 
+=======
+    // This is a reserved interface for aliyun EMR starrocks, and cannot be deleted
+    static const AliyunCloudConfiguration create_aliyun(const TCloudConfiguration& t_cloud_configuration) {
+        DCHECK(t_cloud_configuration.__isset.cloud_type);
+        DCHECK(t_cloud_configuration.cloud_type == TCloudType::ALIYUN);
+        std::map<std::string, std::string> properties{};
+        if (t_cloud_configuration.__isset.cloud_properties) {
+            properties = t_cloud_configuration.cloud_properties;
+        }
+
+        AliyunCloudConfiguration aliyun_cloud_configuration{};
+        AliyunCloudCredential aliyun_cloud_credential{};
+
+        aliyun_cloud_credential.access_key = get_or_default(properties, ALIYUN_OSS_ACCESS_KEY, std::string());
+        aliyun_cloud_credential.secret_key = get_or_default(properties, ALIYUN_OSS_SECRET_KEY, std::string());
+        aliyun_cloud_credential.endpoint = get_or_default(properties, ALIYUN_OSS_ENDPOINT, std::string());
+
+        aliyun_cloud_configuration.aliyun_cloud_credential = aliyun_cloud_credential;
+        return aliyun_cloud_configuration;
+    }
+
+private:
+>>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
     template <typename ReturnType>
-    static ReturnType get_or_default(const std::unordered_map<std::string, std::string>& properties,
-                                     const std::string& key, ReturnType default_value) {
+    static ReturnType get_or_default(const std::map<std::string, std::string>& properties, const std::string& key,
+                                     ReturnType default_value) {
         auto it = properties.find(key);
         if (it != properties.end()) {
             std::string value = it->second;

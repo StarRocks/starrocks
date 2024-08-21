@@ -29,5 +29,10 @@ struct TCloudProperty {
 
 struct TCloudConfiguration {
     1: optional TCloudType cloud_type;
+<<<<<<< HEAD
     2: optional list<TCloudProperty> cloud_properties;
+=======
+    2: optional list<TCloudProperty> deprecated_cloud_properties; // Deprecated
+    3: optional map<string, string> cloud_properties;
+>>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
 }

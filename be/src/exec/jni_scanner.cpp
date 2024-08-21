@@ -471,4 +471,268 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     return status;
 }
 
+<<<<<<< HEAD
+=======
+static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+    for (int i = 0; i < type.children.size(); i++) {
+        const auto& t = type.children[i];
+        if (t.is_unknown_type()) continue;
+        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        if (t.is_complex_type()) {
+            build_nested_fields(t, p, sb);
+        } else {
+            sb->append(p);
+            sb->append(",");
+        }
+    }
+}
+
+static std::string build_fs_options_properties(const FSOptions& options) {
+    const TCloudConfiguration* cloud_configuration = options.cloud_configuration;
+    static constexpr char KV_SEPARATOR = 0x1;
+    static constexpr char PROP_SEPARATOR = 0x2;
+    std::string data;
+
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        for (const auto& [key, value] : cloud_configuration->cloud_properties) {
+            data += key;
+            data += KV_SEPARATOR;
+            data += value;
+            data += PROP_SEPARATOR;
+        }
+    }
+
+    if (data.size() > 0 && data.back() == PROP_SEPARATOR) {
+        data.pop_back();
+    }
+    return data;
+}
+
+Status JniScanner::update_jni_scanner_params() {
+    // update materialized columns.
+    {
+        std::unordered_set<std::string> names;
+        for (const auto& column : _scanner_ctx.materialized_columns) {
+            if (column.name() == "___count___") continue;
+            names.insert(column.name());
+        }
+        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+    }
+
+    std::string required_fields;
+    for (const auto& column : _scanner_ctx.materialized_columns) {
+        required_fields.append(column.name());
+        required_fields.append(",");
+    }
+    if (!required_fields.empty()) {
+        required_fields = required_fields.substr(0, required_fields.size() - 1);
+    }
+
+    std::string nested_fields;
+    for (const auto& column : _scanner_ctx.materialized_columns) {
+        const TypeDescriptor& type = column.slot_type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, column.name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+
+    _jni_scanner_params["required_fields"] = required_fields;
+    _jni_scanner_params["nested_fields"] = nested_fields;
+    return Status::OK();
+}
+
+// -------------------------------hive jni scanner-------------------------------
+
+class HiveJniScanner : public JniScanner {
+public:
+    HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
+            : JniScanner(std::move(factory_class), std::move(params)) {}
+    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
+};
+
+Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    // fill chunk with all wanted column exclude partition columns
+    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
+    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
+    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    return Status::OK();
+}
+
+std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    const HiveTableDescriptor* hive_table = options.hive_table;
+    static const char* serde_property_prefix = "SerDe.";
+
+    std::string data_file_path;
+    std::string hive_column_names;
+    std::string hive_column_types;
+    std::string serde;
+    std::string input_format;
+    std::map<std::string, std::string> serde_properties;
+    std::string time_zone;
+
+    if (dynamic_cast<const FileTableDescriptor*>(hive_table)) {
+        const auto* file_table = down_cast<const FileTableDescriptor*>(hive_table);
+
+        data_file_path = scan_range.full_path;
+
+        hive_column_names = file_table->get_hive_column_names();
+        hive_column_types = file_table->get_hive_column_types();
+        serde = file_table->get_serde_lib();
+        input_format = file_table->get_input_format();
+        time_zone = file_table->get_time_zone();
+    } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
+        const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
+        auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
+        std::string partition_full_path = partition_desc->location();
+        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
+
+        hive_column_names = hdfs_table->get_hive_column_names();
+        hive_column_types = hdfs_table->get_hive_column_types();
+        serde = hdfs_table->get_serde_lib();
+        input_format = hdfs_table->get_input_format();
+        serde_properties = hdfs_table->get_serde_properties();
+        time_zone = hdfs_table->get_time_zone();
+    } else {
+        return nullptr;
+    }
+
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["hive_column_names"] = hive_column_names;
+    jni_scanner_params["hive_column_types"] = hive_column_types;
+    jni_scanner_params["data_file_path"] = data_file_path;
+    jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
+    jni_scanner_params["block_length"] = std::to_string(scan_range.length);
+    jni_scanner_params["serde"] = serde;
+    jni_scanner_params["input_format"] = input_format;
+    jni_scanner_params["time_zone"] = time_zone;
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(*(options.fs_options));
+
+    for (const auto& pair : serde_properties) {
+        jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
+    }
+
+    std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
+
+    return std::make_unique<HiveJniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------paimon jni scanner------------------
+std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    const HiveTableDescriptor* hive_table = options.hive_table;
+    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(hive_table);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["split_info"] = scan_range.paimon_split_info;
+    jni_scanner_params["predicate_info"] = scan_range.paimon_predicate_info;
+    jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
+    jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
+
+    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// -------------hudi jni scanner---------------------
+std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
+    auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
+    std::string partition_full_path = partition_desc->location();
+
+    std::string delta_file_paths;
+    if (!scan_range.hudi_logs.empty()) {
+        for (const std::string& log : scan_range.hudi_logs) {
+            delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
+            delta_file_paths.append(",");
+        }
+        delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
+    }
+
+    std::string data_file_path;
+    if (scan_range.relative_path.empty()) {
+        data_file_path = "";
+    } else {
+        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
+    }
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["base_path"] = hudi_table->get_base_path();
+    jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
+    jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
+    jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
+    jni_scanner_params["delta_file_paths"] = delta_file_paths;
+    jni_scanner_params["data_file_path"] = data_file_path;
+    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
+    jni_scanner_params["serde"] = hudi_table->get_serde_lib();
+    jni_scanner_params["input_format"] = hudi_table->get_input_format();
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(*(options.fs_options));
+    jni_scanner_params["time_zone"] = hudi_table->get_time_zone();
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------odps jni scanner------------------
+std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(options.hive_table);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["project_name"] = odps_table->get_database_name();
+    jni_scanner_params["table_name"] = odps_table->get_table_name();
+    jni_scanner_params.insert(scan_range.odps_split_infos.begin(), scan_range.odps_split_infos.end());
+    jni_scanner_params["time_zone"] = odps_table->get_time_zone();
+
+    const AliyunCloudConfiguration aliyun_cloud_configuration =
+            CloudConfigurationFactory::create_aliyun(*options.fs_options->cloud_configuration);
+    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
+    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
+    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
+    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
+
+    std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------iceberg metadata jni scanner------------------
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["metadata_column_names"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["time_zone"] = hdfs_table->get_time_zone();
+
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
+    jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+    jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------kudu jni scanner------------------
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["kudu_scan_token"] = scan_range.kudu_scan_token;
+    jni_scanner_params["kudu_master"] = scan_range.kudu_master;
+
+    std::string scanner_factory_class = "com/starrocks/kudu/reader/KuduSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+>>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
 } // namespace starrocks

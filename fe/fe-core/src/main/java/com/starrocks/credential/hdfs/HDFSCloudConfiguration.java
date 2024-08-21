@@ -12,53 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential.azure;
+package com.starrocks.credential.hdfs;
 
+import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Map;
 
-public class AzureCloudConfiguration implements CloudConfiguration {
+public class HDFSCloudConfiguration extends CloudConfiguration {
 
-    private final AzureStorageCloudCredential azureStorageCloudCredential;
+    private final HDFSCloudCredential hdfsCloudCredential;
 
-    public AzureCloudConfiguration(AzureStorageCloudCredential azureStorageCloudCredential) {
-        this.azureStorageCloudCredential = azureStorageCloudCredential;
+    public HDFSCloudConfiguration(HDFSCloudCredential hdfsCloudCredential) {
+        Preconditions.checkNotNull(hdfsCloudCredential);
+        this.hdfsCloudCredential = hdfsCloudCredential;
+    }
+
+    public HDFSCloudCredential getHdfsCloudCredential() {
+        return hdfsCloudCredential;
     }
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-<<<<<<< HEAD
-
-        List<TCloudProperty> properties = new LinkedList<>();
-=======
+        super.toThrift(tCloudConfiguration);
+        tCloudConfiguration.setCloud_type(TCloudType.HDFS);
         Map<String, String> properties = tCloudConfiguration.getCloud_properties();
->>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
-        azureStorageCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        hdfsCloudCredential.toThrift(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        azureStorageCloudCredential.applyToConfiguration(configuration);
+        super.applyToConfiguration(configuration);
+        hdfsCloudCredential.applyToConfiguration(configuration);
+    }
+
+    @Override
+    public String toConfString() {
+        return String.format("HDFSCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                hdfsCloudCredential.toCredString());
     }
 
     @Override
     public CloudType getCloudType() {
-        return CloudType.AZURE;
+        return CloudType.HDFS;
     }
 
     @Override
-    public String getCredentialString() {
-        return "AzureCloudConfiguration{" +
-                "azureStorageCloudCredential=" + azureStorageCloudCredential +
-                '}';
+    public FileStoreInfo toFileStoreInfo() {
+        return hdfsCloudCredential.toFileStoreInfo();
     }
 }

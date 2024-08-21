@@ -34,10 +34,17 @@ static const std::vector<TCloudProperty>* get_cloud_properties(const FSOptions& 
         // This branch is used by broker load
         cloud_configuration = &options.hdfs_properties()->cloud_configuration;
     }
+<<<<<<< HEAD
     if (cloud_configuration != nullptr) {
         return &cloud_configuration->cloud_properties;
     }
     return nullptr;
+=======
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        return cloud_configuration->cloud_properties;
+    }
+    return {};
+>>>>>>> 4265e9bd8e ([BugFix] Fix aliyun.oss.access_key unusable (#49951))
 }
 
 static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client,
