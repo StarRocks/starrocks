@@ -22,6 +22,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -445,6 +447,28 @@ public class AstToSQLBuilder {
             if (insert.getQueryStatement() != null) {
                 sb.append(visit(insert.getQueryStatement()));
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ");
+            if (stmt.isReplace()) {
+                sb.append("OR REPLACE ");
+            }
+            sb.append("PIPE ");
+            if (stmt.isIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getPipeName()).append(" ");
+
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null && !properties.isEmpty()) {
+                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(") ");
+            }
+
+            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
             return sb.toString();
         }
 
