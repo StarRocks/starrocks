@@ -171,7 +171,7 @@ public class CloudConfigurationFactoryTest {
 
     @Test
     public void testAzureADLS2ManagedIdentity() {
-        Map<String, String> map = new HashMap<>() {
+        Map<String, String> map = new HashMap<String, String>() {
             {
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
@@ -193,7 +193,7 @@ public class CloudConfigurationFactoryTest {
 
     @Test
     public void testAzureADLS2Oauth2() {
-        Map<String, String> map = new HashMap<>() {
+        Map<String, String> map = new HashMap<String, String>() {
             {
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
