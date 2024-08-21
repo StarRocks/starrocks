@@ -23,6 +23,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
 
 import java.util.List;
 import java.util.Map;
@@ -143,6 +144,38 @@ public class Trino2SRFunctionCallTransformer {
         // to_unixtime -> unix_timestamp
         registerFunctionTransformer("to_unixtime", 1, "unix_timestamp",
                 List.of(Expr.class));
+
+        // from_unixtime(unixtime) -> from_unixtime
+        registerFunctionTransformer("from_unixtime", 1, "from_unixtime",
+                List.of(Expr.class));
+
+        //from_unixtime(unixtime, zone) -> convert_tz, from_unixtime
+        registerFunctionTransformer("from_unixtime", 2,
+                new FunctionCallExpr("convert_tz", List.of(
+                        new FunctionCallExpr("from_unixtime", List.of(
+                                new PlaceholderExpr(1, Expr.class))),
+                        new VariableExpr("time_zone"),
+                        new PlaceholderExpr(2, Expr.class)
+                )));
+
+        //from_unixtime(unixtime, hours, minutes) -> hours_add, minutes_add, from_unixtime
+        registerFunctionTransformer("from_unixtime", 3,
+                new FunctionCallExpr("hours_add", List.of(
+                        new FunctionCallExpr("minutes_add", List.of(
+                                new FunctionCallExpr("from_unixtime", List.of(
+                                        new PlaceholderExpr(1, Expr.class))),
+                                new PlaceholderExpr(3, Expr.class))),
+                        new PlaceholderExpr(2, Expr.class)
+
+                )));
+
+        //at_timezone -> convert_tz
+        registerFunctionTransformer("at_timezone", 2,
+                new FunctionCallExpr("convert_tz", List.of(
+                        new PlaceholderExpr(1, Expr.class),
+                        new VariableExpr("time_zone"),
+                        new PlaceholderExpr(2, Expr.class)
+                )));
 
         // date_parse -> str_to_date
         registerFunctionTransformer("date_parse", 2, "str_to_date",
