@@ -483,8 +483,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
                     not_used_segments->second.begin(),
                     segments->begin() + metadata().next_compaction_offset() + _compaction_segment_limit,
                     segments->end());
-            LOG(INFO) << "tablet: " << tablet_id() << ", version: " << version() << ", rowset: " << metadata().id()
-                      << ", total segments: " << metadata().segments_size()
+            LOG(INFO) << "tablet: " << tablet_id() << ", version: " << _tablet_metadata->version()
+                      << ", rowset: " << metadata().id() << ", total segments: " << metadata().segments_size()
                       << ", compacted segments: " << not_used_segments->first.size()
                       << ", uncompacted segments: " << not_used_segments->second.size();
         }
