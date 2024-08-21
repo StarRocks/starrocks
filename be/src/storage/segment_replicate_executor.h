@@ -66,7 +66,6 @@ private:
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
     doris::PBackendService_Stub* _stub = nullptr;
-    MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
