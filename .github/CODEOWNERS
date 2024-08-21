@@ -130,4 +130,7 @@
 /be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
 /be/src/runtime/export_sink.cpp         @StarRocks/load-unload-maintainer
 
+# meta upgrade/downgrade compatibility
+/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java @StarRocks/meta-compatibility-maintainer
+
 
