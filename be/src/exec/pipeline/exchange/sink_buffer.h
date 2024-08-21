@@ -26,6 +26,7 @@
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
 #include "runtime/query_statistics.h"
@@ -98,6 +99,8 @@ public:
     void cancel_one_sinker(RuntimeState* const state);
 
     void incr_sinker(RuntimeState* state);
+
+    void attach(pipeline::PipelineObserverPtr observer) { _publisher.attach(observer); }
 
 private:
     using Mutex = bthread::Mutex;
@@ -194,6 +197,8 @@ private:
     std::atomic<int64_t> _request_sequence = 0;
     int64_t _sent_audit_stats_frequency = 1;
     int64_t _sent_audit_stats_frequency_upper_limit = 64;
+
+    pipeline::PipelinePublisher _publisher;
 };
 
 } // namespace starrocks::pipeline

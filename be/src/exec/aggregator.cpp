@@ -598,6 +598,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
     // is used to access these entries, so we must reset the _state_allocator along with the hash_map/hash_set.
     _state_allocator.reset();
+    _publisher.notify();
     return Status::OK();
 }
 
@@ -690,6 +691,9 @@ ChunkPtr Aggregator::poll_chunk_buffer() {
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     _limited_buffer->push(chunk);
+    if (!_limited_buffer->is_full()) {
+        _publisher.notify();
+    }
 }
 
 bool Aggregator::is_chunk_buffer_full() {
@@ -873,6 +877,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     ++_num_rows_processed;
     *chunk = std::move(result_chunk);
     _is_ht_eos = true;
+    _publisher.notify();
 
     return Status::OK();
 }
@@ -884,6 +889,7 @@ void Aggregator::process_limit(ChunkPtr* chunk) {
         COUNTER_SET(_agg_stat->rows_returned_counter, _limit);
         _is_ht_eos = true;
         LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
+        _publisher.notify();
     }
 }
 
@@ -1475,6 +1481,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
 
+        _publisher.notify();
         return Status::OK();
     }));
 
@@ -1556,6 +1563,8 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
+
+        _publisher.notify();
     });
 }
 

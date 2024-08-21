@@ -31,6 +31,7 @@ void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     _local_memory_usage += memory_usage;
     _full_chunk_queue.emplace(std::move(chunk));
     _memory_manager->update_memory_usage(memory_usage, num_rows);
+    notify();
 }
 
 // Used for PartitionExchanger.
@@ -49,7 +50,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     _partition_rows_num += size;
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, size);
-
+    notify();
     return Status::OK();
 }
 
@@ -71,6 +72,7 @@ Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& pa
 
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, num_rows);
+    notify();
     return Status::OK();
 }
 
@@ -105,6 +107,7 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     _memory_manager->update_memory_usage(-_local_memory_usage, -_partition_rows_num);
     _partition_rows_num = 0;
     _local_memory_usage = 0;
+    notify();
     return Status::OK();
 }
 
@@ -141,6 +144,10 @@ ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* stat
         size_t num_rows = chunk->num_rows();
         _memory_manager->update_memory_usage(-memory_usage, -num_rows);
         _local_memory_usage -= memory_usage;
+
+        if (_full_chunk_queue.empty()) {
+            notify();
+        }
         return chunk;
     }
 
@@ -178,6 +185,10 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         // NOTE: unpack column if `partition_chunk.chunk` constains const column
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
+    }
+
+    if (!_partition_rows_num) {
+        notify();
     }
     return chunk;
 }

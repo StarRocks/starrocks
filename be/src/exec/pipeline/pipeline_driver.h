@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -25,6 +26,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
@@ -453,6 +455,16 @@ public:
     // use `is_still_epoch_finishing` method to check whether the driver has changed yet.
     bool is_still_epoch_finishing() {
         return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
+    }
+
+    void observe_operator(const std::function<void(PipelineDriver*)>& call_fn) {
+        auto observer = std::make_shared<PipelineObserver>([this, call_fn]() { call_fn(this); });
+        if (nullptr != source_operator()) {
+            source_operator()->attach(observer);
+        }
+        if (nullptr != sink_operator()) {
+            sink_operator()->attach(observer);
+        }
     }
 
 protected:

@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "common/config.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -42,6 +44,11 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
                                     [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_poll_count, [this]() { return _blocked_driver_poller->poll_count(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_ready_count,
+                                    [this]() { return _blocked_driver_poller->ready_count(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_backup_count,
+                                    [this]() { return _blocked_driver_poller->backup_count(); });
 }
 
 void GlobalDriverExecutor::close() {
@@ -250,6 +257,16 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     driver->start_timers();
+
+    if (config::enable_pipeline_event_poller) {
+        driver->observe_operator([&](DriverRawPtr dr) {
+            // LOG(INFO) << "Driver event action:" << driver->to_readable_string()
+            //           << ", sink finished: " << driver->sink_operator()->is_finished()
+            //           << ", source finished: " << driver->source_operator()->is_finished()
+            //           << ", source output: " << driver->source_operator()->has_output();
+            _blocked_driver_poller->upgrade_to_blocked_driver(dr);
+        });
+    }
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);

@@ -17,8 +17,17 @@
 #include <variant>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/pipeline_observer.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
+
+Status AggregateBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    auto observer = PipelineObserver::create([&] { notify(); });
+    _aggregator->attch_observer(observer);
+    return Status::OK();
+}
 
 bool AggregateBlockingSourceOperator::has_output() const {
     return _aggregator->is_sink_complete() && !_aggregator->is_ht_eos();
@@ -29,7 +38,9 @@ bool AggregateBlockingSourceOperator::is_finished() const {
 }
 
 Status AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
-    return _aggregator->set_finished();
+    auto st = _aggregator->set_finished();
+    notify();
+    return st;
 }
 
 void AggregateBlockingSourceOperator::close(RuntimeState* state) {

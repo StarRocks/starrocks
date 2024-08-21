@@ -18,6 +18,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
@@ -39,7 +40,7 @@ using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
-class Operator {
+class Operator : public PipelinePublisher {
     friend class PipelineDriver;
     friend class StreamPipelineDriver;
 

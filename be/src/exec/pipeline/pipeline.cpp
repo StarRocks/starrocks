@@ -72,6 +72,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
              << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
 
     setup_pipeline_profile(state);
+    // LOG(INFO) << "Pipeline chains: " << to_readable_string();
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
         DriverPtr driver = nullptr;

@@ -28,6 +28,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
@@ -239,6 +240,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
+    DeferOp op = DeferOp([this] { notify(); });
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
     set_buffer_finished();
@@ -377,6 +379,9 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         }
         _is_io_task_running[chunk_source_index] = false;
     }
+    if (_num_running_io_tasks == 0) {
+        notify();
+    }
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
@@ -420,9 +425,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
 
-            DeferOp timer_defer([chunk_source]() {
+            DeferOp timer_defer([this, chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),
                             chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+                notify();
             });
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
@@ -473,6 +479,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         // TODO(hcf) set a proper retry times
         LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
                      << _io_task_retry_cnt;
+        if (_num_running_io_tasks == 0) {
+            notify();
+        }
         if (++_io_task_retry_cnt > 100) {
             return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
         }
@@ -491,6 +500,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     DeferOp defer([&]() {
         if (need_detach) {
             detach_chunk_source(chunk_source_index);
+        }
+        if (_morsel_queue->empty()) {
+            notify();
         }
     });
 

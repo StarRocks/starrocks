@@ -101,6 +101,9 @@ public:
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
     METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_poller_poll_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_poller_ready_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_poller_backup_count, MetricUnit::NOUNIT);
 
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);

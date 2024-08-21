@@ -34,6 +34,7 @@
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
@@ -281,7 +282,10 @@ public:
     int64_t limit() { return _limit; }
     bool needs_finalize() { return _needs_finalize; }
     bool is_ht_eos() { return _is_ht_eos; }
-    void set_ht_eos() { _is_ht_eos = true; }
+    void set_ht_eos() {
+        _is_ht_eos = true;
+        _publisher.notify();
+    }
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     int64_t num_input_rows() { return _num_input_rows; }
     int64_t num_rows_returned() { return _num_rows_returned; }
@@ -321,7 +325,10 @@ public:
     RuntimeProfile::Counter* hash_table_size() { return _agg_stat->hash_table_size; }
     RuntimeProfile::Counter* pass_through_row_count() { return _agg_stat->pass_through_row_count; }
 
-    void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
+    void sink_complete() {
+        _is_sink_complete.store(true, std::memory_order_release);
+        _publisher.notify();
+    }
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
@@ -396,11 +403,24 @@ public:
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
 
-    void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
+    void set_streaming_all_states(bool streaming_all_states) {
+        _streaming_all_states = streaming_all_states;
+        if (_streaming_all_states) {
+            _publisher.notify();
+        }
+    }
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
     HashTableKeyAllocator _state_allocator;
+
+    void attch_observer(pipeline::PipelineObserverPtr observer) { _publisher.attach(observer); }
+
+    Status set_finished() override {
+        auto st = ContextWithDependency::set_finished();
+        _publisher.notify();
+        return st;
+    }
 
 protected:
     AggregatorParamsPtr _params;
@@ -506,6 +526,8 @@ protected:
     bool _is_opened = false;
     bool _is_prepared = false;
     int64_t _agg_state_mem_usage = 0;
+
+    pipeline::PipelinePublisher _publisher;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);

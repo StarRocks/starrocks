@@ -16,10 +16,13 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <list>
 #include <memory>
 #include <mutex>
+#include <vector>
 
+#include "gutil/ref_counted.h"
 #include "pipeline_driver.h"
 #include "pipeline_driver_queue.h"
 #include "util/thread.h"
@@ -61,8 +64,15 @@ public:
 
     void iterate_immutable_driver(const IterateImmutableDriverFunc& call) const;
 
+    size_t poll_count() const { return _poll_count.load(); }
+    size_t ready_count() const { return _ready_count.load(); }
+    size_t backup_count() const { return _backup_count.load(); }
+
+    void upgrade_to_blocked_driver(const DriverRawPtr driver);
+
 private:
     void run_internal();
+    void backup_run_internal();
     PipelineDriverPoller(const PipelineDriverPoller&) = delete;
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
 
@@ -72,6 +82,11 @@ private:
 
     mutable std::shared_mutex _local_mutex;
     DriverList _local_blocked_drivers;
+
+    mutable std::mutex _backup_mutex;
+    DriverList _backup_drivers;
+    std::vector<uint64_t> _backup_drivers_wait_time;
+    scoped_refptr<Thread> _backup_thread;
 
     DriverQueue* _driver_queue;
     scoped_refptr<Thread> _polling_thread;
@@ -84,5 +99,8 @@ private:
     DriverList _parked_drivers;
 
     std::atomic<size_t> _blocked_driver_queue_len;
+    std::atomic<size_t> _poll_count = 0;
+    std::atomic<size_t> _backup_count = 0;
+    std::atomic<size_t> _ready_count = 0;
 };
 } // namespace starrocks::pipeline
