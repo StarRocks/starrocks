@@ -26,6 +26,7 @@ namespace starrocks::lake {
 
 class MetaFileBuilder;
 class TabletManager;
+class TabletWriter;
 
 class Rowset : public BaseRowset {
 public:
@@ -44,7 +45,8 @@ public:
     // Requires:
     //  - |tablet_mgr| and |tablet_metadata| is not nullptr
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
-    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
+                    size_t compaction_segment_limit);
 
     virtual ~Rowset();
 
@@ -76,7 +78,17 @@ public:
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
-    [[nodiscard]] int64_t num_segments() const { return metadata().segments_size(); }
+    // if _compaction_segment_limit is set > 0, it means only partial segments will be used
+    [[nodiscard]] int64_t num_segments() const {
+        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
+    }
+
+    // only used in compaction
+    [[nodiscard]] bool partial_segments_compaction() const { return _compaction_segment_limit > 0; }
+    // only used in compaction
+    [[nodiscard]] Status add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_compaction,
+                                                              TabletWriter* writer, uint64_t& uncompacted_num_rows,
+                                                              uint64_t& uncompacted_data_size);
 
     [[nodiscard]] int64_t num_rows() const override { return metadata().num_rows(); }
 
@@ -103,7 +115,8 @@ public:
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                                       bool fill_metadata_cache);
+                                       bool fill_metadata_cache,
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -117,13 +130,18 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    bool _parallel_load;
+    // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
+    // default is 0 means every segment will be used.
+    // only used for compaction
+    size_t _compaction_segment_limit;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i);
+        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;

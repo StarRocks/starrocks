@@ -93,5 +93,9 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 
+void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction,
+                                               RowsetMetadataPB& last_input_rowset);
+
 } // namespace lake
 } // namespace starrocks
