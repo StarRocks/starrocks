@@ -14,26 +14,43 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,9 +90,16 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
+import org.threeten.extra.PeriodDuration;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -88,15 +112,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     protected TableName tableName;
     protected Database db;
     protected Table table;
+    private boolean isSynchronous;
 
     public AlterJobExecutor() {
-
+        isSynchronous = true;
     }
 
     public void process(StatementBase statement, ConnectContext context) {
         visit(statement, context);
 
-        if (table instanceof OlapTable) {
+        if (isSynchronous && table instanceof OlapTable) {
             ((OlapTable) table).lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
@@ -114,8 +139,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         Database db = MetaUtils.getDatabase(context, tableName);
         Table table = MetaUtils.getTable(tableName);
 
-        if (table.getType() == Table.TableType.VIEW || table.getType() == Table.TableType.MATERIALIZED_VIEW) {
-            throw new SemanticException("The specified table [" + tableName + "] is not a table");
+        if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+            throw new SemanticException("Do not support alter non-native table/materialized-view[" + tableName + "]");
         }
 
         if (table instanceof OlapTable && ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
@@ -126,8 +151,38 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.db = db;
         this.table = table;
 
-        for (AlterClause alterClause : statement.getAlterClauseList()) {
-            visit(alterClause, context);
+        if (statement.hasSchemaChangeOp()) {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
+            try {
+                SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+                assert table instanceof OlapTable;
+                schemaChangeHandler.process(statement.getAlterClauseList(), db, (OlapTable) table);
+            } catch (UserException e) {
+                throw new AlterJobException(e.getMessage());
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
+            }
+
+            isSynchronous = false;
+        } else if (statement.hasRollupOp()) {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
+            try {
+                MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                        .getMaterializedViewHandler();
+                Preconditions.checkState(table instanceof OlapTable);
+                ErrorReport.wrapWithRuntimeException(() ->
+                        materializedViewHandler.process(statement.getAlterClauseList(), db, (OlapTable) table));
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
+            }
+
+            isSynchronous = false;
+        } else {
+            for (AlterClause alterClause : statement.getAlterClauseList()) {
+                visit(alterClause, context);
+            }
         }
         return null;
     }
@@ -273,7 +328,111 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        try {
+            Map<String, String> properties = clause.getProperties();
+            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.WRITE_QUORUM);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.INMEMORY);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+                if (table.isCloudNativeTable()) {
+                    Locker locker = new Locker();
+                    locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                    try {
+                        schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
+                    } finally {
+                        locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                    }
+
+                    isSynchronous = false;
+                } else {
+                    schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                            TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.REPLICATED_STORAGE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.BUCKET_SIZE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+                boolean isSuccess = schemaChangeHandler.updateBinlogConfigMeta(db, table.getId(),
+                        properties, TTabletMetaType.BINLOG_CONFIG);
+                if (!isSuccess) {
+                    throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                schemaChangeHandler.updateTableConstraint(db, tableName.getTbl(), properties);
+            } else {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                        if (olapTable.getLocation() != null) {
+                            ErrorReport.reportDdlException(
+                                    ErrorCode.ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL, olapTable.getName());
+                        }
+                        String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+                        GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                                .modifyTableColocate(db, olapTable, colocateGroup, false, null);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
+                    } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
+                        if (!olapTable.dynamicPartitionExists()) {
+                            try {
+                                DynamicPartitionUtil.checkInputDynamicPartitionProperties(
+                                        olapTable, properties, olapTable.getPartitionInfo());
+                            } catch (DdlException e) {
+                                // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                                throw new DdlException("Table " + db.getOriginName() + "." +
+                                        olapTable.getName() + " is not a dynamic partition table.");
+                            }
+                        }
+                        if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
+                            String colocateGroup = olapTable.getColocateGroup();
+                            if (colocateGroup != null) {
+                                throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
+                                        "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
+                            }
+                        }
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .modifyTableDynamicPartition(db, olapTable, properties);
+                    } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                        Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .modifyTableDefaultReplicationNum(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableReplicationNum(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else {
+                        schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                }
+
+                isSynchronous = false;
+            }
+        } catch (UserException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
         return null;
     }
 
@@ -472,8 +631,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
             try {
-                AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-                alterJobMgr.modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
+                modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
             }
@@ -481,6 +639,118 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             throw new AlterJobException(e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Batch update partitions' properties
+     * caller should hold the db lock
+     */
+    private void modifyPartitionsProperty(Database db,
+                                          OlapTable olapTable,
+                                          List<String> partitionNames,
+                                          Map<String, String> properties)
+            throws DdlException, AnalysisException {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+        }
+
+        for (String partitionName : partitionNames) {
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+        }
+
+        boolean hasInMemory = properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY);
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        // get value from properties here
+        // 1. data property
+        PeriodDuration periodDuration = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (!partitionInfo.isRangePartition()) {
+                throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
+            }
+            if (Strings.isNotBlank(storageCoolDownTTL)) {
+                periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            }
+        }
+        DataProperty newDataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
+        // 2. replication num
+        short newReplicationNum =
+                PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);
+        // 3. in memory
+        boolean newInMemory = PropertyAnalyzer.analyzeBooleanProp(properties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // 4. tablet type
+        TTabletType tTabletType =
+                PropertyAnalyzer.analyzeTabletType(properties);
+
+        // modify meta here
+        for (String partitionName : partitionNames) {
+            Partition partition = olapTable.getPartition(partitionName);
+            // 1. date property
+
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+
+            if (newDataProperty != null) {
+                // for storage_cooldown_ttl
+                if (periodDuration != null) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+                    PartitionKey partitionKey = range.upperEndpoint();
+                    if (partitionKey.isMaxValue()) {
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+                    } else {
+                        String stringUpperValue = partitionKey.getKeys().get(0).getStringValue();
+                        DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                        LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                        LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                        long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+                    }
+                }
+                partitionInfo.setDataProperty(partition.getId(), newDataProperty);
+            }
+            // 2. replication num
+            if (newReplicationNum != (short) -1) {
+                if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                    throw new DdlException(
+                            "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
+                }
+                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
+                // update default replication num if this table is unpartitioned table
+                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    olapTable.setReplicationNum(newReplicationNum);
+                }
+            }
+            // 3. in memory
+            boolean oldInMemory = partitionInfo.getIsInMemory(partition.getId());
+            if (hasInMemory && (newInMemory != oldInMemory)) {
+                partitionInfo.setIsInMemory(partition.getId(), newInMemory);
+            }
+            // 4. tablet type
+            if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
+                partitionInfo.setTabletType(partition.getId(), tTabletType);
+            }
+            ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
+                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+            modifyPartitionInfos.add(info);
+        }
+
+        // log here
+        BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
     }
 
     // Alter View

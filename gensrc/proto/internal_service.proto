@@ -241,6 +241,8 @@ message PTabletWriterAddChunkRequest {
     // wait all sender close before rpc returning
     // this is used for automatic partition creation
     optional bool wait_all_sender_close = 11 [default = false];
+    // for multi olap table sink
+    optional int64 sink_id = 12 [default = 0];
 };
 
 message PTabletWriterAddChunksRequest {
@@ -272,6 +274,7 @@ message PTabletWriterAddSegmentRequest {
     optional bool eos = 5;
     optional int64 num_segments = 6;
     optional SegmentPB segment = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterAddSegmentResult {
@@ -290,6 +293,7 @@ message PTabletWriterCancelRequest {
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
     optional string reason = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterCancelResult {

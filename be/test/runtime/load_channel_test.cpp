@@ -66,14 +66,15 @@ public:
 
         // init _open_request
         _open_request.set_is_lake_tablet(true);
-        _open_request.mutable_id()->set_hi(456789);
-        _open_request.mutable_id()->set_lo(987654);
+        _open_request.mutable_id()->set_hi(0);
+        _open_request.mutable_id()->set_lo(0);
         _open_request.set_index_id(kIndexId);
         _open_request.set_txn_id(kTxnId);
         _open_request.set_num_senders(2);
         _open_request.set_need_gen_rollup(false);
         _open_request.set_load_channel_timeout_s(10);
         _open_request.set_is_vectorized(true);
+        _open_request.set_sink_id(0);
 
         _open_request.mutable_schema()->set_db_id(100);
         _open_request.mutable_schema()->set_table_id(101);
@@ -267,6 +268,9 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
         add_chunk_request.set_sender_id(0);
         add_chunk_request.set_eos(false);
         add_chunk_request.set_packet_seq(0);
+        add_chunk_request.mutable_id()->set_hi(0);
+        add_chunk_request.mutable_id()->set_lo(0);
+        add_chunk_request.set_sink_id(0);
 
         ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
         add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
@@ -344,6 +348,9 @@ TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
             add_chunk_request.set_sender_id(sender_id);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(i);
+            add_chunk_request.mutable_id()->set_hi(0);
+            add_chunk_request.mutable_id()->set_lo(0);
+            add_chunk_request.set_sink_id(0);
 
             for (int j = 0; j < kChunkSize; j++) {
                 int64_t tablet_id = 10086 + (j / kChunkSizePerTablet);
@@ -409,6 +416,9 @@ TEST_F(LoadChannelTestForLakeTablet, test_abort) {
             add_chunk_request.set_sender_id(0);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(packet_seq++);
+            add_chunk_request.mutable_id()->set_hi(0);
+            add_chunk_request.mutable_id()->set_lo(0);
+            add_chunk_request.set_sink_id(0);
 
             for (int i = 0; i < kChunkSize; i++) {
                 int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -462,7 +472,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         open_request.set_is_incremental(true);
         _load_channel->open(nullptr, open_request, &open_response, nullptr);
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
-        ch = _load_channel->get_tablets_channel(kIndexId);
+        ch = _load_channel->get_tablets_channel(TabletsChannelKey(open_request.id(), 0, kIndexId));
         ASSERT_NE(nullptr, ch.get());
         // not a local tablet channel
         ASSERT_EQ(nullptr, dynamic_cast<LocalTabletsChannel*>(ch.get()));
@@ -476,7 +486,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         _load_channel->open(nullptr, open_request, &open_response, nullptr);
         EXPECT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
 
-        auto ch2 = _load_channel->get_tablets_channel(kIndexId);
+        auto ch2 = _load_channel->get_tablets_channel(TabletsChannelKey(open_request.id(), 0, kIndexId));
         ASSERT_NE(nullptr, ch2.get());
         // the channels are the same
         ASSERT_EQ(ch, ch2);
@@ -602,6 +612,9 @@ TEST_F(LoadChannelTestForLakeTablet, test_final_profile) {
         add_chunk_request.set_sender_id(0);
         add_chunk_request.set_eos(true);
         add_chunk_request.set_packet_seq(0);
+        add_chunk_request.mutable_id()->set_hi(0);
+        add_chunk_request.mutable_id()->set_lo(0);
+        add_chunk_request.set_sink_id(0);
 
         ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
         add_chunk_request.mutable_chunk()->Swap(&chunk_pb);

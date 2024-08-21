@@ -742,10 +742,13 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     RandomAccessFileOptions opts;
-    auto& meta = params.op_write.del_encryption_metas(del_id);
-    if (!meta.empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
-        opts.encryption_info = std::move(info);
+    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
+        // When upgrade from old version, `del_encryption_metas` could be empty.
+        auto& meta = params.op_write.del_encryption_metas(del_id);
+        if (!meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
+            opts.encryption_info = std::move(info);
+        }
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());

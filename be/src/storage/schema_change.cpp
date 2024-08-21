@@ -888,7 +888,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
         }
         VLOG(3) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
                 << " version is:" << max_rowset->end_version();
-        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
+        new_tablet->modify_rowsets_without_lock(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
         new_tablet->set_cumulative_layer_point(-1);
         new_tablet->save_meta();
         for (auto& rowset : rowsets_to_delete) {

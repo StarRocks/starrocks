@@ -611,7 +611,8 @@ Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vecto
     return Status::OK();
 }
 
-Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
+Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+                                    bool is_version_overwrite, bool is_double_write) {
     auto span = Tracer::Instance().start_trace("rowset_commit");
     auto scope_span = trace::Scope(span);
     if (_error) {
@@ -635,8 +636,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                          << " txn_id: " << rowset->txn_id();
             _ignore_rowset_commit(version, rowset);
             return Status::OK();
-        } else if (version > _edit_version_infos.back()->version.major_number() + 1) {
-            if (_pending_commits.size() >= config::tablet_max_pending_versions) {
+        } else if (version > _edit_version_infos.back()->version.major_number() + 1 && !is_version_overwrite) {
+            // for double write tablet, no need to limit pending rowset
+            if (_pending_commits.size() >= config::tablet_max_pending_versions && !is_double_write) {
                 // there must be something wrong, return error rather than accepting more commits
                 string msg = strings::Substitute(
                         "rowset commit failed too many pending rowsets tablet:$0 version:$1 txn_id: $2 #pending:$3",
@@ -3266,7 +3268,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     rapidjson::Value last_version_value;
     std::string last_version_str =
             strings::Substitute("$0_$1", last_version.major_number(), last_version.minor_number());
-    rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
+    last_version_value.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
     root.AddMember("last_version", last_version_value, root.GetAllocator());
 
     rapidjson::Document rowset_details;

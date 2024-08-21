@@ -1898,7 +1898,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         try:
             if params:
-                cursor.execute(query, ['2'])
+                cursor.execute(query, params)
             else:
                 cursor.execute(query)
             cursor.fetchall()
@@ -1945,3 +1945,31 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(res["status"], "show schema change task error")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
+
+    def wait_table_rowcount_not_empty(self, table, time_out=300):
+        times = 0
+        rc = 0
+        sql = 'show partitions from ' + table
+        while times < time_out and times < time_out:
+            result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
+            if len(result["result"]) > 0:
+                rc = int(result["result"][0][-4])
+                log.info(rc)
+                if rc > 0:
+                    break
+            time.sleep(1)
+            times += 1
+        tools.assert_true(rc > 0, "wait row count > 0 error, timeout 300s")
+
+    def assert_cache_select_is_success(self, query):
+        """
+        Check cache select is success, make sure that read_cache_size + write_cache_size > 0
+        """
+        res = self.execute_sql(query,True,)
+        result = res["result"][0]
+        # remove unit
+        read_cache_size = int(result[0].replace("B", "").replace("KB", ""))
+        write_cache_size = int(result[1].replace("B", "").replace("KB", ""))
+        tools.assert_true(read_cache_size + write_cache_size > 0, "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")

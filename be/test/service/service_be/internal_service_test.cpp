@@ -65,7 +65,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
         r->set_txn_id(1000);
         r->set_index_id(2000);
         r->set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;
@@ -114,7 +114,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         r->set_txn_id(1000);
         r->set_index_id(2000);
         r->set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;
@@ -128,7 +128,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         req.set_txn_id(1000);
         req.set_index_id(2000);
         req.set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunkRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunkRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;

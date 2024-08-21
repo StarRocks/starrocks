@@ -38,9 +38,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
@@ -104,6 +106,7 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
@@ -166,6 +169,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -302,7 +306,12 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
+                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
+        } else {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        }
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -520,6 +529,11 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
+
+                        if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
+                            processQueryScopeHint();
+                        }
+
                         try {
                             execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
                         } catch (SemanticException e) {
@@ -558,7 +572,8 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if (isQuery && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+            if ((isQuery || parsedStmt instanceof InsertStmt)
+                    && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
                     String originSql = origStmt.originStmt.trim()
@@ -741,19 +756,6 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(context.getState().getErrorMessage());
-            }
-
-            if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
@@ -1038,7 +1040,7 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill(), "killed by kill statement : " + originStmt);
+            killCtx.kill(killStmt.isConnectionKill(), "killed manually: " + originStmt.getOrigStmt());
         }
         context.getState().setOk();
     }
@@ -1717,7 +1719,7 @@ public class StmtExecutor {
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (DdlException e) {
+        } catch (DdlException | AlterJobException e) {
             // let StmtExecutor.execute catch this exception
             // which will set error as ANALYSIS_ERR
             throw e;
@@ -1728,7 +1730,7 @@ public class StmtExecutor {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
-            context.getState().setError("Unexpected exception: " + e.getMessage());
+            context.getState().setError(e.getMessage());
         }
     }
 
@@ -2076,6 +2078,7 @@ public class StmtExecutor {
                         label,
                         database.getFullName(),
                         targetTable.getId(),
+                        transactionId,
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
@@ -2267,12 +2270,38 @@ public class StmtExecutor {
                         Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 txnStatus = TransactionStatus.ABORTED;
             } else {
+                InsertTxnCommitAttachment attachment = null;
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    if (insertStmt.isVersionOverwrite()) {
+                        Map<Long, Long> partitionVersionMap = Maps.newHashMap();
+                        Map<PlanNodeId, ScanNode> scanNodeMap = execPlan.getFragments().get(0).collectScanNodes();
+                        for (Map.Entry<PlanNodeId, ScanNode> entry : scanNodeMap.entrySet()) {
+                            if (entry.getValue() instanceof OlapScanNode) {
+                                OlapScanNode olapScanNode = (OlapScanNode) entry.getValue();
+                                partitionVersionMap.putAll(olapScanNode.getScanPartitionVersions());
+                            }
+                        }
+                        Preconditions.checkState(partitionVersionMap.size() <= 1);
+                        if (partitionVersionMap.size() == 1) {
+                            attachment = new InsertTxnCommitAttachment(
+                                    loadedRows, partitionVersionMap.values().iterator().next());
+                        } else if (partitionVersionMap.size() == 0) {
+                            attachment = new InsertTxnCommitAttachment(loadedRows);
+                        }
+                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId, partitionVersionMap);
+                    } else {
+                        attachment = new InsertTxnCommitAttachment(loadedRows);
+                    }
+                } else {
+                    attachment = new InsertTxnCommitAttachment(loadedRows);
+                }
                 VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        new InsertTxnCommitAttachment(loadedRows),
+                        attachment,
                         jobDeadLineMs - System.currentTimeMillis());
 
                 long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
@@ -2510,7 +2539,7 @@ public class StmtExecutor {
             return;
         }
         String sql;
-        if (parsedStmt.needAuditEncryption()) {
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;

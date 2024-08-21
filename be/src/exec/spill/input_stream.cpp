@@ -14,6 +14,8 @@
 
 #include "exec/spill/input_stream.h"
 
+#include <glog/logging.h>
+
 #include <algorithm>
 #include <memory>
 #include <mutex>
@@ -121,26 +123,34 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(workgroup::YieldCo
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {}
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {
+        for (const auto& chunk : _chunks) {
+            _total_rows += chunk->num_rows();
+        }
+    }
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
     void close() override{};
 
 private:
-    size_t read_idx{};
+    size_t _total_rows{};
+    size_t _read_rows{};
+    size_t _read_idx{};
     std::vector<ChunkPtr> _chunks;
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
     RACE_DETECT(detect_get_next);
-    if (read_idx >= _chunks.size()) {
+    if (_read_idx >= _chunks.size()) {
+        DCHECK_EQ(_total_rows, _read_rows);
         return Status::EndOfFile("eos");
     }
     // TODO: make ChunkPtr could convert to ChunkUniquePtr to avoid unused memory copy
-    auto res = std::move(_chunks[read_idx++])->clone_unique();
-    _chunks[read_idx - 1].reset();
+    auto res = std::move(_chunks[_read_idx++])->clone_unique();
+    _read_rows += res->num_rows();
+    _chunks[_read_idx - 1].reset();
 
     return res;
 }
@@ -154,7 +164,7 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+InputStreamPtr SpillInputStream::as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller) {
     return std::make_shared<RawChunkInputStream>(chunks, spiller);
 }
 
@@ -319,7 +329,7 @@ public:
 
     ~OrderedInputStream() override = default;
 
-    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
+    Status init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
@@ -341,7 +351,7 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
+Status OrderedInputStream::init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
                                 Spiller* spiller) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     DCHECK(!_input_streams.empty());
@@ -459,7 +469,7 @@ StatusOr<InputStreamPtr> BlockGroupSet::as_unordered_stream(const SerdePtr& serd
     }
     std::vector<BlockPtr> blocks;
     // collect block for each group
-    for (auto group : _groups) {
+    for (const auto& group : _groups) {
         blocks.insert(blocks.end(), group->blocks().begin(), group->blocks().end());
     }
     auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde, read_options);
@@ -489,9 +499,17 @@ StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGr
         auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
         streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
     }
-    auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);
-    RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
-    return stream;
+
+    InputStreamPtr res;
+    if (streams.empty() || state->is_cancelled()) {
+        res = std::make_shared<RawChunkInputStream>(std::vector<ChunkPtr>(), spiller);
+    } else {
+        auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);
+        RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
+        res = std::move(stream);
+    }
+
+    return res;
 }
 
 } // namespace starrocks::spill

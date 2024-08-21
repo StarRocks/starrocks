@@ -80,6 +80,7 @@ Status BlockSpillOutputDataStream::append(RuntimeState* state, const std::vector
                                           size_t write_num_rows) {
     // acquire block if current block is nullptr or full
     RETURN_IF_ERROR(_prepare_block(state, total_write_size));
+    _append_rows += write_num_rows;
     {
         auto write_io_timer = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), write_io_timer);
         SCOPED_TIMER(write_io_timer);

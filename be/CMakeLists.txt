@@ -598,6 +598,12 @@ endforeach()
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
 
+if (CLANG_TIDY_PATH)
+    # enable clang-tidy check for all source code files
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -960,14 +966,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
 endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
-# static link gcc's lib
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${STARROCKS_DEPENDENCIES}
-    -static-libstdc++
-    -static-libgcc
-    -lresolv
-)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
 
+set(BUILD_FOR_SANITIZE "OFF")
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     message("use jemalloc")
@@ -978,19 +979,29 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     else()
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
     endif()
+    set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
+    set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
+if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+    # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
+    # otherwise do static link gcc's lib
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
+endif()
+
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    -lresolv -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on

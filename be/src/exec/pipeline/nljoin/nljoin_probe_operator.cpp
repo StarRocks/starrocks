@@ -277,7 +277,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
 }
 
 void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
-                                                  std::function<void(bool, size_t, size_t)> call) {
+                                                  const std::function<void(bool, size_t, size_t)>& call) {
     if (_num_build_chunks() == 1) {
         // Multiple probe rows with one build chunk
         size_t num_build_rows = _cross_join_context->num_build_rows();

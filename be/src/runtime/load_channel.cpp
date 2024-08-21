@@ -111,10 +111,10 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     ClosureGuard done_guard(done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    int64_t index_id = request.index_id();
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
     Status st = Status::OK();
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsyncDeltaWriter,
         // it will block the bthread, so we put its destructor outside the lock.
@@ -127,23 +127,22 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         if (_row_desc == nullptr) {
             _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc());
         }
-        auto it = _tablets_channels.find(index_id);
+        auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
-            TabletsChannelKey key(request.id(), index_id);
             if (is_lake_tablet) {
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
             if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({index_id, std::move(channel)});
+                _tablets_channels.insert({key, std::move(channel)});
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
             st = it->second->incremental_open(request, response, _schema);
         }
     }
-    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
+    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << key << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
     response->mutable_status()->add_error_msgs(std::string(st.message()));
 
@@ -156,10 +155,13 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    auto channel = get_tablets_channel(request.index_id());
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
+    auto channel = get_tablets_channel(key);
     if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
     channel->add_chunk(chunk, request, response);
@@ -220,10 +222,13 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _num_segment++;
-    auto channel = get_tablets_channel(request->index_id());
+    TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());
+    auto channel = get_tablets_channel(key);
     if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
     auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
@@ -253,16 +258,17 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
-    auto channel = get_tablets_channel(index_id);
+void LoadChannel::abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids,
+                        const std::string& reason) {
+    auto channel = get_tablets_channel(key);
     if (channel != nullptr) {
         channel->abort(tablet_ids, reason);
     }
 }
 
-void LoadChannel::remove_tablets_channel(int64_t index_id) {
+void LoadChannel::remove_tablets_channel(const TabletsChannelKey& key) {
     std::unique_lock l(_lock);
-    _tablets_channels.erase(index_id);
+    _tablets_channels.erase(key);
     if (_tablets_channels.empty()) {
         l.unlock();
         _closed.store(true);
@@ -271,9 +277,9 @@ void LoadChannel::remove_tablets_channel(int64_t index_id) {
     }
 }
 
-std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_id) {
+std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(const TabletsChannelKey& key) {
     std::lock_guard l(_lock);
-    auto it = _tablets_channels.find(index_id);
+    auto it = _tablets_channels.find(key);
     if (it != _tablets_channels.end()) {
         return it->second;
     } else {

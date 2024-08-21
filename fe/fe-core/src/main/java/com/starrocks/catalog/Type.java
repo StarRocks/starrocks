@@ -39,11 +39,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -573,7 +573,7 @@ public abstract class Type implements Cloneable {
     }
 
     protected abstract String toTypeString(int depth);
-    
+
     /**
      * Same as toSql() but adds newlines and spaces for better readability of nested types.
      */
@@ -1701,14 +1701,14 @@ public abstract class Type implements Cloneable {
     }
 
     // getInnermostType() is only used for array
-    public static Type getInnermostType(Type type) throws AnalysisException {
+    public static Type getInnermostType(Type type) {
         if (type.isScalarType() || type.isStructType() || type.isMapType()) {
             return type;
         }
         if (type.isArrayType()) {
             return getInnermostType(((ArrayType) type).getItemType());
         }
-        throw new AnalysisException("Cannot get innermost type of '" + type + "'");
+        throw new SemanticException("Cannot get innermost type of '" + type + "'");
     }
 
     public String canonicalName() {

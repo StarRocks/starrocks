@@ -68,10 +68,21 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
                 partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
+            } else if (txnState.isVersionOverwrite()) {
+                // overwrite empty partition, it's next version will less than overwrite version
+                // otherwise, it's next version will not change
+                if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
+                    partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                    partition.setNextDataVersion(partition.getNextVersion());
+                }
+            } else if (partitionCommitInfo.isDoubleWrite()) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                partition.setNextDataVersion(partition.getNextVersion());
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
                 partition.setNextDataVersion(partition.getNextDataVersion() + 1);
             }
+            LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
         }
     }
 
@@ -162,12 +173,23 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             } // end for indices
 
             long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
-            partition.setDataVersion(partitionCommitInfo.getDataVersion());
-            if (partitionCommitInfo.getVersionEpoch() > 0) {
-                partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+            if (txnState.isVersionOverwrite()) {
+                if (partition.getVisibleVersion() < version) {
+                    partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                    partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                    if (partitionCommitInfo.getVersionEpoch() > 0) {
+                        partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                    }
+                    partition.setVersionTxnType(txnState.getTransactionType());
+                }
+            } else {
+                partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                if (partitionCommitInfo.getVersionEpoch() > 0) {
+                    partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
+                }
+                partition.setVersionTxnType(txnState.getTransactionType());
             }
-            partition.setVersionTxnType(txnState.getTransactionType());
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {

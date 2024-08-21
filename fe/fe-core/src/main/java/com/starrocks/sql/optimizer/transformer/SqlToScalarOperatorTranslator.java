@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -293,8 +294,12 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visit(ParseNode node, Context context) {
             Expr expr = (Expr) node;
-            if (expressionMapping.get(expr) != null && !expr.isConstant()) {
-                return expressionMapping.get(expr);
+            if (!expressionMapping.getExpressionToColumns().isEmpty() &&
+                    !expr.isConstant()) {
+                ScalarOperator res = Utils.getValueIfExists(expressionMapping.getExpressionToColumns(), expr);
+                if (res != null) {
+                    return res;
+                }
             }
 
             return node.accept(this, context);
@@ -870,7 +875,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
 
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
-                    node.getDictionaryTxnId(), node.getKeySize());
+                    node.getDictionaryTxnId(), node.getKeySize(), node.getNullIfNotExist());
             return op;
         }
     }

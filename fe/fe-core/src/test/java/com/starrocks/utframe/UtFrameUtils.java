@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
@@ -82,9 +83,14 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -109,7 +115,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -136,7 +141,6 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
@@ -144,12 +148,11 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -674,16 +677,7 @@ public class UtFrameUtils {
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
-        QueryStatement queryStmt = (QueryStatement) statementBase;
-        String digest = SqlDigestBuilder.build(queryStmt);
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(digest.getBytes());
-            return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
+        return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
@@ -1059,6 +1053,7 @@ public class UtFrameUtils {
     public static class PseudoImage {
         private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
+        private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
         public static void setUpImageVersion() {
@@ -1071,10 +1066,16 @@ public class UtFrameUtils {
         public PseudoImage() throws IOException {
             assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter.setOutputStream(buffer);
         }
 
         public DataOutputStream getDataOutputStream() {
             return buffer;
+        }
+
+        public ImageWriter getImageWriter() {
+            return imageWriter;
         }
 
         /**
@@ -1082,6 +1083,17 @@ public class UtFrameUtils {
          */
         public DataInputStream getDataInputStream() throws IOException {
             return new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+        }
+
+        public SRMetaBlockReader getMetaBlockReader() throws IOException {
+            JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                    0, buffer.getLength())));
+            return new SRMetaBlockReaderV2(jsonReader);
+        }
+
+        public JsonReader getJsonReader() throws IOException {
+            return new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                    0, buffer.getLength())));
         }
     }
 
@@ -1279,6 +1291,9 @@ public class UtFrameUtils {
 
         // Enable mv refresh insert strict in test
         Config.enable_mv_refresh_insert_strict = true;
+
+        // Enable mv rewrite in mv refresh by default
+        Config.enable_mv_refresh_query_rewrite = true;
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;

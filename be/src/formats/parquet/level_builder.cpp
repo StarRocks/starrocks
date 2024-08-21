@@ -49,11 +49,11 @@ inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     return raw_column;
 }
 
-LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, const std::string& timezone,
+LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, std::string timezone,
                            bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
         : _type_desc(std::move(type_desc)),
           _root(std::move(root)),
-          _timezone(timezone),
+          _timezone(std::move(timezone)),
           _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
           _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {}
 

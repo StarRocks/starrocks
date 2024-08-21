@@ -34,6 +34,7 @@
 
 #include "runtime/exec_env.h"
 
+#include <cctype>
 #include <memory>
 #include <thread>
 
@@ -55,6 +56,8 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -435,10 +438,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor =
-            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
     _connector_scan_executor->initialize(connector_num_io_threads);
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -505,9 +507,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor = new workgroup::ScanExecutor(
+            std::move(scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
@@ -764,6 +766,82 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
+}
+
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+void ExecEnv::try_release_resource_before_core_dump() {
+    std::set<std::string> modules;
+    bool release_all = false;
+    if (config::try_release_resource_before_core_dump.value() == "*") {
+        release_all = true;
+    } else {
+        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
+                                       &parse_resource_str, &modules);
+    }
+
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
+
+    if (_connector_scan_executor != nullptr && need_release("connector_scan_executor")) {
+        _connector_scan_executor->close();
+        LOG(INFO) << "close connector scan executor";
+    }
+    if (_scan_executor != nullptr && need_release("olap_scan_executor")) {
+        _scan_executor->close();
+        LOG(INFO) << "close olap scan executor";
+    }
+    if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
+        _thread_pool->shutdown();
+        LOG(INFO) << "shutdown non-pipeline scan thread pool";
+    }
+    if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
+        _pipeline_prepare_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline prepare thread pool";
+    }
+    if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
+        _pipeline_sink_io_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline sink io thread pool";
+    }
+    if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
+        _query_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
+        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
+        LOG(INFO) << "stop task worker pool for publish version";
+    }
+    if (_wg_driver_executor != nullptr && need_release("wg_driver_executor")) {
+        _wg_driver_executor->close();
+        LOG(INFO) << "stop worker group driver executor";
+    }
+    auto* storage_page_cache = StoragePageCache::instance();
+    if (storage_page_cache != nullptr && need_release("data_cache")) {
+        storage_page_cache->set_capacity(0);
+        LOG(INFO) << "release storage page cache memory";
+    }
+    if (_block_cache != nullptr && need_release("data_cache")) {
+        // TODO: Currently, block cache don't support shutdown now,
+        //  so here will temporary use update_mem_quota instead to release memory.
+        (void)_block_cache->update_mem_quota(0, false);
+        LOG(INFO) << "release block cache";
+    }
 }
 
 } // namespace starrocks

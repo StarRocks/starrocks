@@ -237,6 +237,8 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -277,6 +279,7 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 
     @Override

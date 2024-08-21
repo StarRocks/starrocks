@@ -662,6 +662,7 @@ public class ScalarOperatorToExpr {
             dictionaryGetExpr.setDictionaryId(operator.getDictionaryId());
             dictionaryGetExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
             dictionaryGetExpr.setKeySize(operator.getKeySize());
+            dictionaryGetExpr.setNullIfNotExist(operator.getNullIfNotExist());
             return dictionaryGetExpr;
         }
     }

@@ -69,7 +69,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -88,7 +87,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvPartialPartitionPredicates;
 
@@ -98,6 +96,7 @@ public class MvRewritePreprocessor {
     private final ColumnRefFactory queryColumnRefFactory;
     private final OptimizerContext context;
     private final ColumnRefSet requiredColumns;
+    private final QueryMaterializationContext queryMaterializationContext;
 
     public MvRewritePreprocessor(ConnectContext connectContext,
                                  ColumnRefFactory queryColumnRefFactory,
@@ -107,6 +106,7 @@ public class MvRewritePreprocessor {
         this.queryColumnRefFactory = queryColumnRefFactory;
         this.context = context;
         this.requiredColumns = requiredColumns;
+        this.queryMaterializationContext = context.getQueryMaterializationContext();
     }
 
     @VisibleForTesting
@@ -224,23 +224,17 @@ public class MvRewritePreprocessor {
         }
     }
 
-    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
-                !sessionVariable.isEnableMaterializedViewRewrite()) {
-            return;
-        }
-
+    public void prepare(OptExpression queryOptExpression) {
         try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
             // use a new context rather than reuse the existed context to avoid cache conflict.
-            QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
+                // add into queryMaterializationContext for later use
+                this.queryMaterializationContext.addRelatedMVs(relatedMVs);
 
                 // 2. choose best related mvs by user's config or related mv limit
                 Set<MaterializedView> selectedRelatedMVs;
@@ -270,13 +264,8 @@ public class MvRewritePreprocessor {
                 if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
-                    context.setQueryMaterializationContext(queryMaterializationContext);
                     connectContext.setQueryMVContext(queryMaterializationContext);
                 }
-
-                // initialize mv rewrite strategy finally
-                MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
-                logMVPrepare(connectContext, "Mv rewrite strategy: {}", strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());
@@ -742,7 +731,7 @@ public class MvRewritePreprocessor {
             MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo(mv, true);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
@@ -766,7 +755,7 @@ public class MvRewritePreprocessor {
                 if (materializationContext == null) {
                     continue;
                 }
-                context.addCandidateMvs(materializationContext);
+                queryMaterializationContext.addValidCandidateMV(materializationContext);
                 logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());

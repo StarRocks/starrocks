@@ -38,6 +38,7 @@
 #include <string>
 #include <vector>
 
+#include "agent/agent_common.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -76,6 +77,8 @@ public:
     //
     // Returns nullptr if `type` is not a valid value of `TTaskType::type`.
     ThreadPool* get_thread_pool(int type) const;
+
+    void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(AgentServer);
 

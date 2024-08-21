@@ -78,12 +78,13 @@ static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
     return _get_column_start_offset(last_column) + last_column.total_compressed_size;
 }
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
-                       io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+                       const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
+                       const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
-          _file_mtime(file_mtime),
+          _datacache_options(datacache_options),
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
@@ -102,8 +103,8 @@ std::string FileReader::_build_metacache_key() {
     // While some data source, such as Hudi, have no modification time because their files
     // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
     // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
-    if (_file_mtime > 0) {
-        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+    if (_datacache_options.modification_time > 0) {
+        uint32_t mtime_s = (_datacache_options.modification_time >> 9) & 0x00000000FFFFFFFF;
         memcpy(data + 10, &mtime_s, sizeof(mtime_s));
     } else {
         uint32_t size = _file_size;
@@ -157,6 +158,15 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
 
 FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
+}
+
+Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges) {
+    int64_t dummy_offset = 0;
+    for (auto& r : _row_group_readers) {
+        r->collect_io_ranges(io_ranges, &dummy_offset, ColumnIOType::PAGE_INDEX);
+        r->collect_io_ranges(io_ranges, &dummy_offset, ColumnIOType::PAGES);
+    }
+    return Status::OK();
 }
 
 Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
@@ -248,7 +258,7 @@ Status FileReader::_get_footer() {
         });
         auto deleter = [capture]() { delete capture; };
         WriteCacheOptions options;
-        options.evict_probability = _scanner_ctx->datacache_evict_probability;
+        options.evict_probability = _datacache_options.datacache_evict_probability;
         st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
@@ -635,7 +645,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
     _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;
-    _group_reader_param.sb_stream = nullptr;
+    _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
@@ -694,36 +704,10 @@ Status FileReader::_init_group_readers() {
 
     if (!_row_group_readers.empty()) {
         // prepare first row group
-        RETURN_IF_ERROR(_prepare_cur_row_group());
+        RETURN_IF_ERROR(_row_group_readers[_cur_row_group_idx]->prepare());
     }
 
     return Status::OK();
-}
-
-Status FileReader::_prepare_cur_row_group() {
-    auto& r = _row_group_readers[_cur_row_group_idx];
-    // if coalesce read enabled, we have to
-    // 0. clear last group memory
-    // 1. allocate shared buffered input stream and
-    // 2. collect io ranges of every row group reader.
-    // 3. set io ranges to the stream.
-    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
-        int64_t end_offset = 0;
-        r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
-        int32_t counter = _scanner_ctx->lazy_column_coalesce_counter->load(std::memory_order_relaxed);
-        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
-            _scanner_ctx->stats->group_active_lazy_coalesce_together += 1;
-        } else {
-            _scanner_ctx->stats->group_active_lazy_coalesce_seperately += 1;
-        }
-        r->set_end_offset(end_offset);
-        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges, counter >= 0));
-        _group_reader_param.sb_stream = _sb_stream;
-    }
-
-    // prepare row group
-    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
@@ -749,7 +733,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                 _cur_row_group_idx++;
                 if (_cur_row_group_idx < _row_group_size) {
                     // prepare new group
-                    RETURN_IF_ERROR(_prepare_cur_row_group());
+                    RETURN_IF_ERROR(_row_group_readers[_cur_row_group_idx]->prepare());
                 }
 
                 return Status::OK();

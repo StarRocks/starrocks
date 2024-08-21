@@ -450,13 +450,9 @@ public class MvUtils {
                 || (operator instanceof LogicalAggregationOperator);
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
-            MaterializedView mv,
-            String sql,
-            ColumnRefFactory columnRefFactory,
-            ConnectContext connectContext,
-            OptimizerConfig optimizerConfig,
-            boolean inlineView) {
+    public static StatementBase parse(MaterializedView mv,
+                                      String sql,
+                                      ConnectContext connectContext) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -467,6 +463,14 @@ public class MvUtils {
             LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
             return null;
         }
+        return mvStmt;
+    }
+
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
+                                                                               ColumnRefFactory columnRefFactory,
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig,
+                                                                               boolean inlineView) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
@@ -1343,12 +1347,13 @@ public class MvUtils {
         }
     }
 
-    public static ParseNode getQueryAst(String query) {
+    public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
         try {
             List<StatementBase> statementBases =
-                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+                    com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
             StatementBase stmt = statementBases.get(0);
+            Analyzer.analyze(stmt, connectContext);
             return stmt;
         } catch (ParsingException parsingException) {
             LOG.warn("Parse query {} failed:{}", query, parsingException);
@@ -1404,6 +1409,10 @@ public class MvUtils {
     public static boolean isStr2Date(Expr expr) {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+
+    public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {

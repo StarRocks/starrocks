@@ -92,6 +92,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         '''
         default_configs = [
             "'enable_mv_refresh_insert_strict' = 'true'",
+            "'enable_mv_refresh_query_rewrite' = 'true'",
         ]
 
         for config in default_configs:

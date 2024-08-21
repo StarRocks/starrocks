@@ -16,9 +16,12 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -163,5 +166,20 @@ public class HiveViewTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testShowHiveView() {
+        HiveView hiveView = new HiveView(1, "hive0", "testDb", "test",
+                Lists.newArrayList(new Column("t1a", Type.INT), new Column("t1b", Type.INT)),
+                "select\n" +
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type", HiveView.Type.Hive);
+        String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt(hiveView);
+        Assert.assertEquals("CREATE VIEW `test` (`t1a`, `t1b`) AS select\n" +
+                "    t1b,t1a\n" +
+                "from\n" +
+                "    test_all_type;", viewDdl);
     }
 }

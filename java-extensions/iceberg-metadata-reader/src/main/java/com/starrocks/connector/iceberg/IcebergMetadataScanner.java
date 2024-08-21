@@ -25,7 +25,6 @@ import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileContent;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
@@ -93,8 +92,6 @@ public class IcebergMetadataScanner extends ConnectorScanner {
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
-    private static final int DATA_FILE = 0;
-    private static final int DELETE_FILE = 1;
     private final String manifestBean;
     private final String predicateInfo;
     private final String serializedTable;
@@ -216,7 +213,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     private Object get(String columnName, ContentFile<?> file) {
         switch (columnName) {
             case "content":
-                return file.content() == FileContent.DATA ? DATA_FILE : DELETE_FILE;
+                return file.content().id();
             case "file_path":
                 return file.path().toString();
             case "file_format":

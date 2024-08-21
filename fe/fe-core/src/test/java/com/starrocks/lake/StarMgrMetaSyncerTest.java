@@ -554,8 +554,6 @@ public class StarMgrMetaSyncerTest {
         // can delete the shards, because the error is INVALID_ARGUMENT
         Assert.assertEquals(0, allShardIds.size());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testForceDelete() {
@@ -733,5 +731,4 @@ public class StarMgrMetaSyncerTest {
         starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
         Assert.assertEquals(3, shards.size());
     }
->>>>>>> 3b95a4d056 ([Enhancement] Physical partitions in the same logical partition use the same shard_group_id to make the shard distribution more even (#49195))
 }

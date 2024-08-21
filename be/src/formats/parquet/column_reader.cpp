@@ -305,7 +305,7 @@ void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedI
     const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
     if (type == ColumnIOType::PAGES) {
         const tparquet::ColumnMetaData& column_metadata = column.meta_data;
-        if (_offset_index_ctx != nullptr) {
+        if (_offset_index_ctx != nullptr && !_offset_index_ctx->page_selected.empty()) {
             // add dict page
             if (column_metadata.__isset.dictionary_page_offset) {
                 auto r = io::SharedBufferedInputStream::IORange(
@@ -1031,7 +1031,6 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
         if (parquet_field_it == field_id_2_pos.end()) {
             // Means newly added struct subfield not existed in original parquet file, we put nullptr
             // column reader in children_reader, we will append default value for this subfield later.
-            LOG(INFO) << "Struct subfield name: " + format_subfield_name + " not found in ParquetField.";
             pos[i] = -1;
             iceberg_schema_subfield[i] = nullptr;
             continue;

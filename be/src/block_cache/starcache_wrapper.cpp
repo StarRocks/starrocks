@@ -125,6 +125,10 @@ Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* ha
     return st;
 }
 
+bool StarCacheWrapper::exist(const std::string& key) const {
+    return _cache->exist(key);
+}
+
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
@@ -169,6 +173,7 @@ void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
 }
 
 Status StarCacheWrapper::shutdown() {
+    // TODO: starcache implement shutdown to release memory
     return Status::OK();
 }
 

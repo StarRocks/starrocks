@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -94,7 +95,8 @@ public class AlterTableStatementAnalyzer {
     public static boolean indexClause(AlterClause alterClause) {
         if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
             return true;
-        } else if (alterClause.getProperties() != null && alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
+        } else if (alterClause instanceof ModifyTablePropertiesClause
+                && ((ModifyTablePropertiesClause) alterClause).getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {
             return true;
         }
         return false;

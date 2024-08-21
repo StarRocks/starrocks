@@ -137,6 +137,10 @@ drop database test_add_drop_field_struct;
 -- result:
 []
 -- !result
+
+
+
+
 -- name: test_add_drop_field_array
 create database test_add_drop_field_array;
 -- result:
@@ -285,14 +289,16 @@ drop database test_add_drop_field_array;
 -- result:
 []
 -- !result
+
+
+
+
 -- name: test_add_drop_field_not_allowed
 create database test_add_drop_field_not_allowed;
 -- result:
-[]
 -- !result
 use test_add_drop_field_not_allowed;
 -- result:
-[]
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -307,7 +313,6 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 alter table tab1 modify column c1 add field [*].val1 int;
 -- result:
@@ -319,11 +324,9 @@ E: (1064, 'Drop field for struct column require table enable fast schema evoluti
 -- !result
 drop table tab1;
 -- result:
-[]
 -- !result
 drop database test_add_drop_field_not_allowed;
 -- result:
-[]
 -- !result
 -- name: test_drop_last_field
 create database test_drop_last_field;
@@ -361,6 +364,10 @@ drop database test_drop_last_field;
 -- result:
 []
 -- !result
+
+
+
+
 -- name: test_drop_add_same_name_field
 create database test_drop_add_same_name_field;
 -- result:

@@ -351,4 +351,22 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
+
+    @Test
+    public void testPushDownGroupingID() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select * from (" +
+                    "   select grouping(t1b, t1c) as aa, t1b, t1c, t1d, sum(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)) tt" +
+                    "   where aa = 'aa';";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [15], [16, 15]]\n" +
+                    "  |  PREDICATES: CAST(18: GROUPING AS VARCHAR(1048576)) = 'aa'");
+            assertNotContains(plan, "UNION");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
 }

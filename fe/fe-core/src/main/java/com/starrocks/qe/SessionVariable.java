@@ -49,6 +49,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
@@ -474,6 +475,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    public static final String POPULATE_DATACACHE_MODE = "populate_datacache_mode";
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
     public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
@@ -620,6 +622,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+    public static final String ENABLE_EVALUATE_SCHEMA_SCAN_RULE = "enable_evaluate_schema_scan_rule";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
@@ -1462,6 +1465,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
     private boolean enableRewriteSimpleAggToHdfsScan = false;
 
+    @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
+    private boolean enableEvaluateSchemaScanRule = true;
+
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;
 
@@ -1608,8 +1614,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
     private boolean enableScanDataCache = true;
 
-    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enablePopulateDataCache = true;
+
+    @VariableMgr.VarAttr(name = POPULATE_DATACACHE_MODE)
+    private String dataCachePopulateMode = DataCachePopulateMode.AUTO.modeName();
 
     @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -1634,6 +1643,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int datacachePriority = 0;
 
     private long datacacheTTLSeconds = 0L;
+
+    private boolean enableCacheSelect = false;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -1907,7 +1918,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
-    @VariableMgr.VarAttr(name = WAREHOUSE_NAME)
+    @VariableMgr.VarAttr(name = WAREHOUSE_NAME, flag = VariableMgr.SESSION_ONLY)
     private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
@@ -2254,8 +2265,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableScanDataCache = enableScanDataCache;
     }
 
+    public boolean isEnablePopulateDataCache() {
+        return this.enablePopulateDataCache;
+    }
+
     public void setEnablePopulateDataCache(boolean enablePopulateDataCache) {
         this.enablePopulateDataCache = enablePopulateDataCache;
+    }
+
+    public DataCachePopulateMode getDataCachePopulateMode() {
+        return DataCachePopulateMode.fromName(this.dataCachePopulateMode);
+    }
+
+    public void setDataCachePopulateMode(String mode) {
+        this.dataCachePopulateMode = mode;
     }
 
     public void setEnableDataCacheAsyncPopulateMode(boolean enableDataCacheAsyncPopulateMode) {
@@ -2276,6 +2299,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
         this.datacacheTTLSeconds = datacacheTTLSeconds;
+    }
+
+    public void setEnableCacheSelect(boolean enableCacheSelect) {
+        this.enableCacheSelect = enableCacheSelect;
     }
 
     public boolean isCboUseDBLock() {
@@ -3620,6 +3647,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToHdfsScan;
     }
 
+    public boolean isEnableEvaluateSchemaScanRule() {
+        return enableEvaluateSchemaScanRule;
+    }
+
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -4045,6 +4076,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setDatacache_priority(datacachePriority);
         tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
+        tResult.setEnable_cache_select(enableCacheSelect);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
