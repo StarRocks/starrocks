@@ -309,7 +309,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             locker.lockDatabase(db, LockType.READ);
             try {
-                // shard group might be changed by automatic bucket or schema change
+                // schema change might replace the shards in the original shard group
+                if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                    return false;
+                }
+                // automatic bucketing will create new shards in the original shard group
+                if (table.isAutomaticBucketing()) {
+                    return false;
+                }
+                // automatic bucketing will change physicalPartitions make shard group changed even after it's done
                 if (table.hasShardGroupChanged()) {
                     return false;
                 }
