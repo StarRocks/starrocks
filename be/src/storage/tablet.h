@@ -130,8 +130,8 @@ public:
 
     // operation in rowsets
     [[nodiscard]] Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
+    void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                                     std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -141,6 +141,7 @@ public:
     RowsetSharedPtr rowset_with_max_version() const;
 
     [[nodiscard]] Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -236,7 +237,6 @@ public:
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_all_candicate_rowsets(std::vector<RowsetSharedPtr>* candidate_rowsets);
-    void pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     void calculate_cumulative_point();
 
@@ -370,6 +370,7 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
