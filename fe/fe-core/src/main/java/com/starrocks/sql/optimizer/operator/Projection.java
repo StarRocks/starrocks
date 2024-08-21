@@ -89,7 +89,7 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
-    public Map<ColumnRefOperator, ScalarOperator> getTwoMaps() {
+    public Map<ColumnRefOperator, ScalarOperator> getAllMaps() {
         Map<ColumnRefOperator, ScalarOperator> twoMaps = new HashMap<>();
         twoMaps.putAll(columnRefMap);
         if (commonSubOperatorMap != null) {
