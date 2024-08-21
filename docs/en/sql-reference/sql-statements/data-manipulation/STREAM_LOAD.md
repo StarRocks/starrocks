@@ -71,7 +71,7 @@ The following table describes the parameters in the URL.
 
 > **NOTE**
 >
-> You can use [SHOW FRONTENDS](../Administration/cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+> You can use [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 ### data_desc
 

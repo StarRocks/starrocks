@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Adds a BE node to the BE Blacklist. You can manually add BE nodes to the blacklist to forbid the usage of the nodes in query execution, thereby avoiding frequent query failures or other unexpected behaviors caused by failed connections to the BE nodes.
 
-This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../../administration/management/BE_blacklist.md).
+This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../administration/management/BE_blacklist.md).
 
 :::note
 

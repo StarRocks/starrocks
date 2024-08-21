@@ -1,5 +1,5 @@
 
-For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
+For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
 
 ### Create a database and a cloud-native table
 
@@ -69,7 +69,7 @@ Whether to allow data to be written into object storage asynchronously. Default:
 
 ### View table information
 
-You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/Administration/cluster-management/nodes_processes/SHOW_PROC.md) for more information.
+You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) for more information.
 
 Example:
 

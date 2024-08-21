@@ -57,7 +57,7 @@ SHOW BACKENDS
 | MemUsedPct            | The percentage of used memory.                               |
 | CpuUsedPct            | The percentage of used CPU cores.                            |
 | DataCacheMetrics      | The status of Data Cache:<ul><li>`Disabled`: Disabled</li><li>`Normal`: Normal </li><li>`Abnormal`: Abnormal </li><li>`Updating`: Data Cache is being updating, for example, scaling. </li></ul>                      |
-| Location              | The label of the BE node. For more information, see [Add labels on BEs](../../../../../administration/management/resource_management/be_label.md).                     |
+| Location              | The label of the BE node. For more information, see [Add labels on BEs](../../../../administration/management/resource_management/be_label.md).                     |
 
 ## Example
 
