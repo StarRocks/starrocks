@@ -1373,7 +1373,7 @@ CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 // When the keys that we want to delete, number of them is larger than this config,
 // we will fallback and using `DeleteRange` in rocksdb.
-CONF_mInt32(rocksdb_opt_delete_range_limit, "10000");
+CONF_mInt32(rocksdb_opt_delete_range_limit, "500");
 
 // python envs config
 // create time worker timeout
