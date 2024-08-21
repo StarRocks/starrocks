@@ -10,8 +10,8 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the following options for loading data from GCS:
 
-- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
-- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Synchronous loading using [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
+- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
 
 Each of these options has its own advantages, which are detailed in the following sections.
 
@@ -54,7 +54,7 @@ With `FILES()`, you can:
 
 - Query the data directly from GCS using [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
 - Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) (CTAS).
-- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ### Typical examples
 
@@ -416,7 +416,7 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Check load progress
 

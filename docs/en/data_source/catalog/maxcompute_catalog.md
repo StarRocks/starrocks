@@ -9,7 +9,7 @@ StarRocks supports Alibaba Cloud MaxCompute (previously known as ODPS) catalogs 
 
 A MaxCompute catalog is a kind of external catalog that enables you to query data from MaxCompute without ingestion.
 
-With MaxCompute catalogs, you also can directly transform and load the data from MaxCompute by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md).
+With MaxCompute catalogs, you also can directly transform and load the data from MaxCompute by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ## Usage notes
 

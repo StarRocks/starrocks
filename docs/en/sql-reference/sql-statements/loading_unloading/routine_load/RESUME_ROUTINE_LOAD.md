@@ -4,11 +4,11 @@ displayed_sidebar: "English"
 
 # RESUME ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## Description
 
-Resumes a Routine load job. The job will temporarily enter **NEED_SCHEDULE** state because the job is being re-scheduled. And after some time, the job will be resumed to **RUNNING** state, continuing consuming messages from the data source and loading data. You can check the job's information using the [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) statement.
+Resumes a Routine load job. The job will temporarily enter **NEED_SCHEDULE** state because the job is being re-scheduled. And after some time, the job will be resumed to **RUNNING** state, continuing consuming messages from the data source and loading data. You can check the job's information using the [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) statement.
 
 <RoutineLoadPrivNote />
 

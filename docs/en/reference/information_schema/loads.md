@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # loads
 
-`loads` provides the results of load jobs. This view is supported from StarRocks v3.1 onwards. Currently, you can only view the results of [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) jobs from this view.
+`loads` provides the results of load jobs. This view is supported from StarRocks v3.1 onwards. Currently, you can only view the results of [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) jobs from this view.
 
 The following fields are provided in `loads`:
 

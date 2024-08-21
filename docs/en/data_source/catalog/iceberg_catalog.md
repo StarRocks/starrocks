@@ -14,8 +14,8 @@ Try it in this [hands-on tutorial](../../quick_start/iceberg.md)
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) (this feature is supported from v3.1 onwards).
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster must be able to access the storage system and metastore of your Iceberg cluster. StarRocks supports the following storage systems and metastores:
 
@@ -1196,7 +1196,7 @@ Description: The compression algorithm used for the Iceberg table. The supported
 
 ### Sink data to an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 

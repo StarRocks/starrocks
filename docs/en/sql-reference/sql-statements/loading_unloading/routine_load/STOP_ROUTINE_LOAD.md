@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # STOP ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## Description
 
@@ -15,7 +15,7 @@ Stops a Routine Load job.
 ::: warning
 
 - A stopped Routine Load job cannot be resumed. Therefore, please proceed with caution when executing this statement.
-- If you only need to pause the Routine Load job, you can execute [PAUSE ROUTINE LOAD](./PAUSE_ROUTINE_LOAD.md).
+- If you only need to pause the Routine Load job, you can execute [PAUSE ROUTINE LOAD](PAUSE_ROUTINE_LOAD.md).
 
 :::
 

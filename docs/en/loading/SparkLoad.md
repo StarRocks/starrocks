@@ -173,7 +173,7 @@ PROPERTIES
 The above is a description of parameters for loading through Broker process. If you intend to load data without Broker process, the following should be noted.
 
 - You do not need to specify `broker`.
-- If you need to configure user authentication, and HA for NameNode nodes, you need to configure the parameters in the hdfs-site.xml file in the HDFS cluster, see [broker_properties](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs) for descriptions of parameters. and you need to move the **hdfs-site.xml** file under **$FE_HOME/conf** for each FE and **$BE_HOME/conf** for each BE.
+- If you need to configure user authentication, and HA for NameNode nodes, you need to configure the parameters in the hdfs-site.xml file in the HDFS cluster, see [broker_properties](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs) for descriptions of parameters. and you need to move the **hdfs-site.xml** file under **$FE_HOME/conf** for each FE and **$BE_HOME/conf** for each BE.
 
 > Note
 >

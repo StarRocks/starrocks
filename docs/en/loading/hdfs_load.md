@@ -387,7 +387,7 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Check load progress
 

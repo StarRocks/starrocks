@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ALTER ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## Description
 
@@ -12,8 +12,8 @@ Alters a Routine Load job that is in the `PAUSED` state. You can execute PAUSE R
 
 After successfully altering a Routine Load job, you can:
 
-- Check the modifications made to the Routine Load job by using [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md).
-- Resume the Routine Load job by using [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md).
+- Check the modifications made to the Routine Load job by using [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md).
+- Resume the Routine Load job by using [RESUME ROUTINE LOAD](RESUME_ROUTINE_LOAD.md).
 
 <RoutineLoadPrivNote />
 
@@ -45,7 +45,7 @@ FROM data_source
    [TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
    ```
 
-   For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#load_properties).
+   For detailed parameter descriptions, see [CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#load_properties).
 
 - **`job_properties`**
 
@@ -77,7 +77,7 @@ FROM data_source
 
   - `timezone`
 
-  For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#job_properties).
+  For detailed parameter descriptions, see [CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#job_properties).
 
 - **`data_source`** **and** **`data_source_properties`**
 
@@ -93,7 +93,7 @@ FROM data_source
 
 ## Examples
 
-1. The following example increases the value of the property `desired_concurrent_number` of the load job to `5` in order to increase the parallelism of load tasks. For details on task parallelism, see [how to improve load performance](../../../faq/loading/Routine_load_faq.md#how-can-i-improve-loading-performance).
+1. The following example increases the value of the property `desired_concurrent_number` of the load job to `5` in order to increase the parallelism of load tasks. For details on task parallelism, see [how to improve load performance](../../../../faq/loading/Routine_load_faq.md#how-can-i-improve-loading-performance).
 
    ```SQL
    ALTER ROUTINE LOAD FOR example_tbl_ordertest

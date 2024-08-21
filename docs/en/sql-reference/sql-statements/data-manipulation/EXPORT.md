@@ -68,7 +68,7 @@ WITH BROKER
 
 - `broker_properties`
 
-  The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+  The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../loading_unloading/BROKER_LOAD.md).
 
 ## Examples
 

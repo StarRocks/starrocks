@@ -114,7 +114,7 @@ INSERT INTO site_access TEMPORARY PARTITION (tp2) SELECT * FROM site_access_copy
 INSERT INTO site_access TEMPORARY PARTITION (tp3, tp4,...) SELECT * FROM site_access_copy PARTITION (p3, p4,...);
 ```
 
-For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ### Load data by using STREAM LOAD
 
@@ -125,7 +125,7 @@ curl --location-trusted -u root: -H "label:123" -H "Expect:100-continue" -H "tem
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ### Load data by using BROKER LOAD
 
@@ -145,7 +145,7 @@ WITH BROKER
 );
 ```
 
-Note that `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For detailed syntax and parameter descriptions, see [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+Note that `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For detailed syntax and parameter descriptions, see [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ### Load data by using ROUTINE LOAD
 
@@ -162,7 +162,7 @@ FROM KAFKA
 );
 ```
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md).
 
 ## Query data in temporary partitions
 

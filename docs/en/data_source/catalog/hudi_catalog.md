@@ -7,7 +7,7 @@ toc_max_heading_level: 5
 
 A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion.
 
-Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
+Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster must be able to access the storage system and metastore of your Hudi cluster. StarRocks supports the following storage systems and metastores:
 

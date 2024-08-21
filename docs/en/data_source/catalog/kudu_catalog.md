@@ -8,7 +8,7 @@ StarRocks supports Kudu catalogs from v3.3 onwards.
 
 A Kudu catalog is a kind of external catalog that enables you to query data from Apache Kudu without ingestion.
 
-Also, you can directly transform and load data from Kudu by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Kudu catalogs.
+Also, you can directly transform and load data from Kudu by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Kudu catalogs.
 
 To ensure successful SQL workloads on your Kudu cluster, your StarRocks cluster needs to integrate with the following important components:
 

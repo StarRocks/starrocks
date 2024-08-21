@@ -31,7 +31,7 @@ StarRocks can authenticate to GCS in the following scenarios:
 - Query Parquet and ORC files in GCS.
 - Query [Hive](../data_source/catalog/hive_catalog.md), [Iceberg](../data_source/catalog/iceberg_catalog.md), [Hudi](../data_source/catalog/hudi_catalog.md), and [Delta Lake](../data_source/catalog/deltalake_catalog.md) tables in GCS.
 
-In this topic, [Hive catalog](../data_source/catalog/hive_catalog.md), [file external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) are used as examples to show how StarRocks integrates with GCS in different scenarios. For information about `StorageCredentialParams` in the examples, see the "[Parameters](../integrations/authenticate_to_gcs.md#parameters)" section of this topic.
+In this topic, [Hive catalog](../data_source/catalog/hive_catalog.md), [file external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) are used as examples to show how StarRocks integrates with GCS in different scenarios. For information about `StorageCredentialParams` in the examples, see the "[Parameters](../integrations/authenticate_to_gcs.md#parameters)" section of this topic.
 
 > **NOTE**
 >
@@ -72,7 +72,7 @@ PROPERTIES
 
 ### Broker load
 
-Use the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement to create a Broker Load job whose label is `test_db.label000`, in order to batch load data from GCS into the StarRocks table `target_table`:
+Use the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement to create a Broker Load job whose label is `test_db.label000`, in order to batch load data from GCS into the StarRocks table `target_table`:
 
 ```SQL
 LOAD LABEL test_db.label000

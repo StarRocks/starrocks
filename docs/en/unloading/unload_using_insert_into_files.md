@@ -203,5 +203,5 @@ SELECT * FROM sales_records;
 
 ## See also
 
-- For more instructions on the usage of INSERT, see [SQL reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+- For more instructions on the usage of INSERT, see [SQL reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 - For more instructions on the usage of FILES(), see [SQL reference - FILES()](../sql-reference/sql-functions/table-functions/files.md).

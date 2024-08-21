@@ -71,7 +71,7 @@ You can set different write quorum for tables, that is, how many replicas are re
 
 :::
 
-StarRocks provides four loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
+StarRocks provides four loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 The process of asynchronous loading is as follows:
 

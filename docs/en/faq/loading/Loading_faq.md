@@ -48,7 +48,7 @@ Before you submit a load job, we recommend that you calculate the approximate am
 
 ## 3. What do I do if the "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" error occurs?
 
-Execute [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md), and use the error URL in the returned execution result to view the error details.
+Execute [SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md), and use the error URL in the returned execution result to view the error details.
 
 Common data quality errors are as follows:
 
