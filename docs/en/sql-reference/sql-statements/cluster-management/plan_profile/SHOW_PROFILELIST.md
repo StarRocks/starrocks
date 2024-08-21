@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Lists the query profile records cached in your StarRocks cluster. For more information about query profile, see [Query Profile Overview](../../../administration/query_profile_overview.md).
+Lists the query profile records cached in your StarRocks cluster. For more information about query profile, see [Query Profile Overview](../../../../administration/query_profile_overview.md).
 
 This feature is supported from v3.1 onwards.
 

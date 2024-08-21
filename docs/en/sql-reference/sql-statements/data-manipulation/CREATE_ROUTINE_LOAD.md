@@ -160,7 +160,7 @@ You can specify additional data source (Kafka) related properties, which are equ
 
 > **NOTE**
 >
-> If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE](../Administration/CREATE_FILE.md).
+> If the value of a property is a file name, add the keyword `FILE:` preceding the file name. For information about how to create a file, see [CREATE FILE](../cluster-management/file/CREATE_FILE.md).
 
 - **Specify the default initial offset for all the partitions to be consumed**
 

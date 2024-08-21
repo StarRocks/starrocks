@@ -10,7 +10,7 @@ You can execute the DROP FILE statement to delete a file. When you use this stat
 
 :::tip
 
-This operation requires the SYSTEM-level FILE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+This operation requires the SYSTEM-level FILE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 :::
 

@@ -158,7 +158,7 @@ For detailed information on how to check the query profile and understand other 
 
 ### Verify whether queries are rewritten by an asynchronous materialized view
 
-You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md).
+You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md).
 
 If the metric `SCAN` in the query plan shows the name of the corresponding materialized view, the query has been rewritten by the materialized view.
 
@@ -304,7 +304,7 @@ Large materialized views may fail to refresh because the refresh task exceeds th
   - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
   - Analyze the query profile of the refresh task using the following statements:
     - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
-    - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
+    - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
 
 ### Materialized view state is not active
 

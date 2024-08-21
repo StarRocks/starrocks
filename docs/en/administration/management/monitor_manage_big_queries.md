@@ -247,7 +247,7 @@ To enable SQL Blacklist, execute the following statement:
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md).
+Then you can add the regular expression that represents the SQL pattern to SQL Blacklist using [ADD SQLBLACKLIST](../../sql-reference/sql-statements/cluster-management/sql_blacklist/ADD_SQLBLACKLIST.md).
 
 The following example adds `COUNT(DISTINCT)` to SQL Blacklist:
 

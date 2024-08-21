@@ -10,7 +10,7 @@ This statement is used to install a plugin.
 
 :::tip
 
-This operation requires the SYSTEM-level PLUGIN privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+This operation requires the SYSTEM-level PLUGIN privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 :::
 

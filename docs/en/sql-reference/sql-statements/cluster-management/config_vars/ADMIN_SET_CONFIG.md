@@ -12,7 +12,7 @@ The configurations will be restored to the default values in the `fe.conf` file 
 
 :::tip
 
-This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 :::
 

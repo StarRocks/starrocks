@@ -6,13 +6,13 @@ displayed_sidebar: "English"
 
 ## Description
 
-Displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../administration/management/FE_configuration.md).
+Displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../../administration/management/FE_configuration.md).
 
 If you want to set or modify a configuration item, use [ADMIN SET CONFIG](ADMIN_SET_CONFIG.md).
 
 :::tip
 
-This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 :::
 

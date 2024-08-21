@@ -136,7 +136,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md):
 
 ### Configuration items
 

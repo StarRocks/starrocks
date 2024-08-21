@@ -20,7 +20,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
 
 :::note
 You must have administrator privileges to run cluster administration-related commands.
@@ -30,7 +30,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");

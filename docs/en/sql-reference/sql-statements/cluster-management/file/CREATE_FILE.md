@@ -8,7 +8,7 @@ You can execute the CREATE FILE statement to create a file. After a file is crea
 
 :::tip
 
-This operation requires the SYSTEM-level FILE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+This operation requires the SYSTEM-level FILE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 :::
 

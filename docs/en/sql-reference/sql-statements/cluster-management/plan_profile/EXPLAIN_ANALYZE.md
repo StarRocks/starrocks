@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Executes the specified SQL statement, and shows the query profile of this statement. For more information about query profile, see [Query Profile Overview](../../../administration/query_profile_overview.md).
+Executes the specified SQL statement, and shows the query profile of this statement. For more information about query profile, see [Query Profile Overview](../../../../administration/query_profile_overview.md).
 
 This feature is supported from v3.1 onwards.
 
@@ -22,7 +22,7 @@ EXPLAIN ANALYZE <statement>
 
 ## Parameters
 
-`statement`: the SQL statement of which to show the query profile. Both [SELECT](../data-manipulation/SELECT.md) and [INSERT INTO](../data-manipulation/INSERT.md) are supported.
+`statement`: the SQL statement of which to show the query profile. Both [SELECT](../../data-manipulation/SELECT.md) and [INSERT INTO](../../data-manipulation/INSERT.md) are supported.
 
 ## Usage notes
 
@@ -32,11 +32,11 @@ Please note that when you analyze the profiles of an INSERT INTO statement, no d
 
 Example 1: Simulate and analyze a SELECT statement. The query result are discarded.
 
-![img](../../../_assets/Profile/text_based_explain_analyze_select.jpeg)
+![img](../../../../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
 Example 2: Simulate and analyze an INSERT INTO statement. The loading transaction will be aborted.
 
-![img](../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
+![img](../../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
 ## Relevant SQLs
 
