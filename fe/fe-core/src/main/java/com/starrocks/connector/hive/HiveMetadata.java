@@ -188,6 +188,9 @@ public class HiveMetadata implements ConnectorMetadata {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
+            throw e;
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;

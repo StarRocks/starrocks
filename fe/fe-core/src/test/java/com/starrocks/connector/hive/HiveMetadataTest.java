@@ -178,6 +178,20 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testGetTableThrowConnectorException() {
+        new Expectations(hmsOps) {
+            {
+                hmsOps.getTable("acid_db", "acid_table");
+                result = new StarRocksConnectorException("hive acid table is not supported");
+                minTimes = 1;
+            }
+        };
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+    }
+
+    @Test
     public void testTableExists() {
         boolean exists = hiveMetadata.tableExists("db1", "tbl1");
         Assert.assertTrue(exists);
