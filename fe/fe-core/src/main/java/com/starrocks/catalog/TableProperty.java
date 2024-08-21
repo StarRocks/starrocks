@@ -1022,6 +1022,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionLiveNumber();
         buildReplicatedStorage();
         buildBucketSize();
+        buildMutableBucketNum();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
