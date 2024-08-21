@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential.aliyun;
+package com.starrocks.credential.tencent;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -25,48 +25,43 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
-public class AliyunCloudConfiguration extends CloudConfiguration {
+public class TencentCloudConfiguration extends CloudConfiguration {
+    private final TencentCloudCredential tencentCloudCredential;
 
-    private final AliyunCloudCredential aliyunCloudCredential;
-
-    public AliyunCloudConfiguration(AliyunCloudCredential aliyunCloudCredential) {
-        Preconditions.checkNotNull(aliyunCloudCredential);
-        this.aliyunCloudCredential = aliyunCloudCredential;
+    public TencentCloudConfiguration(TencentCloudCredential tencentCloudCredential) {
+        Preconditions.checkNotNull(tencentCloudCredential);
+        this.tencentCloudCredential = tencentCloudCredential;
     }
 
-    public AliyunCloudCredential getAliyunCloudCredential() {
-        return aliyunCloudCredential;
-    }
-
+    // reuse aws client logic of BE
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
-        // reuse aws client logic of BE
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
         Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
-        aliyunCloudCredential.toThrift(properties);
+        tencentCloudCredential.toThrift(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
         super.applyToConfiguration(configuration);
-        aliyunCloudCredential.applyToConfiguration(configuration);
+        tencentCloudCredential.applyToConfiguration(configuration);
     }
 
     @Override
     public CloudType getCloudType() {
-        return CloudType.ALIYUN;
+        return CloudType.TENCENT;
     }
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        return aliyunCloudCredential.toFileStoreInfo();
+        return tencentCloudCredential.toFileStoreInfo();
     }
 
     @Override
     public String toConfString() {
-        return String.format("AliyunCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
-                aliyunCloudCredential.toCredString());
+        return String.format("TencentCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                tencentCloudCredential.toCredString());
     }
 }
