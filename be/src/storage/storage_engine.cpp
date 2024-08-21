@@ -136,6 +136,13 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 #ifdef USE_STAROS
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
 #endif
+#ifndef BE_TEST
+    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
+    MetadataCache::create_cache(lru_cache_limit);
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
+                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+#endif
 }
 
 StorageEngine::~StorageEngine() {
