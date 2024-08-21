@@ -356,7 +356,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
             rowsets_to_delete.push_back(it.second);
         }
     }
-    modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
+    modify_rowsets_without_lock(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
 
     if (need_persist) {
         RowsetMetaPB meta_pb;
@@ -368,8 +368,9 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     return Status::OK();
 }
 
-void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete,
-                            std::vector<RowsetSharedPtr>* to_replace) {
+void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_add,
+                                         const std::vector<RowsetSharedPtr>& to_delete,
+                                         std::vector<RowsetSharedPtr>* to_replace) {
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -619,6 +620,21 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
                               << " " << st;
     ++_newly_created_rowset_num;
     return Status::OK();
+}
+
+void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
+    std::unique_lock wrlock(_meta_lock);
+    vector<RowsetSharedPtr> origin_rowsets;
+    _pick_candicate_rowset_before_specify_version(&origin_rowsets, version);
+    if (VLOG_IS_ON(2)) {
+        for (auto& rs : origin_rowsets) {
+            VLOG(2) << "delete rowset, tablet_id: " << tablet_id() << ", schema_hash: " << schema_hash()
+                    << ", rowset_id: " << rs->rowset_id() << ", version: " << rs->version();
+        }
+    }
+    Version rowset_version(0, version);
+    rowset->make_visible(rowset_version);
+    modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
 }
 
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
@@ -1152,9 +1168,8 @@ void Tablet::pick_candicate_rowsets_to_base_compaction(vector<RowsetSharedPtr>* 
     }
 }
 
-void Tablet::pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets,
-                                                          int64_t version) {
-    std::shared_lock rdlock(_meta_lock);
+void Tablet::_pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets,
+                                                           int64_t version) {
     for (auto& it : _rs_version_map) {
         if (it.first.first <= version) {
             candidcate_rowsets->push_back(it.second);
