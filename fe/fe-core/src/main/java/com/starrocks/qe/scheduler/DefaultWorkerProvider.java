@@ -274,7 +274,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
-        return toString(usedComputeNode, false);
+        return toString(usedComputeNode, true);
     }
 
     @VisibleForTesting
@@ -293,21 +293,21 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return -1;
     }
 
-    private String toString(boolean chooseComputeNode, boolean onlyChooseAbnormalNode) {
-        return chooseComputeNode ? computeNodesToString(onlyChooseAbnormalNode) :
-                backendsToString(onlyChooseAbnormalNode);
+    private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {
+        return chooseComputeNode ? computeNodesToString(allowNormalNodes) :
+                backendsToString(allowNormalNodes);
     }
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, true));
+                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, false));
     }
 
-    private String computeNodesToString(boolean onlyChooseAbnormalNode) {
+    private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
 
         id2ComputeNode.forEach((backendID, backend) -> {
-            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID) || (!onlyChooseAbnormalNode)) {
+            if (allowNormalNodes || !backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
                 out.append(
                         String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                                 backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
@@ -316,10 +316,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return out.toString();
     }
 
-    private String backendsToString(boolean onlyChooseAbnormalNode) {
+    private String backendsToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> {
-            if (!backend.isAlive() || SimpleScheduler.isInBlocklist(backendID) || (!onlyChooseAbnormalNode)) {
+            if (allowNormalNodes || !backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
                 out.append(
                         String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                                 backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
