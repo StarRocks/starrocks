@@ -50,9 +50,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Hash join between left child and right child.
@@ -61,11 +59,7 @@ import java.util.Map;
  */
 public class HashJoinNode extends JoinNode {
     private boolean isSkewJoin = false;
-    // only set when isSkewJoin = true
-    private HashJoinNode skewJoinFriend;
 
-    // only set when isSkewJoin = true && shuffle join
-    private Map<Integer, Integer> eqJoinConjunctsIndexToRfId;
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
@@ -86,30 +80,11 @@ public class HashJoinNode extends JoinNode {
     }
 
     public boolean isSkewShuffleJoin() {
-        return isSkewJoin && distrMode == DistributionMode.PARTITIONED;
+        return isSkewJoin() && distrMode == DistributionMode.PARTITIONED;
     }
 
     public boolean isSkewBroadJoin() {
-        return isSkewJoin && distrMode == DistributionMode.BROADCAST;
-    }
-
-    public HashJoinNode getSkewJoinFriend() {
-        return skewJoinFriend;
-    }
-
-    public void setSkewJoinFriend(HashJoinNode skewJoinFriend) {
-        this.skewJoinFriend = skewJoinFriend;
-    }
-
-    public Map<Integer, Integer> getEqJoinConjunctsIndexToRfId() {
-        if (eqJoinConjunctsIndexToRfId == null) {
-            eqJoinConjunctsIndexToRfId = new HashMap<>();
-        }
-        return eqJoinConjunctsIndexToRfId;
-    }
-
-    public int getRfIdByEqJoinConjunctsIndex(int index) {
-        return eqJoinConjunctsIndexToRfId.get(index);
+        return isSkewJoin() && distrMode == DistributionMode.BROADCAST;
     }
 
     @Override
@@ -174,9 +149,6 @@ public class HashJoinNode extends JoinNode {
         if (getCanLocalShuffle()) {
             msg.hash_join_node.setInterpolate_passthrough(
                     ConnectContext.get().getSessionVariable().isHashJoinInterpolatePassthrough());
-        }
-        if (isSkewJoin) {
-            msg.hash_join_node.setIs_skew_join(isSkewJoin);
         }
     }
 

@@ -2732,19 +2732,6 @@ public class PlanFragmentBuilder {
                 PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
                 HashJoinNode hashJoinNode = (HashJoinNode) joinNode;
                 hashJoinNode.setSkewJoin(physicalHashJoinOperator.getSkewColumn() != null);
-                // let two node know each other for runtimr filter
-                if (hashJoinNode.isSkewJoin()) {
-                    physicalHashJoinOperator.setMySelfAsNode(hashJoinNode);
-                    if (physicalHashJoinOperator.getSkewJoinFriend() != null) {
-                        HashJoinNode hashJoinNodeFriend =
-                                physicalHashJoinOperator.getSkewJoinFriend().getMySelfAsNode();
-                        if (hashJoinNodeFriend != null) {
-                            hashJoinNode.setSkewJoinFriend(hashJoinNodeFriend);
-                            hashJoinNodeFriend.setSkewJoinFriend(hashJoinNode);
-                        }
-                    }
-                }
-
             } else if (node instanceof PhysicalMergeJoinOperator) {
                 joinNode = new MergeJoinNode(
                         context.getNextNodeId(),
@@ -3784,7 +3771,6 @@ public class PlanFragmentBuilder {
             DataPartition dataPartition =
                     translateDistributionToDataPartition(consumerOperator.getDistributionSpec(), context);
 
-            // is this correct?
             this.currentExecGroup.add(exchangeNode, true);
 
             exchangeNode.setDataPartition(dataPartition);
@@ -3793,8 +3779,7 @@ public class PlanFragmentBuilder {
             splitConsumeFragment.setQueryGlobalDicts(splitProduceFragment.getQueryGlobalDicts());
             splitConsumeFragment.setQueryGlobalDictExprs(splitProduceFragment.getQueryGlobalDictExprs());
             splitConsumeFragment.setLoadGlobalDicts(splitProduceFragment.getLoadGlobalDicts());
-
-            // set limit, do wee need this?
+            
             if (consumerOperator.hasLimit()) {
                 splitConsumeFragment.getPlanRoot().setLimit(consumerOperator.getLimit());
             }

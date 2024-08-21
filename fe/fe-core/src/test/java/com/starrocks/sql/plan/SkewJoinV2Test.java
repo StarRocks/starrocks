@@ -46,9 +46,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         // shuffle join is UNION's left child, with global runtime filter
         assertCContains(sqlPlan, "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (4: v4), remote = true");
+                "  |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n");
         // shuffle join's both child is shuffle exchange
         assertCContains(sqlPlan, " 2:EXCHANGE\n" +
                 "     distribution type: SHUFFLE\n" +
@@ -61,9 +59,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         // broadcast join is UNION's right child, with local runtime filter
         assertCContains(sqlPlan, "8:HASH JOIN\n" +
                 "  |    |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |    |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n" +
-                "  |    |  build runtime filters:\n" +
-                "  |    |  - filter_id = 1, build_expr = (4: v4), remote = false");
+                "  |    |  equal join conjunct: [1: v1, BIGINT, true] = [4: v4, BIGINT, true]\n");
         // broadcast's left child is ROUND_ROBIN, right child is BROADCAST
         assertCContains(sqlPlan, "  |    6:EXCHANGE\n" +
                 "  |       distribution type: ROUND_ROBIN");
@@ -80,7 +76,7 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  SplitCastDataSink:\n" +
                 "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
                 "  OutPut Exchange Id: 02\n" +
-                "  Split expr: 1: v1 NOT IN (1, 2)\n" +
+                "  Split expr: (1: v1 NOT IN (1, 2)) OR (1: v1 IS NULL)\n" +
                 "  OutPut Partition: RANDOM\n" +
                 "  OutPut Exchange Id: 06\n" +
                 "  Split expr: 1: v1 IN (1, 2)\n" +
@@ -98,18 +94,13 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  SplitCastDataSink:\n" +
                 "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
                 "  OutPut Exchange Id: 03\n" +
-                "  Split expr: 4: v4 NOT IN (1, 2)\n" +
+                "  Split expr: (4: v4 NOT IN (1, 2)) OR (4: v4 IS NULL)\n" +
                 "  OutPut Partition: UNPARTITIONED\n" +
                 "  OutPut Exchange Id: 07\n" +
                 "  Split expr: 4: v4 IN (1, 2)\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     table: t1, rollup: t1");
-
-        sqlPlan = sqlPlan.substring(sqlPlan.indexOf("0:OlapScanNode", 0));
-        // broadcast join's rf can not push across exchange to left table scan
-        assertNotContains(sqlPlan, " probe runtime filters:\n" +
-                "     - filter_id = 1");
     }
 
     @Test
@@ -182,6 +173,18 @@ public class SkewJoinV2Test extends PlanTestBase {
     public void testSkewJoinV2WithCountStar() throws Exception {
         String sql = "select count(1) from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4";
         String sqlPlan = getVerboseExplain(sql);
-        System.out.println(sqlPlan);
+        assertCContains(sqlPlan, "9:Project\n" +
+                "  |    |  output columns:\n" +
+                "  |    |  9 <-> 1\n" +
+                "  |    |  cardinality: 1\n" +
+                "  |    |  \n" +
+                "  |    8:HASH JOIN\n" +
+                "  |    |  join op: INNER JOIN (BROADCAST)");
+        assertCContains(sqlPlan, "5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  9 <-> 1\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:HASH JOIN");
     }
 }
