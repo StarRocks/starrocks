@@ -65,12 +65,7 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
-<<<<<<< HEAD
     doris::PBackendService_Stub* _stub = nullptr;
-    MemTracker* _mem_tracker = nullptr;
-=======
-    std::shared_ptr<PInternalService_RecoverableStub> _stub;
->>>>>>> a73cafe8f5 ([BugFix] Fix the mem statistics bug of SegmentReplicateExecutor (#49761))
 
     bool _inited = false;
     Status _st = Status::OK();
