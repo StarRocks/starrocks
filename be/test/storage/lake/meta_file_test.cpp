@@ -524,4 +524,46 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(9);
+    metadata->set_version(10);
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(1);
+    op_compaction.add_input_rowsets(11);
+    op_compaction.add_input_rowsets(22);
+    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segments("bbb.dat");
+    op_compaction.mutable_output_rowset()->add_segments("ccc.dat");
+    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+    RowsetMetadataPB last_input_rowset_metadata;
+
+    last_input_rowset_metadata.set_id(33);
+    last_input_rowset_metadata.mutable_segments()->Clear();
+    last_input_rowset_metadata.add_segments("aaa.dat");
+    last_input_rowset_metadata.add_segments("eee.dat");
+    last_input_rowset_metadata.add_segments("fff.dat");
+    last_input_rowset_metadata.add_segments("ddd.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    // rowset id mismatch
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+
+    last_input_rowset_metadata.set_id(22);
+    // normal case, duplicate segments will be trimed
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segments(0), "eee.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments(1), "fff.dat");
+
+    // no duplicate segments
+    last_input_rowset_metadata.mutable_segments()->Clear();
+    last_input_rowset_metadata.add_segments("xxx.dat");
+    last_input_rowset_metadata.add_segments("yyy.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
+    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+}
+
 } // namespace starrocks::lake

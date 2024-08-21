@@ -777,11 +777,11 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
         }
     }
 
-    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0);
-    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1);
-    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2);
-    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3);
-    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4);
+    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1, 0 /* compaction_segment_limit */);
+    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2, 0 /* compaction_segment_limit */);
+    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3, 0 /* compaction_segment_limit */);
+    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4, 0 /* compaction_segment_limit */);
 
     {
         std::vector<uint32_t> input_rowsets;

@@ -104,6 +104,9 @@ message RowsetMetadataPB {
     // del_files are generated when pk table handle delete operation.
     repeated DelfileWithRowsetId del_files = 11;
     repeated bytes segment_encryption_metas = 12;
+    // set in partial compaction, indicate which segment index next compaction should start from
+    // only be set > 0 if `overlapped` is true
+    optional uint32 next_compaction_offset = 13;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
