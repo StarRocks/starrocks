@@ -69,6 +69,7 @@ public:
     size_t backup_count() const { return _backup_count.load(); }
 
     void upgrade_to_blocked_driver(const DriverRawPtr driver);
+    void upgrade_to_blocked_driver2(const DriverRawPtr driver);
 
 private:
     void run_internal();

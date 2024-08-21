@@ -296,6 +296,53 @@ void PipelineDriverPoller::upgrade_to_blocked_driver(const DriverRawPtr driver) 
     }
 }
 
+void PipelineDriverPoller::upgrade_to_blocked_driver2(const DriverRawPtr driver) {
+    {
+        std::unique_lock<std::mutex> lock(_backup_mutex);
+        if (_backup_drivers.remove(driver) < 1) {
+            return;
+        }
+    }
+    bool is_ready = false;
+    bool is_upgrade = false;
+    if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
+        is_upgrade = true;
+    } else if (driver->fragment_ctx()->is_canceled() || driver->need_report_exec_state()) {
+        is_upgrade = true;
+    } else if (driver->pending_finish() && !driver->is_still_pending_finish()) {
+        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED : DriverState::FINISH);
+        is_ready = true;
+    } else if (driver->is_epoch_finishing() && !driver->is_still_epoch_finishing()) {
+        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                       : DriverState::EPOCH_FINISH);
+        is_ready = true;
+    } else if (driver->is_epoch_finished() || driver->is_finished()) {
+        is_ready = true;
+    } else {
+        auto status_or_is_not_blocked = driver->is_not_blocked();
+        if (!status_or_is_not_blocked.ok()) {
+            is_upgrade = true;
+        } else if (status_or_is_not_blocked.value()) {
+            is_ready = true;
+        }
+    }
+    if (is_upgrade) {
+        std::unique_lock<std::mutex> lock(_global_mutex);
+        _blocked_drivers.push_back(driver);
+        _blocked_driver_queue_len++;
+        driver->_pending_timer_sw->reset();
+        driver->driver_acct().clean_local_queue_infos();
+        _cond.notify_one();
+        return;
+    }
+    if (is_ready) {
+        _driver_queue->put_back(driver);
+    } else {
+        std::unique_lock<std::mutex> lock(_backup_mutex);
+        _backup_drivers.emplace_back(driver);
+    }
+}
+
 void PipelineDriverPoller::park_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_parked_mutex);
     VLOG_ROW << "Add to parked driver:" << driver->to_readable_string();

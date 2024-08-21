@@ -264,7 +264,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
             //           << ", sink finished: " << driver->sink_operator()->is_finished()
             //           << ", source finished: " << driver->source_operator()->is_finished()
             //           << ", source output: " << driver->source_operator()->has_output();
-            _blocked_driver_poller->upgrade_to_blocked_driver(dr);
+            _blocked_driver_poller->upgrade_to_blocked_driver2(dr);
         });
     }
 

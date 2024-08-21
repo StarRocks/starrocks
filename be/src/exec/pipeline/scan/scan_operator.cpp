@@ -241,10 +241,12 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                                                                           : "");
     }
     DeferOp op = DeferOp([this] { notify(); });
-    std::lock_guard guard(_task_mutex);
-    _detach_chunk_sources();
-    set_buffer_finished();
-    _is_finished = true;
+    {
+        std::lock_guard guard(_task_mutex);
+        _detach_chunk_sources();
+        set_buffer_finished();
+        _is_finished = true;
+    }
     return Status::OK();
 }
 

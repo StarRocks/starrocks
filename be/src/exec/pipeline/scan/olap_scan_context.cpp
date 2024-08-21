@@ -60,10 +60,6 @@ void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_i
     VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
                             _active_inputs.size());
     _active_inputs.erase(key);
-
-    if (_active_inputs.empty()) {
-        _publisher.notify();
-    }
 }
 
 bool OlapScanContext::has_active_input() const {
