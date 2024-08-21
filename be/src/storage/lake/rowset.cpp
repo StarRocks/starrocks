@@ -270,6 +270,40 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
             return segment_or.status();
         }
     }
+<<<<<<< HEAD
+=======
+
+    for (auto& fut : segment_futures) {
+        auto result_pair = fut.get();
+        auto segment_or = result_pair.first;
+        if (auto status = check_status(segment_or, result_pair.second); !status.ok()) {
+            return status;
+        }
+    }
+
+    // if this is for partial compaction, erase segments that are alreagy compacted and segments
+    // that are not compacted but exceeds compaction limit
+    if (partial_segments_compaction()) {
+        if (not_used_segments) {
+            not_used_segments->first.insert(not_used_segments->first.begin(), segments->begin(),
+                                            segments->begin() + metadata().next_compaction_offset());
+            not_used_segments->second.insert(
+                    not_used_segments->second.begin(),
+                    segments->begin() + metadata().next_compaction_offset() + _compaction_segment_limit,
+                    segments->end());
+            LOG(INFO) << "tablet: " << tablet_id() << ", version: " << _tablet_metadata->version()
+                      << ", rowset: " << metadata().id() << ", total segments: " << metadata().segments_size()
+                      << ", compacted segments: " << not_used_segments->first.size()
+                      << ", uncompacted segments: " << not_used_segments->second.size();
+        }
+
+        // trim compacted segments
+        segments->erase(segments->begin(), segments->begin() + metadata().next_compaction_offset());
+        // trim uncompacted segments
+        segments->resize(_compaction_segment_limit);
+    }
+
+>>>>>>> 562a4ddb46 ([Enhancement] support invalidate lake compaction with in queue time considered (#49962))
     return Status::OK();
 }
 
