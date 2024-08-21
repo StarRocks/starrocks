@@ -76,7 +76,7 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
     }};
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+    COUNTER_UPDATE(_aggregator->input_row_count(), chunk_size);
 
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {

@@ -402,6 +402,9 @@ public:
 
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
+    bool ht_need_consume() const { return _ht_need_consume; }
+
+    void set_ht_need_consume(bool ht_need_consume) { _ht_need_consume = ht_need_consume; }
 
     HashTableKeyAllocator _state_allocator;
 
@@ -428,6 +431,7 @@ protected:
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
     std::unique_ptr<LimitedPipelineChunkBuffer<AggStatistics>> _limited_buffer;
+    std::atomic<bool> _ht_need_consume = false;
 
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate

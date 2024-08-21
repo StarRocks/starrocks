@@ -34,7 +34,7 @@ public:
         } else {
             LOG(WARNING) << "invalid per_driver_mem_limit";
         }
-        size_t res = max_input_dop * _max_memory_usage_per_driver;
+        int64_t res = max_input_dop * _max_memory_usage_per_driver;
         if (res < _max_memory_usage) {
             _max_memory_usage = res;
         }
@@ -45,7 +45,7 @@ public:
         _buffered_num_rows += num_rows;
     }
 
-    size_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
+    int64_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
 
     int64_t get_memory_usage() const { return _memory_usage; }
 
@@ -66,9 +66,9 @@ public:
     }
 
 private:
-    std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB
-    size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL;         // 128MB
-    size_t _max_buffered_rows{};
+    std::atomic<int64_t> _max_memory_usage{128L * 1024 * 1024 * 1024}; // 128GB
+    int64_t _max_memory_usage_per_driver = 128 * 1024 * 1024L;         // 128MB
+    int64_t _max_buffered_rows{};
     std::atomic<int64_t> _memory_usage{};
     std::atomic<int64_t> _buffered_num_rows{};
     size_t _max_input_dop;
