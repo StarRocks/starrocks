@@ -418,21 +418,12 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     static constexpr char PROP_SEPARATOR = 0x2;
     std::string data;
 
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        for (const auto& [key, value] : cloud_configuration->cloud_properties) {
+            data += key;
+            data += KV_SEPARATOR;
+            data += value;
+            data += PROP_SEPARATOR;
         }
     }
 
