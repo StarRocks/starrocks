@@ -90,9 +90,9 @@ public:
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
-    static StatusOr<LogBlockContainerPtr> create(DirPtr dir, TUniqueId query_id, TUniqueId fragment_instance_id,
-                                                 int32_t plan_node_id, const std::string& plan_node_name, uint64_t id,
-                                                 bool enable_direct_io);
+    static StatusOr<LogBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
+                                                 const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
 
 private:
     DirPtr _dir;
@@ -153,9 +153,10 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
     return f;
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockContainer::create(DirPtr dir, TUniqueId query_id, TUniqueId fragment_instance_id,
-                                                         int32_t plan_node_id, const std::string& plan_node_name,
-                                                         uint64_t id, bool direct_io) {
+StatusOr<LogBlockContainerPtr> LogBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
+                                                         const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                         const std::string& plan_node_name, uint64_t id,
+                                                         bool direct_io) {
     auto container = std::make_shared<LogBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
                                                          plan_node_name, id, direct_io);
     RETURN_IF_ERROR(container->open());
@@ -217,7 +218,7 @@ private:
     size_t _offset{};
 };
 
-LogBlockManager::LogBlockManager(TUniqueId query_id, DirManager* dir_mgr)
+LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
         : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;

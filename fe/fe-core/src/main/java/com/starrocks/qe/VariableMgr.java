@@ -47,6 +47,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -61,7 +62,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -272,6 +272,12 @@ public class VariableMgr {
         return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
     }
 
+    // Check if this sessionVariable can be set correctly
+    public static void checkUpdate(SystemVariable sessionVariable) throws DdlException {
+        VarContext ctx = VariableMgr.getVarContext(sessionVariable.getVariable());
+        checkUpdate(sessionVariable, ctx.getFlag());
+    }
+
     // Check if this setVar can be set correctly
     private static void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
         if ((flag & READ_ONLY) != 0) {
@@ -347,7 +353,7 @@ public class VariableMgr {
         setValue(sessionVariable, ctx.getField(), value);
     }
 
-    public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public static void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<String, String> m = new HashMap<>();
         Map<String, String> g = new HashMap<>();
         try {
@@ -397,14 +403,14 @@ public class VariableMgr {
             throw new IOException("failed to write session variable: " + e.getMessage());
         }
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
 
-        writer.writeJson(m.size());
+        writer.writeInt(m.size());
         for (Map.Entry<String, String> e : m.entrySet()) {
             writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
         }
 
-        writer.writeJson(g.size());
+        writer.writeInt(g.size());
         for (Map.Entry<String, String> e : g.entrySet()) {
             writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
         }
@@ -659,6 +665,14 @@ public class VariableMgr {
         } else {
             return (varContext.getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
         }
+    }
+
+    public static Field getField(String name) {
+        VarContext ctx = getVarContext(name);
+        if (ctx == null) {
+            return null;
+        }
+        return ctx.getField();
     }
 
     @Retention(RetentionPolicy.RUNTIME)

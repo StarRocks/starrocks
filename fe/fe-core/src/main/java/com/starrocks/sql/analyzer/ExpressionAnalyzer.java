@@ -1186,8 +1186,12 @@ public class ExpressionAnalyzer {
                         Type toBitmapArg0Type = toBitmapArg0.getType();
                         if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
                                 || toBitmapArg0Type.isLargeIntType()) {
+                            argumentTypes = new Type[] {toBitmapArg0Type};
                             node.setChild(0, toBitmapArg0);
                             node.resetFnName("", FunctionSet.BITMAP_AGG);
+                            node.getParams().setExprs(Lists.newArrayList(toBitmapArg0));
+                            fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
+                                    Function.CompareMode.IS_IDENTICAL);
                         }
                     }
                 }
@@ -1985,10 +1989,17 @@ public class ExpressionAnalyzer {
             List<String> dictionaryKeys = dictionary.getKeys();
             int dictionaryKeysSize = dictionaryKeys.size();
             int paramDictionaryKeysSize = params.size() - 1;
-            if (paramDictionaryKeysSize != dictionaryKeysSize) {
-                throw new SemanticException("dictionary: " + dictionaryName + " has keys size: " +
-                                            Integer.toString(dictionaryKeysSize) +
-                                            " but param give: " + Integer.toString(paramDictionaryKeysSize));
+            if (!(paramDictionaryKeysSize == dictionaryKeysSize || paramDictionaryKeysSize == dictionaryKeysSize + 1)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has expected keys size: " +
+                                            Integer.toString(dictionaryKeysSize) + " keys: " +
+                                            "[" + String.join(", ", dictionaryKeys) + "]" +
+                                            " plus null_if_not_exist flag(optional)" +
+                                            " but param given: " + Integer.toString(paramDictionaryKeysSize));
+            }
+
+            if (paramDictionaryKeysSize == dictionaryKeysSize + 1 && !(params.get(params.size() - 1) instanceof BoolLiteral)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has invalid parameter for `null_if_not_exist` "
+                                            + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
@@ -2035,6 +2046,9 @@ public class ExpressionAnalyzer {
                 }
             }
 
+            boolean nullIfNotExist = (paramDictionaryKeysSize == dictionaryKeysSize + 1) ?
+                                     ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
+            node.setNullIfNotExist(nullIfNotExist);
             node.setDictionaryId(dictionary.getDictionaryId());
             node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().
                     getLastSuccessTxnId(dictionary.getDictionaryId()));

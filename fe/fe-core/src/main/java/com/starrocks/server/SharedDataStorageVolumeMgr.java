@@ -121,7 +121,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -190,13 +190,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             } else {
                 sv = getDefaultStorageVolume();
                 if (sv == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);

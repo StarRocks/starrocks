@@ -130,8 +130,8 @@ public:
 
     // operation in rowsets
     [[nodiscard]] Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
+    void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                                     std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -141,6 +141,7 @@ public:
     RowsetSharedPtr rowset_with_max_version() const;
 
     [[nodiscard]] Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -254,7 +255,8 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
-    [[nodiscard]] Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
+    [[nodiscard]] Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
+                                       bool is_version_overwrite = false, bool is_double_write = false);
 
     // if there is _compaction_task running
     // do not do compaction
@@ -327,6 +329,10 @@ public:
     void remove_all_delta_column_group_cache() const;
     void remove_all_delta_column_group_cache_unlocked() const;
 
+    [[nodiscard]] bool is_dropping() const { return _is_dropping; }
+    // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
+    void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
+
 protected:
     void on_shutdown() override;
 
@@ -364,6 +370,7 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -443,6 +450,8 @@ private:
     // another tablet with the same tablet id
     // currently, it will be used in Restore process
     bool _will_be_force_replaced = false;
+
+    std::atomic<bool> _is_dropping{false};
 };
 
 inline bool Tablet::init_succeeded() {

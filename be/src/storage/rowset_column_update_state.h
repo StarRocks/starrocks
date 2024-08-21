@@ -31,6 +31,16 @@ class Segment;
 class RandomAccessFile;
 class ColumnIterator;
 
+struct StreamChunkContainer {
+    Chunk* chunk_ptr = nullptr;
+    // [start_rowid, end_rowid) is range of this chunk_ptr
+    uint32_t start_rowid = 0;
+    uint32_t end_rowid = 0;
+
+    // whether this container contains this rowid.
+    bool contains(uint32_t rowid) { return start_rowid <= rowid && rowid < end_rowid; }
+};
+
 struct RowsetSegmentStat {
     int64_t num_rows_written = 0;
     int64_t total_row_size = 0;
@@ -215,7 +225,7 @@ private:
 
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
                                        Rowset* rowset, OlapReaderStatistics* stats, MemTracker* tracker,
-                                       ChunkPtr* source_chunk);
+                                       StreamChunkContainer container);
 
 private:
     int64_t _tablet_id = 0;

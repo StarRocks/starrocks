@@ -74,6 +74,7 @@ add_library(Formats STATIC
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
+        disk_range.hpp
         )
 
 add_subdirectory(orc/apache-orc)

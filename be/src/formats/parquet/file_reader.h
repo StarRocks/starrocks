@@ -25,7 +25,6 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -46,7 +45,8 @@ using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               const DataCacheOptions& datacache_options = DataCacheOptions(),
                io::SharedBufferedInputStream* sb_stream = nullptr,
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
@@ -56,6 +56,8 @@ public:
     Status get_next(ChunkPtr* chunk);
 
     FileMetaData* get_file_metadata();
+
+    Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
 private:
     int _chunk_size;
@@ -98,8 +100,6 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
-    Status _prepare_cur_row_group();
-
     // decode min/max value from row group stats
     Status _decode_min_max_column(const ParquetField& field, const std::string& timezone, const TypeDescriptor& type,
                                   const tparquet::ColumnMetaData& column_meta,
@@ -112,7 +112,7 @@ private:
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
-    int64_t _file_mtime = 0;
+    const DataCacheOptions _datacache_options;
 
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;

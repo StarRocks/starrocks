@@ -27,6 +27,7 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.util.Strings;
 
@@ -118,7 +119,8 @@ public class TaskRunHistoryTable {
                         Strings.quote(DateUtils.formatTimeStampInMill(status.getFinishTime(), ZoneId.systemDefault()));
                 String expireTime =
                         Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
-
+                // Since the content is stored in JSON format and insert into the starrocks olap table, we need to escape the
+                // content to make it safer in deserializing the json.
                 return MessageFormat.format(INSERT_SQL_VALUE,
                         String.valueOf(status.getTaskId()),
                         Strings.quote(status.getQueryId()),
@@ -127,11 +129,10 @@ public class TaskRunHistoryTable {
                         createTime,
                         finishTime,
                         expireTime,
-                        Strings.quote(status.toJSON()));
+                        Strings.quote(StringEscapeUtils.escapeJava(status.toJSON())));
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
-            System.err.println(sql);
             RepoExecutor.getInstance().executeDML(sql);
         }
     }
@@ -176,5 +177,4 @@ public class TaskRunHistoryTable {
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
     }
-
 }

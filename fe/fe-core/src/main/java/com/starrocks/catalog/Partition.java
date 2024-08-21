@@ -598,6 +598,7 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
         buffer.append("committedVersion: ").append(visibleVersion).append("; ");
         buffer.append("committedVersionHash: ").append(0).append("; ");
+        buffer.append("nextVersion: ").append(nextVersion).append("; ");
 
         buffer.append("dataVersion: ").append(dataVersion).append("; ");
         buffer.append("committedDataVersion: ").append(getCommittedDataVersion()).append("; ");

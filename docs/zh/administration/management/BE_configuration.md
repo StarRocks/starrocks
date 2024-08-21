@@ -1747,19 +1747,26 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：单节点上所有的导入线程占据的内存上限比例。
+- 描述：单节点上所有的导入线程占据内存的软上限（百分比）。
 - 引入版本：-
 
-<!--
+##### load_process_max_memory_hard_limit_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单节点上所有的导入线程占据内存的硬上限（比例）。当 `enable_new_load_on_memory_limit_exceeded` 设置为 `false`，并且所有导入线程的内存占用超过 `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` 时，系统将会拒绝新的导入线程。
+- 引入版本：v3.3.2
+
 ##### enable_new_load_on_memory_limit_exceeded
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
+- 引入版本：v3.3.2
 
 ##### txn_commit_rpc_timeout_ms (Deprecated)
 
@@ -3255,6 +3262,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - 默认值：60
@@ -3263,7 +3271,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，系统进行缓存淘汰（Cache Eviction）的间隔。
 - 引入版本：v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - 默认值：0.1
@@ -3272,7 +3282,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）低于此配置项中指定的值，将会触发缓存淘汰。
 - 引入版本：v3.0
-
+-->
+  
+<!--  
 ##### starlet_cache_evict_high_water
 
 - 默认值：0.2
@@ -3281,7 +3293,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）高于此配置项中指定的值，将会停止缓存淘汰。
 - 引入版本：v3.0
-
+-->
+  
 <!--
 ##### starlet_cache_dir_allocate_policy
 

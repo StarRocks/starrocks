@@ -99,7 +99,11 @@ public:
 
     [[nodiscard]] Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
                                      TTransactionId transaction_id, int64_t version, const RowsetSharedPtr& rowset,
-                                     uint32_t wait_time = 0);
+                                     uint32_t wait_time = 0, bool is_double_write = false);
+
+    [[nodiscard]] Status publish_overwrite_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                               TTransactionId transaction_id, int64_t version,
+                                               const RowsetSharedPtr& rowset, uint32_t wait_time);
 
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     [[nodiscard]] Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);

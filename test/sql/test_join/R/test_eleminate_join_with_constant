@@ -1,0 +1,96 @@
+-- name: test_eleminate_join_with_constant
+CREATE TABLE `lineitem` (
+  `l_orderkey` int(11) NOT NULL COMMENT "",
+  `l_partkey` int(11) NOT NULL COMMENT "",
+  `l_suppkey` int(11),
+  `l_shipdate` date
+) ENGINE=OLAP
+DUPLICATE KEY(`l_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 3
+PROPERTIES (
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into lineitem values (1,1,1,'2000-01-01'),(1,2,1,'2000-01-01'),(1,3,2,'2000-01-02'),(11,1,11,'2000-01-01'),(11,2,1,'2000-01-02'),(2,3,2,'2000-01-03'),(2,3,null,null);
+-- result:
+-- !result
+select * from lineitem t1 join (select '2000-01-01' as col1) t2 on true order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01	2000-01-01
+1	2	1	2000-01-01	2000-01-01
+1	3	2	2000-01-02	2000-01-01
+-- !result
+select * from lineitem t1 inner join (select '2000-01-01' as col1) t2 on true where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+11	2	1	2000-01-02	2000-01-01
+-- !result
+select * from lineitem t1 left outer join (select '2000-01-01' as col1) t2 on true where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+11	2	1	2000-01-02	2000-01-01
+-- !result
+select * from lineitem t1 join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01	2000-01-01
+1	2	1	2000-01-01	2000-01-01
+11	1	11	2000-01-01	2000-01-01
+-- !result
+select * from lineitem t1 join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+-- !result
+select * from lineitem t1 left join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01	2000-01-01
+1	2	1	2000-01-01	2000-01-01
+1	3	2	2000-01-02	None
+-- !result
+select * from lineitem t1 left join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+11	2	1	2000-01-02	None
+-- !result
+select * from lineitem t1 right join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01	2000-01-01
+1	2	1	2000-01-01	2000-01-01
+11	1	11	2000-01-01	2000-01-01
+-- !result
+select * from lineitem t1 right join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+-- !result
+select * from lineitem t1 left semi join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01
+1	2	1	2000-01-01
+11	1	11	2000-01-01
+-- !result
+select * from lineitem t1 left semi join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01
+-- !result
+select * from lineitem t1 right semi join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1 limit 3;
+-- result:
+2000-01-01
+-- !result
+select * from lineitem t1 full outer join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	1	1	2000-01-01	2000-01-01
+1	2	1	2000-01-01	2000-01-01
+1	3	2	2000-01-02	None
+-- !result
+select * from lineitem t1 full outer join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 where t1.l_orderkey > 10 order by 1,2,3 limit 3;
+-- result:
+11	1	11	2000-01-01	2000-01-01
+11	2	1	2000-01-02	None
+-- !result
+select * from lineitem t1 left anti join (select '2000-01-01' as col1) t2 on t1.l_shipdate=t2.col1 order by 1,2,3 limit 3;
+-- result:
+1	3	2	2000-01-02
+2	3	None	None
+2	3	2	2000-01-03
+-- !result

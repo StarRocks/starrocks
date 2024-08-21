@@ -315,7 +315,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(type_descs),
+          _type_descs(std::move(std::move(type_descs))),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;
@@ -681,7 +681,8 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        auto buf = ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() +
+                                                                     simdjson::SIMDJSON_PADDING));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
         std::swap(buf, _file_stream_buffer);

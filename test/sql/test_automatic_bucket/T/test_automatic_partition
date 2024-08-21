@@ -142,9 +142,6 @@ select * from t;
 
 create materialized view mv as select k, v1 from t;
 function: wait_alter_table_finish("rollup", 8)
-<<<<<<< HEAD
-select k, v1 from t;
-=======
 select k, v1 from t;
 
 -- name: test_delete
@@ -186,4 +183,3 @@ select * from t;
 
 alter table t set('mutable_bucket_num'='-1');
 alter table t set('mutable_bucket_num'='a');
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))

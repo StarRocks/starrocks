@@ -117,7 +117,8 @@ public:
 
 private:
     void _init_field_mapping();
-    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema) const;
+    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                        const TypeDescriptor* type_descriptor) const;
     const TIcebergSchema* _t_iceberg_schema = nullptr;
     // field name has already been formatted
     std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;

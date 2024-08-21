@@ -41,6 +41,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
@@ -177,6 +178,20 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testGetTableThrowConnectorException() {
+        new Expectations(hmsOps) {
+            {
+                hmsOps.getTable("acid_db", "acid_table");
+                result = new StarRocksConnectorException("hive acid table is not supported");
+                minTimes = 1;
+            }
+        };
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+    }
+
+    @Test
     public void testTableExists() {
         boolean exists = hiveMetadata.tableExists("db1", "tbl1");
         Assert.assertTrue(exists);
@@ -253,6 +268,18 @@ public class HiveMetadataTest {
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assert.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+    }
+
+    @Test
+    public void testShowCreateHiveTbl() {
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        Assert.assertEquals("CREATE TABLE `table1` (\n" +
+                "  `col2` int(11) DEFAULT NULL,\n" +
+                "  `col1` int(11) DEFAULT NULL\n" +
+                ")\n" +
+                "PARTITION BY (col1)\n" +
+                "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
     @Test

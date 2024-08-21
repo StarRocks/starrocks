@@ -14,6 +14,8 @@
 
 #include "exec/jni_scanner.h"
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -416,21 +418,12 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     static constexpr char PROP_SEPARATOR = 0x2;
     std::string data;
 
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        for (const auto& [key, value] : cloud_configuration->cloud_properties) {
+            data += key;
+            data += KV_SEPARATOR;
+            data += value;
+            data += PROP_SEPARATOR;
         }
     }
 
@@ -481,7 +474,7 @@ Status JniScanner::update_jni_scanner_params() {
 class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
-            : JniScanner(factory_class, params) {}
+            : JniScanner(std::move(factory_class), std::move(params)) {}
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
 

@@ -60,19 +60,13 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback,
                                  ClientConnection<FrontendServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
         callback(client);
         return Status::OK();
-    } catch (apache::thrift::protocol::TProtocolException& e) {
-        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
-            ss << "FE RPC response parsing failure, address=" << address << ".The FE may be busy, please retry later";
-        } else {
-            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
-        }
     } catch (apache::thrift::TException& e) {
         ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
     }
@@ -81,7 +75,7 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendSer
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<BackendServiceClient>&)>& callback,
                                  ClientConnection<BackendServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
@@ -96,7 +90,7 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServ
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback,
                                  ClientConnection<TFileBrokerServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;

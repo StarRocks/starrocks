@@ -913,7 +913,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregateWithGroupByKeyExpr1() {
-        setTracLogModule("MV");
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
@@ -5505,12 +5504,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " group by lo_orderdate" +
                     " having sum(lo_tax) > 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("4:Project\n" +
+            checker.contains("  4:Project\n" +
                     "  |  <slot 6> : 21: lo_orderdate\n" +
                     "  |  <slot 18> : 26: sum\n" +
                     "  |  <slot 19> : 27: sum\n" +
-                    "  |  <slot 26> : clone(26: sum)\n" +
-                    "  |  <slot 27> : clone(27: sum)\n" +
                     "  |  \n" +
                     "  3:AGGREGATE (merge finalize)");
         }

@@ -93,6 +93,8 @@ public class InsertStmt extends DmlStmt {
     private final boolean blackHoleTableAsTargetTable;
     private final Map<String, String> tableFunctionProperties;
 
+    private boolean isVersionOverwrite = false;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -172,6 +174,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean hasOverwriteJob() {
         return overwriteJobId > 0;
+    }
+
+    public void setIsVersionOverwrite(boolean isVersionOverwrite) {
+        this.isVersionOverwrite = isVersionOverwrite;
+    }
+
+    public boolean isVersionOverwrite() {
+        return isVersionOverwrite;
     }
 
     public QueryStatement getQueryStatement() {
@@ -311,13 +321,5 @@ public class InsertStmt extends DmlStmt {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        if (tableFunctionAsTargetTable) {
-            return true;
-        }
-        return false;
     }
 }

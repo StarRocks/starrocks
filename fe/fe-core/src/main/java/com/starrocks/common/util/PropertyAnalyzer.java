@@ -393,17 +393,16 @@ public class PropertyAnalyzer {
         return Pair.create(null, PeriodDuration.ZERO);
     }
 
-    public static int analyzePartitionLiveNumber(Map<String, String> properties,
-                                                 boolean removeProperties) throws AnalysisException {
+    public static int analyzePartitionLiveNumber(Map<String, String> properties, boolean removeProperties) {
         int partitionLiveNumber = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_LIVE_NUMBER));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Partition Live Number: " + e.getMessage());
+                throw new SemanticException("Partition Live Number: " + e.getMessage());
             }
             if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
-                throw new AnalysisException("Illegal Partition Live Number: " + partitionLiveNumber);
+                throw new SemanticException("Illegal Partition Live Number: " + partitionLiveNumber);
             }
             if (removeProperties) {
                 properties.remove(PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -412,20 +411,20 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
-    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+    public static long analyzeBucketSize(Map<String, String> properties) {
         long bucketSize = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
             try {
                 bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Bucket size: " + e.getMessage());
+                throw new SemanticException("Bucket size: " + e.getMessage());
             }
             if (bucketSize < 0) {
-                throw new AnalysisException("Illegal bucket size: " + bucketSize);
+                throw new SemanticException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
-            throw new AnalysisException("Bucket size is not set");
+            throw new SemanticException("Bucket size is not set");
         }
     }
 
@@ -535,8 +534,7 @@ public class PropertyAnalyzer {
         return replicationNum;
     }
 
-    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
-            throws AnalysisException {
+    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault) {
         String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -557,21 +555,21 @@ public class PropertyAnalyzer {
         return resourceGroup;
     }
 
-    private static void checkReplicationNum(short replicationNum) throws AnalysisException {
+    private static void checkReplicationNum(short replicationNum) {
         if (replicationNum <= 0) {
-            throw new AnalysisException("Replication num should larger than 0");
+            throw new SemanticException("Replication num should larger than 0");
         }
 
         List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
             backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
-                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+                throw new SemanticException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
             if (replicationNum > backendIds.size()) {
-                throw new AnalysisException("Table replication num should be less than " +
+                throw new SemanticException("Table replication num should be less than " +
                         "of equal to the number of available BE nodes. "
                         + "You can change this default by setting the replication_num table properties. "
                         + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");

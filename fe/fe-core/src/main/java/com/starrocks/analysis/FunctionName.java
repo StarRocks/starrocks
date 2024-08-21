@@ -100,24 +100,25 @@ public class FunctionName implements Writable {
         return db_ + "." + fn_;
     }
 
-    public void analyze(String defaultDb) throws AnalysisException {
+    public void analyze(String defaultDb) {
         if (fn_.length() == 0) {
-            throw new AnalysisException("Function name can not be empty.");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
         }
         for (int i = 0; i < fn_.length(); ++i) {
             if (!isValidCharacter(fn_.charAt(i))) {
-                throw new AnalysisException(
-                        "Function names must be all alphanumeric or underscore. " +
-                                "Invalid name: " + fn_);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Function names must be all alphanumeric or underscore. " +
+                                        "Invalid name: " + fn_);
             }
         }
         if (Character.isDigit(fn_.charAt(0))) {
-            throw new AnalysisException("Function cannot start with a digit: " + fn_);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Function cannot start with a digit: " + fn_);
         }
         if (db_ == null) {
             db_ = defaultDb;
             if (Strings.isNullOrEmpty(db_)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
     }

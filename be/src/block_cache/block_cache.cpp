@@ -137,6 +137,15 @@ Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handl
     return _kv_cache->read_object(cache_key, handle, options);
 }
 
+bool BlockCache::exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const {
+    if (size == 0) {
+        return true;
+    }
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->exist(block_key);
+}
+
 Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "remove block key: " << cache_key << " with invalid args, offset: " << offset

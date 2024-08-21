@@ -35,11 +35,7 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_invalid_bucket_size
 create table t0(k int) properties('bucket_size'='0');
 -- result:
@@ -56,16 +52,12 @@ alter table t set('bucket_size'='0');
 -- !result
 alter table t set('bucket_size'='-1');
 -- result:
-E: (5064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
 -- !result
 alter table t set('bucket_size'='2048');
 -- result:
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_automatic_bucket
 create database kkk;
 -- result:
@@ -97,11 +89,7 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_range_partition @sequential
 create database ttt;
 -- result:
@@ -160,11 +148,7 @@ select * from t;
 2021-01-01	1
 2021-01-05	1
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_list_partition @sequential
 create database ddd;
 -- result:
@@ -223,11 +207,7 @@ select * from t;
 2021-01-01	1
 2021-01-03	1
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_expr_partition @sequential
 create database eee;
 -- result:
@@ -281,11 +261,7 @@ select * from t;
 2021-01-01	1
 2021-01-01	1
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_schema_change @sequential
 create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -389,11 +365,7 @@ select * from t;
 2021-01-05	None	1
 2021-01-05	None	2
 -- !result
-<<<<<<< HEAD
-=======
 
-
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -475,9 +447,6 @@ select k, v1 from t;
 2021-01-03	1
 2021-01-03	2
 -- !result
-<<<<<<< HEAD
-=======
-
 
 -- name: test_delete
 create table t(k int, v int)
@@ -522,8 +491,6 @@ delete from t where k = 1;
 -- !result
 select * from t;
 -- result:
--- !result
-
 
 -- name: test_mutable_bucket @sequential
 create database ggg;
@@ -616,4 +583,3 @@ alter table t set('mutable_bucket_num'='a');
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
 -- !result
->>>>>>> f07abad55d ([Enhancement] Support mutable bucket num table property (#49098))

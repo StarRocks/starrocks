@@ -51,6 +51,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -67,7 +68,6 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -148,17 +148,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "disable_load_job is set to true, all load jobs are rejected");
         }
 
         if (Config.metadata_enable_recovery_mode) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under recovery mode, all load jobs are rejected");
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
@@ -338,8 +338,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
         } catch (LockTimeoutException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            return false;
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
@@ -828,12 +827,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         dbTransactionMgr.updateDatabaseUsedQuotaData(usedQuotaDataBytes);
     }
 
-    public void saveTransactionStateV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveTransactionStateV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
         final int cnt = 2 + txnNum;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
-        writer.writeJson(txnNum);
+        writer.writeInt(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
         }

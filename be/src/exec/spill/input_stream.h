@@ -55,7 +55,7 @@ public:
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
     static InputStreamPtr union_all(std::vector<InputStreamPtr>& _streams);
-    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller);
+    static InputStreamPtr as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller);
 
 private:
     std::atomic_bool _eof = false;
@@ -126,6 +126,15 @@ public:
     size_t size() const {
         std::lock_guard guard(_mutex);
         return _groups.size();
+    }
+
+    size_t num_rows() const {
+        std::lock_guard guard(_mutex);
+        size_t num_rows = 0;
+        for (const auto& group : _groups) {
+            num_rows += group->num_rows();
+        }
+        return num_rows;
     }
 
     // choose the two smallest chunks for the compaction

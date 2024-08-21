@@ -56,7 +56,7 @@ public:
     void select_column_offset_index();
 
 private:
-    Status _decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
+    Status _decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                      const TypeDescriptor& type, const ParquetField* field,
                                      const std::string& timezone);
 

@@ -377,15 +377,14 @@ public class TaskRunStatus implements Writable {
 
     public long calculateRefreshProcessDuration() {
         if (finishTime > processStartTime) {
-            return finishTime - processStartTime;
-        } else {
-            return 0L;
-        }
-    }
-
-    public long calculateRefreshDuration() {
-        if (finishTime > createTime) {
-            return finishTime - createTime;
+            // NOTE:
+            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
+            // In this case to avoid return a weird duration we choose the createTime as startTime
+            if (processStartTime > 0) {
+                return finishTime - processStartTime;
+            } else {
+                return finishTime - createTime;
+            }
         } else {
             return 0L;
         }
@@ -471,7 +470,7 @@ public class TaskRunStatus implements Writable {
     /**
      * Only used for deserialization of ResultBatch
      */
-    static class TaskRunStatusJSONRecord {
+    public static class TaskRunStatusJSONRecord {
         /**
          * Only one item in the array, like:
          * { data: [ {TaskRunStatus} ] }
@@ -488,9 +487,15 @@ public class TaskRunStatus implements Writable {
         List<TaskRunStatus> res = new ArrayList<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
-                ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                String jsonString = copied.toString(Charset.defaultCharset());
-                res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                String jsonString = "";
+                try {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    jsonString = copied.toString(Charset.defaultCharset());
+                    res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                            "_statistics_.task_run_history table: " + jsonString, e);
+                }
             }
         }
         return res;
