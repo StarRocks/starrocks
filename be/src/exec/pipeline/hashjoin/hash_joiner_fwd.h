@@ -21,6 +21,7 @@ static inline constexpr size_t kHashJoinKeyColumnOffset = 1;
 class HashJoiner;
 class JoinHashTable;
 using HashJoinerPtr = std::shared_ptr<HashJoiner>;
+class HashJoinBuilder;
 
 namespace pipeline {
 class HashJoinerFactory;

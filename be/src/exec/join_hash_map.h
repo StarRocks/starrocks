@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "util/runtime_profile.h"
 #define JOIN_HASH_MAP_H
 
 #include <gen_cpp/PlanNodes_types.h>
@@ -197,6 +198,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
 
     HashTableProbeState()
             : build_index_column(UInt32Column::create()),
@@ -256,7 +258,8 @@ struct HashTableProbeState {
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
-              output_probe_column_timer(rhs.output_probe_column_timer) {}
+              output_probe_column_timer(rhs.output_probe_column_timer),
+              probe_counter(rhs.probe_counter) {}
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -288,6 +291,7 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
     bool mor_reader_mode = false;
 };
 
@@ -331,7 +335,7 @@ public:
     const static uint32_t MAX_BUCKET_SIZE = 1 << 31;
 
     static uint32_t calc_bucket_size(uint32_t size) {
-        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 7;
+        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 4;
         // Limit the maximum hash table bucket size.
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
@@ -816,7 +820,7 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_build_column_timer);
+                           RuntimeProfile::Counter* output_build_column_timer, RuntimeProfile::Counter* probe_counter);
 
     void create(const HashTableParam& param);
     void close();
@@ -830,10 +834,11 @@ public:
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
-    StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
+    ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
+    const Columns& get_key_columns() const { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_output_probe_column_count() const { return _table_items->output_probe_column_count; }

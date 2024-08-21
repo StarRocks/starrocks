@@ -47,15 +47,17 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, ColumnPtr column,
+    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
                                  MutableJoinRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
-              column(std::move(column)),
+              is_empty(is_empty),
+              columns(std::move(columns)),
               runtime_filter(std::move(runtime_filter)) {}
     bool multi_partitioned;
     bool eq_null;
-    ColumnPtr column;
+    bool is_empty;
+    std::vector<ColumnPtr> columns;
     MutableJoinRuntimeFilterPtr runtime_filter;
 };
 
@@ -436,12 +438,8 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
-                if (param.column == nullptr || param.column->empty()) {
-                    continue;
-                }
-                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(param.column, desc->build_expr_type(),
-                                                                             desc->runtime_filter(),
-                                                                             kHashJoinKeyColumnOffset, param.eq_null);
+                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(
+                        param, desc->build_expr_type(), desc->runtime_filter(), kHashJoinKeyColumnOffset);
                 if (!status.ok()) {
                     desc->set_runtime_filter(nullptr);
                     break;
@@ -517,7 +515,7 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
-                if (param.column == nullptr || param.column->empty()) {
+                if (param.is_empty) {
                     continue;
                 }
                 rf->concat(param.runtime_filter.get());
