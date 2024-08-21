@@ -3765,12 +3765,6 @@ public class PlanFragmentBuilder {
             context.getFragments().remove(child);
             SplitPlanFragment splitProduce = new SplitPlanFragment(child);
 
-            // output expr seems useless for exchange sink/source
-            //            List<Expr> outputs = Lists.newArrayList();
-            //            optExpression.getOutputColumns().getStream()
-            //                    .forEach(i -> outputs.add(context.getColRefToExpr().get(columnRefFactory.getColumnRef(i))));
-            //
-            //            cteProduce.setOutputExprs(outputs);
             context.getSplitProduceFragments().put(splitId, splitProduce);
             context.getFragments().add(splitProduce);
 

@@ -184,7 +184,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             Pair<ScalarOperator, ScalarOperator> rightTablePredicates =
                     generateInAndNotInPredicate(rightSkewColumn, skewValues);
 
-
             Map<ColumnRefOperator, ColumnRefOperator> leftSplitOutputColumnRefMap =
                     generateOutputColumnRefMap(
                             leftExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory));
@@ -446,22 +445,23 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     rightSkewColumn = child0;
                 } else {
                     // originalSkewColumn is part of some expr
-                    ScalarOperator rewriteChild0 = replaceColumnRef(child0, leftProjection);
-                    ScalarOperator rewriteChild1 = replaceColumnRef(child1, leftProjection);
-                    if (rewriteChild0.getUsedColumns().contains((ColumnRefOperator) originalSkewColumn)) {
-                        leftSkewColumn = child0;
-                        rightSkewColumn = child1;
-                    } else if (rewriteChild1.getUsedColumns().contains((ColumnRefOperator) originalSkewColumn)) {
-                        rightSkewColumn = child0;
-                        leftSkewColumn = child1;
-                    }
+                    if (leftProjection != null) {
+                        ScalarOperator rewriteChild0 = replaceColumnRef(child0, leftProjection);
+                        ScalarOperator rewriteChild1 = replaceColumnRef(child1, leftProjection);
+                        if (rewriteChild0.getUsedColumns().contains((ColumnRefOperator) originalSkewColumn)) {
+                            leftSkewColumn = child0;
+                            rightSkewColumn = child1;
+                        } else if (rewriteChild1.getUsedColumns().contains((ColumnRefOperator) originalSkewColumn)) {
+                            rightSkewColumn = child0;
+                            leftSkewColumn = child1;
+                        }
 
-                    Map<ColumnRefOperator, ScalarOperator> leftColumnRefMap = leftProjection.getAllMaps();
-                    if (leftColumnRefMap.keySet().contains(leftSkewColumn)) {
-                        // this means leftSkewColumn is not a simple columnRef operator, so we need to rewrite skew values
-                        skewValues = rewriteSkewValues(skewValues, leftSkewColumn);
+                        Map<ColumnRefOperator, ScalarOperator> leftColumnRefMap = leftProjection.getAllMaps();
+                        if (leftColumnRefMap.keySet().contains(leftSkewColumn)) {
+                            // this means leftSkewColumn is not a simple columnRef operator, so we need to rewrite skew values
+                            skewValues = rewriteSkewValues(skewValues, leftSkewColumn);
+                        }
                     }
-
                 }
             }
 
