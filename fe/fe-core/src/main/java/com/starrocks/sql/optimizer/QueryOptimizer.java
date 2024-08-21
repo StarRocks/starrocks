@@ -566,7 +566,10 @@ public class QueryOptimizer extends Optimizer {
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
-        skewJoinOptimize(tree, rootTaskContext);
+         if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
+                !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
+            skewJoinOptimize(tree, rootTaskContext);
+        }
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
@@ -921,6 +924,11 @@ public class QueryOptimizer extends Optimizer {
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
+        if (rootTaskContext.getOptimizerContext().getSessionVariable()
+                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
+                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
+            result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
+        }
         result.setPlanCount(planCount);
         return result;
     }
