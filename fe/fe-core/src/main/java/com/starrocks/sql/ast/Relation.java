@@ -113,8 +113,4 @@ public abstract class Relation implements ParseNode {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitRelation(this, context);
     }
-
-    public boolean needAuditEncryption() {
-        return false;
-    }
 }
