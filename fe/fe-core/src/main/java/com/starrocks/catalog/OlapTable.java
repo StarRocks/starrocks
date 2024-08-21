@@ -149,6 +149,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -282,6 +283,9 @@ public class OlapTable extends Table {
     private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
+
+    // The flag is used to indicate whether the table shard group has changed.
+    public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -426,6 +430,14 @@ public class OlapTable extends Table {
         return doubleWritePartitions;
     }
 
+    public boolean hasShardGroupChanged() {
+        return isShardGroupChanged.get();
+    }
+
+    public void setShardGroupChanged(boolean isShardGroupChanged) {
+        this.isShardGroupChanged.set(isShardGroupChanged);
+    }
+
     public BinlogConfig getCurBinlogConfig() {
         if (tableProperty != null) {
             return tableProperty.getBinlogConfig();
@@ -507,6 +519,7 @@ public class OlapTable extends Table {
 
     public void setState(OlapTableState state) {
         this.state = state;
+        setShardGroupChanged(true);
     }
 
     public OlapTableState getState() {

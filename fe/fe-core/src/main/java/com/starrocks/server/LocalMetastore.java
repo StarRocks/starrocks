@@ -1532,11 +1532,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         }
 
         Long id = GlobalStateMgr.getCurrentState().getNextId();
-        long shardGroupId = 0;
-        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                    createShardGroup(db.getId(), olapTable.getId(), id);
-        }
+        // physical partitions in the same logical partition use the same shard_group_id,
+        // so that the shards of this logical partition are more evenly distributed.
+        long shardGroupId = partition.getShardGroupId();
 
         if (name == null) {
             name = partition.generatePhysicalPartitionName(id);
@@ -1626,6 +1624,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 partition.addSubPartition(subPartition);
                 olapTable.addPhysicalPartition(subPartition);
             }
+
+            olapTable.setShardGroupChanged(true);
 
             // add partition log
             addSubPartitionLog(db, olapTable, partition, subPartitions);
