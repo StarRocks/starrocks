@@ -1190,7 +1190,7 @@ CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 // When the keys that we want to delete, number of them is larger than this config,
 // we will fallback and using `DeleteRange` in rocksdb.
-CONF_mInt32(rocksdb_opt_delete_range_limit, "10000");
+CONF_mInt32(rocksdb_opt_delete_range_limit, "500");
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 } // namespace starrocks::config

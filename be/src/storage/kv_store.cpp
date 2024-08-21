@@ -339,17 +339,25 @@ Status KVStore::OptDeleteRange(ColumnFamilyIndex column_family_index, const std:
                                const std::string& end_key, WriteBatch* batch) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     int key_cnt = 0;
-    return iterate_range(column_family_index, begin_key, end_key, [&](std::string_view key, std::string_view value) {
+    auto delete_range_st = Status::OK();
+    auto st = iterate_range(column_family_index, begin_key, end_key, [&](std::string_view key, std::string_view value) {
         if (key_cnt >= config::rocksdb_opt_delete_range_limit) {
             // fallback and use `DeleteRange` instead.
             batch->Clear();
-            batch->DeleteRange(handle, begin_key, end_key);
+            auto rocksdb_st = batch->DeleteRange(handle, begin_key, end_key);
+            if (!rocksdb_st.ok()) {
+                delete_range_st = to_status(rocksdb_st);
+            }
             return false;
         }
         batch->Delete(handle, key);
         key_cnt++;
         return true;
     });
+    if (!delete_range_st.ok()) {
+        return delete_range_st;
+    }
+    return st;
 }
 
 } // namespace starrocks
