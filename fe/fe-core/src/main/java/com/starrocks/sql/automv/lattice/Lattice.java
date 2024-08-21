@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.automv.lattice;
 
-import com.google.api.client.util.Lists;
-import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
@@ -31,6 +33,7 @@ import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.util.Box;
+import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.automv.util.Util;
@@ -81,12 +84,18 @@ public class Lattice {
     private final PlanPiece flatTable;
     private final Map<String, Op> flatTableNormToOpMap;
 
-    private final List<LatticeNodeId> nodeIds = Lists.newArrayList();
-    private final Map<LatticeNodeId, Integer> dimensionsFreqs = Maps.newHashMap();
+    private final List<LatticeNodeId> coverableNodeIds = Lists.newArrayList();
+    private final List<LatticeNodeId> uncoverableINodeIds = Lists.newArrayList();
+    private final Map<LatticeNodeId, List<String>> uncoverableIINodeIds = Maps.newHashMap();
     private final TieredMap<Integer, GenericColumn> flatTableNorms;
     private final LatticeNode root;
-
     private final List<LatticeNode> nodes = Lists.newArrayList();
+    private transient BiMap<Box<LatticeNode>, Integer> nodeOrdinal;
+
+    private Map<LatticeNodeId, Long> coverableNumAcceleratedQueries = null;
+    private Map<LatticeNodeId, Long> accCoverableNumAcceleratedQueries = null;
+    private Map<LatticeNodeId, Long> uncoverableINumAcceleratedQueries = null;
+    private Map<LatticeNodeId, Map<String, Long>> uncoverableIINumAcceleratedQueries = null;
 
     public Lattice(Map<String, Integer> columnToOrdinalMap,
                    List<Integer> columnIds,
@@ -135,7 +144,6 @@ public class Lattice {
 
         Lattice lattice = Lattice.createLattice(firstAggPiece, dimensionNorms);
         pieces.forEach(piece -> lattice.insert(piece.cast()));
-        lattice.updateDimensionsFrequencies();
         return lattice;
     }
 
@@ -181,8 +189,34 @@ public class Lattice {
                 rootPiece);
     }
 
+    public void updateNodeIds(LatticeNodeId id, LatticeNode.Category category, String conjunctsNorm) {
+        switch (category) {
+            case COVERABLE: {
+                coverableNodeIds.add(id);
+                break;
+            }
+            case UNCOVERABLE_I: {
+                uncoverableINodeIds.add(id);
+                break;
+            }
+            case UNCOVERABLE_II: {
+                uncoverableIINodeIds.computeIfAbsent(id, key -> Lists.newArrayList()).add(conjunctsNorm);
+            }
+        }
+    }
+
     public List<LatticeNode> getNodes() {
         return nodes;
+    }
+
+    public int getNodeOrdinal(LatticeNode node) {
+        if (nodeOrdinal == null) {
+            Supplier<Integer> idGen = Util.nextIdGenerator();
+            nodeOrdinal = Stream.concat(Stream.of(root), nodes.stream())
+                    .sorted(LatticeNode.getComparator()).map(n -> Pair.create(n, idGen.get()))
+                    .collect(ImmutableBiMap.toImmutableBiMap(p -> Box.of(p.first), p -> p.second));
+        }
+        return nodeOrdinal.get(Box.of(node));
     }
 
     public List<String> getColumnNorms() {
@@ -200,7 +234,7 @@ public class Lattice {
     public void addAllMinimalCoveringNodes() {
         Set<Pair<LatticeNodeId, LatticeNodeId>> processed = Sets.newHashSet();
         while (addAllMinimalCoveringNodesOnePass(processed)) {
-            consolidate();
+            consolidateCoverable();
         }
     }
 
@@ -296,7 +330,7 @@ public class Lattice {
         Preconditions.checkArgument(aggPiece.getFlatTable().getAuxState().getNormHash()
                 .equals(flatTable.getAuxState().getNormHash()));
         LatticeNodeId id = LatticeNodeId.calcId(aggPiece.getDimensions().values(), columnToOrdinalMap);
-        insertWithId(root, aggPiece, id);
+        insertWithId(aggPiece, id);
     }
 
     public List<LatticeNode> bfs() {
@@ -332,14 +366,68 @@ public class Lattice {
         return result;
     }
 
-    private void updateDimensionsFrequencies() {
-        this.nodeIds.forEach(id -> dimensionsFreqs.merge(id, 1, Integer::sum));
+    private void linkNodeToItsParents(Collection<LatticeNode> parents, LatticeNode node) {
+        // step1: Set newChild's parents.
+        LatticeNodeId id = node.getId();
+        node.setParent(Lists.newArrayList(parents));
+
+        Set<LatticeNode> grandChildren = Sets.newHashSet();
+
+        // step2: Set parents' children.
+        // Some children of parents are newChild's siblings, the others are demoted to be grandchildren
+        // of the parents, in another word, they are children of the newChild, so we gather them together.
+        for (LatticeNode parent : parents) {
+            Map<Boolean, List<LatticeNode>> childGroups = parent.getChildren().stream()
+                    .collect(Collectors.partitioningBy(child -> child.getId().isCoveredStrictlyBy(id)));
+            grandChildren.addAll(childGroups.get(true));
+            List<LatticeNode> siblings = childGroups.get(false);
+            siblings.add(node);
+            parent.setChildren(siblings);
+        }
+        // deduplicate grandchildren
+        // step3: Set newChild's children to be grandChildren of parents.
+        node.getChildren().addAll(grandChildren);
+
+        // step4: Set grandChildren's parents.
+        // grandChildren's current parents should be preserved if it does not cover
+        // newChild. the newChild should be added to grandchildren's parents.
+        for (LatticeNode grandChild : grandChildren) {
+            List<LatticeNode> siblings = grandChild.getParents().stream()
+                    .filter(parent -> !parent.getId().isCovering(id))
+                    .collect(Collectors.toList());
+            siblings.add(node);
+            grandChild.setParent(siblings);
+        }
     }
 
-    private void insertWithId(LatticeNode node, AggregatePiece aggPiece, LatticeNodeId id) {
-        this.nodeIds.add(id);
+    private void addNode(Collection<LatticeNode> parents, LatticeNode node) {
+        linkNodeToItsParents(parents, node);
+        linkNodeToItsChildren(node);
+    }
+
+    private void insertNode(LatticeNode node) {
         TieredList<LatticeNode> commonPath = TieredList.genesis();
-        List<TieredList<LatticeNode>> ancestorPathList = seekFor(node, commonPath, id);
+        LatticeNodeId id = node.getId();
+        List<TieredList<LatticeNode>> ancestorPathList = seekFor(this.root, commonPath, id);
+        Preconditions.checkArgument(!ancestorPathList.isEmpty());
+
+        List<TieredList<LatticeNode>> pathListEndWithTargetId = ancestorPathList.stream()
+                .filter(ancestorPath -> {
+                    LatticeNode lastNode = ancestorPath.get(-1);
+                    return lastNode.getId().equals(id) && lastNode != root;
+                })
+                .collect(Collectors.toList());
+
+        Preconditions.checkState(pathListEndWithTargetId.isEmpty());
+        this.nodes.add(node);
+        Set<LatticeNode> parents =
+                ancestorPathList.stream().map(path -> path.get(-1)).collect(Collectors.toSet());
+        addNode(parents, node);
+    }
+
+    private void insertWithId(AggregatePiece aggPiece, LatticeNodeId id) {
+        TieredList<LatticeNode> commonPath = TieredList.genesis();
+        List<TieredList<LatticeNode>> ancestorPathList = seekFor(root, commonPath, id);
         Preconditions.checkArgument(!ancestorPathList.isEmpty());
 
         List<TieredList<LatticeNode>> pathListEndWithTargetId = ancestorPathList.stream()
@@ -359,37 +447,52 @@ public class Lattice {
             nodes.add(newChild);
             Set<LatticeNode> parents =
                     ancestorPathList.stream().map(path -> path.get(-1)).collect(Collectors.toSet());
-            // step1: Set newChild's parents.
-            newChild.setParent(Lists.newArrayList(parents));
-
-            Set<LatticeNode> grandChildren = Sets.newHashSet();
-
-            // step2: Set parents' children.
-            // Some children of parents are newChild's siblings, the others are demoted to be grandchildren
-            // of the parents, in another word, they are children of the newChild, so we gather them together.
-            for (LatticeNode parent : parents) {
-                Map<Boolean, List<LatticeNode>> childGroups = parent.getChildren().stream()
-                        .collect(Collectors.partitioningBy(child -> child.getId().isCoveredStrictlyBy(id)));
-                grandChildren.addAll(childGroups.get(true));
-                List<LatticeNode> siblings = childGroups.get(false);
-                siblings.add(newChild);
-                parent.setChildren(siblings);
-            }
-            // deduplicate grandchildren
-            // step3: Set newChild's children to be grandChildren of parents.
-            newChild.getChildren().addAll(grandChildren);
-
-            // step4: Set grandChildren's parents.
-            // grandChildren's current parents should be preserved if it does not cover
-            // newChild. the newChild should be added to grandchildren's parents.
-            for (LatticeNode grandChild : grandChildren) {
-                List<LatticeNode> siblings = grandChild.getParents().stream()
-                        .filter(parent -> !parent.getId().isCovering(id))
-                        .collect(Collectors.toList());
-                siblings.add(newChild);
-                grandChild.setParent(siblings);
-            }
+            addNode(parents, newChild);
         }
+    }
+
+    private Set<Box<LatticeNode>> gatherChildren(LatticeNode node) {
+        Set<Box<LatticeNode>> legacyChildren = node.getChildren()
+                .stream()
+                .map(Box::of)
+                .collect(Collectors.toSet());
+
+        Set<Box<LatticeNode>> newChildren = Sets.newHashSet();
+
+        Set<Box<LatticeNode>> closerOffsprings = nodes
+                .stream()
+                .filter(n -> node.getId().isCoveringStrictly(n.getId()))
+                .map(Box::of)
+                .filter(n -> legacyChildren.stream()
+                        .noneMatch(ch -> ch.unboxed().getId().isCovering(n.unboxed().getId())))
+                .collect(Collectors.toSet());
+
+        while (!closerOffsprings.isEmpty()) {
+            Set<Box<LatticeNode>> currCloserOffsprings = Sets.newHashSet();
+            for (Box<LatticeNode> currNode : closerOffsprings) {
+                List<Box<LatticeNode>> nodeCloserOffsprings = currNode.unboxed().getParents().stream()
+                        .filter(np -> node.getId().isCoveringStrictly(np.getId()))
+                        .map(Box::of)
+                        .collect(Collectors.toList());
+                if (nodeCloserOffsprings.isEmpty()) {
+                    newChildren.add(currNode);
+                } else {
+                    currCloserOffsprings.addAll(nodeCloserOffsprings);
+                }
+            }
+            closerOffsprings = currCloserOffsprings;
+        }
+        return newChildren;
+    }
+
+    private void linkNodeToItsChildren(LatticeNode node) {
+        List<LatticeNode> children = gatherChildren(node)
+                .stream()
+                .map(Box::unboxed)
+                .collect(Collectors.toList());
+
+        node.getChildren().addAll(children);
+        children.forEach(child -> child.getParents().add(node));
     }
 
     private List<TieredList<LatticeNode>> seekFor(LatticeNode node, TieredList<LatticeNode> commonPath,
@@ -409,10 +512,15 @@ public class Lattice {
                 .collect(Collectors.toList());
     }
 
+    public void consolidateCoverable() {
+        nodes.forEach(LatticeNode::consolidateCoverable);
+    }
+
     public void consolidate() {
         nodes.forEach(node -> {
             node.consolidateCoverable();
-            node.consolidateUncoverable();
+            node.consolidateConsolidatable();
+            node.consolidateUnconsolidatable();
         });
     }
 
@@ -421,12 +529,42 @@ public class Lattice {
     }
 
     public List<AggregatePiece> getAllPieces() {
-        return nodes.stream().flatMap(node -> Stream.of(node.getCoverablePieces(), node.getUncoverablePieces()))
+        return nodes.stream().flatMap(node -> Stream.of(node.getCoverablePieces(), node.getUncoverableIPieces()))
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
     }
 
+    public void rearrange() {
+        List<LatticeNode> uncoverableIINodes = nodes.stream()
+                .map(LatticeNode::split)
+                .reduce(TieredList.<LatticeNode>genesis(), TieredList::concat);
+
+        Map<Boolean, List<LatticeNode>> nodeGroups = nodes.stream()
+                .collect(Collectors.partitioningBy(node -> node.getUncoverableIPieces().isEmpty()));
+        List<LatticeNode> choppedNodes = nodeGroups.get(true);
+        List<LatticeNode> retainedNodes = nodeGroups.get(false);
+
+        if (!choppedNodes.isEmpty()) {
+            reformat(retainedNodes);
+        }
+        nodes.addAll(uncoverableIINodes);
+    }
+
+    private void reformat(List<LatticeNode> nodes) {
+        this.nodes.clear();
+        this.root.getParents().clear();
+        this.root.getChildren().clear();
+        nodes.forEach(node -> {
+            node.getParents().clear();
+            node.getChildren().clear();
+        });
+        nodes.forEach(this::insertNode);
+    }
+
     public TieredList<MVRecommendation> pickupRecommendations(AutoMVOptions options) {
+        if (nodes.isEmpty()) {
+            return TieredList.<MVRecommendation>genesis();
+        }
         Function<LatticeNode, Integer> classifier = node -> {
             double ratio = node.getCard().getCardRowCountRatio();
             if (ratio > options.getCardRowCountRatioHWM()) {
@@ -438,7 +576,8 @@ public class Lattice {
             }
         };
 
-        List<LatticeNode> nodes = bfs();
+        computeNumAcceleratedQueries();
+
         Map<Integer, List<LatticeNode>> nodeGroups = nodes.stream()
                 .collect(Collectors.groupingBy(classifier));
 
@@ -458,11 +597,8 @@ public class Lattice {
         Function<LatticeNode, MVRecommendation> lowCardNodeBenefitGetter = node -> {
             MVRecommendation mvRec = new MVRecommendation(node);
             mvRec.setProcessed(true);
-            long numQueriesAccelerated = dimensionsFreqs.entrySet().stream()
-                    .filter(e -> node.getId().isCovering(e.getKey()))
-                    .map(Map.Entry::getValue)
-                    .reduce(0, Integer::sum);
-            mvRec.setNumQueriesAccelerated((int) numQueriesAccelerated);
+            int numQueriesAccelerated = (int) getNumAcceleratedQueries(node);
+            mvRec.setNumQueriesAccelerated(numQueriesAccelerated);
             mvRec.setTotalBenefit(node.getCard().getBenefit() * numQueriesAccelerated);
             return mvRec;
         };
@@ -472,14 +608,129 @@ public class Lattice {
                 .collect(TieredList.toList());
 
         double rowCount = nodes.iterator().next().getCard().getRowCount();
-        List<QueryBenefit> queryBenefits = this.dimensionsFreqs.entrySet()
-                .stream().map(e -> new QueryBenefit(e.getKey(), e.getValue().doubleValue(), rowCount))
-                .collect(Collectors.toList());
+
+        List<QueryBenefit> queryBenefits = collectQueryBenefits(rowCount);
 
         BenefitTable benefitTable = new BenefitTable(candidateMVs, queryBenefits);
         TieredList<MVRecommendation> selectedNodeAndBenefitList = benefitTable.calculate();
 
         return selectedNodeAndBenefitList.concat(nodeAndBenefitWithLowCardList);
+    }
+
+    private List<QueryBenefit> collectQueryBenefits(double initialCost) {
+        List<QueryBenefit> queryBenefits = Lists.newArrayList();
+        coverableNumAcceleratedQueries.forEach((id, weight) ->
+                queryBenefits.add(new QueryBenefit(id, LatticeNode.Category.COVERABLE, null, weight, initialCost)));
+        uncoverableINumAcceleratedQueries.forEach((id, weight) ->
+                queryBenefits.add(new QueryBenefit(id, LatticeNode.Category.UNCOVERABLE_I, null, weight, initialCost)));
+        uncoverableIINumAcceleratedQueries.forEach(
+                (id, normRepetitions) -> normRepetitions.forEach((norm, repetitions) -> queryBenefits.add(
+                        new QueryBenefit(id, LatticeNode.Category.UNCOVERABLE_II, norm, repetitions, initialCost))));
+        return queryBenefits;
+    }
+
+    private long getNumAcceleratedQueries(LatticeNode node) {
+        Preconditions.checkState(node.getCoverablePieces().isEmpty());
+        AggregatePiece aggPiece = node.getFinalAggPiece();
+        switch (LatticeNode.Category.getCategory(aggPiece)) {
+            case COVERABLE:
+            case UNCOVERABLE_I:
+                return getNumAcceleratedQueriesForCoverableAndUncoverableI(node);
+            case UNCOVERABLE_II:
+                return getNumAcceleratedQueriesForUncoverableII(node);
+        }
+        return 0L;
+    }
+
+    private void computeNumAcceleratedQueries() {
+        computeCoverableNumAcceleratedQueries();
+        computeUncoverableINumAcceleratedQueries();
+        computeUncoverableIINumAcceleratedQueries();
+    }
+
+    private void computeCoverableNumAcceleratedQueries() {
+        Preconditions.checkState(coverableNumAcceleratedQueries == null);
+        coverableNumAcceleratedQueries = coverableNodeIds
+                .stream()
+                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+
+        Function<LatticeNode, Long> accNumAccelerated = node ->
+                Stream.concat(Stream.of(node.getId()), node.getOffsprings().keySet().stream())
+                        .map(id -> coverableNumAcceleratedQueries.getOrDefault(id, 0L))
+                        .reduce(0L, Long::sum);
+
+        accCoverableNumAcceleratedQueries = nodes
+                .stream()
+                .filter(node -> node.getUncoverableIIPieces().isEmpty())
+                .collect(Collectors.toMap(LatticeNode::getId, accNumAccelerated));
+
+    }
+
+    private void computeUncoverableINumAcceleratedQueries() {
+        Preconditions.checkState(uncoverableINumAcceleratedQueries == null);
+        this.uncoverableINumAcceleratedQueries = uncoverableINodeIds
+                .stream()
+                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+    }
+
+    private void computeUncoverableIINumAcceleratedQueries() {
+        Preconditions.checkState(uncoverableIINumAcceleratedQueries == null);
+        uncoverableIINumAcceleratedQueries = uncoverableIINodeIds.entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue()
+                                .stream()
+                                .collect(Collectors.groupingBy(norm -> norm, Collectors.counting()))));
+    }
+
+    private long getNumAcceleratedQueriesForCoverableAndUncoverableI(LatticeNode node) {
+        Preconditions.checkNotNull(this.coverableNumAcceleratedQueries);
+        Preconditions.checkNotNull(this.uncoverableINumAcceleratedQueries);
+        return accCoverableNumAcceleratedQueries.getOrDefault(node.getId(), 0L) +
+                uncoverableINumAcceleratedQueries.getOrDefault(node.getId(), 0L);
+
+    }
+
+    private long getNumAcceleratedQueriesForUncoverableII(LatticeNode node) {
+        Preconditions.checkNotNull(this.uncoverableIINumAcceleratedQueries);
+        String conjunctsNormHash = node.getFinalAggPiece().getFlatTable().getAuxState().getConjunctsNormHash();
+        Long repetitionCount = Optional.ofNullable(uncoverableIINumAcceleratedQueries.get(node.getId()))
+                .map(repetitionCounts -> repetitionCounts.get(conjunctsNormHash))
+                .orElse(null);
+        return Objects.requireNonNull(repetitionCount);
+    }
+
+    public PrettyPrinter dump(int rootIdx) {
+        Map<String, String> idMap = nodeOrdinal.entrySet().stream()
+                .map(e -> Pair.create(e.getKey().unboxed().getId().toString(), e.getValue()))
+                .map(p -> Pair.create(p.first, "#" + p.second + ":" + p.first))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+
+        List<LatticeNode> bfsNodes = this.bfsIncludingRoot();
+        LatticeNode rootNode = nodeOrdinal.inverse().get(rootIdx).unboxed();
+        TieredMap<LatticeNodeId, Integer> offsprings = rootNode.getOffsprings();
+        Set<LatticeNodeId> nodeIds = Sets.newHashSet();
+        nodeIds.addAll(offsprings.keySet());
+        nodeIds.add(rootNode.getId());
+
+        PrettyPrinter printer = new PrettyPrinter();
+        printer.add("Summary: ").newLine();
+        printer.indentEnclose(() -> {
+            printer.add("TotalNodes: ").add(bfsNodes.size()).newLine();
+            printer.add("NumNodes: ").add(nodeIds.size()).newLine();
+            printer.add("NumDimensions: ").add(dimensionColumnIds.size()).newLine();
+            printer.add("NumMetrics: ").add(columnIds.size() - dimensionColumnIds.size()).newLine();
+        });
+        printer.newLine().newLine();
+        printer.add("LatticeNodes:").newLine();
+        List<PrettyPrinter> nodeList = bfsNodes.stream()
+                .filter(node -> nodeIds.contains(node.getId()))
+                .sorted(LatticeNode.getComparator())
+                .map(node -> node.dump(nodeIds, idMap))
+                .collect(Collectors.toList());
+        printer.indentEnclose(() -> printer.addSuperStepsWithDelNl("\n", nodeList));
+        return printer;
     }
 
 }

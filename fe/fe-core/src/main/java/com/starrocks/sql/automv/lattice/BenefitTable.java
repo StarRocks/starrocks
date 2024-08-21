@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.lattice;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.util.TieredList;
 
 import java.util.Comparator;
@@ -34,11 +35,29 @@ public final class BenefitTable {
         for (MVRecommendation candiMV : this.candidateMVs) {
             List<TentativeQueryBenefit> tentativeBenefits = IntStream.range(0, this.queryBenefits.size())
                     .mapToObj(i -> Pair.create(i, this.queryBenefits.get(i)))
-                    .filter(p -> candiMV.getLatticeNode().getId().isCovering(p.second.getId()))
+                    .filter(p -> canRewrite(candiMV.getLatticeNode(), p.second))
                     .map(p -> new TentativeQueryBenefit(p.second.getId(), p.first))
                     .collect(ImmutableList.toImmutableList());
             candiMV.setTentativeBenefits(tentativeBenefits);
         }
+    }
+
+    private static boolean canRewrite(LatticeNode node, QueryBenefit queryBenefit) {
+        AggregatePiece piece = node.getFinalAggPiece();
+        LatticeNode.Category pieceCategory = LatticeNode.Category.getCategory(piece);
+        boolean isUncoverII = pieceCategory.equals(LatticeNode.Category.UNCOVERABLE_II);
+        switch (queryBenefit.getCategory()) {
+            case COVERABLE:
+                return !isUncoverII && node.getId().isCovering(queryBenefit.getId());
+            case UNCOVERABLE_I:
+                return !isUncoverII && node.getId().equals(queryBenefit.getId());
+            case UNCOVERABLE_II: {
+                String norm = piece.getFlatTable().getAuxState().getConjunctsNormHash();
+                boolean identicalNorm = Objects.equals(norm, queryBenefit.getConjunctsNormHash());
+                return isUncoverII && node.getId().equals(queryBenefit.getId()) && identicalNorm;
+            }
+        }
+        return false;
     }
 
     private boolean calculateOnce() {

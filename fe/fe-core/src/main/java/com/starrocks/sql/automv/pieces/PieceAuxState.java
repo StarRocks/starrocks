@@ -89,7 +89,7 @@ public class PieceAuxState {
 
     public String getConjunctsNormHash() {
         if (this.conjunctsNormHash == null) {
-            this.conjunctsNormHash = Util.md5(conjunctsNorm.getResult());
+            this.conjunctsNormHash = Util.md5(getConjunctsNorm().getResult());
         }
         return this.conjunctsNormHash;
     }

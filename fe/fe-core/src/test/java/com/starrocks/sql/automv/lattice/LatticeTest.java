@@ -447,8 +447,8 @@ public class LatticeTest {
         MVRecommender mvRecommender = new MVRecommender(ctx, options);
         List<MVRecommendation> resultList = mvRecommender.recommend(pieceList, 0, Integer.MAX_VALUE);
         Assert.assertEquals(resultList.size(), 1);
-        Assert.assertEquals(resultList.get(0).getMvResultList().size(), 1);
-        String mv = resultList.get(0).getMvResultList().get(0).getSubquery().getResult();
+        Assert.assertNotNull(resultList.get(0).getMvResult());
+        String mv = resultList.get(0).getMvResult().getSubquery().getResult();
         String[] lines = new String[] {
                 "_ta0000.lo_discount",
                 "_ta0000.d_year",

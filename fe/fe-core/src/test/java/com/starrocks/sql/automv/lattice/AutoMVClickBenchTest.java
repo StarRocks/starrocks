@@ -14,20 +14,29 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.util.AutoMVUtil;
+import com.starrocks.sql.automv.util.Result;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.utframe.StarRocksAssert;
+import org.apache.kerby.util.IOUtil;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.wildfly.common.Assert;
 
+import java.io.File;
+import java.net.URL;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -84,5 +93,57 @@ public class AutoMVClickBenchTest {
                 .collect(Collectors.toList());
         ConnectContext ctx = getStarRocksAssert().getCtx();
         AutoMVUtil.defaultTestHelper(ctx, queryList);
+    }
+
+    private void testLattice(List<Pair<String, String>> queryList, boolean verify) {
+        List<MVRecommendation> recommendations = AutoMVUtil.recommend(queryList, getStarRocksAssert().getCtx());
+        String path = Optional.ofNullable(ClassLoader.getSystemClassLoader().getResource("sql"))
+                .map(URL::getPath).orElse(null);
+
+        Assert.assertTrue(path != null);
+        if (!verify) {
+            path = path.replace("target/test-classes/", "src/test/resources/");
+        }
+        File latticeDumpDir = new File(path, "lattice_dump");
+        Assert.assertTrue(latticeDumpDir.exists());
+        File currentDumpDir = new File(latticeDumpDir, TestUtil.getTestName());
+        if (!currentDumpDir.exists()) {
+            currentDumpDir.mkdir();
+        }
+        for (MVRecommendation rec : recommendations) {
+            LatticeNode node = rec.getLatticeNode();
+            File file = new File(currentDumpDir, String.format("lattice_node_%d.dump", node.getNodeOrdinal()));
+
+            if (verify) {
+                String dump = Result.wrap(() -> IOUtil.readFile(file)).unwrap().orElse(null);
+                Assert.assertTrue(dump != null);
+                String actual = rec.getLatticeNode().dump().getResult().replaceAll(MVName.getPattern().pattern(), "mv");
+                if (!actual.equals(dump)) {
+                    File file0 = new File(currentDumpDir,
+                            String.format("lattice_node_%d.dump.conflict", node.getNodeOrdinal()));
+                    Result.wrap(() -> IOUtil.writeFile(actual, file0));
+                }
+                Assert.assertEquals(file.getName(), dump, actual);
+            } else {
+
+                String dump = rec.getLatticeNode().dump().getResult().replaceAll(MVName.getPattern().pattern(), "mv");
+                Assert.assertTrue(
+                        Result.wrap(() -> IOUtil.writeFile(dump, file)).unwrap().isPresent());
+            }
+        }
+    }
+
+    @Test
+    public void testClickBench1() {
+        Set<String> querySet =
+                ImmutableSet.of("Q01", "Q03", "Q04", "Q05", "Q06", "Q07", "Q30", "Q37", "Q38", "Q39", "Q42");
+        List<Pair<String, String>> queryList = TestUtil.getClickBenchQueryList()
+                .stream()
+                .filter(p -> querySet.contains(p.first))
+                .collect(Collectors.toList());
+        for (int i = 0; i < 10; i++) {
+            Collections.shuffle(queryList);
+            testLattice(queryList, true);
+        }
     }
 }

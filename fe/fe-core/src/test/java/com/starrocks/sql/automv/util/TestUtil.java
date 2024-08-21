@@ -26,10 +26,12 @@ import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -184,4 +186,33 @@ public class TestUtil {
         return starRocksAssert;
     }
 
+    public static String getTestName() {
+        ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
+        PrintStream ps = new PrintStream(byteOut);
+        new Exception().printStackTrace(ps);
+        String[] lines = byteOut.toString(Charsets.UTF_8).split("\n");
+        Pattern methodPattern = Pattern.compile("^\\s*at\\s+(\\S*)\\.(\\w+)\\(.*\\)\\s*$");
+        List<Pair<String, String>> methods = Stream.of(lines).flatMap(l -> {
+            Matcher matcher = methodPattern.matcher(l);
+            if (matcher.matches()) {
+                return Stream.of(Pair.create(matcher.group(1), matcher.group(2)));
+            } else {
+                return Stream.empty();
+            }
+        }).collect(Collectors.toList());
+
+        return methods.stream().filter(p -> {
+            String clsName = p.first;
+            String methodName = p.second;
+            return Result.wrap(() -> Class.forName(clsName).getMethod(methodName))
+                    .bind(method -> {
+                        return Stream.of(method.getDeclaredAnnotations())
+                                .map(annotation -> annotation.annotationType().getCanonicalName())
+                                .anyMatch(name -> {
+                                    return name.equals("org.testng.annotations.Test")
+                                            || name.equals("org.junit.Test");
+                                });
+                    }).unwrap().orElse(false);
+        }).findFirst().map(p -> p.second).orElse(null);
+    }
 }

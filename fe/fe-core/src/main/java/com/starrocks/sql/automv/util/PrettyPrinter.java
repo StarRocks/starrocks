@@ -256,6 +256,24 @@ public class PrettyPrinter {
         return addNewStepExceptNewLine(sb -> sb.append(s));
     }
 
+    public PrettyPrinter addNameToSuperStepItems(String name, List<PrettyPrinter> items) {
+        this.newLine().add(name).add(":");
+        if (!items.isEmpty()) {
+            this.newLine();
+            this.indentEnclose(() -> this.addSuperStepsWithDelNl(";", items));
+        }
+        return this;
+    }
+
+    public PrettyPrinter addNameToItems(String name, List<String> items) {
+        this.newLine().add(name).add(":");
+        if (!items.isEmpty()) {
+            this.newLine();
+            this.indentEnclose(() -> this.addItemsWithDelNl(";", items));
+        }
+        return this;
+    }
+
     public <T> PrettyPrinter addDoubleQuoted(T s) {
         return add("\"").add(s).add("\"");
     }
@@ -380,6 +398,9 @@ public class PrettyPrinter {
 
     @CanIgnoreReturnValue
     private PrettyPrinter addSuperStepsImpl(List<PrettyPrinter> printers, Consumer<PrettyPrinter> separator) {
+        if (printers.isEmpty()) {
+            return this;
+        }
         this.addSuperStepWithIndent(printers.get(0));
         printers.stream().skip(1).forEach(p -> {
             PrettyPrinter p1 = new PrettyPrinter();

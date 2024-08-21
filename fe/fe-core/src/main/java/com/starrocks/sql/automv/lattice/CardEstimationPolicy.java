@@ -44,10 +44,15 @@ public class CardEstimationPolicy {
         // add a cover-all AggregatePiece
         lattice.addMaximalNode();
 
+        lattice.getNodes().forEach(LatticeNode::hoist);
+        lattice.consolidateFully(options.isPruneRollupAbleWithConjuncts());
+
         CardEstimator cardEstimator = new CardEstimator(options, lattice);
         CardEstimateState state = cardEstimator.converge(context);
         Map<LatticeNodeId, CardRecord> cards = cardEstimator.getEstimatedCards();
+
         lattice.getNodes().forEach(node -> node.setCard(cards.get(node.getId())));
+        lattice.rearrange();
         TieredList<MVRecommendation> recommendations = lattice.pickupRecommendations(options);
         recommendations.forEach(rec -> rec.setCardEstimateState(state));
         return recommendations;

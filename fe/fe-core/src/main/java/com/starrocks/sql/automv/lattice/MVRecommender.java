@@ -324,29 +324,13 @@ public class MVRecommender {
                 .sorted(Collections.reverseOrder(Comparator.comparingDouble(MVRecommendation::getTotalBenefit)))
                 .collect(Collectors.toList());
 
-        List<MVRecommendation> selectedRecommendations = Lists.newArrayList();
         Preconditions.checkArgument(endIdx >= 0);
-        int numMVs = 0;
-        for (MVRecommendation rec : recommendations) {
-            LatticeNode node = rec.getLatticeNode();
-            node.hoist();
-            node.consolidateFully(options.isPruneRollupAbleWithConjuncts());
-            if (node.getUncoverablePieces().isEmpty()) {
-                continue;
-            }
-            numMVs += rec.getLatticeNode().getUncoverablePieces().size();
-            selectedRecommendations.add(rec);
-            if (numMVs >= endIdx) {
-                break;
-            }
-        }
+        List<MVRecommendation> selectedRecommendations =
+                recommendations.subList(0, Math.min(endIdx, recommendations.size()));
+
         return selectedRecommendations.stream()
-                .peek(rec -> rec.setMvResultList(rec.getLatticeNode().getUncoverablePieces()
-                        .stream()
-                        .map(this::recommendOneMv)
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .collect(Collectors.toList())))
+                .peek(rec -> rec.setMvResult(recommendOneMv(rec.getLatticeNode().getFinalAggPiece()).orElse(null)))
+                .filter(rec -> rec.getMvResult() != null)
                 .collect(Collectors.toList());
     }
 }

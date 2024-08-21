@@ -1,0 +1,39 @@
+Summary: 
+  TotalNodes: 13
+  NumNodes: 4
+  NumDimensions: 11
+  NumMetrics: 95
+
+
+LatticeNodes:
+  LatticeNode[#4:{0,1,2,5,6,7,9,10}]:
+    Parents:
+    Children:
+      #6:{0,1,2,5,7,9,10};
+      #11:{0,1,2,5,6}
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q07,Q30,Q38,Q42}
+
+  LatticeNode[#6:{0,1,2,5,7,9,10}]:
+    Parents:
+      #4:{0,1,2,5,6,7,9,10}
+    Children:
+      #12:{}
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q07,Q30,Q42}
+
+  LatticeNode[#11:{0,1,2,5,6}]:
+    Parents:
+      #4:{0,1,2,5,6,7,9,10}
+    Children:
+      #12:{}
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q07,Q30,Q38}
+
+  LatticeNode[#12:{}]:
+    Parents:
+      #6:{0,1,2,5,7,9,10};
+      #11:{0,1,2,5,6}
+    Children:
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q05,Q06,Q07,Q30}

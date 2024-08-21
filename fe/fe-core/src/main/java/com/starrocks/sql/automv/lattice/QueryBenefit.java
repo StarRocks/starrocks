@@ -18,16 +18,29 @@ import java.util.Objects;
 
 public class QueryBenefit {
     private final LatticeNodeId id;
+    private final LatticeNode.Category category;
+    private final String conjunctsNormHash;
     private final double weight;
     private LatticeNodeId usedLatticeId;
     private double cost;
     private double benefit;
 
-    public QueryBenefit(LatticeNodeId id, double weight, double initialCost) {
+    public QueryBenefit(LatticeNodeId id, LatticeNode.Category category, String conjunctsNormHash, double weight,
+                        double initialCost) {
         this.id = Objects.requireNonNull(id);
+        this.category = Objects.requireNonNull(category);
+        this.conjunctsNormHash = conjunctsNormHash;
         this.weight = weight;
         this.cost = initialCost;
         this.benefit = 0.0;
+    }
+
+    public LatticeNode.Category getCategory() {
+        return category;
+    }
+
+    public String getConjunctsNormHash() {
+        return conjunctsNormHash;
     }
 
     public LatticeNodeId getId() {

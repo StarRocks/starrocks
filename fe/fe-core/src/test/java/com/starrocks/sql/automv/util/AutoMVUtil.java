@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -33,6 +34,7 @@ import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
+import com.starrocks.sql.automv.lattice.MVRecommendation;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
 import com.starrocks.sql.automv.lifecycle.MVHitCountEntry;
 import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
@@ -177,10 +179,17 @@ public class AutoMVUtil {
     }
 
     public static Void justPrintResult(List<List<String>> results) {
+        ShowRecommendationsStmt showStmt = new ShowRecommendationsStmt(null, 1, 1);
+        List<Column> columns = showStmt.getMetaData().getColumns();
         for (List<String> row : results) {
             PrettyPrinter printer = new PrettyPrinter();
-            printer.addItemsWithDelNl(";", row);
+            List<PrettyPrinter> items = IntStream.range(0, columns.size())
+                    .mapToObj(i -> new PrettyPrinter().add(columns.get(i).getName()).add(": ").add(row.get(i)))
+                    .collect(Collectors.toList());
+
+            printer.addSuperStepsWithDelNl(";", items);
             System.out.println(printer.getResult());
+            System.out.println();
         }
         return null;
     }
@@ -295,5 +304,10 @@ public class AutoMVUtil {
             mvMap.put(result.getMvName(), result.getSubquery().getResult());
         }
         return mvMap;
+    }
+
+    public static List<MVRecommendation> recommend(List<Pair<String, String>> queryList, ConnectContext context) {
+        mockUpCustomizedQueryExecutor(queryList);
+        return TunespaceExecutor.recommend("ts", context, 0, Integer.MAX_VALUE);
     }
 }

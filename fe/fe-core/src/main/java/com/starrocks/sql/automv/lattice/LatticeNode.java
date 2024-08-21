@@ -31,19 +31,23 @@ import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
+import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -54,17 +58,18 @@ public class LatticeNode {
     private List<LatticeNode> parent;
     private List<LatticeNode> children;
     private TieredList<AggregatePiece> coverablePieces;
-    private TieredList<AggregatePiece> uncoverablePieces;
-
+    private TieredList<AggregatePiece> uncoverableIPieces;
+    private TieredList<AggregatePiece> uncoverableIIPieces;
     private transient CardRecord card;
     private transient Set<LatticeNodeId> ancestors;
-    private transient Set<LatticeNodeId> offsprings;
+    private transient TieredMap<LatticeNodeId, Integer> offsprings;
 
     public LatticeNode(Lattice lattice, LatticeNodeId id, AggregatePiece aggPiece) {
         this.lattice = Objects.requireNonNull(lattice);
         this.id = Objects.requireNonNull(id);
         this.coverablePieces = TieredList.<AggregatePiece>genesis();
-        this.uncoverablePieces = TieredList.<AggregatePiece>genesis();
+        this.uncoverableIPieces = TieredList.<AggregatePiece>genesis();
+        this.uncoverableIIPieces = TieredList.<AggregatePiece>genesis();
         this.parent = Lists.newArrayList();
         this.children = Lists.newArrayList();
         Preconditions.checkArgument(aggPiece.getDistinctMetrics().isEmpty());
@@ -327,12 +332,112 @@ public class LatticeNode {
         return mergeMetrics(idConverter, normToOpMap, Arrays.asList(aggPieces));
     }
 
+    public static PrettyPrinter dump(String label, AggregatePiece aggPiece) {
+        PrettyPrinter printer = new PrettyPrinter();
+        String acceleratedQueries = aggPiece.getCommonState().getCoveredQueries()
+                .stream()
+                .map(s -> s.replaceAll("\\.part\\.\\d+", ""))
+                .sorted()
+                .collect(Collectors.joining(","));
+        printer.add(label).add(":{").add(acceleratedQueries).add("}");
+        /*
+        printer.add(label).add(":").newLine();
+        List<String> metrics = aggPiece.getMetrics().merge(aggPiece.getDistinctMetrics())
+                .values()
+                .stream()
+                .map(GenericColumn::getNorm)
+                .map(GenericColumn::toString)
+                .sorted().collect(Collectors.toList());
+
+        printer.indentEnclose(() -> {
+             printer.add("NumMetrics: ").add(metrics.size());
+             printer.addNameToItems("Metrics", metrics);
+            List<String> acceleratedQueries = aggPiece.getCommonState().getCoveredQueries()
+                    .stream()
+                    .sorted()
+                    .collect(Collectors.toList());
+            printer.addNameToItems("AcceleratedQueries", acceleratedQueries);
+        });
+         */
+        return printer;
+    }
+
+    public static Comparator<LatticeNode> getComparator() {
+        return (lhs, rhs) -> {
+            int r = rhs.getId().size() - lhs.getId().size();
+            if (r != 0) {
+                return r;
+            }
+            r = rhs.getId().toString().compareTo(lhs.getId().toString());
+            if (r != 0) {
+                return r;
+            }
+            Set<String> rhsAcceleratedQueries =
+                    Stream.of(rhs.getCoverablePieces(), rhs.getUncoverableIPieces(), rhs.getUncoverableIIPieces())
+                            .flatMap(Collection::stream)
+                            .flatMap(agg -> agg.getCommonState().getCoveredQueries().stream())
+                            .collect(Collectors.toSet());
+
+            Set<String> lhsAcceleratedQueries =
+                    Stream.of(lhs.getCoverablePieces(), lhs.getUncoverableIPieces(), lhs.getUncoverableIIPieces())
+                            .flatMap(Collection::stream)
+                            .flatMap(agg -> agg.getCommonState().getCoveredQueries().stream())
+                            .collect(Collectors.toSet());
+            r = rhsAcceleratedQueries.size() - lhsAcceleratedQueries.size();
+            if (r != 0) {
+                return r;
+            }
+            String rhsCsv = rhsAcceleratedQueries.stream().sorted().collect(Collectors.joining(","));
+            String lhsCsv = lhsAcceleratedQueries.stream().sorted().collect(Collectors.joining(","));
+            return rhsCsv.compareTo(lhsCsv);
+        };
+    }
+
+    public TieredList<LatticeNode> split() {
+        Preconditions.checkState(this.coverablePieces.isEmpty());
+        Preconditions.checkState(this.uncoverableIPieces.size() <= 1);
+        List<AggregatePiece> uncoverableIIPieces = this.uncoverableIIPieces;
+        this.setUncoverableIIPieces(TieredList.<AggregatePiece>genesis());
+        return uncoverableIIPieces.stream().map(aggPiece -> {
+            LatticeNode node = new LatticeNode(lattice, id, aggPiece);
+            node.setCard(getCard());
+            return node;
+        }).collect(TieredList.<LatticeNode>toList());
+    }
+
+    public TieredList<AggregatePiece> getUncoverableIIPieces() {
+        return uncoverableIIPieces;
+    }
+
+    public void setUncoverableIIPieces(
+            List<AggregatePiece> uncoverableIIPieces) {
+        this.uncoverableIIPieces = TieredList.<AggregatePiece>genesis().concat(uncoverableIIPieces);
+    }
+
+    public Lattice getLattice() {
+        return lattice;
+    }
+
     public void addPiece(AggregatePiece aggPiece) {
-        boolean rollupUnable = AggregatePolicies.hasRollupUnable(aggPiece.getMetrics().values());
-        if (rollupUnable) {
-            uncoverablePieces = uncoverablePieces.concatOne(aggPiece);
-        } else {
-            coverablePieces = coverablePieces.concatOne(aggPiece);
+        switch (Category.getCategory(aggPiece)) {
+            case COVERABLE: {
+                coverablePieces = coverablePieces.concatOne(aggPiece);
+                lattice.updateNodeIds(id, Category.COVERABLE, null);
+                break;
+            }
+            case UNCOVERABLE_I: {
+                uncoverableIPieces = uncoverableIPieces.concatOne(aggPiece);
+                Preconditions.checkState(aggPiece.getFlatTable().getConjuncts().isEmpty());
+                lattice.updateNodeIds(id, Category.UNCOVERABLE_I, null);
+                break;
+            }
+            case UNCOVERABLE_II: {
+                uncoverableIIPieces = uncoverableIIPieces.concatOne(aggPiece);
+                Preconditions.checkState(!aggPiece.getFlatTable().getConjuncts().isEmpty());
+                String conjunctsNorm = aggPiece.getFlatTable().getAuxState().getConjunctsNormHash();
+                lattice.updateNodeIds(id, Category.UNCOVERABLE_II, conjunctsNorm);
+                break;
+            }
         }
     }
 
@@ -344,20 +449,24 @@ public class LatticeNode {
         this.coverablePieces = TieredList.<AggregatePiece>genesis().concat(coverablePieces);
     }
 
-    public List<AggregatePiece> getUncoverablePieces() {
-        return uncoverablePieces;
+    public List<AggregatePiece> getUncoverableIPieces() {
+        return uncoverableIPieces;
     }
 
-    private void setUncoverablePieces(List<AggregatePiece> uncoverablePieces) {
-        this.uncoverablePieces = TieredList.<AggregatePiece>genesis().concat(uncoverablePieces);
+    private void setUncoverableIPieces(List<AggregatePiece> uncoverableIPieces) {
+        this.uncoverableIPieces = TieredList.<AggregatePiece>genesis().concat(uncoverableIPieces);
     }
 
     public void consolidateCoverable() {
         setCoverablePieces(consolidate(getCoverablePieces()));
     }
 
-    public void consolidateUncoverable() {
-        Collection<List<AggregatePiece>> pieceGroups = getUncoverablePieces()
+    public void consolidateConsolidatable() {
+        setUncoverableIPieces(consolidate(getUncoverableIPieces()));
+    }
+
+    public void consolidateUnconsolidatable() {
+        Collection<List<AggregatePiece>> pieceGroups = getUncoverableIIPieces()
                 .stream()
                 .collect(Collectors.groupingBy(aggPiece ->
                         aggPiece.getFlatTable().getAuxState().getConjunctsNorm().getResult())).values();
@@ -365,7 +474,7 @@ public class LatticeNode {
         for (List<AggregatePiece> group : pieceGroups) {
             pieces.addAll(consolidate(group));
         }
-        setUncoverablePieces(pieces);
+        setUncoverableIIPieces(pieces);
     }
 
     public void consolidateCoverable(List<AggregatePiece> aggPieces) {
@@ -373,23 +482,15 @@ public class LatticeNode {
     }
 
     public void consolidateFully(boolean pruneRollupUnableWithConjuncts) {
-        Map<Boolean, TieredList<AggregatePiece>> rollupUnablePieceGroups = getUncoverablePieces().stream()
-                .collect(Collectors.partitioningBy(
-                        aggPiece -> aggPiece.getFlatTable().getConjuncts().isEmpty(),
-                        TieredList.<AggregatePiece>toList()));
+        List<AggregatePiece> pieces = TieredList.<AggregatePiece>genesis()
+                .concat(getCoverablePieces())
+                .concat(getUncoverableIPieces());
 
-        TieredList<AggregatePiece> piecesWithConjuncts = rollupUnablePieceGroups.get(false);
-        TieredList<AggregatePiece> piecesWithoutConjuncts = rollupUnablePieceGroups.get(true);
-        List<AggregatePiece> pieces = Stream.of(getCoverablePieces(), piecesWithoutConjuncts)
-                .flatMap(Collection::stream)
-                .collect(Collectors.toList());
-        TieredList<AggregatePiece> uncoverablePieces = TieredList.<AggregatePiece>genesis()
-                .concat(consolidate(pieces));
-        if (!pruneRollupUnableWithConjuncts) {
-            uncoverablePieces = uncoverablePieces.concat(piecesWithConjuncts);
-        }
         setCoverablePieces(Collections.emptyList());
-        setUncoverablePieces(uncoverablePieces);
+        setUncoverableIPieces(consolidate(pieces));
+        if (pruneRollupUnableWithConjuncts) {
+            setUncoverableIIPieces(TieredList.<AggregatePiece>genesis());
+        }
     }
 
     public LatticeNodeId getId() {
@@ -412,25 +513,24 @@ public class LatticeNode {
         this.children = children;
     }
 
-    public Set<LatticeNodeId> getAncestors() {
-        if (this.ancestors == null) {
-            Set<LatticeNodeId> ancestors = Sets.newHashSet();
-            this.getParents().forEach(parent -> {
-                ancestors.addAll(parent.getAncestors());
-                ancestors.add(parent.getId());
-            });
-            this.ancestors = ancestors;
-        }
-        return this.ancestors;
-    }
-
-    public Set<LatticeNodeId> getOffsprings() {
+    public TieredMap<LatticeNodeId, Integer> getOffsprings() {
         if (this.offsprings == null) {
-            Set<LatticeNodeId> offsprings = Sets.newHashSet();
-            this.getChildren().forEach(child -> {
-                offsprings.addAll(child.getOffsprings());
-                offsprings.add(child.getId());
-            });
+            TieredMap<LatticeNodeId, Integer> offsprings = TieredMap.genesis();
+            for (LatticeNode child : this.getChildren()) {
+                TieredMap<LatticeNodeId, Integer> childOffsprings = child.getOffsprings();
+                Set<LatticeNodeId> keys = offsprings.keySet();
+                Map<Boolean, TieredMap<LatticeNodeId, Integer>> offspringGroups = childOffsprings.entrySet()
+                        .stream()
+                        .collect(Collectors.partitioningBy(e -> keys.contains(e.getKey()), TieredMap.toMap()));
+                if (offspringGroups.get(true).isEmpty()) {
+                    offsprings = offsprings.merge(childOffsprings);
+                } else {
+                    offsprings = offsprings.merge(offspringGroups.get(false));
+                }
+                if (!offsprings.containsKey(child.getId())) {
+                    offsprings = offsprings.newTier().put(child.getId(), 0).build();
+                }
+            }
             this.offsprings = offsprings;
         }
         return offsprings;
@@ -496,5 +596,86 @@ public class LatticeNode {
         Optional<AggregatePiece> result = Optional.of(aggPiece);
         hoistMemo.put(targetId, result);
         return result;
+    }
+
+    public int getNodeOrdinal() {
+        return lattice.getNodeOrdinal(this);
+    }
+
+    public PrettyPrinter dump() {
+        return lattice.dump(getNodeOrdinal());
+    }
+
+    public PrettyPrinter dump(Set<LatticeNodeId> nodeIds, Map<String, String> idMap) {
+        PrettyPrinter printer = new PrettyPrinter();
+        printer.add("LatticeNode[").add(idMap.get(id.toString())).add("]:");
+        List<String> parents = this.getParents().stream()
+                .filter(node -> nodeIds.contains(node.getId()))
+                .sorted(LatticeNode.getComparator())
+                .map(parentNode -> idMap.get(parentNode.getId().toString()))
+                .collect(Collectors.toList());
+        List<String> children = this.getChildren().stream()
+                .filter(node -> nodeIds.contains(node.getId()))
+                .sorted(LatticeNode.getComparator())
+                .map(childNode -> idMap.get(childNode.getId().toString()))
+                .collect(Collectors.toList());
+        List<String> dimensions = this.getId().getColumnOrdinals()
+                .stream()
+                .map(i -> lattice.getColumnNorms().get(i))
+                .collect(Collectors.toList());
+
+        Supplier<String> cidGen = Util.nextStringGenerator("C.", "");
+        TieredList<PrettyPrinter> coverablePieces = getCoverablePieces()
+                .stream()
+                .map(aggPiece -> dump(cidGen.get(), aggPiece))
+                .collect(TieredList.toList());
+
+        Supplier<String> uIidGen = Util.nextStringGenerator("UI.", "");
+        TieredList<PrettyPrinter> uncoverableIPieces = getUncoverableIPieces()
+                .stream()
+                .map(aggPiece -> dump(uIidGen.get(), aggPiece))
+                .collect(TieredList.toList());
+
+        Supplier<String> uIIidGen = Util.nextStringGenerator("UII.", "");
+        TieredList<PrettyPrinter> uncoverableIIPieces = getUncoverableIIPieces()
+                .stream()
+                .map(aggPiece -> dump(uIIidGen.get(), aggPiece))
+                .collect(TieredList.toList());
+
+        List<PrettyPrinter> acceleratedQueries = coverablePieces.concat(uncoverableIPieces).concat(uncoverableIIPieces);
+
+        printer.indentEnclose(() -> {
+            printer.addNameToItems("Parents", parents);
+            printer.addNameToItems("Children", children);
+            printer.addNameToSuperStepItems("AcceleratedQueries", acceleratedQueries);
+        });
+        return printer;
+    }
+
+    public AggregatePiece getFinalAggPiece() {
+        List<AggregatePiece> pieces = TieredList.<AggregatePiece>genesis()
+                .concat(coverablePieces)
+                .concat(uncoverableIPieces)
+                .concat(uncoverableIIPieces);
+        Preconditions.checkState(pieces.size() == 1);
+        return pieces.get(0);
+    }
+
+    public enum Category {
+        COVERABLE,
+        UNCOVERABLE_I,
+        UNCOVERABLE_II;
+
+        public static Category getCategory(AggregatePiece piece) {
+            if (AggregatePolicies.hasRollupUnable(piece.getMetrics().values())) {
+                if (piece.getFlatTable().getConjuncts().isEmpty()) {
+                    return UNCOVERABLE_I;
+                } else {
+                    return UNCOVERABLE_II;
+                }
+            } else {
+                return COVERABLE;
+            }
+        }
     }
 }

@@ -1,0 +1,21 @@
+Summary: 
+  TotalNodes: 13
+  NumNodes: 2
+  NumDimensions: 11
+  NumMetrics: 95
+
+
+LatticeNodes:
+  LatticeNode[#10:{0,1,2,5,8}]:
+    Parents:
+    Children:
+      #12:{}
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q07,Q30,Q37}
+
+  LatticeNode[#12:{}]:
+    Parents:
+      #10:{0,1,2,5,8}
+    Children:
+    AcceleratedQueries:
+      UI.0:{Q01,Q03,Q04,Q05,Q06,Q07,Q30}

@@ -14,14 +14,12 @@
 
 package com.starrocks.sql.automv.lattice;
 
-import com.google.api.client.util.Lists;
 import com.starrocks.sql.automv.estimation.CardEstimateState;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -29,7 +27,7 @@ import java.util.stream.Collectors;
 public class MVRecommendation implements Comparable<MVRecommendation> {
 
     private LatticeNode latticeNode;
-    private List<QueryGenerateResult> mvResultList;
+    private QueryGenerateResult mvResult;
     private CardEstimateState cardEstimateState;
     private double totalBenefit;
     private int numQueriesAccelerated;
@@ -41,15 +39,15 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
     }
 
     public MVRecommendation(QueryGenerateResult mvResult) {
-        this.mvResultList = Collections.singletonList(mvResult);
+        this.mvResult = mvResult;
     }
 
-    public List<QueryGenerateResult> getMvResultList() {
-        return mvResultList;
+    public QueryGenerateResult getMvResult() {
+        return mvResult;
     }
 
-    public void setMvResultList(List<QueryGenerateResult> mvResultList) {
-        this.mvResultList = mvResultList;
+    public void setMvResult(QueryGenerateResult mvResult) {
+        this.mvResult = mvResult;
     }
 
     public CardEstimateState getCardEstimateState() {
@@ -98,8 +96,7 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
         this.numQueriesAccelerated = numQueriesAccelerated;
     }
 
-    public List<List<String>> getRowList(Supplier<Integer> idAssigner) {
-        List<List<String>> rowList = Lists.newArrayListWithCapacity(mvResultList.size());
+    public List<String> getRow(Supplier<Integer> idAssigner) {
         TieredList.Builder<String> cardEstimateListBuilder = TieredList.<String>newGenesisTier();
         if (cardEstimateState != null) {
             cardEstimateListBuilder.add(cardEstimateState.getHaltReason().name());
@@ -135,30 +132,26 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
         }
         TieredList<String> nodeInfoList = nodeInfoListBuilder.build();
 
-        for (QueryGenerateResult queryGenerateResult : mvResultList) {
-            TieredList.Builder<String> rowBuilder = TieredList.<String>newGenesisTier();
-            rowBuilder.add("" + idAssigner.get());
-            rowBuilder.add(queryGenerateResult.getMvName());
-            rowBuilder.add(queryGenerateResult.getSubquery().getResult());
+        TieredList.Builder<String> rowBuilder = TieredList.<String>newGenesisTier();
+        rowBuilder.add("" + idAssigner.get());
+        rowBuilder.add(mvResult.getMvName());
+        rowBuilder.add(mvResult.getSubquery().getResult());
 
-            List<PrettyPrinter> orderedCoveredQueries = queryGenerateResult.getCoveredQueries()
-                    .stream()
-                    .sorted()
-                    .map(PrettyPrinter::escapedDoubleQuoted)
-                    .collect(Collectors.toList());
+        List<PrettyPrinter> orderedCoveredQueries = mvResult.getCoveredQueries()
+                .stream()
+                .sorted()
+                .map(PrettyPrinter::escapedDoubleQuoted)
+                .collect(Collectors.toList());
 
-            String coveredQueries = new PrettyPrinter()
-                    .add("[").addSuperSteps(", ", orderedCoveredQueries)
-                    .add("]")
-                    .getResult();
+        String coveredQueries = new PrettyPrinter()
+                .add("[").addSuperSteps(", ", orderedCoveredQueries)
+                .add("]")
+                .getResult();
 
-            List<String> row = rowBuilder.build()
-                    .concat(cardEstimateList)
-                    .concat(nodeInfoList)
-                    .concatOne(coveredQueries);
-            rowList.add(row);
-        }
-        return rowList;
+        return rowBuilder.build()
+                .concat(cardEstimateList)
+                .concat(nodeInfoList)
+                .concatOne(coveredQueries);
     }
 
     @Override
