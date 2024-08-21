@@ -390,9 +390,9 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -403,9 +403,9 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );

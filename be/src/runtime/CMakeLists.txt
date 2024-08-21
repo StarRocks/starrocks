@@ -43,6 +43,7 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     types.cpp
+    agg_state_desc.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
