@@ -1,4 +1,4 @@
-FROM node:18.18.2
+FROM node:21
 
 WORKDIR /app/docusaurus
 ENV NODE_OPTIONS="--max-old-space-size=4096"
