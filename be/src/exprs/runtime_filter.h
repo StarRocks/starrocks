@@ -32,6 +32,7 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+struct SkewBroadcastRfMaterial;
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 // 0x3. Fix serialize problem
@@ -535,10 +536,18 @@ public:
         }
     }
 
-    void insert(const CppType& value) {
-        if (LIKELY(_bf.can_use())) {
-            size_t hash = compute_hash(value);
-            _bf.insert_hash(hash);
+    void insert(const CppType& value, bool insert_into_bf = true) {
+        size_t hash = compute_hash(value);
+        if (insert_into_bf) {
+            if (LIKELY(_bf.can_use())) {
+                _bf.insert_hash(hash);
+            }
+        } else {
+            for (auto& partition_bf : _hash_partition_bf) {
+                if (LIKELY(partition_bf.can_use())) {
+                    partition_bf.insert_hash(hash);
+                }
+            }
         }
 
         _min = std::min(value, _min);

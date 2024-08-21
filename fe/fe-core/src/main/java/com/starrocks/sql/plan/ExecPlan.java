@@ -51,6 +51,7 @@ public class ExecPlan {
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
+    private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -141,6 +142,10 @@ public class ExecPlan {
 
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
+    }
+    
+    public Map<Integer, PlanFragment> getSplitProduceFragments() {
+        return splitProduceFragments;
     }
 
     public OptExpression getPhysicalPlan() {

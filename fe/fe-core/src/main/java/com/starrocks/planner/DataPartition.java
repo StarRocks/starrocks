@@ -61,6 +61,8 @@ public class DataPartition {
 
     public static final DataPartition RANDOM = new DataPartition(TPartitionType.RANDOM);
 
+    public static final DataPartition HYBRID_HASH_PARTITIONED = new DataPartition(TPartitionType.HYBRID_HASH_PARTITIONED);
+
     private final TPartitionType type;
 
     // for hash partition: exprs used to compute hash value
@@ -72,7 +74,8 @@ public class DataPartition {
             Preconditions.checkState(!exprs.isEmpty());
             Preconditions.checkState(
                     type == TPartitionType.HASH_PARTITIONED || type == TPartitionType.RANGE_PARTITIONED
-                            || type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED);
+                            || type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED ||
+                            type == TPartitionType.HYBRID_HASH_PARTITIONED);
             this.type = type;
             this.partitionExprs = ImmutableList.copyOf(exprs);
         } else {
@@ -88,7 +91,8 @@ public class DataPartition {
 
     public DataPartition(TPartitionType type) {
         Preconditions.checkState(
-                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM);
+                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM ||
+                        type == TPartitionType.HYBRID_HASH_PARTITIONED);
         this.type = type;
         this.partitionExprs = ImmutableList.of();
     }
