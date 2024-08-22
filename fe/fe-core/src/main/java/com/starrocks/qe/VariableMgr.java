@@ -192,21 +192,6 @@ public class VariableMgr {
         return DEFAULT_SESSION_VARIABLE;
     }
 
-    public static boolean parseBooleanVariable(String value) {
-        if (value.equalsIgnoreCase("ON")
-                || value.equalsIgnoreCase("TRUE")
-                || value.equalsIgnoreCase("1")) {
-            return true;
-        }
-        if (value.equalsIgnoreCase("OFF")
-                || value.equalsIgnoreCase("FALSE")
-                || value.equalsIgnoreCase("0")) {
-            return false;
-        }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, value);
-        return false;
-    }
-
     // Set value to a variable
     private static boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
