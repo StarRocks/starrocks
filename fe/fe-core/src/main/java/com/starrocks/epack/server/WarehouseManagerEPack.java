@@ -23,6 +23,7 @@ import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.warehouse.Cluster;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -35,7 +36,6 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -320,9 +320,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
-        writer.writeJson(nameToWh.size());
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
+        writer.writeInt(nameToWh.size());
         for (Warehouse warehouse : nameToWh.values()) {
             writer.writeJson(warehouse);
         }

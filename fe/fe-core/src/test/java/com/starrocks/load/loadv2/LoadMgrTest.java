@@ -41,6 +41,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
@@ -341,10 +342,10 @@ public class LoadMgrTest {
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
 
-        loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
+        loadManager.saveLoadJobsV2JsonFormat(image.getImageWriter());
 
         LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         loadManager2.loadLoadJobsV2JsonFormat(reader);
         reader.close();
 

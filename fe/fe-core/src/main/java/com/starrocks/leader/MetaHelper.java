@@ -34,12 +34,14 @@
 
 package com.starrocks.leader;
 
+import com.google.common.base.Strings;
 import com.sleepycat.je.config.EnvironmentParams;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,8 +63,9 @@ import java.util.stream.Stream;
 public class MetaHelper {
     private static final Logger LOG = LogManager.getLogger(MetaHelper.class);
 
-    private static final String PART_SUFFIX = ".part";
+    public static final String PART_SUFFIX = ".part";
     public static final String X_IMAGE_SIZE = "X-Image-Size";
+    public static final String X_IMAGE_CHECKSUM = "X-Image-Checksum";
     private static final int BUFFER_BYTES = 8 * 1024;
     private static final int CHECKPOINT_LIMIT_BYTES = 30 * 1024 * 1024;
 
@@ -83,6 +86,53 @@ public class MetaHelper {
             throw new IOException("Complete file" + filename + " failed");
         }
         return newFile;
+    }
+
+    public static void downloadImageFile(String urlStr, int timeout, String version, File destDir)
+            throws IOException {
+        HttpURLConnection conn = null;
+        String checksum = null;
+        String destFilename = Storage.IMAGE + "." + version;
+        File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
+        // 1. download to a tmp file image.xxx.part
+        try (OutputStream out = new FileOutputStream(partFile)) {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(timeout);
+            conn.setReadTimeout(timeout);
+
+            // Get image size
+            long imageSize = -1;
+            String imageSizeStr = conn.getHeaderField(X_IMAGE_SIZE);
+            if (imageSizeStr != null) {
+                imageSize = Long.parseLong(imageSizeStr);
+            }
+
+            BufferedInputStream bin = new BufferedInputStream(conn.getInputStream());
+
+            // Do not limit speed in client side.
+            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, true);
+
+            if ((imageSize > 0) && (bytes != imageSize)) {
+                throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
+            }
+            checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+
+        // 2. write checksum if exists
+        if (!Strings.isNullOrEmpty(checksum)) {
+            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version), checksum);
+        }
+
+        // 3. rename to image.xxx
+        File imageFile = new File(destDir, destFilename);
+        if (!partFile.renameTo(imageFile)) {
+            throw new IOException("rename file:" + partFile.getName() + " to file:" + destFilename + " failed");
+        }
     }
 
     public static OutputStream getOutputStream(String filename, File dir)

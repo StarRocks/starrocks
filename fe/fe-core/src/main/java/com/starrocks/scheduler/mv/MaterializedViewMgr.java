@@ -21,6 +21,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -287,10 +288,10 @@ public class MaterializedViewMgr {
         List<MVMaintenanceJob> jobList;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + jobMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
-        writer.writeJson(jobMap.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
+        writer.writeInt(jobMap.size());
         for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
             writer.writeJson(mvMaintenanceJob);
         }

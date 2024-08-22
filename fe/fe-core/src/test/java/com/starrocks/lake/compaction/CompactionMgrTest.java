@@ -24,17 +24,15 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -186,12 +184,11 @@ public class CompactionMgrTest {
             }
         };
 
-        ByteArrayOutputStream bstream = new ByteArrayOutputStream();
-        DataOutputStream ostream = new DataOutputStream(bstream);
-        compactionMgr.save(ostream);
+        UtFrameUtils.PseudoImage.setUpImageVersion();
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        compactionMgr.save(image.getImageWriter());
         CompactionMgr compactionMgr2 = new CompactionMgr();
-        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bstream.toByteArray()));
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         compactionMgr2.load(reader);
         Assert.assertEquals(1, compactionMgr2.getPartitionStatsCount());
     }

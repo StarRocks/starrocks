@@ -28,6 +28,7 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -37,7 +38,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
@@ -236,8 +236,8 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
         return failoverGroup.handleRequestMetaRequest(request);
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

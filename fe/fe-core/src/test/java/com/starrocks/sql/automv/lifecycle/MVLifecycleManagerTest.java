@@ -19,14 +19,12 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.util.AutoMVUtil;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -42,6 +40,12 @@ public class MVLifecycleManagerTest {
     @BeforeClass
     public static void setUp() throws Exception {
         AutoMVUtil.mockMVChangeLogPersistence();
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterClass
+    public static void teardown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     private MVLifecycleManager prepareMVLifecycleManager() {
@@ -59,12 +63,9 @@ public class MVLifecycleManagerTest {
         Timestamp t = Timestamp.valueOf(dateTime);
         mgr.updateAuditLatestTimestamp(t.getTime());
 
-        ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
-        DataOutputStream dataOut = new DataOutputStream(byteOut);
-        mgr.save(dataOut);
-        ByteArrayInputStream byteIn = new ByteArrayInputStream(byteOut.toByteArray());
-        DataInputStream dataIn = new DataInputStream(byteIn);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dataIn);
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        mgr.save(image.getImageWriter());
+        SRMetaBlockReader reader = image.getMetaBlockReader();
         MVLifecycleManager mgr2 = new MVLifecycleManager();
         mgr2.load(reader);
         Optional<Long> optTs = mgr2.getAuditLatestTimestamp();

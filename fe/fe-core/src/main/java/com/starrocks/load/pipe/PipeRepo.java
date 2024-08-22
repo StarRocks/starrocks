@@ -14,6 +14,7 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -22,7 +23,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 
 /**
@@ -68,8 +68,8 @@ public class PipeRepo {
         LOG.info("loaded {} pipes", cnt);
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        pipeManager.save(dos);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        pipeManager.save(imageWriter);
     }
 
     public void replay(PipeOpEntry entry) {

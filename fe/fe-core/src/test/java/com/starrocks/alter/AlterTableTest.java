@@ -28,7 +28,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -338,7 +337,7 @@ public class AlterTableTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
 
         // ** test alter table location to rack:*
         sql = "ALTER TABLE test.`test_location_alter` SET ('" +
@@ -360,7 +359,7 @@ public class AlterTableTest {
 
         // ** test replay from edit log: alter to rack:*
         LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
         ModifyTablePropertyOperationLog info = (ModifyTablePropertyOperationLog)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
         localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);

@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -27,7 +28,6 @@ import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.TieredList;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -92,10 +92,10 @@ public class MVLifecycleManager {
         addMVLifecycle(mvLifecycle);
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 2 + nameToMVLifecycles.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, numJson);
-        writer.writeJson(nameToMVLifecycles.size() + 1);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, numJson);
+        writer.writeInt(nameToMVLifecycles.size() + 1);
         writer.writeJson(auditLatestTimestamp);
         for (MVLifecycle mvLifecycle : nameToMVLifecycles.values()) {
             writer.writeJson(mvLifecycle.getMVChangeLog());

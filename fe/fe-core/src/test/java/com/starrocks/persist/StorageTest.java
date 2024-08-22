@@ -115,7 +115,6 @@ public class StorageTest {
     public void testConstruct() {
         Storage storage1 = new Storage(1, "token", "test");
         Assert.assertEquals(1, storage1.getClusterID());
-        Assert.assertEquals("test", storage1.getMetaDir());
     }
 
     @Test
@@ -135,15 +134,6 @@ public class StorageTest {
 
         storage.setImageJournalId(100);
         Assert.assertEquals(100, storage.getImageJournalId());
-
-        Assert.assertEquals("storageTestDir", storage.getMetaDir());
-        storage.setMetaDir("abcd");
-        Assert.assertEquals("abcd", storage.getMetaDir());
-
-        storage.setMetaDir("storageTestDir");
-        storage.clear();
-        File file = new File(storage.getMetaDir());
-        Assert.assertEquals(0, file.list().length);
 
         deleteDir();
     }

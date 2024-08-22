@@ -20,6 +20,7 @@ import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -32,7 +33,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -367,18 +367,18 @@ public class SecurityPolicyMgr {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException {
+    public void save(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for idToPolicy size, 1 json for policyContextMap size, others for each map key and value
             int cnt = 1 + 1 + idToPolicy.size() + policyContextMap.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.SECURITY_POLICY_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, cnt);
 
-            writer.writeJson(idToPolicy.size());
+            writer.writeInt(idToPolicy.size());
             for (Policy policy : idToPolicy.values()) {
                 writer.writeJson(new CreatePolicyLog(policy));
             }
 
-            writer.writeJson(policyContextMap.size());
+            writer.writeInt(policyContextMap.size());
             for (Map.Entry<TableUID, PolicyAppliedContext> entry : policyContextMap.entrySet()) {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());

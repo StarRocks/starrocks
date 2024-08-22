@@ -22,6 +22,7 @@ import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -92,7 +93,7 @@ public class AuthenticationManagerTest {
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // master create test@%; no password
         String sql = "create user test";
@@ -118,7 +119,7 @@ public class AuthenticationManagerTest {
 
         // make final snapshot
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // login from 10.1.1.2 with password will fail
         user = masterManager.checkPassword(testUser.getUser(), "10.1.1.2", scramble, seed);
@@ -126,8 +127,7 @@ public class AuthenticationManagerTest {
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
-        followerManager.loadV2(srMetaBlockReader);
+        followerManager.loadV2(emptyImage.getMetaBlockReader());
 
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
@@ -167,8 +167,7 @@ public class AuthenticationManagerTest {
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
-        imageManager.loadV2(srMetaBlockReader);
+        imageManager.loadV2(finalImage.getMetaBlockReader());
 
         Assert.assertTrue(imageManager.doesUserExist(testUser));
         Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
@@ -266,7 +265,7 @@ public class AuthenticationManagerTest {
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // 2. create user with properties
         String sql = "create user user123 properties (\"session.tx_visible_wait_timeout\" = \"100\", " +
@@ -289,13 +288,13 @@ public class AuthenticationManagerTest {
 
         // 3. save final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // 4 verify replay...
 
         // 4.1 load empty image
         AuthenticationMgr followerManager = new AuthenticationMgr();
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
         followerManager.loadV2(srMetaBlockReader);
 
         // 4.2 replay update user property
@@ -315,7 +314,7 @@ public class AuthenticationManagerTest {
 
         // 4.3 verify final image
         AuthenticationMgr finalManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
+        srMetaBlockReader = new SRMetaBlockReaderV2(finalImage.getJsonReader());
         finalManager.loadV2(srMetaBlockReader);
         userProperty = finalManager.getUserProperty(user);
         Assert.assertEquals(2, userProperty.getSessionVariables().size());
@@ -386,7 +385,7 @@ public class AuthenticationManagerTest {
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // create two catalogs
         String catalogName = "catalog";
@@ -423,13 +422,13 @@ public class AuthenticationManagerTest {
 
         // 4. save final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // 5 verify replay...
 
         // 5.1 load empty image
         AuthenticationMgr followerManager = new AuthenticationMgr();
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
         followerManager.loadV2(srMetaBlockReader);
 
         // 5.2 replay create user
@@ -460,7 +459,7 @@ public class AuthenticationManagerTest {
 
         // 4.3 verify final image
         AuthenticationMgr finalManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
+        srMetaBlockReader = new SRMetaBlockReaderV2(finalImage.getJsonReader());
         finalManager.loadV2(srMetaBlockReader);
         userProperty = finalManager.getUserProperty("user1");
         Assert.assertEquals(1, userProperty.getSessionVariables().size());
@@ -482,7 +481,7 @@ public class AuthenticationManagerTest {
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // 2. create user
         String sql = "create user test";
@@ -507,7 +506,7 @@ public class AuthenticationManagerTest {
 
         // 4. save image after alter
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(alterImage.getDataOutputStream());
+        masterManager.saveV2(alterImage.getImageWriter());
 
         // 5. drop user
         sql = "drop user test";
@@ -517,12 +516,11 @@ public class AuthenticationManagerTest {
 
         // 6. save final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // 7. verify replay...
         AuthenticationMgr followerManager = new AuthenticationMgr();
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
-        followerManager.loadV2(srMetaBlockReader);
+        followerManager.loadV2(emptyImage.getMetaBlockReader());
 
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         // 7.1 replay create user
@@ -554,8 +552,7 @@ public class AuthenticationManagerTest {
 
         // 8. verify alter image
         AuthenticationMgr alterManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(alterImage.getDataInputStream());
-        alterManager.loadV2(srMetaBlockReader);
+        alterManager.loadV2(alterImage.getMetaBlockReader());
 
         Assert.assertTrue(alterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, alterManager.checkPassword(
@@ -564,8 +561,7 @@ public class AuthenticationManagerTest {
 
         // 9. verify final image
         AuthenticationMgr finalManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
-        finalManager.loadV2(srMetaBlockReader);
+        finalManager.loadV2(finalImage.getMetaBlockReader());
         Assert.assertFalse(finalManager.doesUserExist(testUser));
         Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
     }
@@ -754,7 +750,7 @@ public class AuthenticationManagerTest {
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // 2. update user property
         String sql = "set property for 'root' 'max_user_connections' = '555'";
@@ -764,13 +760,13 @@ public class AuthenticationManagerTest {
 
         // 3. save final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // 4 verify replay...
 
         // 4.1 load empty image
         AuthenticationMgr followerManager = new AuthenticationMgr();
-        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
         followerManager.loadV2(srMetaBlockReader);
 
         // 4.2 replay update user property
@@ -781,7 +777,7 @@ public class AuthenticationManagerTest {
 
         // 4.3 verify final image
         AuthenticationMgr finalManager = new AuthenticationMgr();
-        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
+        srMetaBlockReader = new SRMetaBlockReaderV2(finalImage.getJsonReader());
         finalManager.loadV2(srMetaBlockReader);
         Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
         Assert.assertEquals(555, finalManager.getMaxConn("root"));

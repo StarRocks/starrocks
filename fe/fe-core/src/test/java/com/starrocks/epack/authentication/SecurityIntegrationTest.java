@@ -33,7 +33,6 @@ import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -241,7 +240,7 @@ public class SecurityIntegrationTest {
         AuthenticationMgrEPack masterManager = new AuthenticationMgrEPack();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getImageWriter());
 
         // master create security integration ldap3
         String sql = "create security integration ldap3 properties (" +
@@ -291,11 +290,11 @@ public class SecurityIntegrationTest {
 
         // make final snapshot
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.saveV2(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getImageWriter());
 
         // test replay OP_CREATE_SECURITY_INTEGRATION edit log
         AuthenticationMgrEPack followerManager = new AuthenticationMgrEPack();
-        followerManager.loadV2(new SRMetaBlockReader(emptyImage.getDataInputStream()));
+        followerManager.loadV2(emptyImage.getMetaBlockReader());
         Assert.assertNull(followerManager.getSecurityIntegration("ldap3"));
         SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION);
@@ -322,7 +321,7 @@ public class SecurityIntegrationTest {
 
         // simulate restart (load from image)
         AuthenticationMgrEPack imageManager = new AuthenticationMgrEPack();
-        imageManager.loadV2(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        imageManager.loadV2(finalImage.getMetaBlockReader());
         Assert.assertNotNull(imageManager.getSecurityIntegration("ldap3"));
         Assert.assertNull(imageManager.getSecurityIntegration("ldap4"));
         Assert.assertEquals("bbb",
