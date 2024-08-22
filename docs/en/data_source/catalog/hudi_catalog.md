@@ -759,13 +759,13 @@ PROPERTIES
 
 ## View Hudi catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG hudi_catalog_glue;
@@ -792,7 +792,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
 
 ## Drop a Hudi catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Hudi catalog named `hudi_catalog_glue`:
 
@@ -818,7 +818,7 @@ You can use one of the following syntaxes to view the schema of a Hudi table:
 
 ## Query a Hudi table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Hudi cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Hudi cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>

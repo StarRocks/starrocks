@@ -69,6 +69,6 @@ Note:
 
 - [CREATE DATABASE](CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
+- [SHOW DATABASES](SHOW_DATABASES.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP_DATABASE.md)
+- [DROP DATABASE](DROP_DATABASE.md)

@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Drops an asynchronous ETL task submitted using [SUBMIT TASK](./SUBMIT_TASK.md). This feature has been supported since StarRocks v2.5.7.
+Drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). This feature has been supported since StarRocks v2.5.7.
 
 > **NOTE**
 >

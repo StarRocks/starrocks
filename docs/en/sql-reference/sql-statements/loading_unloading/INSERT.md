@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md). From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
 
-You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulation/SUBMIT_TASK.md).
+You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.md).
 
 ## Syntax
 

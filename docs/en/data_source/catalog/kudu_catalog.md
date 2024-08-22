@@ -115,13 +115,13 @@ The following table describes the parameter you need to configure in `CatalogPar
 
 ## View Kudu catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Kudu catalog named `kudu_catalog`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Kudu catalog named `kudu_catalog`:
 
 ```SQL
 SHOW CREATE CATALOG kudu_catalog;
@@ -129,7 +129,7 @@ SHOW CREATE CATALOG kudu_catalog;
 
 ## Drop a Kudu catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Kudu catalog named `kudu_catalog`:
 
@@ -155,7 +155,7 @@ You can use one of the following syntaxes to view the schema of a Kudu table:
 
 ## Query a Kudu table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Kudu cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Kudu cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;

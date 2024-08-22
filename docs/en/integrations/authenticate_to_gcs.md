@@ -39,7 +39,7 @@ In this topic, [Hive catalog](../data_source/catalog/hive_catalog.md), [file ext
 
 ### External catalog
 
-Use the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement to create a Hive catalog named `hive_catalog_gcs` as follows, in order to query files from GCS:
+Use the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement to create a Hive catalog named `hive_catalog_gcs` as follows, in order to query files from GCS:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_gcs

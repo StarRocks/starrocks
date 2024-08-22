@@ -34,8 +34,8 @@ Take note of the following points:
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
-- [SHOW CREATE DATABASE](../data-manipulation/SHOW_CREATE_DATABASE.md)
+- [CREATE DATABASE](CREATE_DATABASE.md)
+- [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
+- [SHOW DATABASES](SHOW_DATABASES.md)

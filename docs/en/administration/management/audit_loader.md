@@ -10,7 +10,7 @@ StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather
 
 ## Create a table to store audit logs
 
-Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) for detailed instructions.
+Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) for detailed instructions.
 
 Because the fields of audit logs vary among different StarRocks versions, you must choose among the following examples to create a table that is compatible with your StarRocks.
 

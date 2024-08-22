@@ -113,14 +113,14 @@ PROPERTIES (
 
 ## View MaxCompute catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md)
 to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a MaxCompute catalog named `odps_catalog`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a MaxCompute catalog named `odps_catalog`:
 
 ```SQL
 SHOW CREATE CATALOG odps_catalog;
@@ -128,7 +128,7 @@ SHOW CREATE CATALOG odps_catalog;
 
 ## Drop a MaxCompute catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a MaxCompute catalog named `odps_catalog`:
 
@@ -154,7 +154,7 @@ You can use one of the following syntaxes to view the schema of a MaxCompute tab
 
 ## Query a MaxCompute table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your MaxCompute cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your MaxCompute cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;

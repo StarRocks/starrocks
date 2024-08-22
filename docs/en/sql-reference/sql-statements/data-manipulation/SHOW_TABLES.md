@@ -22,7 +22,7 @@ SHOW TABLES [FROM <catalog_name>.<db_name>]
 
 | **Parameter**          | **Required** | **Description**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
-| catalog_name | No       | The name of the internal catalog or an external catalog.<ul><li>If you do not specify this parameter or set it to `default_catalog`, tables in StarRocks databases are returned.</li><li>If you set this parameter to the name of an external catalog, tables in databases of an external data source are returned.</li></ul> You can run [SHOW CATALOGS](SHOW_CATALOGS.md) to view internal and external catalogs.|
+| catalog_name | No       | The name of the internal catalog or an external catalog.<ul><li>If you do not specify this parameter or set it to `default_catalog`, tables in StarRocks databases are returned.</li><li>If you set this parameter to the name of an external catalog, tables in databases of an external data source are returned.</li></ul> You can run [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) to view internal and external catalogs.|
 | db_name | No       | The database name. If not specified, the current database is used by default. |
 
 ## Examples
@@ -81,6 +81,6 @@ Alternatively, you can run SET CATALOG to switch to the external catalog `hudi_c
 
 ## References
 
-- [SHOW CATALOGS](SHOW_CATALOGS.md): Views all catalogs in a StarRocks cluster.
-- [SHOW DATABASES](SHOW_DATABASES.md): Views all databases in the internal catalog or an external catalog.
+- [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md): Views all catalogs in a StarRocks cluster.
+- [SHOW DATABASES](../Database/SHOW_DATABASES.md): Views all databases in the internal catalog or an external catalog.
 - [SET CATALOG](../data-definition/SET_CATALOG.md): Switches between catalogs.

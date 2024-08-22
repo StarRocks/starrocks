@@ -18,7 +18,7 @@ SHOW DATABASES [FROM <catalog_name>]
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name      | No           | The name of the internal catalog or an external catalog.<ul><li>If you do not specify the parameter or specify the name of the internal catalog, which is `default_catalog`, you can view databases in your current StarRocks cluster.</li><li>If you set the value of the parameter to the name of an external catalog, you can view databases in the corresponding external data source. You can run [SHOW CATALOGS](SHOW_CATALOGS.md) to view internal and external catalogs.</li></ul> |
+| catalog_name      | No           | The name of the internal catalog or an external catalog.<ul><li>If you do not specify the parameter or specify the name of the internal catalog, which is `default_catalog`, you can view databases in your current StarRocks cluster.</li><li>If you set the value of the parameter to the name of an external catalog, you can view databases in the corresponding external data source. You can run [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md) to view internal and external catalogs.</li></ul> |
 
 ## Examples
 
@@ -62,8 +62,8 @@ SHOW DATABASES FROM hive1;
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
+- [CREATE DATABASE](CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP_DATABASE.md)
+- [DROP DATABASE](DROP_DATABASE.md)

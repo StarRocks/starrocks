@@ -758,13 +758,13 @@ PROPERTIES
 
 ## View unified catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a unified catalog named `unified_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a unified catalog named `unified_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG unified_catalog_glue;
@@ -791,7 +791,7 @@ You can use one of the following methods to switch to a unified catalog and a da
 
 ## Drop a unified catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a unified catalog named `unified_catalog_glue`:
 
@@ -819,7 +819,7 @@ You can use one of the following syntaxes to view the schema of a table from a u
 
 To query data from a unified catalog, follow these steps:
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your unified data source with which the unified catalog is associated:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your unified data source with which the unified catalog is associated:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -878,7 +878,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a database from a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_overview.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
 
 > **NOTE**
 >

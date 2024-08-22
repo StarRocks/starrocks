@@ -39,7 +39,7 @@ StarRocks supports using one of the following authentication methods to access B
 
 #### External catalog
 
-Configure `azure.blob.storage_account` and `azure.blob.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account` and `azure.blob.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -94,7 +94,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -163,7 +163,7 @@ StarRocks supports using one of the following authentication methods to access D
 
 #### External catalog
 
-Configure `azure.adls1.use_managed_service_identity` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls1.use_managed_service_identity` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -215,7 +215,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, and `azure.adls1.oauth2_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, and `azure.adls1.oauth2_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -294,7 +294,7 @@ Before you start, you need to make the following preparations:
 
 #### External catalog
 
-Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, and `azure.adls2.oauth2_client_id` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, and `azure.adls2.oauth2_client_id` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -352,7 +352,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.adls2.storage_account` and `azure.adls2.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.storage_account` and `azure.adls2.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -409,7 +409,7 @@ Before you start, you need to create a service principal, create a role assignme
 
 #### External catalog
 
-Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, and `azure.adls2.oauth2_client_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, and `azure.adls2.oauth2_client_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
