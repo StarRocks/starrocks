@@ -115,9 +115,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -834,29 +832,6 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static DeleteMgr read(DataInput in) throws IOException {
-        String json;
-        try {
-            json = Text.readString(in);
-
-            // In older versions of fe, the information in the deleteHandler is not cleaned up,
-            // and if there are many delete statements, it will cause an int overflow
-            // and report an IllegalArgumentException.
-            //
-            // dbToDeleteInfos is only used to record history delete info,
-            // discarding it doesn't make much of a difference
-        } catch (IllegalArgumentException e) {
-            LOG.warn("read delete handler json string failed, ignore", e);
-            return new DeleteMgr();
-        }
-        return GsonUtils.GSON.fromJson(json, DeleteMgr.class);
-    }
-
-    public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {

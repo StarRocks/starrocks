@@ -57,9 +57,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
@@ -327,18 +325,6 @@ public class PluginMgr implements Writable {
         return rows;
     }
 
-    public void readFields(DataInputStream dis) throws IOException {
-        int size = dis.readInt();
-        for (int i = 0; i < size; i++) {
-            try {
-                PluginInfo pluginInfo = PluginInfo.read(dis);
-                replayLoadDynamicPlugin(pluginInfo);
-            } catch (Exception e) {
-                LOG.warn("load plugin failed.", e);
-            }
-        }
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         // only need to persist dynamic plugins
@@ -348,17 +334,6 @@ public class PluginMgr implements Writable {
         for (PluginInfo pc : list) {
             pc.write(out);
         }
-    }
-
-    public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
-        readFields(dis);
-        LOG.info("finished replay plugins from image");
-        return checksum;
-    }
-
-    public long savePlugins(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
