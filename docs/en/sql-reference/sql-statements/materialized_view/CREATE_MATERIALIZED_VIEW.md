@@ -12,7 +12,7 @@ Creates a materialized view. For usage information about materialized views, see
 >
 > Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
 
-Creating a materialized view is an asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata views [`tasks`](../../../reference/information_schema/tasks.md) and [`task_runs`](../../../reference/information_schema/task_runs.md) in [Information Schema](../../../reference/overview-pages/information_schema.md).
+Creating a materialized view is an asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](SHOW_ALTER_MATERIALIZED_VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata views [`tasks`](../../../reference/information_schema/tasks.md) and [`task_runs`](../../../reference/information_schema/task_runs.md) in [Information Schema](../../../reference/overview-pages/information_schema.md).
 
 StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
@@ -251,7 +251,7 @@ The sort key of the asynchronous materialized view. If you do not specify the so
 
 **PROPERTIES** (optional)
 
-Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](./ALTER_MATERIALIZED_VIEW.md).
+Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md).
 
 - `session.`: If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`.
 - `replication_num`: The number of materialized view replicas to create.
@@ -371,7 +371,7 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
   - External catalog materialized view only support async fixed-interval refresh and manual refresh.
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building materialized views based on external resources is not supported.
-  - Currently, StarRocks cannot perceive if the base table data in the external catalog has changed, so all partitions will be refreshed by default every time the base table is refreshed. You can manually refresh only some of partitions using [REFRESH MATERIALIZED VIEW](../data-manipulation/REFRESH_MATERIALIZED_VIEW.md).
+  - Currently, StarRocks cannot perceive if the base table data in the external catalog has changed, so all partitions will be refreshed by default every time the base table is refreshed. You can manually refresh only some of partitions using [REFRESH MATERIALIZED VIEW](REFRESH_MATERIALIZED_VIEW.md).
 
 ## Examples
 

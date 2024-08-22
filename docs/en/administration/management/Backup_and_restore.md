@@ -216,10 +216,10 @@ During BACKUP and RESTORE of a database, StarRocks does as follows:
 
 Any error encountered throughout the RESTORE process will not block the process.
 
-After RESTORE, you can check the status of the materialized view using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md).
+After RESTORE, you can check the status of the materialized view using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md).
 
 - If the materialized view is active, it can be used directly.
-- If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
+- If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
 
 ## Usage notes
 

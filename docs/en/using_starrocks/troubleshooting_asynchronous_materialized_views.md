@@ -16,14 +16,14 @@ To get a whole picture of asynchronous materialized views that you are working w
 
 ### Check the working state of an asynchronous materialized view
 
-You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
+You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
 
 - `is_active`: Whether the state of the materialized view is active. Only an active materialized view can be used for query acceleration and rewrite.
 - `last_refresh_state`: The state of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS.
 - `last_refresh_error_message`: The reason why the last refresh failed (if the materialized view state is not active).
 - `rows`: The number of data rows in the materialized view. Please note that this value can be different from the actual row count of the materialized view because the updates can be deferred.
 
-For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#returns).
+For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#returns).
 
 Example:
 
@@ -340,7 +340,7 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
+- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
 
   ```SQL
   CANCEL REFRESH MATERIALIZED VIEW mv1;
