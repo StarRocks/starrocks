@@ -782,6 +782,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+    public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -2126,6 +2127,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE, flag = VariableMgr.INVISIBLE)
     private int connectorRemoteFileAsyncTaskSize = 4;
+
+    @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
+    private boolean enableConnectorIncrementalScanRanges = false;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -4112,6 +4116,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getConnectorRemoteFileAsyncTaskSize() {
         return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
     }
 
     // Serialize to thrift object
