@@ -954,8 +954,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         try {
             value = Integer.parseInt(valueString);
         } catch (NumberFormatException e) {
-            ErrorReport.reportAnalysisException(
-                    ErrorCode.ERR_ROUTINE_LOAD_PROPERTY_PARTITION_OFFSET_INVALID, propertyName, valueString, "an integer");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString, "an integer");
         }
         return value;
     }
@@ -968,8 +967,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         try {
             value = Long.valueOf(valueString);
         } catch (NumberFormatException e) {
-            ErrorReport.reportAnalysisException(
-                    ErrorCode.ERR_ROUTINE_LOAD_PROPERTY_PARTITION_OFFSET_INVALID, propertyName, valueString,
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, propertyName, valueString,
                     String.format("an integer, %s, or %s", KafkaProgress.OFFSET_BEGINNING, KafkaProgress.OFFSET_END));
         }
         return value;

@@ -570,7 +570,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka partition '1 2 3' is invalid. It must be an integer",
+                "Invalid kafka partition: '1 2 3'. Expected values should be an integer",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt, connectContext));
 
         // 6. invalid offset a
@@ -584,7 +584,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt2 = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka offset 'a' is invalid. It must be an integer, OFFSET_BEGINNING, or OFFSET_END",
+                "Invalid kafka offset: 'a'. Expected values should be an integer, OFFSET_BEGINNING, or OFFSET_END",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt2, connectContext));
     }
 

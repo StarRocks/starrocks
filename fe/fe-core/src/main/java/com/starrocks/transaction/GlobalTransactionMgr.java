@@ -41,6 +41,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> 308220f27f ([Enhancement] Improve invalid value error message (#48633))
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -338,13 +344,12 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
                 .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
     }
 
-    private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
+    public static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
             throws AnalysisException {
         if (timeoutSecond > maxLoadTimeoutSecond ||
                 timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, "timeout", timeoutSecond,
+                    String.format("between %d and %d seconds", minLoadTimeOutSecond, maxLoadTimeoutSecond));
         }
     }
 
