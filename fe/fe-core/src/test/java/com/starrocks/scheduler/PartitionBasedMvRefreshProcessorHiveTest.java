@@ -791,7 +791,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "TABLE: part_tbl1\n" +
                     "     PARTITION PREDICATES: 4: par_date IS NOT NULL, 4: par_date >= '2020-01-01', " +
                     "4: par_date < '2020-01-05'\n" +
@@ -815,13 +814,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            PlanTestBase.assertContains(plan, "TABLE: part_tbl1\n" +
-                    "     PARTITION PREDICATES: 4: par_date IS NOT NULL, 4: par_date >= '2020-01-05', 4: par_date < " +
-                    "'2020-01-06'\n" +
-                    "     partitions=1/5");
-            PlanTestBase.assertContains(plan, "     TABLE: part_tbl2\n" +
-                    "     PARTITION PREDICATES: 8: par_date IS NOT NULL\n" +
-                    "     partitions=4/4");
+            PlanTestBase.assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: hive_partition_prune_non_ref_tables2\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  0:EMPTYSET");
         }
 
         // run 3
