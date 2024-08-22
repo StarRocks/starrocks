@@ -405,6 +405,8 @@ struct TMaterializedViewStatus {
 
     26: optional string extra_message
     27: optional string query_rewrite_status
+
+    28: optional string owner
 }
 
 struct TListPipesParams {

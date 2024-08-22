@@ -56,6 +56,7 @@ public class ShowMaterializedViewStatus {
     private long lastCheckTime;
     private String inactiveReason;
     private String queryRewriteStatus;
+    private String owner;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -64,6 +65,7 @@ public class ShowMaterializedViewStatus {
     public class RefreshJobStatus {
         private long taskId;
         private String taskName;
+        private String taskOwner;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
         private long mvRefreshEndTime;
@@ -199,6 +201,14 @@ public class ShowMaterializedViewStatus {
 
         public void setExtraMessage(ExtraMessage extraMessage) {
             this.extraMessage = extraMessage;
+        }
+
+        public String getTaskOwner() {
+            return taskOwner;
+        }
+
+        public void setTaskOwner(String taskOwner) {
+            this.taskOwner = taskOwner;
         }
     }
 
@@ -380,6 +390,7 @@ public class ShowMaterializedViewStatus {
 
         status.setTaskId(firstTaskRunStatus.getTaskId());
         status.setTaskName(firstTaskRunStatus.getTaskName());
+        status.setTaskOwner(firstTaskRunStatus.getUser());
 
         // extra message
         ExtraMessage extraMessage = new ExtraMessage();
@@ -457,6 +468,10 @@ public class ShowMaterializedViewStatus {
         this.queryRewriteStatus = queryRewriteStatus;
     }
 
+    public void setOwner(String owner) {
+        this.owner = owner;
+    }
+
     /**
      * Return the thrift of show materialized views command from be's request.
      */
@@ -509,6 +524,8 @@ public class ShowMaterializedViewStatus {
 
         // query_rewrite_status
         status.setQuery_rewrite_status(queryRewriteStatus);
+        // owner
+        status.setOwner(refreshJobStatus.getTaskOwner());
 
         return status;
     }
@@ -576,6 +593,8 @@ public class ShowMaterializedViewStatus {
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
         // query_rewrite_status
         addField(resultRow, queryRewriteStatus);
+        // owner
+        addField(resultRow, refreshJobStatus.getTaskOwner());
 
         return resultRow;
     }
