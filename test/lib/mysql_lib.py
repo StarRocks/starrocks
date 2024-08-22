@@ -24,9 +24,9 @@ mysql_lib.py
 
 import pymysql as _mysql
 from pymysql.constants import CLIENT
-from cup import log
 
 from lib import close_conn
+
 
 class MysqlLib(object):
     """MysqlLib class"""

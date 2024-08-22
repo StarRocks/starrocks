@@ -25,9 +25,14 @@ sr api lib in this module
 import base64
 import bz2
 import configparser
+import copy
 import datetime
 import json
 import logging
+import sys
+import threading
+import traceback
+
 import trino
 import pyhive
 
@@ -59,13 +64,13 @@ from lib.mysql_lib import MysqlLib
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
+from lib import *
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
 common_sql_path = os.path.join(root_path, "common/sql")
 common_data_path = os.path.join(root_path, "common/data")
 common_result_path = os.path.join(root_path, "common/result")
-
 
 LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
@@ -76,6 +81,7 @@ if not os.path.exists(CRASH_DIR):
 
 LOG_LEVEL = logging.INFO
 QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
+
 
 class Filter(logging.Filter):
     """
@@ -100,13 +106,23 @@ class Filter(logging.Filter):
         return True
 
 
-def self_print(msg, need_print=True):
+def self_print(msg, color: ColorEnum = None, bold=False, logout=False, need_print=True):
     # replace secret infos
     for secret_k, secret_v in SECRET_INFOS.items():
         msg = msg.replace(secret_v, "${%s}" % secret_k)
 
     if need_print:
-        print(msg)
+        if color:
+            bold_str = "1;" if bold else ""
+            print(f"\033[{bold_str}{color.value}m{msg} \033[0m")
+
+            if logout:
+                log.info(f"\033[{bold_str}{color.value}m{msg} \033[0m")
+        else:
+            print(msg)
+
+            if logout:
+                log.info(msg)
 
     return msg
 
@@ -117,18 +133,6 @@ logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
-
-RESULT_FLAG = "-- result:"
-RESULT_END_FLAT = "-- !result"
-SHELL_FLAG = "shell: "
-TRINO_FLAG = "trino: "
-SPARK_FLAG = "spark: "
-HIVE_FLAG = "hive: "
-FUNCTION_FLAG = "function: "
-NAME_FLAG = "-- name: "
-UNCHECK_FLAG = "[UC]"
-ORDER_FLAG = "[ORDER]"
-REGEX_FLAG = "[REGEX]"
 
 SECRET_INFOS = {}
 
@@ -141,6 +145,7 @@ class StarrocksSQLApiLib(object):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.root_path = root_path
+        self.data_path = common_data_path
         self.mysql_lib = MysqlLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
@@ -156,6 +161,11 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
+
+        # thread
+        self.thread_res = {}
+        self.thread_var = {}
+        self.thread_res_log = {}
 
         # trino client config
         self.trino_host = ""
@@ -602,7 +612,7 @@ class StarrocksSQLApiLib(object):
                 if ori:
                     return {"status": True, "result": result, "msg": cursor._result.message}
 
-                if isinstance(result, tuple):
+                if isinstance(result, tuple) or isinstance(result, list):
                     if len(result) > 0:
                         if isinstance(result[0], tuple):
                             res_log.extend(["\t".join([str(y) for y in x]) for x in result])
@@ -695,77 +705,90 @@ class StarrocksSQLApiLib(object):
         args = {"table_name": table_name, "database_name": database_name, "query": query}
         return self.delete_from(args)
 
-    def treatment_record_res(self, sql, sql_res):
+    def treatment_record_res(self, sql, sql_res, res_container: list = None):
+
+        res_container = res_container if res_container is not None else self.res_log
+
         if any(re.match(condition, sql) is not None for condition in skip.skip_res_cmd):
             return
 
-        self.res_log.append(RESULT_FLAG)
+        res_container.append(RESULT_FLAG)
         if not sql_res["status"]:
-            self.res_log.append("E: %s" % str(sql_res["msg"]))
+            res_container.append("E: %s" % str(sql_res["msg"]))
         else:
             # msg info no need to be checked
             sql_res = sql_res["result"] if "result" in sql_res else ""
             if isinstance(sql_res, tuple):
                 if len(sql_res) > 0:
                     if isinstance(sql_res[0], tuple):
-                        self.res_log.extend(["\t".join([str(y) for y in x]) for x in sql_res])
+                        res_container.extend(["\t".join([str(y) for y in x]) for x in sql_res])
                     else:
-                        self.res_log.extend(["\t".join(str(x)) for x in sql_res])
+                        res_container.extend(["\t".join(str(x)) for x in sql_res])
             elif isinstance(sql_res, bytes):
                 if sql_res != b"":
-                    self.res_log.append(str(sql_res).strip())
+                    res_container.append(str(sql_res).strip())
             elif sql_res is not None and str(sql_res).strip() != "":
-                self.res_log.append(str(sql_res))
+                res_container.append(str(sql_res))
             else:
                 log.info("SQL result: %s" % sql_res)
 
-        self.res_log.append(RESULT_END_FLAT)
+        res_container.append(RESULT_END_FLAT)
 
-    def record_shell_res(self, shell, shell_res):
+    def record_shell_res(self, shell_cmd, shell_res, record_container: list = None):
         """
         record shell res
-        :param shell: command
+        :param shell_cmd: command
         :param shell_res: shell result
+        :param record_container: record container
         """
-        if any(re.match(condition, shell) is not None for condition in skip.skip_res_cmd):
+
+        record_container = record_container if record_container is not None else self.res_log
+
+        if any(re.match(condition, shell_cmd) is not None for condition in skip.skip_res_cmd):
             return
 
-        self.res_log.append(RESULT_FLAG)
+        record_container.append(RESULT_FLAG)
         # return code
-        self.res_log.append("%s" % shell_res[0])
+        record_container.append("%s" % shell_res[0])
 
-        if shell.endswith("_stream_load"):
-            self.res_log.append(
+        if shell_cmd.endswith("_stream_load"):
+            self_print(shell_res[1])
+            record_container.append(
                 json.dumps(
                     {"Status": json.loads(shell_res[1])["Status"], "Message": json.loads(shell_res[1])["Message"]},
                     indent="    ",
                 )
             )
         else:
-            self.res_log.append("%s" % shell_res[1])
+            record_container.append("%s" % shell_res[1])
 
-        self.res_log.append(RESULT_END_FLAT)
+        record_container.append(RESULT_END_FLAT)
 
-    def record_function_res(self, function, func_res):
+    def record_function_res(self, function, func_res, result_container: list = None):
         """
         record function res
         :param function: function and args
-        :param func_res: result
+        :param func_res: function result
+        :param result_container: result container
         """
+
+        result_container = result_container if result_container is not None else self.res_log
+
         if any(re.match(condition, function) is not None for condition in skip.skip_res_cmd):
             return
 
-        self.res_log.append(RESULT_FLAG)
-        self.res_log.append("%s" % func_res)
-        self.res_log.append(RESULT_END_FLAT)
+        result_container.append(RESULT_FLAG)
+        result_container.append("%s" % func_res)
+        result_container.append(RESULT_END_FLAT)
 
-    def execute_shell(self, shell: str):
+    @staticmethod
+    def execute_shell(shell_cmd: str):
         """execute shell"""
-
-        log.info("shell cmd: %s" % shell)
+        shell_cmd = shell_cmd.replace("curl", "curl -sS")
+        log.info("shell cmd: %s" % shell_cmd)
 
         cmd_res = subprocess.run(
-            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=120, shell=True
+            shell_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=120, shell=True
         )
 
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
@@ -785,7 +808,7 @@ class StarrocksSQLApiLib(object):
 
         return cmd
 
-    def analyse_var(self, cmd):
+    def analyse_var(self, cmd, unfold=True, thread_key: str = None):
         """
         analyse sql/function/shell, return variable name if marked to set
         """
@@ -798,10 +821,58 @@ class StarrocksSQLApiLib(object):
             cmd = cmd[len(var) :]
             var = var[:-1]
 
+        match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
+
+        # replace thread variable dynamically
+        if thread_key:
+            tools.assert_in(thread_key, self.thread_var, f"Thread{thread_key} var dict is not found!")
+
+            for each_word in copy.copy(match_words):
+                # each_word type: xyz | xyz[*]...
+                # each_word: db[0]  match_keywords: [ db ] each_keyword: db
+                match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(cmd)
+                tools.eq_(1, len(match_keywords), f"Var num in {match_keywords} != 1")
+                each_keyword = match_keywords[0]
+
+                # only replace the first keywords
+                if each_keyword in self.thread_var[thread_key]:
+                    each_keyword_value = each_word.replace(each_keyword, f"self.thread_var[{thread_key}][{each_keyword}]")
+
+                    if unfold:
+                        each_keyword_value = str(eval(each_keyword_value))
+                    else:
+                        pass
+
+                    cmd = cmd.replace(f"${{{each_word}}}", each_keyword_value)
+                    log.info(f'Replace {each_keyword} → {each_keyword_value}, {cmd}')
+
+                    match_words.remove(each_word)
+
         # replace variable dynamically, only replace right of '='
-        match_words = re.compile("\\${([^}]*)}").findall(cmd)
-        for each_word in match_words:
-            cmd = cmd.replace("${%s}" % each_word, str(eval("self.%s" % each_word)))
+        for each_word in copy.copy(match_words):
+
+            # each_word type: xyz | xyz[*]...
+            # each_word: db[0]  match_keywords: [ db ] each_keyword: db
+            match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(each_word)
+            tools.eq_(1, len(match_keywords), f"Var num in {match_keywords} != 1")
+            each_keyword = match_keywords[0]
+
+            if each_keyword in self.__dict__:
+                each_keyword_value = each_word.replace(each_keyword, f"self.{each_keyword}")
+
+                if unfold:
+                    each_keyword_value = str(eval(each_keyword_value))
+                else:
+                    pass
+
+                cmd = cmd.replace("${%s}" % each_word, each_keyword_value)
+                log.info(f'Replace {each_keyword} → {each_keyword_value}, {cmd}')
+
+                match_words.remove(each_word)
+
+        if len(match_words) > 0:
+            error_msg = f"[{self.case_info.name}] Some vars not been resolved yet: %s" % ",".join(match_words)
+            self_print(error_msg, color=ColorEnum.YELLOW, bold=True, logout=True)
 
         return var, cmd
 
@@ -833,6 +904,254 @@ class StarrocksSQLApiLib(object):
 
         return res, res_for_log
 
+    def custom_except_hook(self, args: threading.ExceptHookArgs):
+
+        # console exception
+        trace_stack = f'{"*" * 50} {args.thread.name} {"*" * 50}\n'
+        for ex in traceback.TracebackException(type(args.exc_type), args.exc_value, args.exc_traceback).format():
+            trace_stack += str(ex)
+
+        # print(trace_stack, file=sys.stderr, end="")
+        self.thread_res[args.thread.name] = trace_stack
+        # tools.ok_(False, "Thread exit with exception!")
+
+    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode):
+
+        this_res = []
+        self.thread_var[exec_id] = {}
+        _t_info = exec_id[:str(exec_id).rindex("-")]
+        _t_exec_id = exec_id.split("-")[-1]
+
+        for _cmd_id, _each_cmd in enumerate(cmd_list):
+            uncheck = False
+            _cmd_id_str = f'Thread-{exec_id}.{_cmd_id}'
+            this_res.append(ori_cmd_list[_cmd_id])
+            prefix_s_count = len(ori_cmd_list[_cmd_id]) - len(ori_cmd_list[_cmd_id].lstrip())
+
+            # uncheck flag, owns the highest priority
+            if _each_cmd.startswith(UNCHECK_FLAG):
+                uncheck = True
+                _each_cmd = _each_cmd[len(UNCHECK_FLAG):]
+
+            old_this_res_len = len(this_res)
+            actual_res, actual_res_log, var, order = self.execute_single_statement(_each_cmd, _cmd_id_str, record_mode,
+                                                                                   this_res, var_key=exec_id)
+
+            if record_mode:
+                for new_res_lino in range(old_this_res_len, len(this_res)):
+                    # add prefix ' '
+                    _old_res = this_res[new_res_lino]
+                    if "\n" in _old_res and _old_res.startswith("{") and _old_res.endswith("}"):
+                        try:
+                            json.loads(_old_res)
+                            _tmp_old_json = _old_res.split("\n")
+                            for json_line_id in range(len(_tmp_old_json)):
+                                _tmp_old_json[json_line_id] = " " * prefix_s_count + _tmp_old_json[json_line_id]
+                            this_res[new_res_lino] = "\n".join(_tmp_old_json)
+                            continue
+                        except Exception:
+                            pass
+                    this_res[new_res_lino] = " " * prefix_s_count + _old_res
+
+            if not record_mode and not uncheck:
+                # check mode only work in validating mode
+                # pretreatment expect res
+                expect_res = res_list[_cmd_id]
+                expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
+
+                log.info(f"""[{_cmd_id_str}.result]: \n\t- [exp]: {expect_res_for_log}\n\t- [act]: {actual_res}""")
+
+                # -------------------------------------------
+                #               [CHECKER]
+                # -------------------------------------------
+                self.check(_cmd_id_str, _each_cmd, expect_res, actual_res, order, ori_sql=cmd_list[_cmd_id].lstrip())
+
+        if record_mode and len(this_res) > 0:
+            self.thread_res_log.setdefault(_t_info, [])
+            self.thread_res_log[_t_info].append(this_res)
+
+    def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None):
+        """
+        execute single statement and return result
+        """
+
+        order = False
+        res_container = res_container if res_container is not None else self.res_log
+
+        if statement.startswith(TRINO_FLAG):
+            statement = statement[len(TRINO_FLAG):]
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            self_print("[TRINO]: %s" % statement)
+            log.info("[%s] TRINO: %s" % (sql_id, statement))
+            actual_res = self.trino_execute_sql(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+        elif statement.startswith(SPARK_FLAG):
+            statement = statement[len(SPARK_FLAG):]
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            self_print("[SPARK]: %s" % statement)
+            log.info("[%s] SPARK: %s" % (sql_id, statement))
+            actual_res = self.spark_execute_sql(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+        elif statement.startswith(HIVE_FLAG):
+            statement = statement[len(HIVE_FLAG):]
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            self_print("[HIVE]: %s" % statement)
+            log.info("[%s] HIVE: %s" % (sql_id, statement))
+            actual_res = self.hive_execute_sql(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+        # execute command in files
+        elif statement.startswith(SHELL_FLAG):
+            statement = statement[len(SHELL_FLAG):]
+
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+            self_print("[SHELL]: %s" % statement)
+            log.info("[%s] SHELL: %s" % (sql_id, statement))
+            actual_res = self.execute_shell(statement)
+
+            if record_mode:
+                self.record_shell_res(statement, actual_res, res_container)
+
+            actual_res_log = ""
+
+        elif statement.startswith(FUNCTION_FLAG):
+            # function invoke
+            sql = statement[len(FUNCTION_FLAG):]
+
+            # analyse var set
+            var, sql = self.analyse_var(sql, thread_key=var_key)
+            self_print("[FUNCTION]: %s" % sql)
+            log.info("[%s] FUNCTION: %s" % (sql_id, sql))
+            actual_res = eval("self.%s" % sql)
+
+            if record_mode:
+                self.record_function_res(sql, actual_res, res_container)
+
+            actual_res_log = ""
+        else:
+            # sql
+            log.info("[%s] SQL: %s" % (sql_id, statement))
+
+            # order flag
+            if statement.startswith(ORDER_FLAG):
+                order = True
+                statement = statement[len(ORDER_FLAG):]
+
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            actual_res = self.execute_sql(statement)
+            self_print(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+        # set variable dynamically
+        if var:
+            if var_key is None:
+                _tmp_log = f"case attr: {var} → {actual_res}"
+                log.info(f"Update {_tmp_log}" if var in self.__dict__ else f"New {_tmp_log}")
+                self.__setattr__(var, actual_res)
+            else:
+                # thread variable
+                _tmp_log = f"thread({var_key}) attr: {var} → {actual_res}"
+                log.info(f"Update {_tmp_log}" if var in self.thread_var[var_key] else f"New {_tmp_log}")
+
+                self.thread_var[var_key][var] = actual_res
+
+        return actual_res, actual_res_log, var, order
+
+    def execute_loop_statement(self, _loop_stat_list, _loop_id, _timeout, _interval):
+        """
+        execute loop statement
+        """
+        loop_begin_time = int(time.time())
+        retry_count = 0
+        loop_check_res = False
+        while (time.time() - loop_begin_time) < _timeout:
+
+            self_print(f"→ ROUND: {retry_count}...", color=ColorEnum.MAGENTA, logout=True)
+            retry_count += 1
+
+            for each_stat_id, each_statement in enumerate(_loop_stat_list):
+
+                sql_id_str = f"{_loop_id}-{each_stat_id}"
+
+                # uncheck flag, owns the highest priority
+                if each_statement.startswith(UNCHECK_FLAG):
+                    tools.ok_(False, f"Loop statement does not support UNCHECK flag!")
+
+                # check statement
+                if each_statement.startswith(CHECK_FLAG):
+                    each_statement = each_statement[len(CHECK_FLAG):].strip()
+
+                    # analyse var set
+                    var, each_statement_new = self.analyse_var(each_statement, unfold=False)
+
+                    try:
+                        check_result = eval(each_statement_new)
+                    except Exception as e:
+                        self_print(f"[LOOP] Exception: {each_statement}!", ColorEnum.YELLOW, logout=True)
+                        loop_check_res = False
+                        break
+
+                    if check_result is True:
+                        self_print(f"[LOOP CHECK] SUCCESS: {each_statement}!", color=ColorEnum.GREEN, logout=True)
+                        loop_check_res = True
+                    else:
+                        self_print(f"[LOOP CHECK] FAILURE: {each_statement}, result: {check_result}!",
+                                   color=ColorEnum.YELLOW, logout=True)
+                        loop_check_res = False
+                        break
+
+                else:
+                    # normal statement, loop statement no need to record the result
+                    actual_res, actual_res_log, var, _ = self.execute_single_statement(each_statement, each_stat_id,
+                                                                                       False)
+                    log.info("[%s.result]: %s" % (sql_id_str, actual_res))
+
+            if loop_check_res:
+                break
+
+            time.sleep(_interval)
+
+        return loop_check_res
+
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
@@ -852,14 +1171,15 @@ class StarrocksSQLApiLib(object):
             return
 
         if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-            condition in sql for condition in skip.skip_res_cmd
+                condition in sql for condition in skip.skip_res_cmd
         ):
             log.info("[%s.check] skip check" % sql_id)
             return
 
-        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG) :] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
+        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG):] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
         if tmp_ori_sql.startswith(SHELL_FLAG):
-            tools.assert_equal(int(exp.split("\n")[0]), act[0], "shell %s error: %s" % (sql, act))
+            tools.assert_equal(int(exp.split("\n")[0]), act[0],
+                               f"[SHELL ERROR]\n\t- cmd : {sql}\n\t- code: {act[0]}\n\t- msg : {act[1]}")
 
             exp_code = exp.split("\n")[0]
             exp_std = "\n".join(exp.split("\n")[1:])
@@ -897,24 +1217,24 @@ class StarrocksSQLApiLib(object):
                 except Exception as e:
                     log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
-                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n[act]: %s" % (exp_std, act_std))
 
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
-                    tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                    tools.assert_true(False, "shell result str not match,\n[exp]: %s\n[act]: %s" % (exp_std, act_std))
 
         elif tmp_ori_sql.startswith(FUNCTION_FLAG):
             # only support str result
             tools.assert_equal(str(exp), str(act))
         else:
             if exp.startswith(REGEX_FLAG):
-                log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
+                log.info("[check regex]: %s" % exp[len(REGEX_FLAG):])
                 tools.assert_regexp_matches(
                     r"%s" % str(act),
-                    exp[len(REGEX_FLAG) :],
+                    exp[len(REGEX_FLAG):],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (self_print(sql, False), exp[len(REGEX_FLAG) :], act),
+                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG) :], act),
                 )
                 return
 
@@ -940,14 +1260,14 @@ class StarrocksSQLApiLib(object):
                             expect_res,
                             act,
                             "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                            % (self_print(sql, False), expect_res, act),
+                            % (self_print(sql, need_print=False), expect_res, act),
                         )
                     else:
                         tools.assert_count_equal(
                             expect_res,
                             act,
                             "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                            % (self_print(sql, False), expect_res, act),
+                            % (self_print(sql, need_print=False), expect_res, act),
                         )
                     return
                 elif exp.startswith("{") and exp.endswith("}"):
@@ -958,7 +1278,7 @@ class StarrocksSQLApiLib(object):
                         json.loads(exp),
                         json.loads(act),
                         "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                        % (self_print(sql, False), exp, act),
+                        % (self_print(sql, need_print=False), exp, act),
                     )
                     return
             except Exception as e:
@@ -985,14 +1305,14 @@ class StarrocksSQLApiLib(object):
                     exp,
                     act,
                     "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (self_print(sql, False), exp, act),
+                    % (self_print(sql, need_print=False), exp, act),
                 )
             else:
                 tools.assert_count_equal(
                     exp,
                     act,
                     "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (self_print(sql, False), exp, act),
+                    % (self_print(sql, need_print=False), exp, act),
                 )
 
     @staticmethod
@@ -1031,7 +1351,11 @@ class StarrocksSQLApiLib(object):
         test_filepath = os.path.abspath(test_filepath).split(self.root_path)[1].lstrip("/")
 
         # create record table
-        self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+        try:
+            self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+        except AssertionError:
+            self_print(f"Failed to create DB/Table to save the results, please check the env!", ColorEnum.RED)
+            sys.exit(1)
 
         # write record into db
         log.info("start insert...")
@@ -1045,7 +1369,7 @@ class StarrocksSQLApiLib(object):
         insert_round = 1
         while len(new_log) > 0:
             current_log = new_log[: min(len(new_log), 65533)]
-            new_log = new_log[len(current_log) :]
+            new_log = new_log[len(current_log):]
 
             arg_dict = {
                 "database_name": T_R_DB,
@@ -1443,11 +1767,12 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
-    def check_hit_materialized_view_plan(self, res, mv_name):
+    @staticmethod
+    def check_hit_materialized_view_plan(res, mv_name):
         """
         assert mv_name is hit in query
         """
-        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % mv_name)
 
     def check_hit_materialized_view(self, query, *expects):
         """
@@ -1487,13 +1812,13 @@ class StarrocksSQLApiLib(object):
         # could be faster if making this loop parallel
         for sql in sqls:
             if sql.startswith(TRINO_FLAG):
-                sql = sql[len(TRINO_FLAG) :]
+                sql = sql[len(TRINO_FLAG):]
                 res = self.trino_execute_sql(sql)
             elif sql.startswith(SPARK_FLAG):
-                sql = sql[len(SPARK_FLAG) :]
+                sql = sql[len(SPARK_FLAG):]
                 res = self.spark_execute_sql(sql)
             elif sql.startswith(HIVE_FLAG):
-                sql = sql[len(HIVE_FLAG) :]
+                sql = sql[len(HIVE_FLAG):]
                 res = self.hive_execute_sql(sql)
             else:
                 res = self.execute_sql(sql)
@@ -1673,8 +1998,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return
             else:
                 if (
-                    res["msg"][1].find("EsTable metadata has not been synced, Try it later") == -1
-                    and res["msg"][1].find("metadata failure: null") == -1
+                        res["msg"][1].find("EsTable metadata has not been synced, Try it later") == -1
+                        and res["msg"][1].find("metadata failure: null") == -1
                 ):
                     log.info("==========check success: es table metadata is ready==========")
                     return
@@ -1686,15 +2011,15 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
     def _stream_load(self, label, database_name, table_name, filepath, headers=None, meta_sync=True):
         """ """
         url = (
-            "http://"
-            + self.mysql_host
-            + ":"
-            + self.http_port
-            + "/api/"
-            + database_name
-            + "/"
-            + table_name
-            + "/_stream_load"
+                "http://"
+                + self.mysql_host
+                + ":"
+                + self.http_port
+                + "/api/"
+                + database_name
+                + "/"
+                + table_name
+                + "/_stream_load"
         )
         params = [
             "curl",
