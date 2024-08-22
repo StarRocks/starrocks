@@ -1,0 +1,115 @@
+-- name: test_mv_rewrite_with_push_down_aggregate
+
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t1 (
+  k1 date NULL COMMENT "",
+  k2 varchar(255) NULL COMMENT "",
+  k3 varchar(255) NULL COMMENT "",
+  v1 decimal64(18, 2) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(k1, k2, k3)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO t1 (k1, v1, k3, k2) VALUES
+('2024-07-20', 10000.00, 'LOB1', 'Region1'),
+('2024-07-19', 8500.00, 'LOB1', 'Region1'),
+('2024-06-20', 9500.00, 'LOB1', 'Region1'),
+('2024-06-19', 9000.00, 'LOB2', 'Region2'),
+('2024-07-01', 12000.00, 'LOB2', 'Region2');
+--mv
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY RANDOM
+REFRESH ASYNC
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS SELECT t1.k1, t1.k3,t1.k2, sum(t1.v1) AS period_actual_value FROM t1 GROUP BY t1.k1, t1.k3, t1.k2;
+refresh materialized view test_mv1 with sync mode;
+
+-- case1
+[UC]result=EXPLAIN WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-20' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT date_cte.date1, date_cte.date2, k3, k2, SUM(v1)
+FROM t1 JOIN date_cte ON TRUE
+WHERE k1 BETWEEN date_cte.date4 AND date_cte.date5 OR k1 BETWEEN date_cte.date6 AND date_cte.date7
+GROUP BY date_cte.date1, date_cte.date2, k3, k2;
+function: check_hit_materialized_view_plan("""${result}""", "test_mv1")
+WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-20' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT date_cte.date1, date_cte.date2, k3, k2, SUM(v1)
+FROM t1 JOIN date_cte ON TRUE
+WHERE k1 BETWEEN date_cte.date4 AND date_cte.date5 OR k1 BETWEEN date_cte.date6 AND date_cte.date7
+GROUP BY date_cte.date1, date_cte.date2, k3, k2 order by k3, k2;
+
+-- case2
+[UC]result=EXPLAIN WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-26' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT 
+    date_cte.date1,
+    date_cte.date2,
+    k2,
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date6 AND date_cte.date7
+            THEN v1 
+            ELSE 0 
+        END),
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date1 AND date_cte.date5
+            THEN v1 
+            ELSE 0 
+        END)
+FROM t1 JOIN date_cte ON TRUE GROUP BY  date_cte.date1, date_cte.date2, k2;
+function: check_hit_materialized_view_plan("""${result}""", "test_mv1")
+
+WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-26' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT 
+    date_cte.date1,
+    date_cte.date2,
+    k2,
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date6 AND date_cte.date7
+            THEN v1 
+            ELSE 0 
+        END),
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date1 AND date_cte.date5
+            THEN v1 
+            ELSE 0 
+        END)
+FROM t1 JOIN date_cte ON TRUE GROUP BY  date_cte.date1, date_cte.date2, k2 order by k2;

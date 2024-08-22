@@ -1,0 +1,242 @@
+-- name: test_mv_rewrite_with_push_down_aggregate
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 date NULL COMMENT "",
+  k2 varchar(255) NULL COMMENT "",
+  k3 varchar(255) NULL COMMENT "",
+  v1 decimal64(18, 2) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(k1, k2, k3)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 (k1, v1, k3, k2) VALUES
+('2024-07-20', 10000.00, 'LOB1', 'Region1'),
+('2024-07-19', 8500.00, 'LOB1', 'Region1'),
+('2024-06-20', 9500.00, 'LOB1', 'Region1'),
+('2024-06-19', 9000.00, 'LOB2', 'Region2'),
+('2024-07-01', 12000.00, 'LOB2', 'Region2');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY RANDOM
+REFRESH ASYNC
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS SELECT t1.k1, t1.k3,t1.k2, sum(t1.v1) AS period_actual_value FROM t1 GROUP BY t1.k1, t1.k3, t1.k2;
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+[UC]result=EXPLAIN WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-20' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT date_cte.date1, date_cte.date2, k3, k2, SUM(v1)
+FROM t1 JOIN date_cte ON TRUE
+WHERE k1 BETWEEN date_cte.date4 AND date_cte.date5 OR k1 BETWEEN date_cte.date6 AND date_cte.date7
+GROUP BY date_cte.date1, date_cte.date2, k3, k2;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:10: expr | 7: expr | 3: k3 | 2: k2 | 13: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  5:EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: HASH_PARTITIONED: 15: k3, 16: k2
+
+  STREAM DATA SINK
+    EXCHANGE ID: 05
+    UNPARTITIONED
+
+  4:Project
+  |  <slot 2> : 16: k2
+  |  <slot 3> : 15: k3
+  |  <slot 7> : 'last_month_period'
+  |  <slot 10> : '2024-07-20'
+  |  <slot 13> : 18: sum
+  |  
+  3:AGGREGATE (merge finalize)
+  |  output: sum(18: sum)
+  |  group by: 15: k3, 16: k2
+  |  
+  2:EXCHANGE
+
+PLAN FRAGMENT 2
+ OUTPUT EXPRS:
+  colocate exec groups: ExecGroup{groupId=1, nodeIds=[0, 1]}
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    HASH_PARTITIONED: 15: k3, 16: k2
+
+  1:AGGREGATE (update serialize)
+  |  STREAMING
+  |  output: sum(17: period_actual_value)
+  |  group by: 15: k3, 16: k2
+  |  
+  0:OlapScanNode
+     TABLE: test_mv1
+     PREAGGREGATION: ON
+     PREDICATES: 14: k1 IN ('2024-06-20', '2024-07-20')
+     partitions=1/1
+     rollup: test_mv1
+     tabletRatio=2/2
+     tabletList=23043,23045
+     cardinality=1
+     avgRowSize=0.0
+     MaterializedView: true
+-- !result
+function: check_hit_materialized_view_plan("""${result}""", "test_mv1")
+-- result:
+None
+-- !result
+WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-20' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT date_cte.date1, date_cte.date2, k3, k2, SUM(v1)
+FROM t1 JOIN date_cte ON TRUE
+WHERE k1 BETWEEN date_cte.date4 AND date_cte.date5 OR k1 BETWEEN date_cte.date6 AND date_cte.date7
+GROUP BY date_cte.date1, date_cte.date2, k3, k2 order by k3, k2;
+-- result:
+2024-07-20	last_month_period	LOB1	Region1	19500.00
+-- !result
+[UC]result=EXPLAIN WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-26' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT 
+    date_cte.date1,
+    date_cte.date2,
+    k2,
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date6 AND date_cte.date7
+            THEN v1 
+            ELSE 0 
+        END),
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date1 AND date_cte.date5
+            THEN v1 
+            ELSE 0 
+        END)
+FROM t1 JOIN date_cte ON TRUE GROUP BY  date_cte.date1, date_cte.date2, k2;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:9: expr | 7: expr | 2: k2 | 15: sum | 16: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  5:EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: HASH_PARTITIONED: 23: k2
+
+  STREAM DATA SINK
+    EXCHANGE ID: 05
+    UNPARTITIONED
+
+  4:Project
+  |  <slot 2> : DictDecode(23: k2, [<place-holder>])
+  |  <slot 7> : 'last_month_period'
+  |  <slot 9> : '2024-07-20'
+  |  <slot 15> : 21: sum
+  |  <slot 16> : 22: sum
+  |  
+  3:AGGREGATE (merge finalize)
+  |  output: sum(21: sum), sum(22: sum)
+  |  group by: 23: k2
+  |  
+  2:EXCHANGE
+
+PLAN FRAGMENT 2
+ OUTPUT EXPRS:
+  colocate exec groups: ExecGroup{groupId=1, nodeIds=[0, 1]}
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    HASH_PARTITIONED: 23: k2
+
+  1:AGGREGATE (update serialize)
+  |  STREAMING
+  |  output: sum(if((17: k1 >= CAST('2024-06-20 00:00:00' AS DATE)) AND (17: k1 <= CAST('2024-06-20 00:00:00' AS DATE)), 20: period_actual_value, CAST(0 AS DECIMAL128(38,2)))), sum(if((17: k1 >= CAST('2024-07-20' AS DATE)) AND (17: k1 <= CAST('2024-07-26' AS DATE)), 20: period_actual_value, CAST(0 AS DECIMAL128(38,2))))
+  |  group by: 23: k2
+  |  
+  0:OlapScanNode
+     TABLE: test_mv1
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: test_mv1
+     tabletRatio=2/2
+     tabletList=23043,23045
+     cardinality=1
+     avgRowSize=0.0
+     MaterializedView: true
+-- !result
+function: check_hit_materialized_view_plan("""${result}""", "test_mv1")
+-- result:
+None
+-- !result
+WITH date_cte AS (
+    SELECT
+         '2024-07-20' AS date1,
+         'last_month_period' AS date2,
+         'LD' AS date3,
+         '2024-07-20' AS date4,
+         '2024-07-26' AS date5,
+         date_add('2024-07-20', interval -1 month) AS date6,
+         date_add('2024-07-20',interval -1 month) AS date7
+)
+SELECT 
+    date_cte.date1,
+    date_cte.date2,
+    k2,
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date6 AND date_cte.date7
+            THEN v1 
+            ELSE 0 
+        END),
+    SUM(CASE 
+            WHEN k1 BETWEEN date_cte.date1 AND date_cte.date5
+            THEN v1 
+            ELSE 0 
+        END)
+FROM t1 JOIN date_cte ON TRUE GROUP BY  date_cte.date1, date_cte.date2, k2 order by k2;
+-- result:
+2024-07-20	last_month_period	Region1	9500.00	10000.00
+2024-07-20	last_month_period	Region2	0.00	0.00
+-- !result

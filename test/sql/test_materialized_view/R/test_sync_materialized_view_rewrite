@@ -297,9 +297,9 @@ CREATE MATERIALIZED VIEW mv_test_base_table1 AS
 SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 -- result:
 -- !result
-analyze full table test_base_table1 with sync mode;
+[UC]analyze full table test_base_table1 with sync mode;
 -- result:
-test_db_f3ff2226c33811eea0bfdbbedfe51b53.test_base_table1	analyze	status	OK
+test_db_b359ee2e7ea640ca89b1b2ec0cf3e504.test_base_table1	analyze	status	OK
 -- !result
 function: wait_materialized_view_finish()
 -- result:
@@ -355,7 +355,7 @@ function: check_no_hit_materialized_view("select * from (select col0, col2, col3
 -- result:
 None
 -- !result
-select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t order by 1;
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 987654321	2022-04-30 13:00:00	Fujian	None	None
@@ -368,7 +368,7 @@ function: check_no_hit_materialized_view("select * from (select col0, col2, col3
 -- result:
 None
 -- !result
-select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t order by 1;
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 -- !result
@@ -379,16 +379,16 @@ function: check_hit_materialized_view("select * from (select col0, col2, col3, i
 -- result:
 None
 -- !result
-select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t order by 1;
 -- result:
-987654321	2022-04-30 13:00:00	Fujian	None	None
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
 -- !result
 function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
 -- result:
 None
 -- !result
-select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t order by 1;
 -- result:
 123456789	2022-04-30 12:00:00	Guangdong	1	10001
 -- !result

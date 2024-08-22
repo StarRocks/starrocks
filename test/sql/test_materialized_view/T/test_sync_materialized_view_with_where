@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view_with_where @sequential
+-- name: test_sync_materialized_view_with_where
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
@@ -38,7 +38,7 @@ create materialized view mv_1 as select k1, sum(k6) as sum_k6, max(k7) as max fr
 function: wait_materialized_view_finish()
 function: check_hit_materialized_view("select k1, sum(k6), max(k7) as max from duplicate_tbl where k7 > 2  group by 1", "mv_1")
 function: check_hit_materialized_view("select k1, sum(k6), max(k7) as max from duplicate_tbl where k7 > 2 and k1 > 1 group by 1", "mv_1")
-function: check_no_hit_materialized_view("select k1, sum(k6), max(k7 + 1) as max from duplicate_tbl where k7 > 2  group by 1", "mv_1")
+function: check_hit_materialized_view("select k1, sum(k6), max(k7 + 1) as max from duplicate_tbl where k7 > 2  group by 1", "mv_1")
 function: check_no_hit_materialized_view("select k1, sum(k6), max(k7) as max from duplicate_tbl where k7 > 3  group by 1", "mv_1")
 select k1, sum(k6), max(k7) as max from duplicate_tbl where k7 > 2  group by 1 order by 1;
 select k1, sum(k6), max(k7) as max from duplicate_tbl where k7 > 2 and k1 > '2023-06-15' group by 1 order by 1;

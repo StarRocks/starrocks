@@ -113,7 +113,7 @@ function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
 -- result:
 None
 -- !result
@@ -121,7 +121,7 @@ function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k
 -- result:
 None
 -- !result
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
 -- result:
 None
 -- !result
@@ -129,11 +129,11 @@ function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k
 -- result:
 None
 -- !result
-function: check_no_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
+function: check_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
 -- result:
 None
 -- !result
-function: check_no_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
+function: check_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
 -- result:
 None
 -- !result

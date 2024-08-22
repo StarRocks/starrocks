@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view_rewrite
+-- name: test_sync_materialized_view_with_where
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
@@ -50,7 +50,7 @@ function: check_hit_materialized_view("select k1, sum(k6), max(k7) as max from d
 -- result:
 None
 -- !result
-function: check_no_hit_materialized_view("select k1, sum(k6), max(k7 + 1) as max from duplicate_tbl where k7 > 2  group by 1", "mv_1")
+function: check_hit_materialized_view("select k1, sum(k6), max(k7 + 1) as max from duplicate_tbl where k7 > 2  group by 1", "mv_1")
 -- result:
 None
 -- !result

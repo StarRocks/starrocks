@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -328,6 +329,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         starRocksAssert.dropTable("test_partition_expr_tbl1");
     }
 
+
+
     @Test
     public void testMvRewriteForColumnReorder() throws Exception {
         {
@@ -353,7 +356,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 " as select t1a, t1b, sum(t1f) as total from test.test_all_type group by t1a, t1b;", () -> {
             {
                 String query = "select t1a, sum(if(t1b=0, t1f, 0)) as total from test.test_all_type group by t1a;";
-                sql(query).notContain("mv0");
+                sql(query).contains("mv0");
             }
             {
                 String query = "select t1a, sum(if(t1b=0, t1b, 0)) as total from test.test_all_type group by t1a;";
@@ -456,24 +459,24 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
     @Test
     public void testRewriteWithEliminateJoinsBasic2() throws Exception {
-       starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
-               "  `k1` date,\n" +
-               "  `k2` decimal64(18, 2),\n" +
-               "  `k3` varchar(255),\n" +
-               "  `v1` varchar(255)\n" +
-               ") ENGINE=OLAP \n" +
-               "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-               "DISTRIBUTED BY RANDOM\n" +
-               "PROPERTIES (\n" +
-               "\"replication_num\" = \"1\"\n" +
-               ");");
-       starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
-               "DISTRIBUTED BY RANDOM\n" +
-               "REFRESH ASYNC\n" +
-               "PROPERTIES (\n" +
-               "\"replication_num\" = \"1\"\n" +
-               ")\n" +
-               "AS SELECT k1, k2, k3, sum(v1) from tbl1 group by k1, k2, k3");
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` varchar(255)\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k2, k3, sum(v1) from tbl1 group by k1, k2, k3");
         {
             String sql = "with cte as(" +
                     "    select " +
@@ -563,6 +566,355 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             sql("select count(*) from tbl1").contains("mv1");
             starRocksAssert.dropMaterializedView("mv1");
         }
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithPushDownEquivalent1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k2, k3, sum(v1) from tbl1 group by k1, k2, k3");
+        {
+            String sql = "select t1.k1, " +
+                    "    sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.v1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            sql(sql).contains("mv1")
+                    .contains("  1:AGGREGATE (update serialize)\n" +
+                            "  |  STREAMING\n" +
+                            "  |  output: sum(if((7: k1 >= '2024-06-20') AND (7: k1 <= '2024-08-20'), 10: sum(v1), 0))\n" +
+                            "  |  group by: 7: k1\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: mv1");
+        }
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.v1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            sql(sql).contains("mv1")
+                    .contains("  1:AGGREGATE (update serialize)\n" +
+                            "  |  STREAMING\n" +
+                            "  |  output: sum(if((7: k1 >= '2024-06-20') AND (7: k1 <= '2024-08-20'), 10: sum(v1), 0))\n" +
+                            "  |  group by: 7: k1\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: mv1")
+                    .contains("  4:Project\n" +
+                            "  |  <slot 1> : 8: k1\n" +
+                            "  |  <slot 7> : 2 * 12: sum");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithPushDownEquivalent2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k2, k3, sum(2 * v1) from tbl1 group by k1, k2, k3");
+        {
+            // mv's sum doesn't contain column ref which cannot be used for rewrite
+            String sql = "select t1.k1, " +
+                    "    sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then 2 * t1.v1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            sql(sql).notContain("mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithPushDownEquivalent3() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k2, k3, sum(v1), max(v1) from tbl1 group by k1, k2, k3");
+        {
+            String sql = "select t1.k1, 2 * min(v1 + 1) from tbl1 t1 group by t1.k1";
+            sql(sql).notContain("mv1");
+        }
+        {
+            String sql = "select t1.k1, 2 * sum(case when t1.v1 > 10 then t1.v1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            sql(sql).notContain("mv1");
+        }
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(v1 + cast(k3 as int)) " +
+                    "    from tbl1 t1 group by t1.k1";
+            sql(sql).notContain("mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithPushDownEquivalent4() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k3, sum(k2) from tbl1 group by k1, k3");
+        // sum(decimal)
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.k2 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertContains(plan, " |  aggregate: sum[(if[((8: k1 >= '2024-06-20') AND " +
+                    "(8: k1 <= '2024-08-20'), [10: sum(k2), DECIMAL128(38,2), true], cast(0 as DECIMAL128(38,2))); " +
+                    "args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(38,2); args nullable: true; " +
+                    "result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,2); " +
+                    "args nullable: true; result nullable: true]");
+        }
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then 2 * t1.k2 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getCostExplain(sql);
+            PlanTestBase.assertNotContains(plan, "mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithPushDownEquivalent5() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k3, sum(k2) from tbl1 group by k1, k3");
+        // sum(decimal)
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.k2 when t1.k3 ='xxxx' then k2  else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertContains(plan, "|  aggregate: sum[(CASE WHEN (8: k1 >= '2024-06-20') AND " +
+                    "(8: k1 <= '2024-08-20') THEN 10: sum(k2) WHEN 9: k3 = 'xxxx' THEN 10: sum(k2) " +
+                    "ELSE CAST(0 AS DECIMAL128(38,2)) END); args: DECIMAL128; result: DECIMAL128(38,2); " +
+                    "args nullable: true; result nullable: true]");
+        }
+
+        {
+            String sql = "select t1.k1, " +
+                    "    2 * sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.k2 when t1.k3 ='xxxx' then k2 + 1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertNotContains(plan, "mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithCaseWhen1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k3, " +
+                " sum(k2) as sum1," +
+                " sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) " +
+                "and date_add('2024-07-20', interval 1 month) then t1.k2 + 1 else 0 end ) as sum2 \n" +
+                " from tbl1 t1 group by k1, k3");
+        // sum(decimal)
+        {
+            String sql = "select t1.k1, " +
+                    "     sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month) then t1.k2 + 1 else 0 end) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([10: sum2, DECIMAL128(38,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); " +
+                    "args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [7: k1, DATE, true]\n" +
+                    "  |  cardinality: 1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithCaseWhen2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k3, " +
+                " sum(k2) as sum1," +
+                " sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) " +
+                "and date_add('2024-07-20', interval 1 month) then t1.k2 + 1 else 0 end ) as sum2 \n" +
+                " from tbl1 t1 group by k1, k3");
+        // mv: case when case when cond1 then val1 else val2
+        // query: if (cond1, val1, val2)
+        {
+            String sql = "select t1.k1, " +
+                    "     sum(if(t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                    " date_add('2024-07-20', interval 1 month), t1.k2 + 1, 0)) " +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([10: sum2, DECIMAL128(38,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); " +
+                    "args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [7: k1, DATE, true]\n" +
+                    "  |  cardinality: 1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testRewriteWithCaseWhen3() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` bigint \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, k3, " +
+                " sum(k2) as sum1," +
+                " sum(if(t1.k1 between date_add('2024-07-20', interval -1 month) and " +
+                " date_add('2024-07-20', interval 1 month), t1.k2 + 1, 0)) as sum2" +
+                " from tbl1 t1 group by k1, k3");
+        // mv: if (cond1, val1, val2)
+        // query: case when case when cond1 then val1 else val2
+        {
+            String sql = "select t1.k1, " +
+                    " sum(case when t1.k1 between date_add('2024-07-20', interval -1 month) " +
+                    "and date_add('2024-07-20', interval 1 month) then t1.k2 + 1 else 0 end ) \n" +
+                    "    from tbl1 t1 group by t1.k1";
+            String plan = getVerboseExplain(sql);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([10: sum2, DECIMAL128(38,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); " +
+                    "args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [7: k1, DATE, true]\n" +
+                    "  |  cardinality: 1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("tbl1");
     }
 }

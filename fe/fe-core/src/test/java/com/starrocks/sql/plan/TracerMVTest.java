@@ -148,7 +148,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
-        testRewriteFail(mv, "select emps.locationid, empid, sum(emps.deptno + 1) as col3 from emps " +
+        testRewriteFail(mv, "select emps.locationid, empid, min(emps.deptno + 1) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid  > 10 group by empid,emps.locationid");
         String pr = Tracers.printLogs();
         Tracers.close();
@@ -163,7 +163,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
-        testRewriteFail(mv, "select emps.locationid, empid, sum(emps.deptno + 1) as col3 from emps " +
+        testRewriteFail(mv, "select emps.locationid, empid, min(emps.deptno + 1) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid where empid  > 10 group by empid,emps.locationid");
         String pr = Tracers.printLogs();
         Tracers.close();
