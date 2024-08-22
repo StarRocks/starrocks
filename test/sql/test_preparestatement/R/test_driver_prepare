@@ -1,11 +1,9 @@
 -- name: test_driver_prepare
 create database test_driver_prepare;
 -- result:
-[]
 -- !result
 use test_driver_prepare;
 -- result:
-[]
 -- !result
 CREATE TABLE IF NOT EXISTS prepare_stmt (
     k1 INT,
@@ -18,11 +16,9 @@ CREATE TABLE IF NOT EXISTS prepare_stmt (
     PRIMARY KEY (k1, k2, k3, k4, k5)
     DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
 -- result:
-[]
 -- !result
 insert into prepare_stmt values (1, 2, 3, 4, '2', true, '1');
 -- result:
-[]
 -- !result
 function: assert_prepare_execute('test_driver_prepare', 'select 1')
 -- result:

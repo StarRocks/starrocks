@@ -320,7 +320,6 @@ select array_generate(3,3);
 -- !result
 select array_generate(3,2,1);
 -- result:
-[]
 -- !result
 
 -- name: test_array_repeat
@@ -334,7 +333,6 @@ select array_repeat([1,2],3);
 -- !result
 select array_repeat(1,-1);
 -- result:
-[]
 -- !result
 CREATE TABLE IF NOT EXISTS repeat_test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
 -- result:

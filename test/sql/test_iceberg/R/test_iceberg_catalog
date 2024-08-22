@@ -30,4 +30,8 @@ None
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> 1ba1a59d38 ([Tool] SQL-Tester support `loop` and `concurrency` grammar (#49856))

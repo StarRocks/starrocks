@@ -26,6 +26,7 @@ import pymysql as _mysql
 from pymysql.constants import CLIENT
 
 
+
 class MysqlLib(object):
     """MysqlLib class"""
 
