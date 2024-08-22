@@ -333,23 +333,6 @@
                                 "using_starrocks/data_lake_query_acceleration_with_materialized_views",
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
-                        },
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "using_starrocks/usage/intro"
-                            },
-                            "items": [
-                                "using_starrocks/usage/create",
-                                "using_starrocks/usage/alter",
-                                "using_starrocks/usage/drop",
-                                "using_starrocks/usage/show",
-                                "using_starrocks/usage/information_schema-materialized_views",
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views",
-                                "using_starrocks/feature-support-asynchronous-materialized-views"
-                            ]
                         }
                     ]
                 },
@@ -1116,23 +1099,6 @@
                                 "using_starrocks/query_rewrite_with_materialized_views",
                                 "using_starrocks/data_lake_query_acceleration_with_materialized_views",
                                 "using_starrocks/create_partitioned_materialized_view"
-                            ]
-                        },
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "using_starrocks/usage/intro"
-                            },
-                            "items": [
-                                "using_starrocks/usage/create",
-                                "using_starrocks/usage/alter",
-                                "using_starrocks/usage/drop",
-                                "using_starrocks/usage/show",
-                                "using_starrocks/usage/information_schema-materialized_views",
-                                "using_starrocks/troubleshooting_asynchronous_materialized_views",
-                                "using_starrocks/feature-support-asynchronous-materialized-views"
                             ]
                         }
                     ]
