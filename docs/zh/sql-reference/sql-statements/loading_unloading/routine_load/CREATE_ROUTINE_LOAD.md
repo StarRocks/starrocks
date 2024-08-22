@@ -160,7 +160,7 @@ FROM <data_source>
 
 > **说明**
 >
-> 当参数的取值是文件时，则值前加上关键词 `FILE:`。关于如何创建文件，请参见 [CREATE FILE](../../Administration/CREATE_FILE.md) 命令文档。
+> 当参数的取值是文件时，则值前加上关键词 `FILE:`。关于如何创建文件，请参见 [CREATE FILE](../../cluster-management/file/CREATE_FILE.md) 命令文档。
 
 **指定所有待消费分区的默认起始消费位点。**
 

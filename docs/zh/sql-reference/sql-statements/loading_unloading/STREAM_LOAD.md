@@ -67,7 +67,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 > **说明**
 >
-> 您可以通过 [SHOW FRONTENDS](../Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+> 您可以通过 [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 ### data_desc
 

@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;

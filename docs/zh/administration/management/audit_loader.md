@@ -109,11 +109,11 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)。
+详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md)。
 
 ## 验证安装并查询审计日志
 
-1. 您可以通过 [SHOW PLUGINS](../../sql-reference/sql-statements/Administration/SHOW_PLUGINS.md) 语句检查插件是否安装成功。
+1. 您可以通过 [SHOW PLUGINS](../../sql-reference/sql-statements/cluster-management/plugin/SHOW_PLUGINS.md) 语句检查插件是否安装成功。
 
     以下示例中，插件 `AuditLoader` 的 `Status` 为 `INSTALLED`，即代表安装成功。
 

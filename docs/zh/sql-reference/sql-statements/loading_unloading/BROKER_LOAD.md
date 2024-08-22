@@ -281,7 +281,7 @@ StarRocks 访问存储系统的认证配置。
 
   > **说明**
   >
-  > 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
+  > 您可以通过 [SHOW BROKER](../cluster-management/nodes_processes/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
 
 #### AWS S3
 

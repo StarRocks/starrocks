@@ -128,7 +128,7 @@ WHERE:
 
 4.resource_properties
 
-[Spark 资源的配置](../table_bucket_part_index/CREATE_RESOURCE.md#spark-资源)。当用户有临时性的需求，比如增加任务使用的资源而修改 Spark 和 HDFS 配置，可以在这里设置，设置仅对本次任务生效，并不影响 StarRocks 集群中已有的配置。
+[Spark 资源的配置](../Resource/CREATE_RESOURCE.md#spark-资源)。当用户有临时性的需求，比如增加任务使用的资源而修改 Spark 和 HDFS 配置，可以在这里设置，设置仅对本次任务生效，并不影响 StarRocks 集群中已有的配置。
 
 5.opt_properties
 
