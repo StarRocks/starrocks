@@ -26,28 +26,28 @@ public class MarkParentRequiredDistributionRuleTest extends PlanTestBase {
     @Test
     public void testJoin() throws Exception {
         String sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7";
-        ExecPlan execPlan= getExecPlan(sql);
+        ExecPlan execPlan = getExecPlan(sql);
         Assert.assertTrue(execPlan.getOptExpression(3).getOp() instanceof PhysicalHashJoinOperator);
         Assert.assertFalse("No global dict exists. No requirement from parent, " +
                         "we can change the output distribution of this join",
-                execPlan.getOptExpression( 3).isExistRequiredDistribution());
+                execPlan.getOptExpression(3).isExistRequiredDistribution());
 
         sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7 group by t1.v4";
-        execPlan= getExecPlan(sql);
+        execPlan = getExecPlan(sql);
         Assert.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
         Assert.assertTrue("Had requirement from parent, we can't change the output distribution of this join",
-                execPlan.getOptExpression( 4).isExistRequiredDistribution());
+                execPlan.getOptExpression(4).isExistRequiredDistribution());
 
         sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7 join t3 on t1.v4 = t3.v11";
-        execPlan= getExecPlan(sql);
+        execPlan = getExecPlan(sql);
         Assert.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
         Assert.assertTrue(execPlan.getOptExpression(8).getOp() instanceof PhysicalHashJoinOperator);
 
         Assert.assertTrue("Had requirement from parent, we can't change the output distribution of this join",
-                execPlan.getOptExpression( 4).isExistRequiredDistribution());
+                execPlan.getOptExpression(4).isExistRequiredDistribution());
         Assert.assertFalse("No global dict exists. No requirement from parent, " +
                         "we can't change the output distribution of this join",
-                execPlan.getOptExpression( 8).isExistRequiredDistribution());
+                execPlan.getOptExpression(8).isExistRequiredDistribution());
     }
 
     @Test
