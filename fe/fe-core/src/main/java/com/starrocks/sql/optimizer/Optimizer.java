@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
+import com.starrocks.sql.optimizer.rule.tree.MarkParentRequiredDistributionRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -289,6 +290,11 @@ public class Optimizer {
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
             finalPlan = physicalRuleRewrite(connectContext, rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression("final plan after physical rewrite:\n%s", finalPlan);
+        }
+
+        try (Timer ignored = Tracers.watchScope("DynamicRewrite")) {
+            finalPlan = dynamicRewrite(connectContext, rootTaskContext, finalPlan);
+            OptimizerTraceUtil.logOptExpression("final plan after dynamic rewrite:\n%s", finalPlan);
         }
 
         // collect all mv scan operator
@@ -900,6 +906,13 @@ public class Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
 
         result.setPlanCount(planCount);
+        return result;
+    }
+
+    private OptExpression dynamicRewrite(ConnectContext connectContext, TaskContext rootTaskContext, OptExpression result) {
+        // update the existRequiredDistribution value in optExpression. The next rules need it to determine
+        // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
+        result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
         return result;
     }
 
