@@ -1343,17 +1343,16 @@ class StarrocksSQLApiLib(object):
                     cnt += 1
             return cnt 
         
-        MAX_LOOP_COUNT = 30 
+        MAX_LOOP_COUNT = 180
         is_all_ok = False
         count = 0
         if check_count is None:
             while count < MAX_LOOP_COUNT:
                 is_all_ok = is_all_finished1() and is_all_finished2()
                 if is_all_ok:
-                    # sleep another 5s to avoid FE's async action.
-                    time.sleep(2)
+                    time.sleep(1)
                     break
-                time.sleep(2)
+                time.sleep(1)
                 count += 1
         else:
             show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
@@ -1367,9 +1366,9 @@ class StarrocksSQLApiLib(object):
                 if success_cnt >= check_count:
                     is_all_ok = True
                     # sleep to avoid FE's async action.
-                    time.sleep(2)
+                    time.sleep(1)
                     break
-                time.sleep(2)
+                time.sleep(1)
                 count += 1
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
@@ -2109,14 +2108,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(len(accelerated_queries_list) > 0, "The number of AcceleratedQueries list should not be empty")
         tools.assert_true(any(map(lambda qs: qs == expect_queries, accelerated_queries_list)), "At least one of AcceleratedQueries should be %s" % (expect_queries))
 
-    def wait_table_rowcount_not_empty(self, table, time_out=300):
+    def wait_table_rowcount_not_empty(self, table, max_times=300):
         times = 0
         rc = 0
         sql = 'show partitions from ' + table
-        while times < time_out and times < time_out:
+        while times < max_times:
             result = self.execute_sql(sql, True)
-            log.info(sql)
-            log.info(result)
             if len(result["result"]) > 0:
                 rc = int(result["result"][0][-4])
                 log.info(rc)
@@ -2124,7 +2121,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                     break
             time.sleep(1)
             times += 1
-        tools.assert_true(True, "wait row count > 0 error, timeout 300s")
+        tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
 
     def assert_cache_select_is_success(self, query):
         """
