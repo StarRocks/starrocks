@@ -192,8 +192,8 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
     }
 
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
-    for (auto& entry : txn_meta.column_to_values()) {
-        _column_to_value.insert({entry.first, entry.second});
+    for (auto& entry : txn_meta.column_to_expr_value()) {
+        _column_to_expr_value.insert({entry.first, entry.second});
     }
 
     EditVersion read_version;
@@ -529,8 +529,8 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
 
         bool has_default_value = tablet_column.has_default_value();
         std::string default_value;
-        auto iter = _column_to_value.find(std::string(tablet_column.name()));
-        if (iter != _column_to_value.end()) {
+        auto iter = _column_to_expr_value.find(std::string(tablet_column.name()));
+        if (iter != _column_to_expr_value.end()) {
             has_default_value = true;
             default_value = iter->second;
         } else if (has_default_value) {
@@ -539,9 +539,8 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
         if (has_default_value) {
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
-                    std::make_unique<DefaultValueColumnIterator>(
-                            true, default_value,
-                            tablet_column.is_nullable(), type_info, tablet_column.length(), row_cnt);
+                    std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
+                                                                 type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
             RETURN_IF_ERROR(

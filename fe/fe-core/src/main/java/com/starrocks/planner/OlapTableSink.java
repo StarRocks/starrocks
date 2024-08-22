@@ -358,7 +358,7 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
-            Map<String, String> column_to_value = new HashMap<>();
+            Map<String, String> columnToExprValue = new HashMap<>();
             columns.addAll(indexMeta
                     .getSchema()
                     .stream()
@@ -370,7 +370,7 @@ public class OlapTableSink extends DataSink {
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds());
                 columnsDesc.add(tColumn);
                 if (column.getDefaultExpr() != null) {
-                    column_to_value.put(column.getColumnId().getId(), column.calculatedDefaultValue());
+                    columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
                 }
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
@@ -384,7 +384,7 @@ public class OlapTableSink extends DataSink {
             TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
                     indexMeta.getShortKeyColumnCount());
             TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(pair.getKey(), columns,
-                    indexMeta.getSchemaHash(), column_to_value);
+                    indexMeta.getSchemaHash(), columnToExprValue);
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             schemaParam.addToIndexes(indexSchema);

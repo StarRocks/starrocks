@@ -5147,7 +5147,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns, void* state,
                                         const TabletSchemaCSPtr& read_tablet_schema,
-                                        const std::map<string, string>* column_to_values) {
+                                        const std::map<string, string>* column_to_expr_value) {
     std::vector<uint32_t> unique_column_ids;
     for (unsigned int column_id : column_ids) {
         const TabletColumn& tablet_column = read_tablet_schema->column(column_id);
@@ -5174,9 +5174,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             const TabletColumn& tablet_column = read_tablet_schema->column(column_ids[i]);
             bool has_default_value = tablet_column.has_default_value();
             std::string default_value;
-            if (column_to_values != nullptr) {
-                auto iter = column_to_values->find(std::string(tablet_column.name()));
-                if (iter != column_to_values->end()) {
+            if (column_to_expr_value != nullptr) {
+                auto iter = column_to_expr_value->find(std::string(tablet_column.name()));
+                if (iter != column_to_expr_value->end()) {
                     has_default_value = true;
                     default_value = iter->second;
                 } else if (has_default_value) {
@@ -5186,9 +5186,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             if (has_default_value) {
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
-                        std::make_unique<DefaultValueColumnIterator>(
-                                true, default_value,
-                                tablet_column.is_nullable(), type_info, tablet_column.length(), 1);
+                        std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
+                                                                     type_info, tablet_column.length(), 1);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get()));

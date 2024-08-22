@@ -201,9 +201,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             }
             // set partial update mode
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
-            if (_context.column_to_value != nullptr) {
-                for (auto& [name, value] : (*_context.column_to_value)) {
-                    _rowset_txn_meta_pb->mutable_column_to_values()->insert({name, value});
+            if (_context.column_to_expr_value != nullptr) {
+                for (auto& [name, value] : (*_context.column_to_expr_value)) {
+                    _rowset_txn_meta_pb->mutable_column_to_expr_value()->insert({name, value});
                 }
             }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;

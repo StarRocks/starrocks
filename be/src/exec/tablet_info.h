@@ -50,7 +50,7 @@ struct OlapTableIndexSchema {
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
-    std::map<std::string, std::string> column_to_value;
+    std::map<std::string, std::string> column_to_expr_value;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
