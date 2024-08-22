@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.2.10
 
-Release date: August 22, 2024
+Release date: August 23, 2024
 
 ### Improvements
 
