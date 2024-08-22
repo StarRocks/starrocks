@@ -599,6 +599,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
       LINUX_DISTRO: ubuntu
+      GH_TOKEN: ${{ github.token }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
@@ -610,9 +611,17 @@ jobs:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
-            
+
+      - name: check sync
+        id: check-sync
+        run: |
+          labels=`gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json labels -q '.labels[].name'`
+          echo "${labels}"
+          [[ "${labels}" =~ sync ]] && echo "IS_SYNC=true" >> $GITHUB_OUTPUT
+
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: be-path-filter
           path: be-path-filter
@@ -621,6 +630,7 @@ jobs:
       
       - name: Download FE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: fe-path-filter
           path: fe-path-filter
@@ -629,6 +639,7 @@ jobs:
 
       - name: Parsing BE path-filter file
         id: parsing-be-path-filter
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e be-path-filter ]]; then
             cd be-path-filter/; ls;
@@ -639,6 +650,7 @@ jobs:
   
       - name: Parsing FE path-filter file
         id: parsing-fe-path-filter
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e fe-path-filter ]]; then
             cd fe-path-filter/; ls;
@@ -661,6 +673,7 @@ jobs:
         
       - name: BRANCH INFO
         id: branch
+        if: steps.check-necessity.outcome == 'success'
         run: |
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
@@ -668,6 +681,7 @@ jobs:
 
       - name: Rebuild Checker
         id: rebuild-checker
+        if: steps.check-necessity.outcome == 'success'
         env:
           be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
           fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
@@ -684,6 +698,7 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
+        if: steps.check-necessity.outcome == 'success'
         env:
           package: ${{ env.package }}
           pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
@@ -706,12 +721,14 @@ jobs:
           fi
 
       - name: build result
+        if: steps.check-necessity.outcome == 'success'
         run: |
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
         uses: actions/upload-artifact@v4
+        if: steps.check-necessity.outcome == 'success'
         with:
           name: base_version
           path: ./base_version.txt
@@ -733,7 +750,7 @@ jobs:
 
   deploy:
     runs-on: [self-hosted, normal]
-    if: always() && needs.build.result == 'success'
+    if: always() && needs.build.result == 'success' && needs.build.outputs.build_nece == 'true'
     needs: build
     name: DEPLOY SR
     env:
