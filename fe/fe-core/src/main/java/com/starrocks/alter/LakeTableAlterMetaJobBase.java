@@ -71,6 +71,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
 
+    public LakeTableAlterMetaJobBase(JobType jobType) {
+        super(jobType);
+    }
+
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                      String tableName, long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
