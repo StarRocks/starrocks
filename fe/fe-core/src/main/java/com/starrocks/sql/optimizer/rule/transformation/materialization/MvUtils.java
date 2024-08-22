@@ -47,7 +47,6 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
@@ -1045,8 +1044,7 @@ public class MvUtils {
     }
 
     // convert date to varchar type
-    public static Range<PartitionKey> convertToVarcharRange(
-            Range<PartitionKey> from, String dateFormat) throws AnalysisException {
+    public static Range<PartitionKey> convertToVarcharRange(Range<PartitionKey> from, String dateFormat) {
         DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
         if (from.hasLowerBound() && from.hasUpperBound()) {
             PartitionKey lowerPartitionKey = convertToVarcharPartitionKey(
