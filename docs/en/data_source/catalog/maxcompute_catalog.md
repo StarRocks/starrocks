@@ -228,7 +228,7 @@ The TIMESTAMP type will lose precision due to type conversion in StarRocks.
 
 In the current version, MaxCompute catalogs cannot automatically collect CBO statistics for MaxCompute tables, and consequently the optimizer may not be able to generate the optimal query plans. As such, manually scanning the CBO statistics for MaxCompute tables and importing them into StarRocks can effectively expedite queries.
 
-Suppose that there is a MaxCompute table named `mc_table` in your MaxCompute cluster. You can create a manual collection task for collecting CBO statistics by using [ANALYZE TABLE](../../sql-reference/sql-statements/data-definition/ANALYZE_TABLE.md):
+Suppose that there is a MaxCompute table named `mc_table` in your MaxCompute cluster. You can create a manual collection task for collecting CBO statistics by using [ANALYZE TABLE](../../sql-reference/sql-statements/cbo_stats/ANALYZE_TABLE.md):
 
 ```SQL
 ANALYZE TABLE mc_table;

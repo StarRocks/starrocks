@@ -38,8 +38,8 @@ This statement returns the following columns.
 
 ## References
 
-[ANALYZE TABLE](../data-definition/ANALYZE_TABLE.md): create a manual collection task.
+[ANALYZE TABLE](ANALYZE_TABLE.md): create a manual collection task.
 
-[KILL ANALYZE](../data-definition/KILL_ANALYZE.md): cancel a custom collection task that is running.
+[KILL ANALYZE](KILL_ANALYZE.md): cancel a custom collection task that is running.
 
 For more information about collecting statistics for CBO, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md).
