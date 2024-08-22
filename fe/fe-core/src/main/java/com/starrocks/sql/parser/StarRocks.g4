@@ -862,6 +862,7 @@ alterClause
     | createOrReplaceTagClause
     | dropBranchClause
     | dropTagClause
+    | tableOperationClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1046,6 +1047,10 @@ dropTagClause
     : DROP TAG (IF EXISTS)? identifier
     ;
 
+tableOperationClause
+    : EXECUTE functionCall
+    ;
+
 tagOptions
     : (AS OF VERSION snapshotId)? (refRetain)?
     ;
@@ -1114,7 +1119,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) writeBranch? partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;

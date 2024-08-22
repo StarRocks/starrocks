@@ -57,16 +57,19 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -92,7 +95,6 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
@@ -313,24 +315,20 @@ public class AlterJobMgr {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        MaterializedView oldMaterializedView = null;
-        try {
-            oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-            db.dropTable(oldMaterializedView.getName());
-            oldMaterializedView.setName(newMaterializedViewName);
-            db.registerTableUnlocked(oldMaterializedView);
-            updateTaskDefinition(oldMaterializedView);
-            LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                    newMaterializedViewName, oldMaterializedView.getId());
-        } catch (Throwable e) {
-            if (oldMaterializedView != null) {
+        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+        if (oldMaterializedView != null) {
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db,
+                    Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE)) {
+                db.dropTable(oldMaterializedView.getName());
+                oldMaterializedView.setName(newMaterializedViewName);
+                db.registerTableUnlocked(oldMaterializedView);
+                updateTaskDefinition(oldMaterializedView);
+                LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                        newMaterializedViewName, oldMaterializedView.getId());
+            } catch (Throwable e) {
                 oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -544,19 +542,19 @@ public class AlterJobMgr {
         return this.clusterHandler;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<Long, AlterJobV2> schemaChangeAlterJobs = schemaChangeHandler.getAlterJobsV2();
         Map<Long, AlterJobV2> materializedViewAlterJobs = materializedViewHandler.getAlterJobsV2();
 
         int cnt = 1 + schemaChangeAlterJobs.size() + 1 + materializedViewAlterJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ALTER_MGR, cnt);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ALTER_MGR, cnt);
 
-        writer.writeJson(schemaChangeAlterJobs.size());
+        writer.writeInt(schemaChangeAlterJobs.size());
         for (AlterJobV2 alterJobV2 : schemaChangeAlterJobs.values()) {
             writer.writeJson(alterJobV2);
         }
 
-        writer.writeJson(materializedViewAlterJobs.size());
+        writer.writeInt(materializedViewAlterJobs.size());
         for (AlterJobV2 alterJobV2 : materializedViewAlterJobs.values()) {
             writer.writeJson(alterJobV2);
         }
@@ -565,9 +563,13 @@ public class AlterJobMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int schemaChangeJobSize = reader.readJson(int.class);
+        int schemaChangeJobSize = reader.readInt();
         for (int i = 0; i != schemaChangeJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown alterJobV2(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             schemaChangeHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -579,9 +581,13 @@ public class AlterJobMgr {
             }
         }
 
-        int materializedViewJobSize = reader.readJson(int.class);
+        int materializedViewJobSize = reader.readInt();
         for (int i = 0; i != materializedViewJobSize; ++i) {
             AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            if (alterJobV2 instanceof IForwardCompatibleObject) {
+                LOG.warn("Ignore unknown MV job(id: {}) from the future version!", alterJobV2.getJobId());
+                continue;
+            }
             materializedViewHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint

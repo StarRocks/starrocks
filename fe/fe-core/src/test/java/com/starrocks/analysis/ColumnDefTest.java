@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
@@ -261,7 +262,7 @@ public class ColumnDefTest {
         Assert.assertEquals("1.99E38", column7.getDefaultValue());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testArrayHLL() throws AnalysisException {
         ColumnDef column =
                 new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, true, DefaultValueDef.NOT_SET,
@@ -269,7 +270,7 @@ public class ColumnDefTest {
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testArrayBitmap() throws AnalysisException {
         ColumnDef column =
                 new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, true,
@@ -278,14 +279,14 @@ public class ColumnDefTest {
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testArrayPercentile() throws AnalysisException {
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testInvalidVarcharInsideArray() throws AnalysisException {
         Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, true,
@@ -293,7 +294,7 @@ public class ColumnDefTest {
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testInvalidDecimalInsideArray() throws AnalysisException {
         Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, true,

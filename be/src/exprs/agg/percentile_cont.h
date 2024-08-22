@@ -21,8 +21,10 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -41,28 +43,39 @@ inline constexpr LogicalType PercentileResultLT = LT;
 template <LogicalType LT>
 inline constexpr LogicalType PercentileResultLT<LT, true, ArithmeticLTGuard<LT>> = TYPE_DOUBLE;
 
+template <LogicalType LT>
+struct PercentileStateTypes {
+    using CppType = RunTimeCppType<LT>;
+    using ItemType = VectorWithAggStateAllocator<CppType>;
+    using GridType = VectorWithAggStateAllocator<ItemType>;
+};
+
 template <LogicalType LT, typename = guard::Guard>
 struct PercentileState {
-    using CppType = RunTimeCppType<LT>;
+    using CppType = typename PercentileStateTypes<LT>::CppType;
+    using ItemType = typename PercentileStateTypes<LT>::ItemType;
+    using GridType = typename PercentileStateTypes<LT>::GridType;
+
     void update(CppType item) { items.emplace_back(item); }
     void update_batch(const std::vector<CppType>& vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
     }
-    std::vector<CppType> items;
-    std::vector<std::vector<CppType>> grid;
+    ItemType items;
+    GridType grid;
     double rate = 0.0;
 };
 
 template <LogicalType LT, typename CppType, bool reverse>
-void kWayMergeSort(const std::vector<std::vector<CppType>>& grid, std::vector<CppType>& b, std::vector<int>& ls,
-                   std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm, CppType& senior_elm) {
+void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
+                   std::vector<int>& ls, std::vector<int>& mp, size_t goal, int k, CppType& junior_elm,
+                   CppType& senior_elm) {
     CppType minV = RunTimeTypeLimits<LT>::min_value();
     CppType maxV = RunTimeTypeLimits<LT>::max_value();
-
     b.resize(k + 1);
     ls.resize(k);
+    mp.resize(k);
     for (int i = 0; i < k; ++i) {
         if constexpr (reverse) {
             mp[i] = grid[i].size() - 2;
@@ -196,9 +209,9 @@ public:
         double rate = *reinterpret_cast<double*>(slice.data);
         size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
-        std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        auto& grid = this->data(state).grid;
 
-        std::vector<InputCppType> vec;
+        typename PercentileStateTypes<LT>::ItemType vec;
         vec.resize(items_size + 2);
         memcpy(vec.data() + 1, data_ptr, items_size * sizeof(InputCppType));
         vec[0] = RunTimeTypeLimits<LT>::min_value();
@@ -387,13 +400,13 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        const auto& grid = this->data(state).grid;
         const double& rate = this->data(state).rate;
 
         // for group by
         if (grid.size() == 0) {
             ResultColumnType* column = down_cast<ResultColumnType*>(to);
-            auto& items = const_cast<std::vector<InputCppType>&>(this->data(state).items);
+            auto& items = const_cast<typename PercentileStateTypes<LT>::ItemType&>(this->data(state).items);
             std::sort(items.begin(), items.end());
 
             if (items.size() == 0) {
@@ -414,7 +427,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
         std::vector<InputCppType> b;
         std::vector<int> ls;
-        std::map<int, int> mp;
+        std::vector<int> mp;
 
         size_t k = grid.size();
         size_t rowsNum = 0;
@@ -468,7 +481,7 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        std::vector<InputCppType> new_vector = std::move(this->data(state).items);
+        typename PercentileStateTypes<LT>::ItemType new_vector = std::move(this->data(state).items);
         for (auto& innerData : this->data(state).grid) {
             std::move(innerData.begin() + 1, innerData.end() - 1, std::back_inserter(new_vector));
         }

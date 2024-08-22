@@ -90,6 +90,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -902,13 +903,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DELETE_MGR, numJson);
 
-        writer.writeJson(dbToDeleteInfos.size());
+        writer.writeInt(dbToDeleteInfos.size());
         for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
-            writer.writeJson(deleteInfoEntry.getKey());
+            writer.writeLong(deleteInfoEntry.getKey());
             writer.writeJson(deleteInfoEntry.getValue());
         }
         writer.close();
@@ -917,7 +918,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
-            long dbId = reader.readJson(long.class);
+            long dbId = reader.readLong();
             List<MultiDeleteInfo> multiDeleteInfos =
                     (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
                     }.getType());

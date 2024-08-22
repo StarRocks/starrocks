@@ -46,6 +46,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.thrift.TStorageMedium;
@@ -159,9 +160,9 @@ public class LocalMetaStoreTest {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        localMetaStore.save(image.getDataOutputStream());
+        localMetaStore.save(image.getImageWriter());
 
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         localMetaStore.load(reader);
         reader.close();
 

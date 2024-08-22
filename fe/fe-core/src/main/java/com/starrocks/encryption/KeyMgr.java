@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -32,7 +33,6 @@ import com.starrocks.thrift.TGetKeysResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -204,13 +204,13 @@ public class KeyMgr {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         keysLock.readLock().lock();
         try {
             final int cnt = 1 + idToKey.size();
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.KEY_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.KEY_MGR, cnt);
             // write keys
-            writer.writeJson(idToKey.size());
+            writer.writeInt(idToKey.size());
             for (EncryptionKey key : idToKey.values()) {
                 EncryptionKeyPB pb = new EncryptionKeyPB();
                 key.toPB(pb, this);

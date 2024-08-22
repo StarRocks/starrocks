@@ -68,6 +68,7 @@ public enum AlterOpType {
     OPTIMIZE,
     ALTER_BRANCH,
     ALTER_TAG,
+    ALTER_TABLE_OPERATION,
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

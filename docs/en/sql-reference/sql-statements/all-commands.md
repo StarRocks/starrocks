@@ -78,6 +78,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [ADD BACKEND BLACKLIST](./Administration/ADD_BACKEND_BLACKLIST.md)
 - [DELETE BACKEND BLACKLIST](./Administration/DELETE_BACKEND_BLACKLIST.md)
 - [SHOW BACKEND BLACKLIST](./Administration/SHOW_BACKEND_BLACKLIST.md)
+- [SYNC](./Administration/SYNC.md)
 
 ### Resource group
 

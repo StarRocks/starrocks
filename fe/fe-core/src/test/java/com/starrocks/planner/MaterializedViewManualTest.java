@@ -420,4 +420,107 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             }
         });
     }
+
+    @Test
+    public void testRewriteWithEliminateJoinsBasic1() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
+            {
+                String query = "select t1.t1b, sum(t1b) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on t1.t1a=t2.k1 group by t1.t1b;";
+                sql(query).match("mv0")
+                        .contains("  1:Project\n" +
+                                "  |  <slot 2> : 16: t1b\n" +
+                                "  |  <slot 13> : sum(16: t1b)\n" +
+                                "  |  \n" +
+                                "  0:OlapScanNode\n" +
+                                "     TABLE: mv0\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 14: t1a = 'k1'");
+            }
+            {
+                String query = "select t2.k1, t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on true group by t2.k1, t1.t1b;";
+                sql(query).match("mv0")
+                        .contains("  1:AGGREGATE (update serialize)\n" +
+                                "  |  STREAMING\n" +
+                                "  |  output: sum(15: total)\n" +
+                                "  |  group by: 16: t1b\n" +
+                                "  |  \n" +
+                                "  0:OlapScanNode\n" +
+                                "     TABLE: mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testRewriteWithEliminateJoinsBasic2() throws Exception {
+       starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+               "  `k1` date,\n" +
+               "  `k2` decimal64(18, 2),\n" +
+               "  `k3` varchar(255),\n" +
+               "  `v1` varchar(255)\n" +
+               ") ENGINE=OLAP \n" +
+               "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+               "DISTRIBUTED BY RANDOM\n" +
+               "PROPERTIES (\n" +
+               "\"replication_num\" = \"1\"\n" +
+               ");");
+       starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+               "DISTRIBUTED BY RANDOM\n" +
+               "REFRESH ASYNC\n" +
+               "PROPERTIES (\n" +
+               "\"replication_num\" = \"1\"\n" +
+               ")\n" +
+               "AS SELECT k1, k2, k3, sum(v1) from tbl1 group by k1, k2, k3");
+        {
+            String sql = "with cte as(" +
+                    "    select " +
+                    "    '2024-07-20' as date1," +
+                    "    date_add('2024-07-20', interval -1 month) AS start_date," +
+                    "    date_add('2024-07-20', interval 1 month) AS end_date," +
+                    "    'k3' as k3" +
+                    ") select " +
+                    "    cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3, sum(t1.v1) " +
+                    "    from cte join tbl1 t1 " +
+                    "    on cte.k3 = t1.k3 " +
+                    "    group by cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3";
+            sql(sql).contains("mv1")
+                    .contains("  1:Project\n" +
+                            "  |  <slot 2> : '2024-07-20'\n" +
+                            "  |  <slot 3> : '2024-06-20 00:00:00'\n" +
+                            "  |  <slot 4> : '2024-08-20 00:00:00'\n" +
+                            "  |  <slot 6> : 11: k1\n" +
+                            "  |  <slot 7> : 12: k2\n" +
+                            "  |  <slot 8> : 13: k3\n" +
+                            "  |  <slot 10> : 14: sum(v1)\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: mv1");
+        }
+
+        {
+            String sql = "with cte as(" +
+                    "    select " +
+                    "    '2024-07-20' as date1," +
+                    "    date_add('2024-07-20', interval -1 month) AS start_date," +
+                    "    date_add('2024-07-20', interval 1 month) AS end_date," +
+                    "    'k3' as k3" +
+                    ") select " +
+                    "    cte.date1, cte.start_date, cte.end_date, t1.k1, sum(t1.v1) " +
+                    "    from cte join tbl1 t1 " +
+                    "    on cte.k3 = t1.k3 " +
+                    "    group by cte.date1, cte.start_date, cte.end_date, t1.k1";
+            sql(sql).contains("mv1")
+                    .contains("1:Project\n" +
+                            "|  <slot 11> : col$: k1\n" +
+                            "|  <slot 14> : col$: sum(v1)\n" +
+                            "|\n" +
+                            "0:OlapScanNode\n" +
+                            "TABLE: mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
 }

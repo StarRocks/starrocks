@@ -72,6 +72,7 @@ Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     if (!_prepared_probe.load()) {
         RETURN_IF_ERROR(_hash_joiner->prepare_prober(state, _runtime_profile));
+        _hash_joiner->reference_hash_table(_hash_joiner);
         _prepared_probe.store(true);
     }
 
