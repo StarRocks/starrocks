@@ -13,7 +13,7 @@ keywords: ['beifen']
 >
 > 只有拥有 System 级 REPOSITORY 权限的用户才可以创建仓库。
 
-删除仓库操作请参考 [DROP REPOSITORY](../../data-definition/backup_restore/DROP_REPOSITORY.md) 章节。
+删除仓库操作请参考 [DROP REPOSITORY](./DROP_REPOSITORY.md) 章节。
 
 ## 语法
 
@@ -29,7 +29,7 @@ PROPERTIES ("key"="value", ...)
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | READ ONLY           | 创建只读仓库。请注意只读仓库只可进行恢复操作。当为两个集群创建相同仓库，用以迁移数据时，可以为新集群创建只读仓库，仅赋予其恢复的权限。|
-| repository_name     | 仓库名。命名要求参见[系统限制](../../../../reference/System_limit.md)。  |
+| repository_name     | 仓库名。命名要求参见[系统限制](../../../reference/System_limit.md)。  |
 | repository_location | 远端存储系统路径。                                           |
 | PROPERTIES          | 访问远端存储系统的节点及密钥或用户名及密码。具体使用方式见以下说明。 |
 

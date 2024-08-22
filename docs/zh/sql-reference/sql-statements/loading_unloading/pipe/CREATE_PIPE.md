@@ -75,7 +75,7 @@ SELECT * FROM FILES
 >
 > 把上面命令示例中的 `AAA` 和 `BBB` 替换成真实有效的 Access Key 和 Secret Key 作为访问凭证。由于这里使用的数据对象对所有合法的 AWS 用户开放，因此您填入任何真实有效的 Access Key 和 Secret Key 都可以。
 
-该示例以基于 IAM User 的认证鉴权方式为例，并假设 Parquet 源文件与 StarRocks 目标表的结构相同。有关认证方式和语句详情，参见[配置 AWS 认证信息](../../../../integrations/authenticate_to_aws_resour../../../sql-functions/table-functions/files.mdunctions/files.md)。
+该示例以基于 IAM User 的认证鉴权方式为例，并假设 Parquet 源文件与 StarRocks 目标表的结构相同。有关认证方式和语句详情，参见[配置 AWS 认证信息](../../../../integrations/authenticate_to_aws_resources.md) [FILES](../../../sql-functions/table-functions/files.md)。
 
 ## 相关文档
 

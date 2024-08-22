@@ -39,7 +39,7 @@ AS <etl_statement>
 | task_name          | 是      | 任务名称。                                                                                   |
 | schedule_start     | 否      | 定时任务的开始时间。                                                                           |
 | schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
-| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务../../data-manipulation/INSERT.md
+| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) |
 
 ## 使用说明
 
