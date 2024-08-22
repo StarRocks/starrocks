@@ -154,10 +154,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             String fnName = distinctCall.getFnName();
             List<ScalarOperator> children = distinctCall.getChildren();
             Type type = children.get(0).getType();
-            if (type.isComplexType()
-                    || type.isJsonType()
-                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
-                    || (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && type.isDecimalOfAnyVersion())) {
+            if (!canRewriteByMultiFunc(type, fnName)) {
                 canRewriteByMultiFunc = false;
                 break;
             }
@@ -169,6 +166,19 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         }
 
         return !canRewriteByMultiFunc;
+    }
+
+    private boolean canRewriteByMultiFunc(Type type, String fnName) {
+        if (type.isComplexType() || type.isJsonType()) {
+            return false;
+        }
+        if (FunctionSet.GROUP_CONCAT_FUNCS.contains(fnName)) {
+            return false;
+        }
+        if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && type.isDecimalOfAnyVersion()) {
+            return false;
+        }
+        return true;
     }
 
     private boolean isCTEMoreEfficient(OptExpression input, OptimizerContext context,
