@@ -492,7 +492,13 @@ void JsonPathDeriver::_finalize() {
         } else {
             update_stack.push_back(node);
             for (auto& [key, child] : node->children) {
-                stack.emplace_back(child.get(), path + "." + std::string(key));
+                if (key.size() > 0) {
+                    // ignore empty key, it's invalid path in SQL
+                    stack.emplace_back(child.get(), path + "." + std::string(key));
+                } else {
+                    node->remain = true;
+                    _has_remain |= true;
+                }
             }
         }
     }

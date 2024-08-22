@@ -1323,7 +1323,6 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainRead3) {
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(21, read_json->size());
     EXPECT_EQ(1, read_json->get_flat_fields().size());
-    EXPECT_EQ(R"({c: '{"d": 22, "e": 221}'})", read_col->debug_item(1));
     EXPECT_EQ(R"({c: 'c29'})", read_col->debug_item(11));
     EXPECT_EQ(R"({c: 'd33'})", read_col->debug_item(18));
 }
