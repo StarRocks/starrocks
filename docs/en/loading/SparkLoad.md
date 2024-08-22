@@ -145,7 +145,7 @@ PROPERTIES
 `PROPERTIES` includes parameters relating to the Apache Spark™ resource, as follows:
 > **Note**
 >
-> For detailed description of Apache Spark™ resource PROPERTIES, please see [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md)
+> For detailed description of Apache Spark™ resource PROPERTIES, please see [CREATE RESOURCE](../sql-reference/sql-statements/Resource/CREATE_RESOURCE.md)
 
 - Spark related parameters:
   - `type`: Resource type, required, currently only supports `spark`.
