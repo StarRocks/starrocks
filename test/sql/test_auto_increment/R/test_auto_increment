@@ -529,7 +529,7 @@ CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k2` string default "abc" COMMENT "",
   `k3` BIGINT AUTO_INCREMENT COMMENT "",
   `k4` string default "bcd"COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
@@ -566,4 +566,92 @@ DROP TABLE t_auto_increment_incorrect_col_id;
 -- !result
 DROP DATABASE test_auto_increment_incorrect_col_id;
 -- result:
+<<<<<<< HEAD
+=======
+-- !result
+-- name: test_auto_increment_partial_update_only
+CREATE DATABASE test_auto_increment_partial_update_only;
+-- result:
+-- !result
+USE test_auto_increment_partial_update_only;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_partial_update_only` (
+  `k1` BIGINT NOT NULL COMMENT "",
+  `k2` BIGINT NOT NULL COMMENT "",
+  `k3` BIGINT NOT NULL COMMENT "",
+  `k4` BIGINT AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_partial_update_only VALUES (1, 2, 3, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	2	3	1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_1 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_2 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true -H label:test_auto_increment_partial_update_only_3 -H column_separator:, -H columns:"k1,k2,k3" ${url}/api/test_auto_increment_partial_update_only/t_auto_increment_partial_update_only/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_only;
+-- result:
+1	20	30	1
+2	40	50	2
+-- !result
+DROP TABLE t_auto_increment_partial_update_only;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_partial_update_only;
+-- result:
+>>>>>>> 1ba1a59d38 ([Tool] SQL-Tester support `loop` and `concurrency` grammar (#49856))
 -- !result

@@ -467,7 +467,6 @@ insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
 -- !result
 alter table tab1 add column c1 bigint;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:

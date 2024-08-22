@@ -13,4 +13,24 @@ select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part;
 -- !result
 drop catalog iceberg_sql_test_${uuid0}
 -- result:
+<<<<<<< HEAD
+=======
+6
+-- !result
+select count(*), col_date from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part group by col_date order by col_date;
+-- result:
+1	2020-01-01
+1	2020-02-01
+1	2020-03-01
+1	2020-04-01
+1	2020-05-01
+1	2020-06-01
+-- !result
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_ts_to_ts;","partitions=2")
+-- result:
+None
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+>>>>>>> 1ba1a59d38 ([Tool] SQL-Tester support `loop` and `concurrency` grammar (#49856))
 -- !result

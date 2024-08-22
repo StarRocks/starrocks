@@ -1,7 +1,7 @@
 -- name: test_array_functions
-CREATE TABLE array_test ( 
+CREATE TABLE array_test (
 pk bigint not null ,
-s_1   Array<String>, 
+s_1   Array<String>,
 i_1   Array<BigInt>,
 f_1   Array<Double>,
 d_1   Array<DECIMAL(26, 2)>,
@@ -1443,17 +1443,17 @@ select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], pa
 -- result:
 0
 -- !result
-select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')],
                           [parse_json('{"addr": 1}')]);
 -- result:
 1
 -- !result
-select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')],
                           [parse_json('{"addr": 1}'), parse_json('{"addr": 2}')]);
 -- result:
 1
 -- !result
-select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')],
                           [parse_json('{"addr": 1}'), parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
 -- result:
 0
@@ -2257,12 +2257,12 @@ None
 None
 None
 -- !result
-select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')],
                         [parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
 -- result:
 1
 -- !result
-select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')],
                         [parse_json('{"addr": 3}'), parse_json('{"addr": 4}')]);
 -- result:
 0
