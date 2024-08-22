@@ -491,6 +491,7 @@ delete from t where k = 1;
 -- !result
 select * from t;
 -- result:
+-- !result
 
 -- name: test_mutable_bucket @sequential
 create database ggg;
