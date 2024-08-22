@@ -19,4 +19,16 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc a inne
 -- view definition: CREATE VIEW `test_hive_view` AS with test_cte as (select `base_hive_table`.`k1` from `test_oss`.`base_hive_table`) select `test_cte`.`k1` from test_cte
 select * from hive_sql_test_${uuid0}.test_oss.test_hive_view;
 
-drop catalog hive_sql_test_${uuid0}
+create external catalog unified_catalog_${uuid0} PROPERTIES ("type"="unified",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}",
+    "unified.metastore.type"="hive"
+);
+
+refresh external table unified_catalog_${uuid0}.test_oss.test_hive_view;
+
+
+drop catalog unified_catalog_${uuid0};
+drop catalog hive_sql_test_${uuid0};
