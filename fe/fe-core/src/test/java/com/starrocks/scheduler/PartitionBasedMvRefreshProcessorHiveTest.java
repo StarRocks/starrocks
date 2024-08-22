@@ -717,6 +717,34 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
     }
 
     @Test
+    public void testRangePartitionRefresh_Hive_CastDate() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        String mvName = "hive_parttbl_cast_date_mv";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_cast_date_mv`\n" +
+                "PARTITION BY (pdt)\n" +
+                "REFRESH MANUAL AS\n" +
+                "   SELECT `l_orderkey`, `l_suppkey`, cast(`l_shipdate` as date) pdt " +
+                "   FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a;");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(PARTITION_START, "1998-01-01");
+        taskRunProperties.put(TaskRun.PARTITION_END, "1998-01-03");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        initAndExecuteTaskRun(taskRun);
+        Collection<Partition> partitions = materializedView.getPartitions();
+
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(plan, plan.contains("PARTITION PREDICATES: 15: l_shipdate >= '1998-01-01', " +
+                "15: l_shipdate < '1998-01-03'"));
+        Assert.assertTrue(plan.contains("partitions=5/8"));
+    }
+
+    @Test
     public void testRefreshPartitionWithMulParColumnsHiveTable1() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_mul_parttbl_mv1"));

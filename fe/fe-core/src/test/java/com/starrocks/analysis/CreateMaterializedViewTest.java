@@ -1093,7 +1093,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionByExpr() throws Exception {
+    public void testPartitionByCastDate() throws Exception {
         final String mvName = "mv_cast_date";
         final String castPredicate = " WHERE cast(l_shipdate as date) >= '1998-01-01' ";
         final String commonPredicate = " WHERE dt >= '1998-01-01' ";
