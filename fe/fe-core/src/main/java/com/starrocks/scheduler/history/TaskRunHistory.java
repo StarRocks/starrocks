@@ -70,7 +70,9 @@ public class TaskRunHistory {
             return;
         }
         TaskRunStatus task = historyTaskRunMap.remove(queryId);
-        taskName2Status.remove(task.getTaskName());
+        if (task != null) {
+            taskName2Status.remove(task.getTaskName());
+        }
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
