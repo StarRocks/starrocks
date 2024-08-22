@@ -216,6 +216,12 @@ public class ConnectProcessor {
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+                //represent analysis err
+                if (ctx.getState().getStateType() == QueryState.ErrType.ANALYSIS_ERR){
+                    MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                } else {
+                    MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                }
             } else {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
