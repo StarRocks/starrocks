@@ -856,11 +856,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             continue;
         }
         // leaf node
-<<<<<<< HEAD
-        DCHECK(iter->second->op == JsonFlatPath::OP_INCLUDE);
-=======
         DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_ROOT);
->>>>>>> f6290fdff8 ([Enhancement][FlatJson] opitmize flat json compaction performance (#49411))
         builder->add(k, v);
     }
     for (auto& [child_name, child] : root->children) {
@@ -1117,7 +1113,7 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
             std::vector<std::string> p;
             std::vector<LogicalType> t;
             for (auto& index : fk.dst_index) {
-                p.emplace_back(all_flat_paths[index]);
+                all_flat_paths.emplace_back(_dst_paths[index]);
                 p.emplace_back(_dst_paths[index]);
                 t.emplace_back(_dst_types[index]);
             }

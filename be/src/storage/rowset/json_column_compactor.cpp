@@ -194,10 +194,6 @@ Status FlatJsonColumnCompactor::finish() {
     return _json_writer->finish();
 }
 
-uint64_t FlatJsonColumnCompactor::estimate_buffer_size() {
-    return _estimate_size;
-}
-
 Status JsonColumnCompactor::append(const Column& column) {
     const JsonColumn* json_col;
     NullColumnPtr nulls = nullptr;

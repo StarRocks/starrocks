@@ -27,29 +27,22 @@ public:
             : FlatJsonColumnWriter(opts, std::move(type_info), wfile, std::move(json_writer)) {}
 
     Status append(const Column& column) override;
-    uint64_t estimate_buffer_size() override;
 
     Status finish() override;
 
 private:
     Status _compact_columns(std::vector<ColumnPtr>& json_datas);
 
-<<<<<<< HEAD
-private:
-    std::vector<ColumnPtr> _json_datas;
-    size_t _estimate_size = 0;
-=======
     Status _merge_columns(std::vector<ColumnPtr>& json_datas);
 
     Status _flatten_columns(std::vector<ColumnPtr>& json_datas);
->>>>>>> f6290fdff8 ([Enhancement][FlatJson] opitmize flat json compaction performance (#49411))
 };
 
 class JsonColumnCompactor final : public ColumnWriter {
 public:
     JsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
                         std::unique_ptr<ScalarColumnWriter> json_writer)
-            : ColumnWriter(type_info, opts.meta->length(), opts.meta->is_nullable()),
+            : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
               _json_meta(opts.meta),
               _json_writer(std::move(json_writer)) {}
 
