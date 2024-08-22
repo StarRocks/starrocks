@@ -176,6 +176,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
 
+    // for deserialization
+    public RollupJobV2() {
+        super(JobType.ROLLUP);
+    }
+
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
                        int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash,

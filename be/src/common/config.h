@@ -782,15 +782,6 @@ CONF_mBool(pipeline_print_profile, "false");
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
 CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
-// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
-// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
-//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
-CONF_Int64(pipeline_scan_queue_mode, "0");
-// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
-CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
@@ -1330,6 +1321,9 @@ CONF_mBool(enable_json_flat, "true");
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
 
+// direct read flat json
+CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+
 // extract flat json column when row_num * null_factor > null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
 
@@ -1379,7 +1373,7 @@ CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 // When the keys that we want to delete, number of them is larger than this config,
 // we will fallback and using `DeleteRange` in rocksdb.
-CONF_mInt32(rocksdb_opt_delete_range_limit, "10000");
+CONF_mInt32(rocksdb_opt_delete_range_limit, "500");
 
 // python envs config
 // create time worker timeout
@@ -1437,5 +1431,11 @@ CONF_mInt32(thrift_max_frame_size, "16384000");
 // The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
 // allows for structures nested up to 64 levels deep.
 CONF_mInt32(thrift_max_recursion_depth, "64");
+
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
 
 } // namespace starrocks::config

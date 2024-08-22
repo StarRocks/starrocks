@@ -205,6 +205,7 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+        TEST_ERROR_POINT("PosixFileSystem::appendv");
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
@@ -222,6 +223,7 @@ public:
     }
 
     Status pre_allocate(uint64_t size) override {
+        TEST_ERROR_POINT("PosixFileSystem::pre_allocate");
         uint64_t offset = std::max(_filesize, _pre_allocated_size);
         int ret;
         RETRY_ON_EINTR(ret, fallocate(_fd, 0, offset, size));
@@ -239,6 +241,7 @@ public:
     }
 
     Status close() override {
+        TEST_ERROR_POINT("PosixFileSystem::close");
         if (_closed) {
             return Status::OK();
         }
@@ -278,6 +281,7 @@ public:
     }
 
     Status flush(FlushMode mode) override {
+        TEST_ERROR_POINT("PosixFileSystem::flush");
 #if defined(__linux__)
         int flags = SYNC_FILE_RANGE_WRITE;
         if (mode == FLUSH_SYNC) {
@@ -296,6 +300,7 @@ public:
     }
 
     Status sync() override {
+        TEST_ERROR_POINT("PosixFileSystem::sync");
         MonotonicStopWatch watch;
         watch.start();
         if (_pending_sync) {

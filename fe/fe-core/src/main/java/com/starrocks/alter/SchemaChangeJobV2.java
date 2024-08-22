@@ -193,6 +193,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
+    // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
     }

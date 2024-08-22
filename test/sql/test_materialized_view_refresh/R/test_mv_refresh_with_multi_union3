@@ -279,18 +279,6 @@ select dt from test_mv4 group by dt order by 1;
 2024-04-12
 2024-04-13
 -- !result
-drop materialized view test_mv1;
--- result:
--- !result
-drop materialized view test_mv2;
--- result:
--- !result
-drop materialized view test_mv3;
--- result:
--- !result
-drop materialized view test_mv4;
--- result:
--- !result
 drop database db_${uuid0} force;
 -- result:
 -- !result

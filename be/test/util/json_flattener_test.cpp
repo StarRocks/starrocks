@@ -85,6 +85,7 @@ INSTANTIATE_TEST_SUITE_P(JsonPathDeriverCases, JsonPathDeriverTest,
         // EMPTY
         std::make_tuple(R"( {"k1": 1, "k2": {}} )", R"( {"k1": 3, "k2": {}} )", true, std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_BIGINT}),
         std::make_tuple(R"( {} )", R"( {"k1": 3} )", true, std::vector<std::string> {}, std::vector<LogicalType> {}),
+        std::make_tuple(R"( {"": 123} )", R"( {"": 234} )", true, std::vector<std::string> {}, std::vector<LogicalType> {}),
 
         // DEEP
         std::make_tuple(R"( {"k2": {"j1": 1, "j2": 2}} )", R"( {"k2": {"j1": 3, "j2": 4}} )", false, std::vector<std::string> {"k2.j1", "k2.j2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),

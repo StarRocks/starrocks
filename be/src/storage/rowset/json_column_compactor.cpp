@@ -18,8 +18,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <sstream>
-#include <utility>
 #include <vector>
 
 #include "column/column.h"
@@ -31,7 +29,6 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
-#include "types/logical_type.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {

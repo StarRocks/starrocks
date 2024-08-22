@@ -72,7 +72,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
 
-    private final String postfix;
+    private String postfix;
 
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds = Lists.newArrayList();
@@ -100,6 +100,11 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @SerializedName(value = "optimizeOperation")
     private String optimizeOperation = "";
+
+    // for deserialization
+    public OptimizeJobV2() {
+        super(JobType.OPTIMIZE);
+    }
 
     public OptimizeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                          OptimizeClause optimizeClause) {
@@ -764,9 +769,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (jobState != JobState.PENDING) {
-            return;
-        }
+        this.postfix = "_" + jobId;
     }
 
     @Override

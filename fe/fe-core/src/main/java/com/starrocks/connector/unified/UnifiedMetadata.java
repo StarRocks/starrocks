@@ -116,6 +116,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(Table table) {
         Table.TableType type = getTableType(table);
+        if (table.isHiveView()) {
+            type = HIVE;
+        }
         return metadataMap.get(type);
     }
 

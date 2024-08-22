@@ -199,8 +199,6 @@ public:
 
     Status generate_pk_dump();
 
-    MetadataCache* metadata_cache() const { return _metadata_cache.get(); }
-
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -277,9 +275,6 @@ private:
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
-
-    // LRU cache for metadata
-    std::unique_ptr<MetadataCache> _metadata_cache;
 
     std::vector<TabletsShard> _tablets_shards;
     const int64_t _tablets_shards_mask;

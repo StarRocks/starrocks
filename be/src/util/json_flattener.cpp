@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -31,7 +30,6 @@
 #include <vector>
 
 #include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -53,9 +51,6 @@
 namespace starrocks {
 
 namespace flat_json {
-using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
-using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx);
-
 template <LogicalType TYPE>
 void extract_number(const vpack::Slice* json, NullableColumn* result) {
     try {
@@ -93,6 +88,7 @@ void extract_string(const vpack::Slice* json, NullableColumn* result) {
             result->null_column()->append(0);
             vpack::Options options = vpack::Options::Defaults;
             options.singleLinePrettyPrint = true;
+            options.dumpAttributesInIndexOrder = false;
             std::string str = json->toJson(&options);
             down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str));
         }
@@ -111,52 +107,52 @@ void extract_json(const vpack::Slice* json, NullableColumn* result) {
 }
 
 template <LogicalType TYPE>
-void merge_number(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx) {
+void merge_number(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx) {
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const RunTimeColumnType<TYPE>*>(nullable_column->data_column().get());
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->add(name, vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
     } else {
-        builder->add(name, vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
     }
 }
 
-void merge_string(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx) {
+void merge_string(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx) {
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
-    builder->add(name, vpack::Value(col->get_slice(idx).to_string()));
+    builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_slice(idx).to_string()));
 }
 
-void merge_json(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx) {
+void merge_json(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx) {
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
-    builder->add(name, col->get_object(idx)->to_vslice());
+    builder->addUnchecked(name.data(), name.size(), col->get_object(idx)->to_vslice());
 }
 
-using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
-using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string& name, const Column* src, size_t idx);
-static const uint8_t JSON_BASE_TYPE_BITS = 0;     // least flat to JSON type
-static const uint8_t JSON_BIGINT_TYPE_BITS = 225; // 011000 10, bigint compatible type
-
 // clang-format off
+using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
+using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
+static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
+static const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
+
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
-static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS {
-        {vpack::ValueType::None, 255},      // 111111 11, 255
-        {vpack::ValueType::SmallInt, 241},  // 111100 01, 241
-        {vpack::ValueType::Int, 225},       // 111000 01, 225
-        {vpack::ValueType::UInt, 224},      // 111000 00, 224
-        {vpack::ValueType::Double, 192},    // 110000 00, 192
-        {vpack::ValueType::String, 8},      // 000010 00, 8
+static const FlatJsonHashMap<vpack::ValueType, uint8_t> JSON_TYPE_BITS {
+        {vpack::ValueType::None, 31},      //  00011111, 31
+        {vpack::ValueType::SmallInt, 15},  //  00001111, 15
+        {vpack::ValueType::Int, 7},        //  00000111, 7
+        {vpack::ValueType::UInt, 3},       //  00000011, 3
+        {vpack::ValueType::Double, 1},     //  00000001, 1
+        {vpack::ValueType::String, 16},    //  00010000, 16
 };
 
 // starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
-static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
+static const FlatJsonHashMap<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
     {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_TINYINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
@@ -166,7 +162,7 @@ static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE 
     {JSON_BASE_TYPE_BITS,                                LogicalType::TYPE_JSON},
 };
 
-static const std::unordered_map<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
+static FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS {
     {LogicalType::TYPE_TINYINT,         JSON_TYPE_BITS.at(vpack::ValueType::None)},
     {LogicalType::TYPE_BIGINT,          JSON_TYPE_BITS.at(vpack::ValueType::Int)},
     {LogicalType::TYPE_LARGEINT,        JSON_TYPE_BITS.at(vpack::ValueType::UInt)},
@@ -175,7 +171,7 @@ static const std::unordered_map<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS 
     {LogicalType::TYPE_JSON,            JSON_BASE_TYPE_BITS},
 };
 
-static const std::unordered_map<uint8_t, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
+static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC {
     {LogicalType::TYPE_TINYINT,         &extract_number<LogicalType::TYPE_TINYINT>},
     {LogicalType::TYPE_BIGINT,          &extract_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,        &extract_number<LogicalType::TYPE_LARGEINT>},
@@ -186,7 +182,7 @@ static const std::unordered_map<uint8_t, JsonFlatExtractFunc> JSON_EXTRACT_FUNC 
 };
 
 // should match with extract function
-static const std::unordered_map<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
+static const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
     {LogicalType::TYPE_TINYINT,       &merge_number<LogicalType::TYPE_TINYINT>},
     {LogicalType::TYPE_BIGINT,        &merge_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,      &merge_number<LogicalType::TYPE_LARGEINT>},
@@ -196,24 +192,22 @@ static const std::unordered_map<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC 
 };
 // clang-format on
 
-uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
-    if (JSON_TYPE_BITS.contains(type1)) {
-        return JSON_TYPE_BITS.at(type1) & type2;
-    }
-    return JSON_BASE_TYPE_BITS;
+inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
+    auto iter = JSON_TYPE_BITS.find(type1);
+    return iter != JSON_TYPE_BITS.end() ? type2 & iter->second : JSON_BASE_TYPE_BITS;
 }
 
 } // namespace flat_json
 
-std::pair<std::string, std::string> JsonFlatPath::_split_path(const std::string& path) {
+std::pair<std::string_view, std::string_view> JsonFlatPath::_split_path(const std::string_view& path) {
     size_t pos = 0;
     if (path.starts_with("\"")) {
         pos = path.find('\"', 1);
         DCHECK(pos != std::string::npos);
     }
     pos = path.find('.', pos);
-    std::string key;
-    std::string next;
+    std::string_view key;
+    std::string_view next;
     if (pos == std::string::npos) {
         key = path;
     } else {
@@ -224,7 +218,7 @@ std::pair<std::string, std::string> JsonFlatPath::_split_path(const std::string&
     return {key, next};
 }
 
-JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string& path, JsonFlatPath* root) {
+JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, JsonFlatPath* root) {
     if (path.empty()) {
         return root;
     }
@@ -251,7 +245,7 @@ JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string& path, JsonFla
 *                    /    \
 *                b3(IN)   b4(IN)
 */
-void JsonFlatPath::set_root(const std::string& new_root_path, JsonFlatPath* node) {
+void JsonFlatPath::set_root(const std::string_view& new_root_path, JsonFlatPath* node) {
     node->op = OP_IGNORE;
     if (new_root_path.empty()) {
         node->op = OP_ROOT;
@@ -295,9 +289,9 @@ bool check_null_factor(const std::vector<const Column*>& json_datas) {
 
 JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                  bool has_remain)
-        : _has_remain(has_remain), _paths(paths), _types(types) {
-    for (size_t i = 0; i < paths.size(); i++) {
-        auto* leaf = JsonFlatPath::normalize_from_path(paths[i], _path_root.get());
+        : _has_remain(has_remain), _paths(std::move(paths)), _types(types) {
+    for (size_t i = 0; i < _paths.size(); i++) {
+        auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];
         leaf->index = i;
     }
@@ -434,14 +428,14 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
     }
 }
 
-void JsonPathDeriver::_visit_json_paths(vpack::Slice value, JsonFlatPath* root, size_t mark_row) {
+void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
     vpack::ObjectIterator it(value, false);
 
     for (; it.valid(); it.next()) {
         auto current = (*it);
         // sub-object?
         auto v = current.value;
-        auto k = current.key.copyString();
+        auto k = current.key.stringView();
 
         if (!root->children.contains(k)) {
             root->children.emplace(k, std::make_unique<JsonFlatPath>());
@@ -450,18 +444,15 @@ void JsonPathDeriver::_visit_json_paths(vpack::Slice value, JsonFlatPath* root, 
         if (v.isObject()) {
             _visit_json_paths(v, child, mark_row);
         } else {
-            _derived_maps[child].hits++;
-            uint8_t base_type = _derived_maps[child].type;
+            auto desc = &_derived_maps[child];
+            desc->hits++;
             vpack::ValueType json_type = v.type();
-            uint8_t compatibility_type = flat_json::get_compatibility_type(json_type, base_type);
-            _derived_maps[child].type = compatibility_type;
-            _derived_maps[child].casts += (base_type != compatibility_type);
-
-            _derived_maps[child].multi_times += (_derived_maps[child].last_row == mark_row);
-            _derived_maps[child].last_row = mark_row;
+            desc->type = flat_json::get_compatibility_type(json_type, desc->type);
+            desc->multi_times += (desc->last_row == mark_row);
+            desc->last_row = mark_row;
 
             if (json_type == vpack::ValueType::UInt) {
-                _derived_maps[child].max = std::max(_derived_maps[child].max, v.getUIntUnchecked());
+                desc->max = std::max(desc->max, v.getUIntUnchecked());
             }
         }
     }
@@ -501,7 +492,13 @@ void JsonPathDeriver::_finalize() {
         } else {
             update_stack.push_back(node);
             for (auto& [key, child] : node->children) {
-                stack.emplace_back(child.get(), path + "." + key);
+                if (key.size() > 0) {
+                    // ignore empty key, it's invalid path in SQL
+                    stack.emplace_back(child.get(), path + "." + std::string(key));
+                } else {
+                    node->remain = true;
+                    _has_remain |= true;
+                }
             }
         }
     }
@@ -539,14 +536,16 @@ void JsonPathDeriver::_finalize() {
 
 JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
     DCHECK(deriver.flat_path_root() != nullptr);
-    _dst_root = deriver.flat_path_root();
     _dst_paths = deriver.flat_paths();
     _has_remain = deriver.has_remain_json();
-
-    auto paths = deriver.flat_paths();
     auto types = deriver.flat_types();
 
-    for (size_t i = 0; i < paths.size(); i++) {
+    _dst_root = std::make_shared<JsonFlatPath>();
+    for (size_t i = 0; i < _dst_paths.size(); i++) {
+        auto* leaf = JsonFlatPath::normalize_from_path(_dst_paths[i], _dst_root.get());
+        leaf->type = types[i];
+        leaf->index = i;
+
         _flat_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
     }
 
@@ -558,11 +557,11 @@ JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
 
 JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                              bool has_remain)
-        : _has_remain(has_remain), _dst_paths(paths) {
+        : _has_remain(has_remain), _dst_paths(std::move(paths)) {
     _dst_root = std::make_shared<JsonFlatPath>();
 
-    for (size_t i = 0; i < paths.size(); i++) {
-        auto* leaf = JsonFlatPath::normalize_from_path(paths[i], _dst_root.get());
+    for (size_t i = 0; i < _dst_paths.size(); i++) {
+        auto* leaf = JsonFlatPath::normalize_from_path(_dst_paths[i], _dst_root.get());
         leaf->type = types[i];
         leaf->index = i;
 
@@ -616,12 +615,12 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
         auto current = (*it);
         // sub-object
         auto v = current.value;
-        auto k = current.key.copyString();
+        auto k = current.key.stringView();
 
         auto child = root->children.find(k);
         if constexpr (REMAIN) {
             if (child == root->children.end()) {
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
                 continue;
             }
         } else {
@@ -645,7 +644,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             // not leaf node, should goto deep
         } else if (v.isObject()) {
             if constexpr (REMAIN) {
-                builder->add(k, vpack::Value(vpack::ValueType::Object));
+                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _flatten_json<REMAIN>(v, child->second.get(), builder, hit_count);
                 builder->close();
             } else {
@@ -655,7 +654,7 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             }
         } else {
             if constexpr (REMAIN) {
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
             }
         }
     }
@@ -827,14 +826,14 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
 #endif
     vpack::ObjectIterator it(*remain, false);
     for (; it.valid(); it.next()) {
-        auto k = it.key().copyString();
+        auto k = it.key().stringView();
         auto v = it.value();
 
         auto iter = root->children.find(k);
         if (iter == root->children.end()) {
             if constexpr (IN_TREE) {
                 // only remain contains
-                builder->add(k, v);
+                builder->addUnchecked(k.data(), k.size(), v);
             }
             continue;
         }
@@ -849,7 +848,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 _merge_json_with_remain<true>(child, &v, builder, index);
             } else {
                 DCHECK(child->op == JsonFlatPath::OP_INCLUDE);
-                builder->add(k, vpack::Value(vpack::ValueType::Object));
+                builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _merge_json_with_remain<true>(child, &v, builder, index);
                 builder->close();
             }
@@ -857,7 +856,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         }
         // leaf node
         DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_ROOT);
-        builder->add(k, v);
+        builder->addUnchecked(k.data(), k.size(), v);
     }
     for (auto& [child_name, child] : root->children) {
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
@@ -903,7 +902,7 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
         } else if (child->op == JsonFlatPath::OP_ROOT) {
             _merge_json(child.get(), builder, index);
         } else {
-            builder->add(child_name, vpack::Value(vpack::ValueType::Object));
+            builder->addUnchecked(child_name.data(), child_name.size(), vpack::Value(vpack::ValueType::Object));
             _merge_json(child.get(), builder, index);
             builder->close();
         }
@@ -1025,9 +1024,19 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
     for (auto& fk : _flat_tasks) {
         std::vector<std::string> p;
         std::vector<LogicalType> t;
-        for (auto& index : fk.dst_index) {
-            p.emplace_back(_dst_paths[index]);
-            t.emplace_back(_dst_types[index]);
+        if (fk.src_index == _src_paths.size()) {
+            DCHECK(has_remain);
+            for (auto& index : fk.dst_index) {
+                p.emplace_back(_dst_paths[index]);
+                t.emplace_back(_dst_types[index]);
+            }
+        } else {
+            for (auto& index : fk.dst_index) {
+                // compute flatten path
+                auto dp = _dst_paths[index].substr(_src_paths[fk.src_index].size() + 1);
+                p.emplace_back(dp);
+                t.emplace_back(_dst_types[index]);
+            }
         }
         fk.flattener = std::make_unique<JsonFlattener>(p, t, false);
     }

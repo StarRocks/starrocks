@@ -142,6 +142,7 @@ struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -161,6 +162,7 @@ struct HashJoinBuildMetrics {
     void prepare(RuntimeProfile* runtime_profile);
 };
 
+// TODO: rename HashJoiner to HashJoinController
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
@@ -208,6 +210,7 @@ public:
     Status build_ht(RuntimeState* state);
     // probe phase
     Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status probe_input_finished();
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
@@ -355,11 +358,9 @@ private:
             return;
         }
 
-        auto& ht = _hash_join_builder->hash_table();
-
         if (row_count > 0) {
-            if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && ht.get_key_columns().size() == 1 &&
-                _has_null(ht.get_key_columns()[0]) && _other_join_conjunct_ctxs.empty()) {
+            if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN &&
+                _hash_join_builder->anti_join_key_column_has_null() && _other_join_conjunct_ctxs.empty()) {
                 // The current implementation of HashTable will reserve a row for judging the end of the linked list.
                 // When performing expression calculations (such as cast string to int),
                 // it is possible that this reserved row will generate Null,

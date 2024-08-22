@@ -97,31 +97,34 @@ class Filter(logging.Filter):
         # replace secret infos
         for secret_k, secret_v in SECRET_INFOS.items():
             try:
-                record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+                record.msg = record.msg.replace(secret_v, "${%s}" % secret_k)
             except Exception:
-                record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
+                record.msg = str(record.msg).replace(secret_v, "${%s}" % secret_k)
 
         if record.levelno < self.msg_level:
             return False
         return True
 
 
-def self_print(msg, color: ColorEnum = None, bold=False, logout=False):
+def self_print(msg, color: ColorEnum = None, bold=False, logout=False, need_print=True):
     # replace secret infos
     for secret_k, secret_v in SECRET_INFOS.items():
-        msg = msg.replace(secret_v, '${%s}' % secret_k)
+        msg = msg.replace(secret_v, "${%s}" % secret_k)
 
-    if color:
-        bold_str = "1;" if bold else ""
-        print(f"\033[{bold_str}{color.value}m{msg} \033[0m")
+    if need_print:
+        if color:
+            bold_str = "1;" if bold else ""
+            print(f"\033[{bold_str}{color.value}m{msg} \033[0m")
 
-        if logout:
-            log.info(f"\033[{bold_str}{color.value}m{msg} \033[0m")
-    else:
-        print(msg)
+            if logout:
+                log.info(f"\033[{bold_str}{color.value}m{msg} \033[0m")
+        else:
+            print(msg)
 
-        if logout:
-            log.info(msg)
+            if logout:
+                log.info(msg)
+
+    return msg
 
 
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
@@ -225,7 +228,7 @@ class StarrocksSQLApiLib(object):
         cluster_status_dict = self.get_cluster_status()
 
         if isinstance(cluster_status_dict, str):
-            if cluster_status_dict == 'abnormal':
+            if cluster_status_dict == "abnormal":
                 log.error("FE status is abnormal!")
 
             return
@@ -254,11 +257,16 @@ class StarrocksSQLApiLib(object):
                 be_crash_case = self.case_info.name
 
                 title = f"[{self.run_info}] SQL-Tester crash"
-                run_link = os.environ.get('WORKFLOW_URL', '')
+                run_link = os.environ.get("WORKFLOW_URL", "")
                 body = (
-                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
-                        % (be_crash_case, be_crash_log, cluster_status_dict["version"], cluster_status_dict["ip"][0],
-                           run_link)
+                    """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                    % (
+                        be_crash_case,
+                        be_crash_log,
+                        cluster_status_dict["version"],
+                        cluster_status_dict["ip"][0],
+                        run_link,
+                    )
                 )
                 assignee = os.environ.get("ISSUE_AUTHOR")
                 repo = os.environ.get("GITHUB_REPOSITORY")
@@ -305,9 +313,7 @@ class StarrocksSQLApiLib(object):
             return -1
 
         time.sleep(10)
-        cmd = (
-            f". ~/.bash_profile; cd {self.cluster_path}/be; ulimit -c unlimited; export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1;sh bin/start_be.sh --daemon"
-        )
+        cmd = f". ~/.bash_profile; cd {self.cluster_path}/be; ulimit -c unlimited; export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1;sh bin/start_be.sh --daemon"
         start_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
         if start_res["exitstatus"] != 0 or start_res["remote_exitstatus"] != 0:
             log.error("Start be error, msg: %s" % start_res)
@@ -333,9 +339,7 @@ class StarrocksSQLApiLib(object):
 
     def get_crash_log(self, ip):
         log.warning("Get crash log from %s" % ip)
-        cmd = (
-            f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
-        )
+        cmd = f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
         crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=False)
         return crash_log["result"]
 
@@ -344,11 +348,11 @@ class StarrocksSQLApiLib(object):
         wait until be was exited
         """
         log.warning("Wait be exit...")
-        timeout = 60
-        while timeout > 0:
+        _timeout = 60
+        while _timeout > 0:
             status_dict = self.get_cluster_status()
 
-            if status_dict == 'abnormal':
+            if status_dict == "abnormal":
                 # fe abnormal
                 return
 
@@ -357,7 +361,7 @@ class StarrocksSQLApiLib(object):
 
             else:
                 time.sleep(5)
-                timeout -= 1
+                _timeout -= 1
 
         return
 
@@ -434,7 +438,7 @@ class StarrocksSQLApiLib(object):
                 env_value = os.environ.get(env_key, "")
             else:
                 # save secrets info
-                if 'aws' in env_key or 'oss_' in env_key:
+                if "aws" in env_key or "oss_" in env_key:
                     SECRET_INFOS[env_key] = env_value
 
             self.__setattr__(env_key, env_value)
@@ -647,7 +651,7 @@ class StarrocksSQLApiLib(object):
 
             for i in range(len(result)):
                 row = [str(item) for item in result[i]]
-                result[i] = '\t'.join(row)
+                result[i] = "\t".join(row)
 
             return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
@@ -814,7 +818,7 @@ class StarrocksSQLApiLib(object):
         if regex.match(cmd):
             # set variable
             var = regex.match(cmd).group()
-            cmd = cmd[len(var):]
+            cmd = cmd[len(var) :]
             var = var[:-1]
 
         match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
@@ -1206,8 +1210,10 @@ class StarrocksSQLApiLib(object):
                     return
 
                 try:
-                    tools.assert_true(re.match(exp_std, act_std, flags=re.S),
-                                      "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                    tools.assert_true(
+                        re.match(exp_std, act_std, flags=re.S),
+                        "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std),
+                    )
                 except Exception as e:
                     log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
@@ -1228,7 +1234,7 @@ class StarrocksSQLApiLib(object):
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG):],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (sql, exp[len(REGEX_FLAG):], act),
+                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG) :], act),
                 )
                 return
 
@@ -1254,14 +1260,14 @@ class StarrocksSQLApiLib(object):
                             expect_res,
                             act,
                             "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                            % (sql, expect_res, act),
+                            % (self_print(sql, need_print=False), expect_res, act),
                         )
                     else:
                         tools.assert_count_equal(
                             expect_res,
                             act,
                             "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                            % (sql, expect_res, act),
+                            % (self_print(sql, need_print=False), expect_res, act),
                         )
                     return
                 elif exp.startswith("{") and exp.endswith("}"):
@@ -1271,7 +1277,8 @@ class StarrocksSQLApiLib(object):
                     tools.assert_dict_equal(
                         json.loads(exp),
                         json.loads(act),
-                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
+                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                        % (self_print(sql, need_print=False), exp, act),
                     )
                     return
             except Exception as e:
@@ -1297,11 +1304,15 @@ class StarrocksSQLApiLib(object):
                 tools.assert_list_equal(
                     exp,
                     act,
-                    "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
+                    "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                    % (self_print(sql, need_print=False), exp, act),
                 )
             else:
                 tools.assert_count_equal(
-                    exp, act, "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act)
+                    exp,
+                    act,
+                    "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                    % (self_print(sql, need_print=False), exp, act),
                 )
 
     @staticmethod
@@ -1643,49 +1654,55 @@ class StarrocksSQLApiLib(object):
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
-            for res in results:
-                last_refresh_state = res[12]
+            for _res in results:
+                last_refresh_state = _res[12]
                 if last_refresh_state != "SUCCESS" and last_refresh_state != "MERGED":
                     return False
             return True
 
         def is_all_finished2():
-            sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(
-                mv_name, current_db)
-            print(sql)
+            sql = f"""select STATE from information_schema.task_runs a
+                join information_schema.materialized_views b 
+                on a.task_name=b.task_name 
+                where b.table_name='{mv_name}' 
+                    and a.`database`='{current_db}'
+            """
+            self_print(sql)
             result = self.execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
-            for res in results:
-                if res[0] != "SUCCESS" and res[0] != "MERGED":
+            for _res in results:
+                if _res[0] != "SUCCESS" and _res[0] != "MERGED":
                     return False
             return True
 
         # information_schema.task_runs result
         def get_success_count(results):
             cnt = 0
-            for res in results:
-                if res[0] == "SUCCESS" or res[0] == "MERGED":
+            for _res in results:
+                if _res[0] == "SUCCESS" or _res[0] == "MERGED":
                     cnt += 1
             return cnt
 
-        MAX_LOOP_COUNT = 30
+        max_loop_count = 180
         is_all_ok = False
         count = 0
         if check_count is None:
-            while count < MAX_LOOP_COUNT:
+            while count < max_loop_count:
                 is_all_ok = is_all_finished1() and is_all_finished2()
                 if is_all_ok:
-                    # sleep another 5s to avoid FE's async action.
-                    time.sleep(2)
+                    time.sleep(1)
                     break
-                time.sleep(2)
+                time.sleep(1)
                 count += 1
         else:
-            show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(
-                mv_name, current_db)
-            while count < MAX_LOOP_COUNT:
+            show_sql = f"""select STATE from information_schema.task_runs a 
+                join information_schema.materialized_views b 
+                on a.task_name=b.task_name 
+                where b.table_name='{mv_name}' 
+                    and a.`database`='{current_db}'"""
+            while count < max_loop_count:
                 print(show_sql)
                 res = self.execute_sql(show_sql, True)
                 if not res["status"]:
@@ -1695,17 +1712,19 @@ class StarrocksSQLApiLib(object):
                 if success_cnt >= check_count:
                     is_all_ok = True
                     # sleep to avoid FE's async action.
-                    time.sleep(2)
+                    time.sleep(1)
                     break
-                time.sleep(2)
+                time.sleep(1)
                 count += 1
-        tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
+        tools.assert_equal(True, is_all_ok, "wait async materialized view finish error")
 
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
         show_sql = """select count(*) from information_schema.materialized_views 
-        join information_schema.task_runs using(task_name)
-        where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
-        """.format(db_name, mv_name)
+            join information_schema.task_runs using(task_name)
+            where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
+        """.format(
+            db_name, mv_name
+        )
         print(show_sql)
 
         cnt = 1
@@ -1728,15 +1747,19 @@ class StarrocksSQLApiLib(object):
         wait pipe load finish
         """
         state = ""
-        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(
-            db_name, pipe_name)
+        show_sql = """select state, load_status, last_error 
+            from information_schema.pipes 
+            where database_name='{}' and pipe_name='{}'
+        """.format(
+            db_name, pipe_name
+        )
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
             state = res["result"][0][0]
-            if state == 'RUNNING':
+            if state == "RUNNING":
                 print("pipe state is " + state)
                 time.sleep(1)
             else:
@@ -1942,7 +1965,9 @@ var columnId = new ColumnId("{col}");
 var cid = new ColumnIdentifier(tid, columnId)
 
 out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
-';      """.format(db=db_name, tb=table_name, col=column_name)
+';      """.format(
+            db=db_name, tb=table_name, col=column_name
+        )
         res = self.execute_sql(sql, True)
         print("scirpt output:" + str(res))
         tools.assert_true(str(res["result"][0][0]).strip() == "true", "column still could collect dictionary")
@@ -2067,7 +2092,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         return res
 
     def prepare_data(self, data_name, db):
-        """ load data """
+        """load data"""
         tools.assert_in(data_name, ["ssb", "tpch", "tpcds"], "Unsupported data!")
 
         # create tables
@@ -2211,7 +2236,9 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
     def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
         timeout = 300
-        scan_table_sql = f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+        scan_table_sql = (
+            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+        )
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
@@ -2247,16 +2274,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         backends = []
         for row in res["result"]:
-            backends.append({
-                "host": row[1],
-                "port": row[4],
-            })
+            backends.append(
+                {
+                    "host": row[1],
+                    "port": row[4],
+                }
+            )
 
         return backends
 
     def update_be_config(self, key, value):
-        """Update the config to all the backends.
-        """
+        """Update the config to all the backends."""
         backends = self._get_backend_http_endpoints()
         for backend in backends:
             exec_url = f"http://{backend['host']}:{backend['port']}/api/update_config?{key}={value}"
@@ -2264,8 +2292,9 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res = self.post_http_request(exec_url)
 
             res_json = json.loads(res)
-            tools.assert_dict_contains_subset({"status": "OK"}, res_json,
-                                              f"failed to update be config [response={res}] [url={exec_url}]")
+            tools.assert_dict_contains_subset(
+                {"status": "OK"}, res_json, f"failed to update be config [response={res}] [url={exec_url}]"
+            )
 
     def assert_table_cardinality(self, sql, rows):
         """
@@ -2307,8 +2336,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         backend_id = res["result"][0][2]
 
         res = self.execute_sql(
-            "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')" % (
-            tablet_id, backend_id),
+            "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')"
+            % (tablet_id, backend_id),
             True,
         )
 
@@ -2332,8 +2361,10 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "explain %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0,
-                              "assert expect {} is not found in plan {}".format(expect, res['result']))
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
 
     def assert_explain_not_contains(self, query, *expects):
         """
@@ -2369,16 +2400,14 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "trace values %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0,
-                              "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])),
+            )
 
     def assert_prepare_execute(self, db, query, params=()):
         conn = mysql.connector.connect(
-            host=self.mysql_host,
-            user=self.mysql_user,
-            password="",
-            port=self.mysql_port,
-            database=db
+            host=self.mysql_host, user=self.mysql_user, password="", port=self.mysql_port, database=db
         )
         cursor = conn.cursor(prepared=True)
 
@@ -2402,17 +2431,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "trace times %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0,
-                              "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])),
+            )
 
     def assert_clear_stale_stats(self, query, expect_num):
         timeout = 300
-        num = 0;
+        num = 0
         while timeout > 0:
             res = self.execute_sql(query)
             num = res["result"]
             if int(num) < expect_num:
-                break;
+                break
             time.sleep(10)
             timeout -= 10
         else:
@@ -2424,14 +2455,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
 
-    def wait_table_rowcount_not_empty(self, table, time_out=300):
+    def wait_table_rowcount_not_empty(self, table, max_times=300):
         times = 0
         rc = 0
         sql = 'show partitions from ' + table
-        while times < time_out and times < time_out:
+        while times < max_times:
             result = self.execute_sql(sql, True)
-            log.info(sql)
-            log.info(result)
             if len(result["result"]) > 0:
                 rc = int(result["result"][0][-4])
                 log.info(rc)
@@ -2439,7 +2468,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                     break
             time.sleep(1)
             times += 1
-        tools.assert_true(True, "wait row count > 0 error, timeout 300s")
+        tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
 
     def assert_cache_select_is_success(self, query):
         """

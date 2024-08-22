@@ -81,10 +81,7 @@ Rowset::~Rowset() {
     if (_keys_type != PRIMARY_KEYS) {
         // ONLY support non-pk table now.
         // evict rowset before destroy, in case this rowset no close yet.
-        auto metadata_cache = StorageEngine::instance()->tablet_manager()->metadata_cache();
-        if (metadata_cache != nullptr) {
-            metadata_cache->evict_rowset(this);
-        }
+        MetadataCache::instance()->evict_rowset(this);
     }
 #endif
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
@@ -191,7 +188,7 @@ Status Rowset::do_load() {
     if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
         // Add rowset to lru metadata cache for memory control.
         // ONLY support non-pk table now.
-        StorageEngine::instance()->tablet_manager()->metadata_cache()->cache_rowset(this);
+        MetadataCache::instance()->cache_rowset(this);
     }
 #endif
     return Status::OK();
@@ -733,6 +730,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
