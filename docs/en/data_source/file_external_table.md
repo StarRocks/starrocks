@@ -285,4 +285,4 @@ SELECT * FROM t0;
 
 ## Manage file external tables
 
-You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md).
+You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md).

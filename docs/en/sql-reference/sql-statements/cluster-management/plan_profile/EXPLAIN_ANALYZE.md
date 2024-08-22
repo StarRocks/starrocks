@@ -22,7 +22,7 @@ EXPLAIN ANALYZE <statement>
 
 ## Parameters
 
-`statement`: the SQL statement of which to show the query profile. Both [SELECT](../../data-manipulation/SELECT.md) and [INSERT INTO](../../loading_unloading/INSERT.md) are supported.
+`statement`: the SQL statement of which to show the query profile. Both [SELECT](../../table_bucket_part_index/SELECT.md) and [INSERT INTO](../../loading_unloading/INSERT.md) are supported.
 
 ## Usage notes
 

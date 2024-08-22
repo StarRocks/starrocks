@@ -44,7 +44,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
     USE <catalog_name>.<db_name>;
     ```
 
-4. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query internal data:
+4. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query internal data:
 
       ```SQL
       SELECT * FROM <table_name>;

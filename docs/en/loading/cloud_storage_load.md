@@ -130,7 +130,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -174,7 +174,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -227,7 +227,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -293,7 +293,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -336,7 +336,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -388,7 +388,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -463,7 +463,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -507,7 +507,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -560,7 +560,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -628,7 +628,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -675,7 +675,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -731,7 +731,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -765,7 +765,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 ## View a load job
 
-Use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
+Use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
 Example 1: Query the results of load jobs executed on the `test_db` database. In the query statement, specify that a maximum of two results can be returned and the return results must be sorted by creation time (`CREATE_TIME`) in descending order.
 

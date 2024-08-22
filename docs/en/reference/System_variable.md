@@ -749,7 +749,7 @@ The number of scan instances determines the number of other execution nodes in t
   * `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
   * `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
-  For more information, see [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#partial-updates-in-column-mode-since-v31).
+  For more information, see [UPDATE](../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md#partial-updates-in-column-mode-since-v31).
 * **Default**: auto
 * **Introduced in**: v3.1
 

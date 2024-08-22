@@ -47,7 +47,7 @@ alter_clause1[, alter_clause2, ...]
 - Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
 - Column comments cannot be modified.
 - One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
-- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
+- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Rename
@@ -157,7 +157,7 @@ Parameters:
 
 - `"key"="value"`:
 
-   You can set properties for the new partition. For details, see [CREATE TABLE](./CREATE_TABLE.md#properties).
+   You can set properties for the new partition. For details, see [CREATE TABLE](CREATE_TABLE.md#properties).
 
 Examples:
 
@@ -229,7 +229,7 @@ Notes for `multi_range_partitions`:
 :::note
 
 - Keep at least one partition for partitioned tables.
-- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](../data-definition/backup_restore/RECOVER.md) command within a specified period (1 day by default).
 - If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
 
 :::
@@ -1232,8 +1232,8 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 
 ## References
 
-- [CREATE TABLE](./CREATE_TABLE.md)
-- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
-- [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)
-- [DROP TABLE](./DROP_TABLE.md)
+- [CREATE TABLE](CREATE_TABLE.md)
+- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
+- [SHOW TABLES](SHOW_TABLES.md)
+- [SHOW ALTER TABLE](SHOW_ALTER.md)
+- [DROP TABLE](DROP_TABLE.md)

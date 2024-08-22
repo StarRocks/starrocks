@@ -34,7 +34,7 @@ This topic guides you through querying data from external data sources by using 
       USE catalog_name.db_name;
       ```
 
-5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).
+5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
 
       ```SQL
       SELECT * FROM table_name;

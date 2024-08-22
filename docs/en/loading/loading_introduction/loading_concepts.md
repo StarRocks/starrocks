@@ -67,7 +67,7 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 :::tip
 
-You can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+You can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
 
 :::
 

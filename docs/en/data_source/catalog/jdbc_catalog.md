@@ -159,7 +159,7 @@ DROP Catalog jdbc0;
     USE <catalog_name>.<db_name>;
     ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT * FROM <table_name>;

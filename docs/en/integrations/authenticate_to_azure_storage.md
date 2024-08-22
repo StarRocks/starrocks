@@ -54,7 +54,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -110,7 +110,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -177,7 +177,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls1.use_managed_service_identity` and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls1.use_managed_service_identity` and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -231,7 +231,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -310,7 +310,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -367,7 +367,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -425,7 +425,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure

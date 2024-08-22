@@ -52,8 +52,8 @@ This method is available from v3.2 onwards and currently supports only the Parqu
 
 With `FILES()`, you can:
 
-- Query the data directly from GCS using [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
-- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) (CTAS).
+- Query the data directly from GCS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS).
 - Load the data into an existing table using [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 ### Typical examples

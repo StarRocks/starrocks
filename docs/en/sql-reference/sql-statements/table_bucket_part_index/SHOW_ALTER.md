@@ -63,7 +63,7 @@ Shows the execution of the ongoing ALTER TABLE operations, including:
 
 ## References
 
-- [CREATE TABLE](../data-definition/CREATE_TABLE.md)
-- [ALTER TABLE](../data-definition/ALTER_TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
-- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [CREATE TABLE](CREATE_TABLE.md)
+- [ALTER TABLE](ALTER_TABLE.md)
+- [SHOW TABLES](SHOW_TABLES.md)
+- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)

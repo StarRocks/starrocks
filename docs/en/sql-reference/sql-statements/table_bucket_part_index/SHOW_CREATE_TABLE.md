@@ -135,7 +135,7 @@ PROPERTIES (
 
 ## References
 
-- [CREATE TABLE](../data-definition/CREATE_TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
-- [ALTER TABLE](../data-definition/ALTER_TABLE.md)
-- [DROP TABLE](../data-definition/DROP_TABLE.md)
+- [CREATE TABLE](CREATE_TABLE.md)
+- [SHOW TABLES](SHOW_TABLES.md)
+- [ALTER TABLE](ALTER_TABLE.md)
+- [DROP TABLE](DROP_TABLE.md)

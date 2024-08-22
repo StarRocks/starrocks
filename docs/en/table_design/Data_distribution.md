@@ -918,7 +918,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 #### View the number of buckets
 
-After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
+After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
 
 :::info
 
@@ -957,4 +957,4 @@ As query patterns and data volume evolve in business scenarios, the configuratio
   ALTER TABLE t ORDER BY k2, k1;
   ```
 
-For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).

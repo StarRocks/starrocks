@@ -172,7 +172,7 @@ EXECUTE select_by_id_stmt USING @id2;
 ## Limits
 
 - Currently, StarRocks shared-data clusters do not support hybrid row-column storage.
-- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.

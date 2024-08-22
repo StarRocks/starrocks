@@ -178,7 +178,7 @@ You can use one of the following syntaxes to view the schema of a MaxCompute tab
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
@@ -236,7 +236,7 @@ ANALYZE TABLE mc_table;
 
 ## Manually update metadata cache
 
-By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a MaxCompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
+By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a MaxCompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]

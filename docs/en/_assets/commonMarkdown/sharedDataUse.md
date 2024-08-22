@@ -90,7 +90,7 @@ Shared-data StarRocks clusters support all loading methods provided by StarRocks
 
 ### Query in a shared-data StarRocks cluster
 
-Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) for more information.
+Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) for more information.
 
 > **NOTE**
 >

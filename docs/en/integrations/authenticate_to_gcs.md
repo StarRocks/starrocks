@@ -53,7 +53,7 @@ PROPERTIES
 
 ### File external table
 
-Use the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement to create a file external table named `external_table_gcs` as follows, in order to query a data file named `test_file_external_tbl` from GCS without any metastore:
+Use the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement to create a file external table named `external_table_gcs` as follows, in order to query a data file named `test_file_external_tbl` from GCS without any metastore:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_gcs

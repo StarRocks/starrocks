@@ -15,7 +15,7 @@ You can use this statement to:
 
 Supported statements include:
 
-- [CREATE TABLE AS SELECT](../../data-definition/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
+- [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](../INSERT.md) (from v3.0 onwards)
 - [CACHE SELECT](../../../../data_source/data_cache_warmup.md) (from v3.3 onwards)
 
@@ -39,7 +39,7 @@ AS <etl_statement>
 | task_name          | Yes     | The name of the task.                                                                               |
 | schedule_start     | No      | The start time for the scheduled task.                                                                 |
 | schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
+| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
 
 ## Usage notes
 

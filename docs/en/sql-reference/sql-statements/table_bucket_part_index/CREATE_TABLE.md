@@ -32,7 +32,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 :::tip
 
 - The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../../reference/System_limit.md).
-- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md) for these reserved keywords.
+- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../keywords.md) for these reserved keywords.
 
 :::
 
@@ -96,7 +96,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 - **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
-**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 
 **AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
@@ -401,7 +401,7 @@ When creating a temporary table, you must set `ENGINE` to `olap`.
 
 If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
-The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md) after table creation.
+The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) after table creation.
 
 **Set initial storage medium and automatic storage cooldown time**
 
@@ -439,7 +439,7 @@ PROPERTIES (
 
   For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and the partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The automatic storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the automatic storage cooldown time for this partition is `2023-08-02 00:00:00`.
 
-  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md).
+  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md).
 
 **Usages**
 
@@ -671,7 +671,7 @@ PROPERTIES (
 
 #### Set fast schema evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation.
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
   > **NOTE**
   >
   > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
@@ -1041,8 +1041,8 @@ DISTRIBUTED BY HASH(k2);
 
 ## References
 
-- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
-- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
-- [USE](USE.md)
+- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
+- [SHOW TABLES](SHOW_TABLES.md)
+- [USE](../data-definition/USE.md)
 - [ALTER TABLE](ALTER_TABLE.md)
 - [DROP TABLE](DROP_TABLE.md)

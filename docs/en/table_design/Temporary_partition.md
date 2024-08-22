@@ -12,7 +12,7 @@ You can use the temporary partition feature in the following scenarios:
 
 - Atomic overwrite operation
   
-  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#swap).
+  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#swap).
 
 - Adjust partition data query concurrency
 
@@ -24,7 +24,7 @@ You can use the temporary partition feature in the following scenarios:
 
 ## Create temporary partitions
 
-You can create one or more partitions at a time by using the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) command.
+You can create one or more partitions at a time by using the [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) command.
 
 ### Syntax
 
@@ -94,7 +94,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 ## Show temporary partitions
 
-You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) command.
+You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) command.
 
 ```SQL
 SHOW TEMPORARY PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
@@ -166,7 +166,7 @@ For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql
 
 ## Query data in temporary partitions
 
-You can use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query data in specified temporary partitions.
+You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query data in specified temporary partitions.
 
 ```SQL
 SELECT * FROM
@@ -191,7 +191,7 @@ ON site_access.site_id=site_access1.site_id and site_access.event_day=site_acces
 
 ## Replace original formal partitions with temporary partitions
 
-You can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement to replace the original formal partition with a temporary partition, thereby creating a new formal partition.
+You can use the [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement to replace the original formal partition with a temporary partition, thereby creating a new formal partition.
 
 > **NOTE**
 >

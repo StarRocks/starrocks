@@ -94,11 +94,11 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
     :::note
 
 
-    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
     :::
 
-- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
+- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md).
 
     ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
@@ -106,7 +106,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 
 ### Progress of creating an index
 
-Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
+Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
 
 ```SQL
 SHOW ALTER TABLE COLUMN;
@@ -120,7 +120,7 @@ Each table can only have one ongoing Schema Change task at a time. You cannot cr
 
 ### View an index
 
-View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md).
+View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_INDEX.md).
 
 ```SQL
 SHOW INDEXES FROM lineorder_partial;
@@ -134,7 +134,7 @@ Creating a bitmap index is an asynchronous process. Using the above statement, y
 
 ### Delete an index
 
-Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
+Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/DROP_INDEX.md).
 
 ```SQL
 DROP INDEX lo_orderdate_index ON lineorder_partial;
