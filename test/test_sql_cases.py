@@ -126,7 +126,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        log.info("[TeadDown end]: %s" % self.case_info.name)
+        log.info(f"Execution complete [{self.case_info.name}]!")
 
     # -------------------------------------------
     #         [CASE]
