@@ -107,6 +107,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -1324,6 +1325,10 @@ public class UtFrameUtils {
             }
         };
 
+        mockDML();
+    }
+
+    public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
@@ -1341,6 +1346,12 @@ public class UtFrameUtils {
                             setPartitionVersion(partition, partition.getVisibleVersion() + 1);
                         }
                     }
+                } else if (stmt instanceof DeleteStmt) {
+                    DeleteStmt delete = (DeleteStmt) stmt;
+                    TableName tableName = delete.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    tbl.setHasDelete();
                 }
             }
         };
