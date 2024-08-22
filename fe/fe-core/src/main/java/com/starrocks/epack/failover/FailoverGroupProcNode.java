@@ -47,7 +47,7 @@ public class FailoverGroupProcNode implements ProcNodeInterface {
                 failoverGroup.getName(),
                 failoverGroup.getState().toString(),
                 failoverGroup.getRole().toString(),
-                failoverGroup.getMembers().toString(),
+                failoverGroup.getMembers().values().toString(),
                 failoverGroup.getSchedule().getSchedule(),
                 String.valueOf(failoverGroup.getSchedule().isSuspended()),
                 TimeUtils.longToTimeString(failoverGroup.getSchedule().getScheduledTimeMs()),

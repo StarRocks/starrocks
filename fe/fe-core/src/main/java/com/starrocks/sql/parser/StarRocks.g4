@@ -885,33 +885,32 @@ setDefaultStorageVolumeStatement
 
 createPrimaryFailoverGroupStatement
     : CREATE FAILOVER GROUP (IF NOT EXISTS)? failoverGroupName=identifierOrString
-          catalogsDesc?
-          databasesDesc?
-          tablesDesc?
+          includeTablesDesc?
+          excludeTablesDesc?
           membersDesc
           scheduleDesc
           comment?
           properties?
     ;
 
-catalogsDesc
-    : CATALOGS EQ identifier (',' identifier)*
+includeTablesDesc
+    : INCLUDE_TABLES EQ tableNamesDesc (',' tableNamesDesc)*
     ;
 
-databasesDesc
-    : DATABASES EQ qualifiedName (',' qualifiedName)*
+excludeTablesDesc
+    : EXCLUDE_TABLES EQ tableNamesDesc (',' tableNamesDesc)*
     ;
 
-tablesDesc
-    : TABLES EQ qualifiedName (',' qualifiedName)*
-    ;
-
-scheduleDesc
-    : SCHEDULE EQ string
+tableNamesDesc
+    : identifierOrStringOrStar ('.' identifierOrStringOrStar)*
     ;
 
 membersDesc
     : MEMBERS EQ string ',' string (',' string)*
+    ;
+
+scheduleDesc
+    : SCHEDULE EQ string
     ;
 
 createSecondaryFailoverGroupStatement
@@ -933,9 +932,8 @@ describeFailoverGroupStatement
 
 alterFailoverGroupSetStatement
     : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString SET
-          catalogsDesc?
-          databasesDesc?
-          tablesDesc?
+          includeTablesDesc?
+          excludeTablesDesc?
           membersDesc?
           scheduleDesc?
           comment?
@@ -944,23 +942,18 @@ alterFailoverGroupSetStatement
 
 alterFailoverGroupAddStatement
     : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString ADD
-          catalogsAddDesc?
-          databasesAddDesc?
-          tablesAddDesc?
+          includeTablesAddDesc?
+          excludeTablesAddDesc?
           membersAddDesc?
           properties?
     ;
 
-catalogsAddDesc
-    : identifier (',' identifier)* TO CATALOGS
+includeTablesAddDesc
+    : tableNamesDesc (',' tableNamesDesc)* TO INCLUDE_TABLES
     ;
 
-databasesAddDesc
-    : qualifiedName (',' qualifiedName)* TO DATABASES
-    ;
-
-tablesAddDesc
-    : qualifiedName (',' qualifiedName)* TO TABLES
+excludeTablesAddDesc
+    : tableNamesDesc (',' tableNamesDesc)* TO EXCLUDE_TABLES
     ;
 
 membersAddDesc
@@ -969,22 +962,17 @@ membersAddDesc
 
 alterFailoverGroupRemoveStatement
     : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString REMOVE
-          catalogsRemoveDesc?
-          databasesRemoveDesc?
-          tablesRemoveDesc?
+          includeTablesRemoveDesc?
+          excludeTablesRemoveDesc?
           membersRemoveDesc?
     ;
 
-catalogsRemoveDesc
-    : identifier (',' identifier)* FROM CATALOGS
+includeTablesRemoveDesc
+    : tableNamesDesc (',' tableNamesDesc)* FROM INCLUDE_TABLES
     ;
 
-databasesRemoveDesc
-    : qualifiedName (',' qualifiedName)* FROM DATABASES
-    ;
-
-tablesRemoveDesc
-    : qualifiedName (',' qualifiedName)* FROM TABLES
+excludeTablesRemoveDesc
+    : tableNamesDesc (',' tableNamesDesc)* FROM EXCLUDE_TABLES
     ;
 
 membersRemoveDesc

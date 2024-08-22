@@ -49,14 +49,14 @@ public class CheckReplicatedObjectMetaJobTest {
     public void testCheckCatalogExisted() throws Exception {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCheckCatalogExistedGroup " +
-                        "CATALOGS = default_catalog " +
+                        "INCLUDE_TABLES = default_catalog.*.* " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
         new MockUp<FailoverGroup>() {
             @Mock
             public ReplicatedObjectMeta getObjectMeta() {
@@ -74,14 +74,14 @@ public class CheckReplicatedObjectMetaJobTest {
     public void testCheckDatabaseExisted() throws Exception {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCheckDatabaseExistedGroup " +
-                        "DATABASES = test " +
+                        "INCLUDE_TABLES = test.* " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
         new MockUp<FailoverGroup>() {
             @Mock
             public ReplicatedObjectMeta getObjectMeta() {
@@ -99,14 +99,14 @@ public class CheckReplicatedObjectMetaJobTest {
     public void testCheckTableExisted() throws Exception {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCheckTableExistedGroup " +
-                        "TABLES = test.CheckReplicatedObjectMetaJobTestTable " +
+                        "INCLUDE_TABLES = test.CheckReplicatedObjectMetaJobTestTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
         new MockUp<FailoverGroup>() {
             @Mock
             public ReplicatedObjectMeta getObjectMeta() {

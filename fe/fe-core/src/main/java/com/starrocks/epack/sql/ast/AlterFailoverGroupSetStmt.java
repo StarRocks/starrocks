@@ -13,9 +13,12 @@ import java.util.Map;
 public class AlterFailoverGroupSetStmt extends DdlStmt {
     private final boolean ifExists;
     private final String failoverGroupName;
-    private final List<String> catalogNames;
-    private final List<DatabaseName> databaseNames;
-    private final List<TableName> tableNames;
+    private final List<String> includeCatalogs;
+    private final List<DatabaseName> includeDatabases;
+    private final List<TableName> includeTables;
+    private final List<String> excludeCatalogs;
+    private final List<DatabaseName> excludeDatabases;
+    private final List<TableName> excludeTables;
     private final List<String> members;
     private final String schedule;
     private final Map<String, String> properties;
@@ -24,9 +27,12 @@ public class AlterFailoverGroupSetStmt extends DdlStmt {
     public AlterFailoverGroupSetStmt(
             boolean ifExists,
             String failoverGroupName,
-            List<String> catalogNames,
-            List<DatabaseName> databaseNames,
-            List<TableName> tableNames,
+            List<String> includeCatalogs,
+            List<DatabaseName> includeDatabases,
+            List<TableName> includeTables,
+            List<String> excludeCatalogs,
+            List<DatabaseName> excludeDatabases,
+            List<TableName> excludeTables,
             List<String> members,
             String schedule,
             Map<String, String> properties,
@@ -35,9 +41,12 @@ public class AlterFailoverGroupSetStmt extends DdlStmt {
         super(pos);
         this.ifExists = ifExists;
         this.failoverGroupName = failoverGroupName;
-        this.catalogNames = catalogNames;
-        this.databaseNames = databaseNames;
-        this.tableNames = tableNames;
+        this.includeCatalogs = includeCatalogs;
+        this.includeDatabases = includeDatabases;
+        this.includeTables = includeTables;
+        this.excludeCatalogs = excludeCatalogs;
+        this.excludeDatabases = excludeDatabases;
+        this.excludeTables = excludeTables;
         this.members = members;
         this.schedule = schedule;
         this.properties = properties;
@@ -52,16 +61,28 @@ public class AlterFailoverGroupSetStmt extends DdlStmt {
         return failoverGroupName;
     }
 
-    public List<String> getCatalogNames() {
-        return catalogNames;
+    public List<String> getIncludeCatalogs() {
+        return includeCatalogs;
     }
 
-    public List<DatabaseName> getDatabaseNames() {
-        return databaseNames;
+    public List<DatabaseName> getIncludeDatabases() {
+        return includeDatabases;
     }
 
-    public List<TableName> getTableNames() {
-        return tableNames;
+    public List<TableName> getIncludeTables() {
+        return includeTables;
+    }
+
+    public List<String> getExcludeCatalogs() {
+        return excludeCatalogs;
+    }
+
+    public List<DatabaseName> getExcludeDatabases() {
+        return excludeDatabases;
+    }
+
+    public List<TableName> getExcludeTables() {
+        return excludeTables;
     }
 
     public List<String> getMembers() {

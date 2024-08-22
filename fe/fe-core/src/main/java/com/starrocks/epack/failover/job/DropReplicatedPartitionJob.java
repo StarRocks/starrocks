@@ -18,19 +18,19 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
     private final Database localDatabase;
     private final OlapTable localTable;
     private final String localPartitionName;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
     private final boolean isDropForce;
 
     public DropReplicatedPartitionJob(FailoverGroup failoverGroup, Database remoteDatabase,
             OlapTable remoteTable, Database localDatabase, OlapTable localTable,
-            String localPartitionName, boolean isReplicatedObject, boolean isDropForce) {
+            String localPartitionName, boolean isIncludeObject, boolean isDropForce) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
         this.localTable = localTable;
         this.localPartitionName = localPartitionName;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
         this.isDropForce = isDropForce;
     }
 
@@ -55,7 +55,7 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
         }
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
-                remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
+                remoteDatabase, remoteTable, localDatabase, isIncludeObject);
         job.execute();
     }
 }

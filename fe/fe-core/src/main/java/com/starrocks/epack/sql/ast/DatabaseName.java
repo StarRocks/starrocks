@@ -5,11 +5,17 @@ package com.starrocks.epack.sql.ast;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Objects;
+
 public class DatabaseName implements ParseNode {
     private String catalog;
     private String database;
 
     private final NodePosition pos;
+
+    public DatabaseName(String catalog, String database) {
+        this(catalog, database, NodePosition.ZERO);
+    }
 
     public DatabaseName(String catalog, String database, NodePosition pos) {
         this.catalog = catalog;
@@ -40,5 +46,23 @@ public class DatabaseName implements ParseNode {
     @Override
     public String toString() {
         return catalog + "." + database;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        DatabaseName databaseName = (DatabaseName) o;
+        return Objects.equals(catalog, databaseName.catalog)
+                && Objects.equals(database, databaseName.database);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalog, database);
     }
 }

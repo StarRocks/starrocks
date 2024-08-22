@@ -40,20 +40,22 @@ public class FailoverGroupSQLTest {
     public void testCreatePrimaryFailoverGroup() throws Exception {
         CreatePrimaryFailoverGroupStmt createStmt1 = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group1 " +
-                        "CATALOGS = default_catalog " +
+                        "INCLUDE_TABLES = default_catalog.*.* " +
+                        "EXCLUDE_TABLES = not_existed_db.* " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         DDLStmtExecutor.execute(createStmt1, starRocksAssert.getCtx());
 
         AlterFailoverGroupSetStmt alterStmt1 = (AlterFailoverGroupSetStmt) analyzeSuccess(
                 "ALTER FAILOVER GROUP test_group1 SET " +
-                        "CATALOGS = default_catalog " +
+                        "INCLUDE_TABLES = default_catalog.*.* " +
+                        "EXCLUDE_TABLES = not_existed_db.* " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
         DDLStmtExecutor.execute(alterStmt1, starRocksAssert.getCtx());
 
@@ -77,10 +79,11 @@ public class FailoverGroupSQLTest {
 
         CreatePrimaryFailoverGroupStmt createStmt2 = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group2 " +
-                        "DATABASES = test " +
+                        "INCLUDE_TABLES = test.* " +
+                        "EXCLUDE_TABLES = test.not_existed_table " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         DDLStmtExecutor.execute(createStmt2, starRocksAssert.getCtx());

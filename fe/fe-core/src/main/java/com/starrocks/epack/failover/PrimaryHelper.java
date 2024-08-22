@@ -2,22 +2,18 @@
 
 package com.starrocks.epack.failover;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
-import com.starrocks.leader.MetaHelper;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import org.apache.commons.io.output.NullOutputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,10 +22,9 @@ import java.util.Set;
 
 public class PrimaryHelper {
     private static final Logger LOG = LogManager.getLogger(PrimaryHelper.class);
-    private static final int PUT_IMAGE_TIMEOUT_MS = 3600000;
 
     public static FailoverGroupMember initPrimaryMembers(List<String> memberStrings,
-                                                         Map<String, FailoverGroupMember> members)
+            Map<String, FailoverGroupMember> members)
             throws DdlException {
         FailoverGroupMember primary = null;
         NetworkAddress primaryLeaderAddress = NetworkAddress.getLocalLeaderAddress();
@@ -115,15 +110,8 @@ public class PrimaryHelper {
         return members;
     }
 
-    public static void pushImageTo(String httpHost, int httpPort, long imageVersion, String imageSubDir)
-            throws IOException {
-        String url = "http://" + httpHost + ":" + httpPort + "/put?version=" + imageVersion
-                + "&port=" + Config.http_port + "&subdir=" + imageSubDir + "&is_failover_image=true";
-        MetaHelper.getHttpOutput(url, PUT_IMAGE_TIMEOUT_MS, new NullOutputStream());
-    }
-
     public static TFailoverGroupHandshakeResponse sendHandshakeTo(NetworkAddress address,
-                                                                  TFailoverGroupHandshakeRequest request) {
+            TFailoverGroupHandshakeRequest request) {
         TNetworkAddress thriftAddress = address.toThrift();
         try {
             TFailoverGroupHandshakeResponse response = ThriftRPCRequestExecutor.call(

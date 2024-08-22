@@ -16,14 +16,14 @@ public class CreateReplicatedDatabaseJob extends FailoverGroupJob {
 
     private final Database remoteDatabase;
     private final List<Table> remoteTables; // Null for whole database
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
 
     public CreateReplicatedDatabaseJob(FailoverGroup failoverGroup, Database remoteDatabase,
-            List<Table> remoteTables, boolean isReplicatedObject) {
+            List<Table> remoteTables, boolean isIncludeObject) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTables = remoteTables;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
     }
 
     @Override
@@ -39,7 +39,7 @@ public class CreateReplicatedDatabaseJob extends FailoverGroupJob {
         }
 
         CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
-                remoteDatabase, remoteTables, isReplicatedObject);
+                remoteDatabase, remoteTables, isIncludeObject);
         job.execute();
     }
 }

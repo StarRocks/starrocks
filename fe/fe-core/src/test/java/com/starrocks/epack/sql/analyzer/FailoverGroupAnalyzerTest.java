@@ -34,38 +34,64 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeCreatePrimaryFailoverGroup() {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group " +
-                        "CATALOGS = test_catalog " +
-                        "DATABASES = test_db, test_catalog.test_db " +
-                        "TABLES = test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "INCLUDE_TABLES = test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "EXCLUDE_TABLES = test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
                         "MEMBERS = " +
-                        "'test_member1:SELF'," +
-                        "'test_member2:192.168.0.1:9090'" +
+                                "'test_member1:SELF'," +
+                                "'test_member2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
 
-        Assert.assertNotNull(stmt.getCatalogNames());
-        Assert.assertEquals(1, stmt.getCatalogNames().size());
-        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+        Assert.assertNotNull(stmt.getIncludeCatalogs());
+        Assert.assertEquals(1, stmt.getIncludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getIncludeCatalogs().get(0));
 
-        Assert.assertNotNull(stmt.getDatabaseNames());
-        Assert.assertEquals(2, stmt.getDatabaseNames().size());
-        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
-        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+        Assert.assertNotNull(stmt.getIncludeDatabases());
+        Assert.assertEquals(2, stmt.getIncludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getIncludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(1).getDatabase());
 
-        Assert.assertNotNull(stmt.getTableNames());
-        Assert.assertEquals(3, stmt.getTableNames().size());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
-        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
-        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+        Assert.assertNotNull(stmt.getIncludeTables());
+        Assert.assertEquals(3, stmt.getIncludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getIncludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getIncludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getExcludeCatalogs());
+        Assert.assertEquals(1, stmt.getExcludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getExcludeCatalogs().get(0));
+
+        Assert.assertNotNull(stmt.getExcludeDatabases());
+        Assert.assertEquals(2, stmt.getExcludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getExcludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getExcludeTables());
+        Assert.assertEquals(3, stmt.getExcludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getExcludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getExcludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(2).getTbl());
 
         Assert.assertNotNull(stmt.getMembers());
         Assert.assertEquals(2, stmt.getMembers().size());
@@ -78,7 +104,7 @@ public class FailoverGroupAnalyzerTest {
         analyzeFail(
                 "CREATE FAILOVER GROUP test_group " +
                         "MEMBERS = " +
-                        "'test_member1:SELF', ''" +
+                                "'test_member1:SELF', ''" +
                         "SCHEDULE = '1h'",
                 "Member is empty");
     }
@@ -143,38 +169,64 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeAlterFailoverGroupSet() {
         AlterFailoverGroupSetStmt stmt = (AlterFailoverGroupSetStmt) analyzeSuccess(
                 "ALTER FAILOVER GROUP test_group SET " +
-                        "CATALOGS = test_catalog " +
-                        "DATABASES = test_db, test_catalog.test_db " +
-                        "TABLES = test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "INCLUDE_TABLES = test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "EXCLUDE_TABLES = test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
                         "MEMBERS = " +
-                        "'test_member1:SELF'," +
-                        "'test_member2:192.168.0.1:9090'" +
+                                "'test_member1:SELF'," +
+                                "'test_member2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
 
-        Assert.assertNotNull(stmt.getCatalogNames());
-        Assert.assertEquals(1, stmt.getCatalogNames().size());
-        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+        Assert.assertNotNull(stmt.getIncludeCatalogs());
+        Assert.assertEquals(1, stmt.getIncludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getIncludeCatalogs().get(0));
 
-        Assert.assertNotNull(stmt.getDatabaseNames());
-        Assert.assertEquals(2, stmt.getDatabaseNames().size());
-        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
-        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+        Assert.assertNotNull(stmt.getIncludeDatabases());
+        Assert.assertEquals(2, stmt.getIncludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getIncludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(1).getDatabase());
 
-        Assert.assertNotNull(stmt.getTableNames());
-        Assert.assertEquals(3, stmt.getTableNames().size());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
-        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
-        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+        Assert.assertNotNull(stmt.getIncludeTables());
+        Assert.assertEquals(3, stmt.getIncludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getIncludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getIncludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getExcludeCatalogs());
+        Assert.assertEquals(1, stmt.getExcludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getExcludeCatalogs().get(0));
+
+        Assert.assertNotNull(stmt.getExcludeDatabases());
+        Assert.assertEquals(2, stmt.getExcludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getExcludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getExcludeTables());
+        Assert.assertEquals(3, stmt.getExcludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getExcludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getExcludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(2).getTbl());
 
         Assert.assertNotNull(stmt.getMembers());
         Assert.assertEquals(2, stmt.getMembers().size());
@@ -187,7 +239,7 @@ public class FailoverGroupAnalyzerTest {
         analyzeFail(
                 "ALTER FAILOVER GROUP test_group SET " +
                         "MEMBERS = " +
-                        "'test_member1:SELF', ''",
+                                "'test_member1:SELF', ''",
                 "Member is empty");
 
         analyzeFail(
@@ -200,37 +252,65 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeAlterFailoverGroupAdd() {
         AlterFailoverGroupAddStmt stmt = (AlterFailoverGroupAddStmt) analyzeSuccess(
                 "ALTER FAILOVER GROUP test_group ADD " +
-                        "test_catalog TO CATALOGS " +
-                        "test_db, test_catalog.test_db TO DATABASES " +
-                        "test_table, test_db.test_table, test_catalog.test_db.test_table TO TABLES " +
-                        "'test_member1:SELF'," +
-                        "'test_member2:192.168.0.1:9090' " +
+                                "test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "TO INCLUDE_TABLES " +
+                                "test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "TO EXCLUDE_TABLES " +
+                                "'test_member1:SELF', " +
+                                "'test_member2:192.168.0.1:9090' " +
                         "TO MEMBERS ");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
 
-        Assert.assertNotNull(stmt.getCatalogNames());
-        Assert.assertEquals(1, stmt.getCatalogNames().size());
-        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+        Assert.assertNotNull(stmt.getIncludeCatalogs());
+        Assert.assertEquals(1, stmt.getIncludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getIncludeCatalogs().get(0));
 
-        Assert.assertNotNull(stmt.getDatabaseNames());
-        Assert.assertEquals(2, stmt.getDatabaseNames().size());
-        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
-        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+        Assert.assertNotNull(stmt.getIncludeDatabases());
+        Assert.assertEquals(2, stmt.getIncludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getIncludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(1).getDatabase());
 
-        Assert.assertNotNull(stmt.getTableNames());
-        Assert.assertEquals(3, stmt.getTableNames().size());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
-        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
-        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+        Assert.assertNotNull(stmt.getIncludeTables());
+        Assert.assertEquals(3, stmt.getIncludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getIncludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getIncludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getExcludeCatalogs());
+        Assert.assertEquals(1, stmt.getExcludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getExcludeCatalogs().get(0));
+
+        Assert.assertNotNull(stmt.getExcludeDatabases());
+        Assert.assertEquals(2, stmt.getExcludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getExcludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getExcludeTables());
+        Assert.assertEquals(3, stmt.getExcludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getExcludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getExcludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(2).getTbl());
 
         Assert.assertNotNull(stmt.getMembers());
         Assert.assertEquals(2, stmt.getMembers().size());
@@ -247,37 +327,65 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeAlterFailoverGroupRemove() {
         AlterFailoverGroupRemoveStmt stmt = (AlterFailoverGroupRemoveStmt) analyzeSuccess(
                 "ALTER FAILOVER GROUP test_group REMOVE " +
-                        "test_catalog FROM CATALOGS " +
-                        "test_db, test_catalog.test_db FROM DATABASES " +
-                        "test_table, test_db.test_table, test_catalog.test_db.test_table FROM TABLES " +
-                        "'test_member1:SELF'," +
-                        "'test_member2:192.168.0.1:9090' " +
+                                "test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "FROM INCLUDE_TABLES " +
+                                "test_catalog.*.*, " +
+                                "test_db.*, test_catalog.test_db.*, " +
+                                "test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "FROM EXCLUDE_TABLES " +
+                                "'test_member1:SELF', " +
+                                "'test_member2:192.168.0.1:9090' " +
                         "FROM MEMBERS ");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
 
-        Assert.assertNotNull(stmt.getCatalogNames());
-        Assert.assertEquals(1, stmt.getCatalogNames().size());
-        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+        Assert.assertNotNull(stmt.getIncludeCatalogs());
+        Assert.assertEquals(1, stmt.getIncludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getIncludeCatalogs().get(0));
 
-        Assert.assertNotNull(stmt.getDatabaseNames());
-        Assert.assertEquals(2, stmt.getDatabaseNames().size());
-        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
-        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+        Assert.assertNotNull(stmt.getIncludeDatabases());
+        Assert.assertEquals(2, stmt.getIncludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getIncludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeDatabases().get(1).getDatabase());
 
-        Assert.assertNotNull(stmt.getTableNames());
-        Assert.assertEquals(3, stmt.getTableNames().size());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
-        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
-        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
-        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
-        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
-        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+        Assert.assertNotNull(stmt.getIncludeTables());
+        Assert.assertEquals(3, stmt.getIncludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getIncludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getIncludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getIncludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getIncludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getIncludeTables().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getExcludeCatalogs());
+        Assert.assertEquals(1, stmt.getExcludeCatalogs().size());
+        Assert.assertEquals("test_catalog", stmt.getExcludeCatalogs().get(0));
+
+        Assert.assertNotNull(stmt.getExcludeDatabases());
+        Assert.assertEquals(2, stmt.getExcludeDatabases().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeDatabases().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getExcludeDatabases().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeDatabases().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getExcludeTables());
+        Assert.assertEquals(3, stmt.getExcludeTables().size());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getExcludeTables().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getExcludeTables().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getExcludeTables().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getExcludeTables().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getExcludeTables().get(2).getTbl());
 
         Assert.assertNotNull(stmt.getMembers());
         Assert.assertEquals(2, stmt.getMembers().size());

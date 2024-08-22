@@ -9,11 +9,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.failover.job.CheckReplicatedObjectMetaJob;
-import com.starrocks.epack.failover.job.FailoverGroupJob;
 import com.starrocks.epack.failover.job.UpdateReplicatedObjectJob;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
@@ -26,7 +24,6 @@ import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.replication.ReplicationJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -80,8 +77,11 @@ public class FailoverGroup implements Writable {
     @SerializedName(value = "schedule")
     private volatile ReplicationSchedule schedule; // Managing replication period
 
-    @SerializedName(value = "objectMgr")
-    private volatile ReplicatedObjectMgr objectMgr; // Managing replicated object, such as dbs or tables
+    @SerializedName(value = "includeMgr")
+    private volatile IncludeObjectMgr includeMgr; // Managing include objects, such as dbs or tables
+
+    @SerializedName(value = "excludeMgr")
+    private volatile ExcludeObjectMgr excludeMgr; // Managing exclude objects, such as dbs or tables
 
     private volatile ReplicatedObjectMeta objectMeta; // Replicated object meta from primary
 
@@ -123,8 +123,12 @@ public class FailoverGroup implements Writable {
         return schedule;
     }
 
-    public ReplicatedObjectMgr getObjectMgr() {
-        return objectMgr;
+    public IncludeObjectMgr getIncludeMgr() {
+        return includeMgr;
+    }
+
+    public ExcludeObjectMgr getExcludeMgr() {
+        return excludeMgr;
     }
 
     public ReplicatedObjectMeta getObjectMeta() {
@@ -155,7 +159,8 @@ public class FailoverGroup implements Writable {
         this.comment = Strings.nullToEmpty(stmt.getComment());
         this.properties = stmt.getProperties();
         this.schedule = new ReplicationSchedule(stmt.getSchedule());
-        this.objectMgr = new ReplicatedObjectMgr(stmt);
+        this.includeMgr = new IncludeObjectMgr(stmt);
+        this.excludeMgr = new ExcludeObjectMgr(stmt);
     }
 
     // For secondary
@@ -169,7 +174,8 @@ public class FailoverGroup implements Writable {
         this.comment = "";
         this.properties = new HashMap<>();
         this.schedule = new ReplicationSchedule();
-        this.objectMgr = new ReplicatedObjectMgr();
+        this.includeMgr = new IncludeObjectMgr();
+        this.excludeMgr = new ExcludeObjectMgr();
     }
 
     // For primary
@@ -183,7 +189,8 @@ public class FailoverGroup implements Writable {
         String newComment = stmt.getComment();
         Map<String, String> newProperties = stmt.getProperties();
         ReplicationSchedule newSchedule = null;
-        ReplicatedObjectMgr newObjectMgr = new ReplicatedObjectMgr(stmt, objectMgr);
+        IncludeObjectMgr newIncludeMgr = new IncludeObjectMgr(includeMgr, stmt);
+        ExcludeObjectMgr newExcludeMgr = new ExcludeObjectMgr(excludeMgr, stmt);
 
         if (stmt.getMembers() != null) {
             newMembers = new ConcurrentHashMap<>();
@@ -206,7 +213,8 @@ public class FailoverGroup implements Writable {
         if (newSchedule != null) {
             schedule = newSchedule;
         }
-        objectMgr = newObjectMgr;
+        includeMgr = newIncludeMgr;
+        excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
@@ -220,7 +228,8 @@ public class FailoverGroup implements Writable {
 
         Map<String, FailoverGroupMember> addMembers = null;
         Map<String, String> addProperties = stmt.getProperties();
-        ReplicatedObjectMgr addObjectMgr = new ReplicatedObjectMgr(stmt);
+        IncludeObjectMgr newIncludeMgr = new IncludeObjectMgr(includeMgr, stmt);
+        ExcludeObjectMgr newExcludeMgr = new ExcludeObjectMgr(excludeMgr, stmt);
 
         if (stmt.getMembers() != null) {
             addMembers = PrimaryHelper.initMembers(stmt.getMembers());
@@ -235,13 +244,14 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        objectMgr.addObjects(addObjectMgr);
         if (addMembers != null) {
             members.putAll(addMembers);
         }
         if (addProperties != null) {
             properties.putAll(addProperties);
         }
+        includeMgr = newIncludeMgr;
+        excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
@@ -254,7 +264,8 @@ public class FailoverGroup implements Writable {
         }
 
         List<String> removeMembers = stmt.getMembers();
-        ReplicatedObjectMgr removeObjectMgr = new ReplicatedObjectMgr(stmt);
+        IncludeObjectMgr newIncludeMgr = new IncludeObjectMgr(includeMgr, stmt);
+        ExcludeObjectMgr newExcludeMgr = new ExcludeObjectMgr(excludeMgr, stmt);
 
         if (removeMembers != null) {
             for (String memberName : removeMembers) {
@@ -265,12 +276,13 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        objectMgr.removeObjects(removeObjectMgr);
         if (removeMembers != null) {
             for (String memberName : removeMembers) {
                 members.remove(memberName);
             }
         }
+        includeMgr = newIncludeMgr;
+        excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
@@ -322,6 +334,7 @@ public class FailoverGroup implements Writable {
         primary = newLocalMember;
         state = FailoverGroupState.INITIALIZING;
         role = FailoverGroupRole.PRIMARY;
+        cancelReplication();
 
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
         LOG.info("Failover group promoted to primary, name: {}, members: {}", name, members);
@@ -365,80 +378,13 @@ public class FailoverGroup implements Writable {
         }
     }
 
-    public boolean addReplicatedCatalog(long catalogId) {
-        if (!objectMgr.addCatalog(catalogId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean removeReplicatedCatalog(long catalogId) {
-        if (!objectMgr.removeCatalog(catalogId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean addReplicatedDatabase(long catalogId, long databaseId) {
-        if (!objectMgr.addDatabase(catalogId, databaseId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean removeReplicatedDatabase(long databaseId) {
-        if (!objectMgr.removeDatabase(databaseId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean addReplicatedTable(long catalogId, long databaseId, long tableId) {
-        if (!objectMgr.addTable(catalogId, databaseId, tableId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean removeReplicatedTable(long tableId) {
-        if (!objectMgr.removeTable(tableId)) {
-            return false;
-        }
-
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        return true;
-    }
-
-    public boolean addFailoverGroupJob(FailoverGroupJob job) {
-        return jobExecutor.addFailoverGroupJob(job);
-    }
-
-    public boolean removeFailoverGroupJob(FailoverGroupJob job) {
-        return jobExecutor.removeFailoverGroupJob(job);
-    }
-
-    public boolean addReplicationJob(ReplicationJob job) {
-        return jobExecutor.addReplicationJob(job);
-    }
-
     /*
      * For secondary
      * Handle handshake rpc, primary and secondary handshake
      * RPC client: Primary FE Leader
      * RPC server: Secondary FE Leader
      */
-    public TFailoverGroupHandshakeResponse handleHandshakeRequest(TFailoverGroupHandshakeRequest request)
-            throws UserException {
+    public TFailoverGroupHandshakeResponse handleHandshakeRequest(TFailoverGroupHandshakeRequest request) {
         FailoverGroupMember remotePrimaryMember = FailoverGroupMember.fromThrift(request.getPrimary_member());
         FailoverGroupMember localPrimaryMember = findMember(remotePrimaryMember);
         if (localPrimaryMember == null) {
@@ -452,6 +398,7 @@ public class FailoverGroup implements Writable {
         }
 
         if (!primary.getName().equals(remotePrimaryMember.getName())) {
+            cancelReplication();
             LOG.info("Failover group {} change primary from {} to {}", name, primary, remotePrimaryMember);
         }
 
@@ -473,7 +420,7 @@ public class FailoverGroup implements Writable {
      * RPC server: Primary FE any node
      */
     public TFailoverGroupRequestMetaResponse handleRequestMetaRequest(TFailoverGroupRequestMetaRequest request)
-            throws UserException, IOException {
+            throws IOException {
         if (!role.equals(FailoverGroupRole.PRIMARY)) {
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
             TStatus status = new TStatus(TStatusCode.ILLEGAL_STATE);
@@ -515,9 +462,9 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        long imageVersion = pushNewImage(remoteSecondaryMember.getLeader().getHost(), request.getSecondary_http_port(),
-                getFailoverImageSubDir(), request.getLast_meta_version());
+        long imageVersion = new Storage(GlobalStateMgr.getServingState().getImageDir()).getImageJournalId();
         if (imageVersion <= request.getLast_meta_version()) {
+            triggerNewImage();
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
             TStatus status = new TStatus(TStatusCode.REMOTE_FILE_NOT_FOUND);
             status.addToError_msgs("Current image version " + imageVersion +
@@ -528,35 +475,27 @@ public class FailoverGroup implements Writable {
 
         TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
         response.setStatus(new TStatus(TStatusCode.OK));
-        response.setPrimary_token(GlobalStateMgr.getServingState().getToken());
         response.setMeta_version(imageVersion);
+        response.setPrimary_token(GlobalStateMgr.getServingState().getToken());
+        response.setPrimary_http_port(Config.http_port);
         return response;
     }
 
     /*
      * For primary
-     * Push new image to secondary when receive request meta rpc request
+     * Trigger new image
      */
-    private long pushNewImage(String httpHost, int httpPort, String imageSubDir, long lastMetaVersion)
-            throws IOException, UserException {
-        String imageDir = GlobalStateMgr.getServingState().getImageDir();
-        Storage storage = new Storage(imageDir);
-        long imageVersion = storage.getImageJournalId();
-        if (imageVersion > lastMetaVersion) {
-            PrimaryHelper.pushImageTo(httpHost, httpPort, imageVersion, imageSubDir);
-        } else {
-            if (GlobalStateMgr.getServingState().isLeader()) {
-                // Avoid duplicate trigger new image
-                if (schedule.canSchedule(Config.failover_group_trigger_new_image_interval_sec * 1000)) {
-                    schedule.startSchedule();
-                    GlobalStateMgr.getServingState().triggerNewImage();
-                    schedule.finishSchedule(false);
+    private void triggerNewImage() {
+        if (GlobalStateMgr.getServingState().isLeader()) {
+            // Avoid duplicate trigger new image
+            if (schedule.canSchedule(Config.failover_group_trigger_new_image_interval_sec * 1000)) {
+                schedule.startSchedule();
+                GlobalStateMgr.getServingState().triggerNewImage();
+                schedule.finishSchedule(false);
 
-                    GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-                }
+                GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
             }
         }
-        return imageVersion;
     }
 
     /*
@@ -616,7 +555,7 @@ public class FailoverGroup implements Writable {
      * For secondary
      * Secondary FE Leader send request meta rpc to primary FE any node
      */
-    private void sendRequestMeta() throws IOException, UserException {
+    private void sendRequestMeta() throws IOException {
         if (!role.equals(FailoverGroupRole.SECONDARY) || state.equals(FailoverGroupState.INITIALIZING)) {
             return;
         }
@@ -640,10 +579,14 @@ public class FailoverGroup implements Writable {
         request.setSecondary_member(localMember.toThrift());
         long lastMetaVersion = new Storage(getFailoverImageDir(), true).getImageJournalId();
         request.setLast_meta_version(lastMetaVersion);
-        request.setSecondary_http_port(Config.http_port);
 
         TFailoverGroupRequestMetaResponse response = SecondaryHelper.sendRequestMetaTo(address, request);
         if (response == null || response.getMeta_version() <= lastMetaVersion) {
+            return;
+        }
+
+        if (!SecondaryHelper.pullImage(response.getPrimary_token(), address.getHost(), response.getPrimary_http_port(),
+                response.getMeta_version(), getFailoverImageSubDir())) {
             return;
         }
 
@@ -655,13 +598,7 @@ public class FailoverGroup implements Writable {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             globalStateMgr.loadImage(getFailoverImageDir());
             objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name)
-                    .getObjectMgr().toObjectMeta(response.getPrimary_token()); // Token is not saved in image
-            objectMeta.setLoadMgr(globalStateMgr.getLoadMgr());
-            objectMeta.setRoutineLoadMgr(globalStateMgr.getRoutineLoadMgr());
-            objectMeta.setStreamLoadMgr(globalStateMgr.getStreamLoadMgr());
-            objectMeta.setPipeManager(globalStateMgr.getPipeManager());
-            objectMeta.setDeleteMgr(globalStateMgr.getDeleteMgr());
-            objectMeta.setTableIdToIncrementId(globalStateMgr.getLocalMetastore().tableIdToIncrementId());
+                    .getIncludeMgr().toObjectMeta(response.getPrimary_token()); // Token is not saved in image
         } catch (Exception e) {
             LOG.warn("Failover group {} load image {} failed: ",
                     name, response.getMeta_version(), e);
@@ -676,7 +613,7 @@ public class FailoverGroup implements Writable {
 
     /*
      * For secondary
-     * Handle object meta of primary
+     * Handle object meta replicated from primary
      */
     private void handleObjectMeta() {
         if (!role.equals(FailoverGroupRole.SECONDARY) || state.equals(FailoverGroupState.INITIALIZING)) {
@@ -701,25 +638,26 @@ public class FailoverGroup implements Writable {
         if (schedule.isRoundPending()) {
             if (jobExecutor.isAllJobsFinished()) {
                 if (jobExecutor.hasFailedJobs()) {
-                    schedule.finishSchedule(true);
-                    GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-                    LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs",
-                            name, primary);
+                    handleReplicationFailed();
                 } else {
                     if (state.equals(FailoverGroupState.REPLICATING)) {
                         handleReplicationFinished();
                     } else {
-                        state = FailoverGroupState.RUNNING;
-                        schedule.finishSchedule(false);
-                        jobExecutor.clear();
-                        objectMap.clear();
-                        objectMeta = null;
-                        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-                        LOG.info("Failover group {} finished replication and updating from primary {}", name, primary);
+                        handleUpdatingFinished();
                     }
                 }
             }
         }
+    }
+
+    /*
+     * For secondary
+     * Do some work when replication has failures
+     */
+    private void handleReplicationFailed() {
+        schedule.finishSchedule(true);
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs", name, primary);
     }
 
     /*
@@ -734,6 +672,31 @@ public class FailoverGroup implements Writable {
 
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
         LOG.info("Failover group {} finished replication and start updating from primary {}", name, primary);
+    }
+
+    /*
+     * For secondary
+     * Do some work when updating finished
+     */
+    private void handleUpdatingFinished() {
+        state = FailoverGroupState.RUNNING;
+        schedule.finishSchedule(false);
+        objectMeta = null;
+        jobExecutor.clear();
+        objectMap.clear();
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        LOG.info("Failover group {} finished replication and updating from primary {}", name, primary);
+    }
+
+    /*
+     * For secondary
+     * Cancel replication
+     */
+    public void cancelReplication() {
+        schedule.cancelSchedule();
+        objectMeta = null;
+        jobExecutor.clear();
+        objectMap.clear();
     }
 
     /*
@@ -773,7 +736,7 @@ public class FailoverGroup implements Writable {
      * For secondary
      * Update secondary failover group from primary
      */
-    private void updateFromPrimary(FailoverGroup primaryFailoverGroup) throws DdlException {
+    private void updateFromPrimary(FailoverGroup primaryFailoverGroup) {
         Preconditions.checkState(name.equals(primaryFailoverGroup.name));
 
         state = FailoverGroupState.RUNNING;
@@ -783,7 +746,15 @@ public class FailoverGroup implements Writable {
         comment = primaryFailoverGroup.comment;
         properties = primaryFailoverGroup.properties;
 
-        schedule.setSchedule(primaryFailoverGroup.schedule.getSchedule());
+        try {
+            ReplicationSchedule newSchedule = new ReplicationSchedule(
+                    primaryFailoverGroup.schedule.getSchedule(), schedule);
+            schedule = newSchedule;
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+
+        excludeMgr = primaryFailoverGroup.excludeMgr;
 
         for (FailoverGroupMember member : members.values()) {
             if (!member.getRole().equals(FailoverGroupRole.PRIMARY)) {

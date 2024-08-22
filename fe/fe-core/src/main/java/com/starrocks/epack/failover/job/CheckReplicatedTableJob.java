@@ -31,15 +31,15 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
     private final Database remoteDatabase;
     private final OlapTable remoteTable;
     private final Database localDatabase;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
 
     public CheckReplicatedTableJob(FailoverGroup failoverGroup, Database remoteDatabase,
-            OlapTable remoteTable, Database localDatabase, boolean isReplicatedObject) {
+            OlapTable remoteTable, Database localDatabase, boolean isIncludeObject) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
     }
 
     @Override
@@ -51,14 +51,14 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             Table localTable = localDatabase.getTable(remoteTable.getName());
             if (localTable == null) {
                 CreateReplicatedTableJob job = new CreateReplicatedTableJob(failoverGroup,
-                        remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
+                        remoteDatabase, remoteTable, localDatabase, isIncludeObject);
                 job.start();
                 return;
             }
 
             if (!localTable.isOlapTable()) {
                 DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isReplicatedObject, true);
+                        remoteTable, localDatabase, localTable, isIncludeObject, true);
                 job.start();
                 return;
             }
@@ -67,16 +67,16 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             OlapTable remoteOlapTable = remoteTable;
             if (!checkTableConsistency(localOlapTable)) {
                 DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isReplicatedObject, true);
+                        remoteTable, localDatabase, localTable, isIncludeObject, true);
                 job.start();
                 return;
             }
 
             failoverGroup.getObjectMap().putTableMap(remoteTable.getId(), localTable.getId());
 
-            if (isReplicatedObject) {
-                failoverGroup.addReplicatedTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, localDatabase.getId(),
-                        localTable.getId());
+            if (isIncludeObject) {
+                failoverGroup.getIncludeMgr().addIncludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
+                        localDatabase.getId(), localTable.getId());
             }
 
             boolean needReplication = false;
@@ -96,10 +96,10 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             if (needReplication) {
                 try {
                     ReplicationJob job = new ReplicationJob(null,
-                            failoverGroup.getObjectMeta().getSystemMeta().getToken(),
+                            failoverGroup.getObjectMeta().getClusterToken(),
                             localDatabase.getId(), localOlapTable, remoteOlapTable,
-                            failoverGroup.getObjectMeta().getSystemMeta().getSystemInfoService());
-                    failoverGroup.addReplicationJob(job);
+                            failoverGroup.getObjectMeta().getSystemInfoService());
+                    failoverGroup.getJobExecutor().addReplicationJob(job);
                 } catch (Exception e) {
                     LOG.warn("Failed to create replication job for {}.{} in failover group {}, ",
                             localDatabase.getFullName(), localTable.getName(), failoverGroup.getName(), e);
@@ -123,7 +123,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         Partition localPartition = localTable.getPartition(remotePartition.getName(), false);
         if (localPartition == null) {
             CreateReplicatedPartitionJob job = new CreateReplicatedPartitionJob(failoverGroup, remoteDatabase,
-                    remoteTable, remotePartition, localDatabase, localTable, isReplicatedObject);
+                    remoteTable, remotePartition, localDatabase, localTable, isIncludeObject);
             job.start();
             return null;
         }
@@ -132,11 +132,11 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             if (localTable.getPartitionInfo().isPartitioned()) {
                 DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
                         remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
-                        isReplicatedObject, true);
+                        isIncludeObject, true);
                 job.start();
             } else {
                 DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isReplicatedObject, true);
+                        remoteTable, localDatabase, localTable, isIncludeObject, true);
                 job.start();
             }
             return null;
@@ -159,7 +159,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         if (localPhysicalPartition == null) {
             CreateReplicatedPhysicalPartitionJob job = new CreateReplicatedPhysicalPartitionJob(failoverGroup,
                     remoteDatabase, remoteTable, remotePhysicalPartition, localDatabase, localTable,
-                    localPartition, isReplicatedObject);
+                    localPartition, isIncludeObject);
             job.start();
             return null;
         }

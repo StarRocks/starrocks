@@ -44,18 +44,18 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
     private final Partition remotePartition;
     private final Database localDatabase;
     private final OlapTable localTable;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
 
     public CreateReplicatedPartitionJob(FailoverGroup failoverGroup, Database remoteDatabase,
             OlapTable remoteTable, Partition remotePartition, Database localDatabase,
-            OlapTable localTable, boolean isReplicatedObject) {
+            OlapTable localTable, boolean isIncludeObject) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.remotePartition = remotePartition;
         this.localDatabase = localDatabase;
         this.localTable = localTable;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
     }
 
     @Override
@@ -77,7 +77,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
         }
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
-                remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
+                remoteDatabase, remoteTable, localDatabase, isIncludeObject);
         job.execute();
     }
 

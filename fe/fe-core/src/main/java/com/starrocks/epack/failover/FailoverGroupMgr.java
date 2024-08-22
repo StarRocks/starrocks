@@ -107,7 +107,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
         boolean result = idToFailoverGroup.remove(failoverGroup.getId(), failoverGroup);
         Preconditions.checkState(result);
 
-        // TODO: Cancel running jobs in failover group
+        failoverGroup.cancelReplication();
 
         GlobalStateMgr.getServingState().getEditLog().logDropFailoverGroup(failoverGroup.getId());
         LOG.info("Failover group {} is dropped, cancel all running replication jobs", stmt.getFailoverGroupName());

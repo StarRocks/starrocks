@@ -80,7 +80,24 @@ public class MetaService {
         }
 
         @Override
+        protected boolean needCheckClientIsFe() {
+            return false;
+        }
+
+        @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
+            String tokenStr = request.getSingleParameter(TOKEN);
+            if (Strings.isNullOrEmpty(tokenStr) && !isFromValidFe(request)) {
+                response.appendContent("Invalid client host.");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
+            if (!tokenStr.equals(GlobalStateMgr.getCurrentState().getToken())) {
+                response.appendContent("Invalid token.");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
+
             String versionStr = request.getSingleParameter(VERSION);
             if (Strings.isNullOrEmpty(versionStr)) {
                 response.appendContent("Miss version parameter");

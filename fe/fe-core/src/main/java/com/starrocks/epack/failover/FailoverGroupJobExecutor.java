@@ -91,7 +91,13 @@ public class FailoverGroupJobExecutor {
     }
 
     public void clear() {
+        for (FailoverGroupJob job : failoverGroupJobs) {
+            job.cancel();
+        }
         failoverGroupJobs.clear();
+        for (ReplicationJob job : runningReplicationJobs.values()) {
+            job.cancel();
+        }
         runningReplicationJobs.clear();
         committedReplicationJobs.clear();
         abortedReplicationJobs.clear();

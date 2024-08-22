@@ -44,25 +44,48 @@ public class FailoverGroupAnalyzer {
                 throw new SemanticException("Failover group name is empty");
             }
 
-            List<String> catalogNames = statement.getCatalogNames();
-            if (catalogNames != null) {
-                for (String catalogName : catalogNames) {
+            List<String> includeCatalogs = statement.getIncludeCatalogs();
+            if (includeCatalogs != null) {
+                for (String catalogName : includeCatalogs) {
                     if (Strings.isNullOrEmpty(catalogName)) {
                         throw new SemanticException("Catalog name is empty");
                     }
                 }
             }
 
-            List<DatabaseName> databaseNames = statement.getDatabaseNames();
-            if (databaseNames != null) {
-                for (DatabaseName databaseName : databaseNames) {
+            List<DatabaseName> includeDatabases = statement.getIncludeDatabases();
+            if (includeDatabases != null) {
+                for (DatabaseName databaseName : includeDatabases) {
                     normalizeDatabaseName(databaseName, context);
                 }
             }
 
-            List<TableName> tableNames = statement.getTableNames();
-            if (tableNames != null) {
-                for (TableName tableName : tableNames) {
+            List<TableName> includeTables = statement.getIncludeTables();
+            if (includeTables != null) {
+                for (TableName tableName : includeTables) {
+                    normalizeTableName(tableName, context);
+                }
+            }
+
+            List<String> excludeCatalogs = statement.getExcludeCatalogs();
+            if (excludeCatalogs != null) {
+                for (String catalogName : excludeCatalogs) {
+                    if (Strings.isNullOrEmpty(catalogName)) {
+                        throw new SemanticException("Catalog name is empty");
+                    }
+                }
+            }
+
+            List<DatabaseName> excludeDatabases = statement.getExcludeDatabases();
+            if (excludeDatabases != null) {
+                for (DatabaseName databaseName : excludeDatabases) {
+                    normalizeDatabaseName(databaseName, context);
+                }
+            }
+
+            List<TableName> excludeTables = statement.getExcludeTables();
+            if (excludeTables != null) {
+                for (TableName tableName : excludeTables) {
                     normalizeTableName(tableName, context);
                 }
             }
@@ -152,25 +175,48 @@ public class FailoverGroupAnalyzer {
                 throw new SemanticException("Failover group name is empty");
             }
 
-            List<String> catalogNames = statement.getCatalogNames();
-            if (catalogNames != null) {
-                for (String catalogName : catalogNames) {
+            List<String> includeCatalogs = statement.getIncludeCatalogs();
+            if (includeCatalogs != null) {
+                for (String catalogName : includeCatalogs) {
                     if (Strings.isNullOrEmpty(catalogName)) {
                         throw new SemanticException("Catalog name is empty");
                     }
                 }
             }
 
-            List<DatabaseName> databaseNames = statement.getDatabaseNames();
-            if (databaseNames != null) {
-                for (DatabaseName databaseName : databaseNames) {
+            List<DatabaseName> includeDatabases = statement.getIncludeDatabases();
+            if (includeDatabases != null) {
+                for (DatabaseName databaseName : includeDatabases) {
                     normalizeDatabaseName(databaseName, context);
                 }
             }
 
-            List<TableName> tableNames = statement.getTableNames();
-            if (tableNames != null) {
-                for (TableName tableName : tableNames) {
+            List<TableName> includeTables = statement.getIncludeTables();
+            if (includeTables != null) {
+                for (TableName tableName : includeTables) {
+                    normalizeTableName(tableName, context);
+                }
+            }
+
+            List<String> excludeCatalogs = statement.getExcludeCatalogs();
+            if (excludeCatalogs != null) {
+                for (String catalogName : excludeCatalogs) {
+                    if (Strings.isNullOrEmpty(catalogName)) {
+                        throw new SemanticException("Catalog name is empty");
+                    }
+                }
+            }
+
+            List<DatabaseName> excludeDatabases = statement.getExcludeDatabases();
+            if (excludeDatabases != null) {
+                for (DatabaseName databaseName : excludeDatabases) {
+                    normalizeDatabaseName(databaseName, context);
+                }
+            }
+
+            List<TableName> excludeTables = statement.getExcludeTables();
+            if (excludeTables != null) {
+                for (TableName tableName : excludeTables) {
                     normalizeTableName(tableName, context);
                 }
             }
@@ -219,25 +265,48 @@ public class FailoverGroupAnalyzer {
                 throw new SemanticException("Failover group name is empty");
             }
 
-            List<String> catalogNames = statement.getCatalogNames();
-            if (catalogNames != null) {
-                for (String catalogName : catalogNames) {
+            List<String> includeCatalogs = statement.getIncludeCatalogs();
+            if (includeCatalogs != null) {
+                for (String catalogName : includeCatalogs) {
                     if (Strings.isNullOrEmpty(catalogName)) {
                         throw new SemanticException("Catalog name is empty");
                     }
                 }
             }
 
-            List<DatabaseName> databaseNames = statement.getDatabaseNames();
-            if (databaseNames != null) {
-                for (DatabaseName databaseName : databaseNames) {
+            List<DatabaseName> includeDatabases = statement.getIncludeDatabases();
+            if (includeDatabases != null) {
+                for (DatabaseName databaseName : includeDatabases) {
                     normalizeDatabaseName(databaseName, context);
                 }
             }
 
-            List<TableName> tableNames = statement.getTableNames();
-            if (tableNames != null) {
-                for (TableName tableName : tableNames) {
+            List<TableName> includeTables = statement.getIncludeTables();
+            if (includeTables != null) {
+                for (TableName tableName : includeTables) {
+                    normalizeTableName(tableName, context);
+                }
+            }
+
+            List<String> excludeCatalogs = statement.getExcludeCatalogs();
+            if (excludeCatalogs != null) {
+                for (String catalogName : excludeCatalogs) {
+                    if (Strings.isNullOrEmpty(catalogName)) {
+                        throw new SemanticException("Catalog name is empty");
+                    }
+                }
+            }
+
+            List<DatabaseName> excludeDatabases = statement.getExcludeDatabases();
+            if (excludeDatabases != null) {
+                for (DatabaseName databaseName : excludeDatabases) {
+                    normalizeDatabaseName(databaseName, context);
+                }
+            }
+
+            List<TableName> excludeTables = statement.getExcludeTables();
+            if (excludeTables != null) {
+                for (TableName tableName : excludeTables) {
                     normalizeTableName(tableName, context);
                 }
             }
@@ -268,31 +337,54 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement,
-                                                           ConnectContext context) {
+                ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
             }
 
-            List<String> catalogNames = statement.getCatalogNames();
-            if (catalogNames != null) {
-                for (String catalogName : catalogNames) {
+            List<String> includeCatalogs = statement.getIncludeCatalogs();
+            if (includeCatalogs != null) {
+                for (String catalogName : includeCatalogs) {
                     if (Strings.isNullOrEmpty(catalogName)) {
                         throw new SemanticException("Catalog name is empty");
                     }
                 }
             }
 
-            List<DatabaseName> databaseNames = statement.getDatabaseNames();
-            if (databaseNames != null) {
-                for (DatabaseName databaseName : databaseNames) {
+            List<DatabaseName> includeDatabases = statement.getIncludeDatabases();
+            if (includeDatabases != null) {
+                for (DatabaseName databaseName : includeDatabases) {
                     normalizeDatabaseName(databaseName, context);
                 }
             }
 
-            List<TableName> tableNames = statement.getTableNames();
-            if (tableNames != null) {
-                for (TableName tableName : tableNames) {
+            List<TableName> includeTables = statement.getIncludeTables();
+            if (includeTables != null) {
+                for (TableName tableName : includeTables) {
+                    normalizeTableName(tableName, context);
+                }
+            }
+
+            List<String> excludeCatalogs = statement.getExcludeCatalogs();
+            if (excludeCatalogs != null) {
+                for (String catalogName : excludeCatalogs) {
+                    if (Strings.isNullOrEmpty(catalogName)) {
+                        throw new SemanticException("Catalog name is empty");
+                    }
+                }
+            }
+
+            List<DatabaseName> excludeDatabases = statement.getExcludeDatabases();
+            if (excludeDatabases != null) {
+                for (DatabaseName databaseName : excludeDatabases) {
+                    normalizeDatabaseName(databaseName, context);
+                }
+            }
+
+            List<TableName> excludeTables = statement.getExcludeTables();
+            if (excludeTables != null) {
+                for (TableName tableName : excludeTables) {
                     normalizeTableName(tableName, context);
                 }
             }
@@ -311,7 +403,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement,
-                                                            ConnectContext context) {
+                ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -321,7 +413,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement,
-                                                            ConnectContext context) {
+                ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -331,7 +423,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement,
-                                                            ConnectContext context) {
+                ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -341,7 +433,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement,
-                                                           ConnectContext context) {
+                ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");

@@ -20,17 +20,17 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
     private final OlapTable remoteTable;
     private final Database localDatabase;
     private final Table localTable;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
     private final boolean isDropForce;
 
     public DropReplicatedTableJob(FailoverGroup failoverGroup, Database remoteDatabase, OlapTable remoteTable,
-            Database localDatabase, Table localTable, boolean isReplicatedObject, boolean isDropForce) {
+            Database localDatabase, Table localTable, boolean isIncludeObject, boolean isDropForce) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
         this.localTable = localTable;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
         this.isDropForce = isDropForce;
     }
 
@@ -50,8 +50,8 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
             return;
         }
 
-        if (isReplicatedObject) {
-            failoverGroup.removeReplicatedTable(localTable.getId());
+        if (isIncludeObject) {
+            failoverGroup.getIncludeMgr().removeIncludeTable(localTable.getId());
         }
 
         if (remoteDatabase == null || remoteTable == null) {
@@ -59,7 +59,7 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
         }
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
-                remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
+                remoteDatabase, remoteTable, localDatabase, isIncludeObject);
         job.execute();
     }
 }

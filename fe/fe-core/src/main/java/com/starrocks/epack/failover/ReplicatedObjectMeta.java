@@ -12,31 +12,13 @@ import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ReplicatedObjectMeta {
-    public static class SystemMeta {
-        private final String token;
-
-        private final SystemInfoService systemInfoService;
-
-        public SystemMeta(String token, SystemInfoService systemInfoService) {
-            this.token = token;
-            this.systemInfoService = systemInfoService;
-        }
-
-        public String getToken() {
-            return token;
-        }
-
-        public SystemInfoService getSystemInfoService() {
-            return systemInfoService;
-        }
-    }
-
     public static class CatalogMeta {
         // Null means default catalog
         private final Catalog catalog;
@@ -114,32 +96,38 @@ public class ReplicatedObjectMeta {
         }
     }
 
-    private final SystemMeta systemMeta;
+    private final String clusterToken;
+    private final SystemInfoService systemInfoService;
 
     private final Map<Long, CatalogMeta> catalogMetas = Maps.newConcurrentMap();
-
     private final Map<Long, DatabaseMeta> databaseMetas = Maps.newConcurrentMap();
-
     private final Map<Long, TableMeta> tableMetas = Maps.newConcurrentMap();
 
-    private LoadMgr loadMgr;
+    private final LoadMgr loadMgr;
+    private final RoutineLoadMgr routineLoadMgr;
+    private final StreamLoadMgr streamLoadMgr;
+    private final PipeManager pipeManager;
+    private final DeleteMgr deleteMgr;
 
-    private RoutineLoadMgr routineLoadMgr;
+    private final ConcurrentHashMap<Long, Long> tableIdToIncrementId;
 
-    private StreamLoadMgr streamLoadMgr;
-
-    private PipeManager pipeManager;
-
-    private DeleteMgr deleteMgr;
-
-    private ConcurrentHashMap<Long, Long> tableIdToIncrementId;
-
-    public ReplicatedObjectMeta(SystemMeta systemMeta) {
-        this.systemMeta = systemMeta;
+    public ReplicatedObjectMeta(String clusterToken, GlobalStateMgr globalStateMgr) {
+        this.clusterToken = clusterToken != null ? clusterToken : globalStateMgr.getToken();
+        this.systemInfoService = globalStateMgr.getNodeMgr().getClusterInfo();
+        this.loadMgr = globalStateMgr.getLoadMgr();
+        this.routineLoadMgr = globalStateMgr.getRoutineLoadMgr();
+        this.streamLoadMgr = globalStateMgr.getStreamLoadMgr();
+        this.pipeManager = globalStateMgr.getPipeManager();
+        this.deleteMgr = globalStateMgr.getDeleteMgr();
+        this.tableIdToIncrementId = globalStateMgr.getLocalMetastore().tableIdToIncrementId();
     }
 
-    public SystemMeta getSystemMeta() {
-        return systemMeta;
+    public String getClusterToken() {
+        return clusterToken;
+    }
+
+    public SystemInfoService getSystemInfoService() {
+        return systemInfoService;
     }
 
     public Map<Long, CatalogMeta> getCatalogMetas() {
@@ -194,47 +182,23 @@ public class ReplicatedObjectMeta {
         return loadMgr;
     }
 
-    public void setLoadMgr(LoadMgr loadMgr) {
-        this.loadMgr = loadMgr;
-    }
-
     public RoutineLoadMgr getRoutineLoadMgr() {
         return routineLoadMgr;
-    }
-
-    public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
-        this.routineLoadMgr = routineLoadMgr;
     }
 
     public StreamLoadMgr getStreamLoadMgr() {
         return streamLoadMgr;
     }
 
-    public void setStreamLoadMgr(StreamLoadMgr streamLoadMgr) {
-        this.streamLoadMgr = streamLoadMgr;
-    }
-
     public PipeManager getPipeManager() {
         return pipeManager;
-    }
-
-    public void setPipeManager(PipeManager pipeManager) {
-        this.pipeManager = pipeManager;
     }
 
     public DeleteMgr getDeleteMgr() {
         return deleteMgr;
     }
 
-    public void setDeleteMgr(DeleteMgr deleteMgr) {
-        this.deleteMgr = deleteMgr;
-    }
-
     public ConcurrentHashMap<Long, Long> getTableIdToIncrementId() {
         return tableIdToIncrementId;
-    }
-
-    public void setTableIdToIncrementId(ConcurrentHashMap<Long, Long> tableIdToIncrementId) {
-        this.tableIdToIncrementId = tableIdToIncrementId;
     }
 }

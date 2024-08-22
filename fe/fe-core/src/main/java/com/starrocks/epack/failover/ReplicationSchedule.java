@@ -14,7 +14,7 @@ public class ReplicationSchedule {
     private static final Logger LOG = LogManager.getLogger(FailoverGroup.class);
 
     @SerializedName(value = "schedule")
-    private volatile String schedule; // Schedule string, such as "1s", "10m", "5h", "1d"
+    private final String schedule; // Schedule string, such as "1s", "10m", "5h", "1d"
 
     @SerializedName(value = "scheduledTimeMs")
     private volatile long scheduledTimeMs; // A replication started time
@@ -76,11 +76,6 @@ public class ReplicationSchedule {
         return schedule;
     }
 
-    public void setSchedule(String schedule) throws DdlException {
-        parseSchedule(schedule);
-        this.schedule = schedule;
-    }
-
     public long getScheduledTimeMs() {
         return scheduledTimeMs;
     }
@@ -133,7 +128,7 @@ public class ReplicationSchedule {
         return finishedTimeMs == 0 && roundFinishedTimeMs != 0;
     }
 
-    public boolean needSchedule() throws DdlException {
+    public boolean needSchedule() {
         if (isPending()) {
             if (isRoundPending()) {
                 return false;
@@ -186,10 +181,23 @@ public class ReplicationSchedule {
         forceSchedule = false;
     }
 
+    public void cancelSchedule() {
+        this.scheduledTimeMs = 0;
+        this.finishedTimeMs = 0;
+        this.lastScheduledTimeMs = 0;
+        this.roundScheduledTimeMs = 0;
+        this.roundFinishedTimeMs = 0;
+        this.forceSchedule = false;
+    }
+
     // TODO: Support cron expression
-    private long getNextScheduleTimeMs() throws DdlException {
-        long periodMs = parseSchedule(schedule);
-        return lastScheduledTimeMs + periodMs;
+    private long getNextScheduleTimeMs() {
+        try {
+            long periodMs = parseSchedule(schedule);
+            return lastScheduledTimeMs + periodMs;
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private long parseSchedule(String schedule) throws DdlException {

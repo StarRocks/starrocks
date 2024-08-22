@@ -17,17 +17,17 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
     private final Database remoteDatabase;
     private final List<Table> remoteTables; // Null for whole database
     private final Database localDatabase;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
     private final boolean isDropForce;
 
     public DropReplicatedDatabaseJob(FailoverGroup failoverGroup, Database remoteDatabase,
-            List<Table> remoteTables, Database localDatabase, boolean isReplicatedObject,
+            List<Table> remoteTables, Database localDatabase, boolean isIncludeObject,
             boolean isDropForce) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTables = remoteTables;
         this.localDatabase = localDatabase;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
         this.isDropForce = isDropForce;
     }
 
@@ -43,8 +43,8 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
             return;
         }
 
-        if (isReplicatedObject) {
-            failoverGroup.removeReplicatedDatabase(localDatabase.getId());
+        if (isIncludeObject) {
+            failoverGroup.getIncludeMgr().removeIncludeDatabase(localDatabase.getId());
         }
 
         if (remoteDatabase == null) {
@@ -52,7 +52,7 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
         }
 
         CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
-                remoteDatabase, remoteTables, isReplicatedObject);
+                remoteDatabase, remoteTables, isIncludeObject);
         job.execute();
     }
 }

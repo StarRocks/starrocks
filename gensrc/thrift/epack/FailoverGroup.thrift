@@ -33,11 +33,11 @@ struct TFailoverGroupRequestMetaRequest {
     1: optional string failover_group_name
     2: optional TFailoverGroupMember secondary_member
     3: optional i64 last_meta_version
-    4: optional i32 secondary_http_port
 }
 
 struct TFailoverGroupRequestMetaResponse {
     1: optional Status.TStatus status
-    2: optional string primary_token
-    3: optional i64 meta_version
+    2: optional i64 meta_version
+    3: optional string primary_token
+    4: optional i32 primary_http_port
 }

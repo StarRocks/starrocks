@@ -52,15 +52,15 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
     private final Database remoteDatabase;
     private final OlapTable remoteTable;
     private final Database localDatabase;
-    private final boolean isReplicatedObject;
+    private final boolean isIncludeObject;
 
     public CreateReplicatedTableJob(FailoverGroup failoverGroup, Database remoteDatabase,
-            OlapTable remoteTable, Database localDatabase, boolean isReplicatedObject) {
+            OlapTable remoteTable, Database localDatabase, boolean isIncludeObject) {
         super(failoverGroup);
         this.remoteDatabase = remoteDatabase;
         this.remoteTable = remoteTable;
         this.localDatabase = localDatabase;
-        this.isReplicatedObject = isReplicatedObject;
+        this.isIncludeObject = isIncludeObject;
     }
 
     @Override
@@ -78,7 +78,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         }
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup,
-                remoteDatabase, remoteTable, localDatabase, isReplicatedObject);
+                remoteDatabase, remoteTable, localDatabase, isIncludeObject);
         job.execute();
     }
 

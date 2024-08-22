@@ -3173,6 +3173,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static int failover_group_job_threads = 4;
     @ConfField(mutable = true)
+    public static int failover_group_pull_image_timeout_sec = 30;
+    @ConfField(mutable = true)
     public static int failover_group_trigger_new_image_interval_sec = 10;
 
 

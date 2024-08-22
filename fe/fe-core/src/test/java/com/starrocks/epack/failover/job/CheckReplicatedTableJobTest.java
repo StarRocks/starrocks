@@ -51,14 +51,14 @@ public class CheckReplicatedTableJobTest {
     public void testCheckTableExisted() throws Exception {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCheckDatabaseExistedGroup " +
-                        "TABLES = test.CheckReplicatedTableJobTestTable " +
+                        "INCLUDE_TABLES = test.CheckReplicatedTableJobTestTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 

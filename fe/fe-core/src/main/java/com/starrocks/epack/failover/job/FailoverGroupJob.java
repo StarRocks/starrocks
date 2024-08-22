@@ -10,6 +10,7 @@ public abstract class FailoverGroupJob implements Runnable {
     private static final Logger LOG = LogManager.getLogger(FailoverGroupJob.class);
 
     protected final FailoverGroup failoverGroup;
+    protected volatile boolean canceled = false;
 
     protected FailoverGroupJob(FailoverGroup failoverGroup) {
         this.failoverGroup = failoverGroup;
@@ -20,17 +21,25 @@ public abstract class FailoverGroupJob implements Runnable {
     }
 
     public void start() {
-        failoverGroup.addFailoverGroupJob(this);
+        failoverGroup.getJobExecutor().addFailoverGroupJob(this);
+    }
+
+    public void cancel() {
+        canceled = true;
     }
 
     @Override
     public final void run() {
+        if (canceled) {
+            return;
+        }
+
         try {
             execute();
         } catch (Exception e) {
             LOG.warn("Failed to execute failover group job in failover group {}, ", failoverGroup.getName(), e);
         } finally {
-            failoverGroup.removeFailoverGroupJob(this);
+            failoverGroup.getJobExecutor().removeFailoverGroupJob(this);
         }
     }
 

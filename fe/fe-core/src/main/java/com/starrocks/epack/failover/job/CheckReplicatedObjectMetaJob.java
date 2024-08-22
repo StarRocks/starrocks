@@ -38,8 +38,19 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
                 continue;
             }
 
+            if (failoverGroup.getExcludeMgr().isExcludeCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                LOG.warn("Ignore remote exclude catalog {}", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                continue;
+            }
+
             Set<String> databaseNames = Sets.newHashSet();
             for (Database remoteDatabase : catalogMeta.getDatabases().values()) {
+                if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        remoteDatabase.getFullName())) {
+                    LOG.warn("Ignore remote exclude database {}", remoteDatabase.getFullName());
+                    continue;
+                }
+
                 CheckReplicatedDatabaseJob job = new CheckReplicatedDatabaseJob(failoverGroup,
                         remoteDatabase, false);
                 job.start();
@@ -47,10 +58,14 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
                 databaseNames.add(remoteDatabase.getFullName());
             }
 
-            failoverGroup.addReplicatedCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
+            failoverGroup.getIncludeMgr().addIncludeCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
 
             // Drop deleted databases in catalog
-            for (Database localDatabase : failoverGroup.getObjectMgr().getCatalogs().get(null).values()) {
+            for (Database localDatabase : failoverGroup.getIncludeMgr().getIncludeCatalogs().get(null).values()) {
+                if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        localDatabase.getFullName())) {
+                    continue;
+                }
                 if (!databaseNames.contains(localDatabase.getFullName())) {
                     DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, null, null,
                             localDatabase, false, false);
@@ -60,16 +75,24 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         }
 
         // Remove deleted catalog
-        if (failoverGroup.getObjectMeta().getCatalogMetas().isEmpty() && !failoverGroup.getObjectMgr().getCatalogs().isEmpty()) {
-            failoverGroup.removeReplicatedCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
+        if (failoverGroup.getObjectMeta().getCatalogMetas().isEmpty()
+                && !failoverGroup.getIncludeMgr().getIncludeCatalogs().isEmpty()) {
+            failoverGroup.getIncludeMgr().removeIncludeCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
         }
     }
 
     private void checkReplicatedDatabases() {
         Set<String> databaseNames = Sets.newHashSet();
-        for (ReplicatedObjectMeta.DatabaseMeta databaseMeta : failoverGroup.getObjectMeta().getDatabaseMetas().values()) {
+        for (ReplicatedObjectMeta.DatabaseMeta databaseMeta : failoverGroup.getObjectMeta().getDatabaseMetas()
+                .values()) {
             if (!databaseMeta.isInternalCatalog()) {
                 LOG.warn("Ignore remote external catalog {}", databaseMeta.getCatalog().getName());
+                continue;
+            }
+
+            if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    databaseMeta.getDatabase().getFullName())) {
+                LOG.warn("Ignore remote exclude database {}", databaseMeta.getDatabase().getFullName());
                 continue;
             }
 
@@ -81,7 +104,11 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         }
 
         // Drop deleted databases
-        for (Database localDatabase : failoverGroup.getObjectMgr().getDatabases().values()) {
+        for (Database localDatabase : failoverGroup.getIncludeMgr().getIncludeDatabases().values()) {
+            if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    localDatabase.getFullName())) {
+                continue;
+            }
             if (!databaseNames.contains(localDatabase.getFullName())) {
                 DropReplicatedDatabaseJob job = new DropReplicatedDatabaseJob(failoverGroup, null, null,
                         localDatabase, true, false);
@@ -99,6 +126,13 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
                 continue;
             }
 
+            if (failoverGroup.getExcludeMgr().isExcludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName())) {
+                LOG.warn("Ignore remote exclude table {}.{}", tableMeta.getDatabase().getFullName(),
+                        tableMeta.getTable().getName());
+                continue;
+            }
+
             databaseToTables.computeIfAbsent(tableMeta.getDatabase(), key -> Lists.newArrayList())
                     .add(tableMeta.getTable());
             databaseToTableNames.computeIfAbsent(tableMeta.getDatabase().getFullName(), key -> Sets.newHashSet())
@@ -112,13 +146,18 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
         }
 
         // Drop deleted tables
-        for (Map.Entry<Database, Map<Long, Table>> entry : failoverGroup.getObjectMgr().getTables().entrySet()) {
+        for (Map.Entry<Database, Map<Long, Table>> entry : failoverGroup.getIncludeMgr().getIncludeTables()
+                .entrySet()) {
             Set<String> tableNames = databaseToTableNames.get(entry.getKey().getFullName());
             if (tableNames == null) {
                 continue;
             }
 
             for (Table localTable : entry.getValue().values()) {
+                if (failoverGroup.getExcludeMgr().isExcludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        entry.getKey().getFullName(), localTable.getName())) {
+                    continue;
+                }
                 if (!tableNames.contains(localTable.getName())) {
                     DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, null,
                             null, entry.getKey(), localTable, true, false);

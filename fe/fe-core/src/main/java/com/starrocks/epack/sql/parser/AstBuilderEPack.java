@@ -2,12 +2,14 @@
 
 package com.starrocks.epack.sql.parser;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.AddBackendClauseEPack;
 import com.starrocks.epack.sql.ast.AddComputeNodeClauseEPack;
@@ -634,17 +636,26 @@ public class AstBuilderEPack extends AstBuilder {
             StarRocksParser.CreatePrimaryFailoverGroupStatementContext context) {
         boolean ifNotExist = context.IF() != null;
         String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
-        List<String> catalogNames = parseCatalogsDescStatement(context.catalogsDesc());
-        List<DatabaseName> databaseNames = parseDatabasesDescStatement(context.databasesDesc());
-        List<TableName> tableNames = parseTablesDescStatement(context.tablesDesc());
+        List<String> includeCatalogs = new ArrayList<>();
+        List<DatabaseName> includeDatabases = new ArrayList<>();
+        List<TableName> includeTables = new ArrayList<>();
+        convertTableNames(parseIncludeTablesDescStatement(context.includeTablesDesc()),
+                includeCatalogs, includeDatabases, includeTables);
+        List<String> excludeCatalogs = new ArrayList<>();
+        List<DatabaseName> excludeDatabases = new ArrayList<>();
+        List<TableName> excludeTables = new ArrayList<>();
+        convertTableNames(parseExcludeTablesDescStatement(context.excludeTablesDesc()),
+                excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
         Map<String, String> properties = getProperties(context.properties());
         String comment = context.comment() == null ? null
                 : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
-        return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName, catalogNames,
-                databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
+        return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName,
+                includeCatalogs, includeDatabases, includeTables,
+                excludeCatalogs, excludeDatabases, excludeTables,
+                members, schedule, properties, comment, createPos(context));
     }
 
     @Override
@@ -689,9 +700,16 @@ public class AstBuilderEPack extends AstBuilder {
             StarRocksParser.AlterFailoverGroupSetStatementContext context) {
         boolean ifNotExist = context.IF() != null;
         String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
-        List<String> catalogNames = parseCatalogsDescStatement(context.catalogsDesc());
-        List<DatabaseName> databaseNames = parseDatabasesDescStatement(context.databasesDesc());
-        List<TableName> tableNames = parseTablesDescStatement(context.tablesDesc());
+        List<String> includeCatalogs = new ArrayList<>();
+        List<DatabaseName> includeDatabases = new ArrayList<>();
+        List<TableName> includeTables = new ArrayList<>();
+        convertTableNames(parseIncludeTablesDescStatement(context.includeTablesDesc()),
+                includeCatalogs, includeDatabases, includeTables);
+        List<String> excludeCatalogs = new ArrayList<>();
+        List<DatabaseName> excludeDatabases = new ArrayList<>();
+        List<TableName> excludeTables = new ArrayList<>();
+        convertTableNames(parseExcludeTablesDescStatement(context.excludeTablesDesc()),
+                excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = context.scheduleDesc() == null ? null
                 : ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
@@ -699,8 +717,10 @@ public class AstBuilderEPack extends AstBuilder {
         String comment = context.comment() == null ? null
                 : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
-        return new AlterFailoverGroupSetStmt(ifNotExist, failoverGroupName, catalogNames,
-                databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
+        return new AlterFailoverGroupSetStmt(ifNotExist, failoverGroupName,
+                includeCatalogs, includeDatabases, includeTables,
+                excludeCatalogs, excludeDatabases, excludeTables,
+                members, schedule, properties, comment, createPos(context));
     }
 
     @Override
@@ -708,14 +728,23 @@ public class AstBuilderEPack extends AstBuilder {
             StarRocksParser.AlterFailoverGroupAddStatementContext context) {
         boolean ifNotExist = context.IF() != null;
         String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
-        List<String> catalogNames = parseCatalogsAddDescStatement(context.catalogsAddDesc());
-        List<DatabaseName> databaseNames = parseDatabasesAddDescStatement(context.databasesAddDesc());
-        List<TableName> tableNames = parseTablesAddDescStatement(context.tablesAddDesc());
+        List<String> includeCatalogs = new ArrayList<>();
+        List<DatabaseName> includeDatabases = new ArrayList<>();
+        List<TableName> includeTables = new ArrayList<>();
+        convertTableNames(parseIncludeTablesAddDescStatement(context.includeTablesAddDesc()),
+                includeCatalogs, includeDatabases, includeTables);
+        List<String> excludeCatalogs = new ArrayList<>();
+        List<DatabaseName> excludeDatabases = new ArrayList<>();
+        List<TableName> excludeTables = new ArrayList<>();
+        convertTableNames(parseExcludeTablesAddDescStatement(context.excludeTablesAddDesc()),
+                excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersAddDescStatement(context.membersAddDesc());
         Map<String, String> properties = getProperties(context.properties());
 
-        return new AlterFailoverGroupAddStmt(ifNotExist, failoverGroupName, catalogNames,
-                databaseNames, tableNames, members, properties, createPos(context));
+        return new AlterFailoverGroupAddStmt(ifNotExist, failoverGroupName,
+                includeCatalogs, includeDatabases, includeTables,
+                excludeCatalogs, excludeDatabases, excludeTables,
+                members, properties, createPos(context));
     }
 
     @Override
@@ -723,13 +752,22 @@ public class AstBuilderEPack extends AstBuilder {
             StarRocksParser.AlterFailoverGroupRemoveStatementContext context) {
         boolean ifNotExist = context.IF() != null;
         String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
-        List<String> catalogNames = parseCatalogsRemoveDescStatement(context.catalogsRemoveDesc());
-        List<DatabaseName> databaseNames = parseDatabasesRemoveDescStatement(context.databasesRemoveDesc());
-        List<TableName> tableNames = parseTablesRemoveDescStatement(context.tablesRemoveDesc());
+        List<String> includeCatalogs = new ArrayList<>();
+        List<DatabaseName> includeDatabases = new ArrayList<>();
+        List<TableName> includeTables = new ArrayList<>();
+        convertTableNames(parseIncludeTablesRemoveDescStatement(context.includeTablesRemoveDesc()),
+                includeCatalogs, includeDatabases, includeTables);
+        List<String> excludeCatalogs = new ArrayList<>();
+        List<DatabaseName> excludeDatabases = new ArrayList<>();
+        List<TableName> excludeTables = new ArrayList<>();
+        convertTableNames(parseExcludeTablesRemoveDescStatement(context.excludeTablesRemoveDesc()),
+                excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersRemoveDescStatement(context.membersRemoveDesc());
 
-        return new AlterFailoverGroupRemoveStmt(ifNotExist, failoverGroupName, catalogNames,
-                databaseNames, tableNames, members, createPos(context));
+        return new AlterFailoverGroupRemoveStmt(ifNotExist, failoverGroupName,
+                includeCatalogs, includeDatabases, includeTables,
+                excludeCatalogs, excludeDatabases, excludeTables,
+                members, createPos(context));
     }
 
     @Override
@@ -768,46 +806,22 @@ public class AstBuilderEPack extends AstBuilder {
         return new AlterFailoverGroupResumeStmt(ifNotExist, failoverGroupName, createPos(context));
     }
 
-    private List<String> parseCatalogsDescStatement(StarRocksParser.CatalogsDescContext catalogsDesc) {
-        if (catalogsDesc == null) {
+    private List<TableName> parseIncludeTablesDescStatement(
+            StarRocksParser.IncludeTablesDescContext includeTablesDesc) {
+        if (includeTablesDesc == null) {
             return null;
         }
 
-        List<String> catalogNames = new ArrayList<>();
-        List<StarRocksParser.IdentifierContext> catalogList = catalogsDesc.identifier();
-        for (StarRocksParser.IdentifierContext catalog : catalogList) {
-            String catalogName = ((Identifier) visit(catalog)).getValue();
-            catalogNames.add(catalogName);
-        }
-        return catalogNames;
+        return parseTableNamesDescStatement(includeTablesDesc.tableNamesDesc());
     }
 
-    private List<DatabaseName> parseDatabasesDescStatement(StarRocksParser.DatabasesDescContext databasesDesc) {
-        if (databasesDesc == null) {
+    private List<TableName> parseExcludeTablesDescStatement(
+            StarRocksParser.ExcludeTablesDescContext excludeTablesDesc) {
+        if (excludeTablesDesc == null) {
             return null;
         }
 
-        List<DatabaseName> databaseNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> databaseList = databasesDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext database : databaseList) {
-            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
-            databaseNames.add(databaseName);
-        }
-        return databaseNames;
-    }
-
-    private List<TableName> parseTablesDescStatement(StarRocksParser.TablesDescContext tablesDesc) {
-        if (tablesDesc == null) {
-            return null;
-        }
-
-        List<TableName> tableNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> tableList = tablesDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext table : tableList) {
-            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
-            tableNames.add(tableName);
-        }
-        return tableNames;
+        return parseTableNamesDescStatement(excludeTablesDesc.tableNamesDesc());
     }
 
     private List<String> parseMembersDescStatement(StarRocksParser.MembersDescContext membersDesc) {
@@ -824,47 +838,22 @@ public class AstBuilderEPack extends AstBuilder {
         return members;
     }
 
-    private List<String> parseCatalogsAddDescStatement(StarRocksParser.CatalogsAddDescContext catalogsAddDesc) {
-        if (catalogsAddDesc == null) {
+    private List<TableName> parseIncludeTablesAddDescStatement(
+            StarRocksParser.IncludeTablesAddDescContext includeTablesAddDesc) {
+        if (includeTablesAddDesc == null) {
             return null;
         }
 
-        List<String> catalogNames = new ArrayList<>();
-        List<StarRocksParser.IdentifierContext> catalogList = catalogsAddDesc.identifier();
-        for (StarRocksParser.IdentifierContext catalog : catalogList) {
-            String catalogName = ((Identifier) visit(catalog)).getValue();
-            catalogNames.add(catalogName);
-        }
-        return catalogNames;
+        return parseTableNamesDescStatement(includeTablesAddDesc.tableNamesDesc());
     }
 
-    private List<DatabaseName> parseDatabasesAddDescStatement(
-            StarRocksParser.DatabasesAddDescContext databasesAddDesc) {
-        if (databasesAddDesc == null) {
+    private List<TableName> parseExcludeTablesAddDescStatement(
+            StarRocksParser.ExcludeTablesAddDescContext excludeTablesAddDesc) {
+        if (excludeTablesAddDesc == null) {
             return null;
         }
 
-        List<DatabaseName> databaseNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> databaseList = databasesAddDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext database : databaseList) {
-            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
-            databaseNames.add(databaseName);
-        }
-        return databaseNames;
-    }
-
-    private List<TableName> parseTablesAddDescStatement(StarRocksParser.TablesAddDescContext tablesAddDesc) {
-        if (tablesAddDesc == null) {
-            return null;
-        }
-
-        List<TableName> tableNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> tableList = tablesAddDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext table : tableList) {
-            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
-            tableNames.add(tableName);
-        }
-        return tableNames;
+        return parseTableNamesDescStatement(excludeTablesAddDesc.tableNamesDesc());
     }
 
     private List<String> parseMembersAddDescStatement(StarRocksParser.MembersAddDescContext membersAddDesc) {
@@ -881,48 +870,22 @@ public class AstBuilderEPack extends AstBuilder {
         return members;
     }
 
-    private List<String> parseCatalogsRemoveDescStatement(
-            StarRocksParser.CatalogsRemoveDescContext catalogsRemoveDesc) {
-        if (catalogsRemoveDesc == null) {
+    private List<TableName> parseIncludeTablesRemoveDescStatement(
+            StarRocksParser.IncludeTablesRemoveDescContext includeTablesRemoveDesc) {
+        if (includeTablesRemoveDesc == null) {
             return null;
         }
 
-        List<String> catalogNames = new ArrayList<>();
-        List<StarRocksParser.IdentifierContext> catalogList = catalogsRemoveDesc.identifier();
-        for (StarRocksParser.IdentifierContext catalog : catalogList) {
-            String catalogName = ((Identifier) visit(catalog)).getValue();
-            catalogNames.add(catalogName);
-        }
-        return catalogNames;
+        return parseTableNamesDescStatement(includeTablesRemoveDesc.tableNamesDesc());
     }
 
-    private List<DatabaseName> parseDatabasesRemoveDescStatement(
-            StarRocksParser.DatabasesRemoveDescContext databasesRemoveDesc) {
-        if (databasesRemoveDesc == null) {
+    private List<TableName> parseExcludeTablesRemoveDescStatement(
+            StarRocksParser.ExcludeTablesRemoveDescContext excludeTablesRemoveDesc) {
+        if (excludeTablesRemoveDesc == null) {
             return null;
         }
 
-        List<DatabaseName> databaseNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> databaseList = databasesRemoveDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext database : databaseList) {
-            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
-            databaseNames.add(databaseName);
-        }
-        return databaseNames;
-    }
-
-    private List<TableName> parseTablesRemoveDescStatement(StarRocksParser.TablesRemoveDescContext tablesRemoveDesc) {
-        if (tablesRemoveDesc == null) {
-            return null;
-        }
-
-        List<TableName> tableNames = new ArrayList<>();
-        List<StarRocksParser.QualifiedNameContext> tableList = tablesRemoveDesc.qualifiedName();
-        for (StarRocksParser.QualifiedNameContext table : tableList) {
-            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
-            tableNames.add(tableName);
-        }
-        return tableNames;
+        return parseTableNamesDescStatement(excludeTablesRemoveDesc.tableNamesDesc());
     }
 
     private List<String> parseMembersRemoveDescStatement(StarRocksParser.MembersRemoveDescContext membersRemoveDesc) {
@@ -939,29 +902,55 @@ public class AstBuilderEPack extends AstBuilder {
         return members;
     }
 
-    private DatabaseName qualifiedNameToDatabaseName(QualifiedName qualifiedName) {
-        // Hierarchy: catalog.database
-        List<String> parts = qualifiedName.getParts();
-        if (parts.size() == 2) {
-            return new DatabaseName(parts.get(0), parts.get(1), qualifiedName.getPos());
-        } else if (parts.size() == 1) {
-            return new DatabaseName(null, parts.get(0), qualifiedName.getPos());
-        } else {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidDbFormat(qualifiedName.toString()));
+    private List<TableName> parseTableNamesDescStatement(
+            List<StarRocksParser.TableNamesDescContext> tableNameList) {
+        List<TableName> tableNames = new ArrayList<>();
+        for (StarRocksParser.TableNamesDescContext tableName : tableNameList) {
+            List<StarRocksParser.IdentifierOrStringOrStarContext> partList = tableName.identifierOrStringOrStar();
+            List<String> parts = partList.stream().map(c -> ((Identifier) visit(c)).getValue()).collect(toList());
+            switch (parts.size()) {
+                case 1:
+                    tableNames.add(new TableName(null, null, parts.get(0)));
+                    break;
+                case 2:
+                    tableNames.add(new TableName(null, parts.get(0), parts.get(1)));
+                    break;
+                case 3:
+                    tableNames.add(new TableName(parts.get(0), parts.get(1), parts.get(2)));
+                    break;
+                default:
+                    throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(Joiner.on('.').join(parts)));
+            }
         }
+        return tableNames;
     }
 
-    private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
-        // Hierarchy: catalog.database.table
-        List<String> parts = qualifiedName.getParts();
-        if (parts.size() == 3) {
-            return new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
-        } else if (parts.size() == 2) {
-            return new TableName(null, parts.get(0), parts.get(1), qualifiedName.getPos());
-        } else if (parts.size() == 1) {
-            return new TableName(null, null, parts.get(0), qualifiedName.getPos());
-        } else {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
+    private static void convertTableNames(List<TableName> originTableNames,
+            List<String> catalogNames, List<DatabaseName> databaseNames, List<TableName> tableNames) {
+        if (originTableNames == null) {
+            return;
+        }
+
+        for (TableName tableName : originTableNames) {
+            if (tableName.getTbl() == null) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(tableName.toString()));
+            } else if (tableName.getTbl().equals("*")) {
+                if (tableName.getDb() == null) {
+                    catalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                } else if (tableName.getDb().equals("*")) {
+                    if (tableName.getCatalog() == null) {
+                        catalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                    } else if (tableName.getCatalog().equals("*")) {
+                        catalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                    } else {
+                        catalogNames.add(tableName.getCatalog());
+                    }
+                } else {
+                    databaseNames.add(new DatabaseName(tableName.getCatalog(), tableName.getDb()));
+                }
+            } else {
+                tableNames.add(tableName);
+            }
         }
     }
 

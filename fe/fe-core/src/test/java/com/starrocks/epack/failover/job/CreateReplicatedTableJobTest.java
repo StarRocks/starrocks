@@ -51,14 +51,14 @@ public class CreateReplicatedTableJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateUnPartitionedTableGroup " +
-                        "TABLES = test.testCreateUnPartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateUnPartitionedTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
@@ -85,14 +85,14 @@ public class CreateReplicatedTableJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateListPartitionedTableGroup " +
-                        "TABLES = test.testCreateListPartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateListPartitionedTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
@@ -120,14 +120,14 @@ public class CreateReplicatedTableJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateRangePartitionedTableGroup " +
-                        "TABLES = test.testCreateRangePartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateRangePartitionedTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
@@ -154,14 +154,14 @@ public class CreateReplicatedTableJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateDateExprPartitionedTableGroup " +
-                        "TABLES = test.testCreateDateExprPartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateDateExprPartitionedTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
@@ -188,14 +188,14 @@ public class CreateReplicatedTableJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateColumnExprPartitionedTableGroup " +
-                        "TABLES = test.testCreateColumnExprPartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateColumnExprPartitionedTable " +
                         "MEMBERS = " +
-                        "'az1:SELF'," +
-                        "'az2:192.168.0.1:9090'" +
+                                "'az1:SELF'," +
+                                "'az2:192.168.0.1:9090'" +
                         "SCHEDULE = '1h'");
 
         FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
-        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
 
