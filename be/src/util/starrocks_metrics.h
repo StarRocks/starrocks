@@ -72,18 +72,22 @@ private:
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
     METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT)
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT);                \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_running_threads, MetricUnit::NOUNIT);            \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_active_threads, MetricUnit::NOUNIT)
 
-#define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                           \
-    do {                                                                                                         \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })  \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total,                                             \
-                                        [this]() { return threadpool->total_executed_tasks(); })                 \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total,                                            \
-                                        [this]() { return threadpool->total_pending_time_ns(); })                \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total,                                            \
-                                        [this]() { return threadpool->total_execute_time_ns(); })                \
-        REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); }) \
+#define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                            \
+    do {                                                                                                          \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })   \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total,                                              \
+                                        [this]() { return threadpool->total_executed_tasks(); })                  \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total,                                             \
+                                        [this]() { return threadpool->total_pending_time_ns(); })                 \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total,                                             \
+                                        [this]() { return threadpool->total_execute_time_ns(); })                 \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); })  \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_running_threads, [this]() { return threadpool->num_threads(); })   \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_active_threads, [this]() { return threadpool->active_threads(); }) \
     } while (false)
 
 class StarRocksMetrics {
