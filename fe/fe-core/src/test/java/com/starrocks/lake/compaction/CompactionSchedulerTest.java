@@ -25,6 +25,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
@@ -39,15 +40,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 
 public class CompactionSchedulerTest {
-
-    private final long dbId = 9000L;
-    private final long transactionId = 12345L;
 
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
@@ -58,6 +57,8 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
+        long dbId = 9000L;
+        long transactionId = 12345L;
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         new Expectations() {
             {
@@ -185,5 +186,37 @@ public class CompactionSchedulerTest {
         List<CompactionRecord> list = compactionScheduler.getHistory();
         Assert.assertEquals(2, list.size());
         Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
+    }
+
+    @Test
+    public void testCompactionTaskLimit() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(null, null, null, null, "");
+
+        int defaultValue = Config.lake_compaction_max_tasks;
+        // explicitly set config to a value bigger than default -1
+        Config.lake_compaction_max_tasks = 10;
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+
+        // reset config to default value
+        Config.lake_compaction_max_tasks = defaultValue;
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+                return Arrays.asList(b1, c1, c2);
+            }
+
+            @Mock
+            public Warehouse getCompactionWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
     }
 }

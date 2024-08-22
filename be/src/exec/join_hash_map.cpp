@@ -24,6 +24,7 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -303,11 +304,13 @@ JoinHashTable JoinHashTable::clone_readable_table() {
 
 void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
-                                      RuntimeProfile::Counter* output_build_column_timer) {
+                                      RuntimeProfile::Counter* output_build_column_timer,
+                                      RuntimeProfile::Counter* probe_count) {
     if (_probe_state == nullptr) return;
     _probe_state->search_ht_timer = search_ht_timer;
     _probe_state->output_probe_column_timer = output_probe_column_timer;
     _probe_state->output_build_column_timer = output_build_column_timer;
+    _probe_state->probe_counter = probe_count;
 }
 
 float JoinHashTable::get_keys_per_bucket() const {
@@ -329,6 +332,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->search_ht_timer = param.search_ht_timer;
         _probe_state->output_probe_column_timer = param.output_probe_column_timer;
         _probe_state->output_build_column_timer = param.output_build_column_timer;
+        _probe_state->probe_counter = param.probe_counter;
     }
 
     _table_items->build_chunk = std::make_shared<Chunk>();
@@ -652,7 +656,8 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
     _table_items->row_count += chunk->num_rows();
 }
 
-StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+    DCHECK(chunk != nullptr && chunk->num_rows() > 0);
     ChunkPtr output = std::make_shared<Chunk>();
     //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {

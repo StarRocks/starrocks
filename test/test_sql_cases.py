@@ -92,6 +92,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         default_configs = [
             "'enable_mv_refresh_insert_strict' = 'true'",
             "'enable_mv_refresh_query_rewrite' = 'true'",
+            # enlarge task run concurrency to speed up mv's refresh and find more potential bugs
+            "'task_runs_concurrency' = '16'",
         ]
 
         for config in default_configs:
@@ -124,7 +126,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        log.info("[TeadDown end]: %s" % self.case_info.name)
+        log.info(f"Execution complete [{self.case_info.name}]!")
 
     # -------------------------------------------
     #         [CASE]

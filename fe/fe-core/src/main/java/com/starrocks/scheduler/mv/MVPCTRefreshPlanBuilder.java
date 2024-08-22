@@ -367,7 +367,8 @@ public class MVPCTRefreshPlanBuilder {
                                             Expr mvPartitionOutputExpr)
             throws AnalysisException {
         if (tablePartitionNames.isEmpty()) {
-            return new BoolLiteral(true);
+            // If the updated partition names are empty, it means that the table should not be refreshed.
+            return new BoolLiteral(false);
         }
         return mvRefreshPartitioner.generatePartitionPredicate(table, tablePartitionNames, mvPartitionOutputExpr);
     }
