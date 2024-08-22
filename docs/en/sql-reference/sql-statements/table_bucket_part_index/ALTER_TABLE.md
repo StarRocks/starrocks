@@ -229,7 +229,7 @@ Notes for `multi_range_partitions`:
 :::note
 
 - Keep at least one partition for partitioned tables.
-- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](../data-definition/backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](../backup_restore/RECOVER.md) command within a specified period (1 day by default).
 - If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
 
 :::

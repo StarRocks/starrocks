@@ -2,67 +2,67 @@
 displayed_sidebar: "English"
 ---
 
-# BACKUP
+# RESTORE
 
 ## Description
 
-Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
+Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables.
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../../data-manipulation/backup_restore/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../../data-definition/backup_restore/CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../../data-manipulation/backup_restore/SHOW_SNAPSHOT.md).
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](./SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](./CANCEL_RESTORE.md).
 
 > **CAUTION**
 >
-> - Only users with the ADMIN privilege can back up data.
+> - Only users with the ADMIN privilege can restore data.
 > - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
-> - StarRocks does not support specifying data compression algorithm for data backup.
 
 ## Syntax
 
 ```SQL
-BACKUP SNAPSHOT <db_name>.<snapshot_name>
-TO <repository_name>
+RESTORE SNAPSHOT <db_name>.<snapshot_name>
+FROM <repository_name>
 [ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
-       [, ...] ) ]
-[ PROPERTIES ("key"="value" [, ...] ) ]
+    [ AS <table_alias>] [, ...] ) ]
+PROPERTIES ("key"="value", ...)
 ```
 
 ## Parameters
 
 | **Parameter**   | **Description**                                              |
 | --------------- | ------------------------------------------------------------ |
-| db_name         | Name of the database that stores the data to be backed up.   |
-| snapshot_name   | Specify a name for the data snapshot. Globally unique.       |
-| repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](../../data-definition/backup_restore/CREATE_REPOSITORY.md). |
-| ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
-| PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
-| PROPERTIES      | Properties of the data snapshot. Valid keys:`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.`timeout`: Task timeout. Unit: second. Default: `86400`. |
+| db_name         | Name of the database that the data is restored to.           |
+| snapshot_name   | Name for the data snapshot.                                  |
+| repository_name | Repository name.                                             |
+| ON              | Name of the tables to restore. The whole database is restored if this parameter is not specified. |
+| PARTITION       | Name of the partitions to be restored. The whole table is restored if this parameter is not specified. You can view the partition name using [SHOW PARTITIONS](../table_bucket_part_index/SHOW_PARTITIONS.md). |
+| PROPERTIES      | Properties of the RESTORE operation. Valid keys:<ul><li>`backup_timestamp`: Backup timestamp. **Required**. You can view backup timestamps using [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md).</li><li>`replication_num`: Specify the number of replicas to be restored. Default: `3`.</li><li>`meta_version`: This parameter is only used as a temporary solution to restore the data backed up by the earlier version of StarRocks. The latest version of the backed up data already contains `meta version`, and you do not need to specify it.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
 
 ## Examples
 
-Example 1: Backs up the database `example_db` to the repository `example_repo`.
+Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_label1` from the `example_repo` repository to the database `example_db`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
 
 ```SQL
-BACKUP SNAPSHOT example_db.snapshot_label1
-TO example_repo
-PROPERTIES ("type" = "full");
+RESTORE SNAPSHOT example_db.snapshot_label1
+FROM example_repo
+ON ( backup_tbl )
+PROPERTIES
+(
+    "backup_timestamp"="2018-05-04-16-45-08",
+    "replication_num" = "1"
+);
 ```
 
-Example 2: Backs up the table `example_tbl` in `example_db` to `example_repo`.
+Example 2: Restores partitions `p1` and `p2` of table `backup_tbl` in `snapshot_label2` and table `backup_tbl2` from `example_repo` to database `example_db`, and rename `backup_tbl2` to `new_tbl`. The backup timestamp is `2018-05-04-17-11-01`. Restores three replicas by default.
 
 ```SQL
-BACKUP SNAPSHOT example_db.snapshot_label2
-TO example_repo
-ON (example_tbl);
-```
-
-Example 2: Backs up the partitions `p1` and `p2` of `example_tbl` and the table `example_tbl2` in `example_db` to `example_repo`.
-
-```SQL
-BACKUP SNAPSHOT example_db.snapshot_label3
-TO example_repo
+RESTORE SNAPSHOT example_db.snapshot_label2
+FROM example_repo
 ON(
-    example_tbl PARTITION (p1, p2),
-    example_tbl2
+    backup_tbl PARTITION (p1, p2),
+    backup_tbl2 AS new_tbl
+)
+PROPERTIES
+(
+    "backup_timestamp"="2018-05-04-17-11-01"
 );
 ```
 
