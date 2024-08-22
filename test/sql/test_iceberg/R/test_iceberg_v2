@@ -1,7 +1,6 @@
 -- name: test_iceberg_v2
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 -- result:
-[]
 -- !result
 /*
  CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_orc_unpartitioned_table` (
@@ -133,5 +132,4 @@ select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_par
 
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
-[]
 -- !result

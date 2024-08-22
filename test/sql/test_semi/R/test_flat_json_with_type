@@ -16,7 +16,6 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-[]
 -- !result
 insert into js1 values 
 (1,  11,  parse_json('{"a": true,   "b": 1, "c": "qwe",    "d": 1210.010,  "e":  [1,2,3,4]}')),
@@ -31,7 +30,6 @@ insert into js1 values
 (10, 101, parse_json('{"a": false,  "b": -1, "c": "true",   "d": -1.123,  "e":  "false"}')),
 (11, 102, parse_json('{"a": false,  "b": 9, "c": "false",  "d": 9290.090,  "e":  [1,2,3,4]}'));
 -- result:
-[]
 -- !result
 select j1->'a' from js1 order by v2;
 -- result:
@@ -1031,7 +1029,6 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-[]
 -- !result
 insert into js2 values 
 (1,  11,  parse_json('{"a": true,   "b": 1.123, "c": "qwe",    "d": "asdfsfd",  "e":  [1,2,3,4]}')),
@@ -1046,7 +1043,6 @@ insert into js2 values
 (10, 101, parse_json('{"a": false,  "b": 9, "c": "true",   "d": 9290.090,  "e":  [1,2,3,4]}')),
 (11, 102, parse_json('{"a": false,  "b": 9, "c": "false",  "d": 9290.090,  "e":  [1,2,3,4]}'));
 -- result:
-[]
 -- !result
 select j1->'a' from js2 order by v2;
 -- result:
@@ -2046,14 +2042,12 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-[]
 -- !result
 insert into js3 values 
 (1, 21, parse_json('{"a": null, "b": null,  "c": null, "e": null}')),
 (2, 22, parse_json('{"a": 123,  "b": "avx", "c": true, "e": null}')),
 (3, 23, parse_json('{"a": 234,  "b": "sse", "c": false, "e": null}'));
 -- result:
-[]
 -- !result
 select j1->'e' from js3 order by v2;
 -- result:

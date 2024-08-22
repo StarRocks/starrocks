@@ -12,11 +12,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "parquet"
@@ -29,7 +27,6 @@ as select * from files (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- result:
@@ -60,15 +57,12 @@ hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
 -- result:
@@ -89,11 +83,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "parquet"
@@ -106,7 +98,6 @@ as select * from files (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- result:
@@ -134,15 +125,12 @@ hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
 -- result:
@@ -163,11 +151,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "parquet"
@@ -180,7 +166,6 @@ as select * from files (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- result:
@@ -200,15 +185,12 @@ hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
 -- result:
