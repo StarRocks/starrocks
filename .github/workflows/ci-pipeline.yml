@@ -621,7 +621,7 @@ jobs:
 
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
-        if: steps.check-sync.IS_SYNC == 'true'
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: be-path-filter
           path: be-path-filter
@@ -630,6 +630,7 @@ jobs:
       
       - name: Download FE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: fe-path-filter
           path: fe-path-filter
@@ -638,6 +639,7 @@ jobs:
 
       - name: Parsing BE path-filter file
         id: parsing-be-path-filter
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e be-path-filter ]]; then
             cd be-path-filter/; ls;
@@ -648,6 +650,7 @@ jobs:
   
       - name: Parsing FE path-filter file
         id: parsing-fe-path-filter
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e fe-path-filter ]]; then
             cd fe-path-filter/; ls;
