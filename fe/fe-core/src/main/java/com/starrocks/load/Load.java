@@ -34,8 +34,6 @@
 
 package com.starrocks.load;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -60,8 +58,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.backup.BlobStorage;
-import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -73,7 +69,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -96,9 +91,6 @@ import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -1091,82 +1083,8 @@ public class Load {
         return originExpr;
     }
 
-    public LoadErrorHub.Param getLoadErrorHubInfo() {
-        return loadErrorHubParam;
-    }
-
     public void setLoadErrorHubInfo(LoadErrorHub.Param info) {
         this.loadErrorHubParam = info;
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void setLoadErrorHubInfo(Map<String, String> properties) throws DdlException {
-        String type = properties.get("type");
-        if (type.equalsIgnoreCase("MYSQL")) {
-            String host = properties.get("host");
-            if (Strings.isNullOrEmpty(host)) {
-                throw new DdlException("mysql host is missing");
-            }
-
-            int port = -1;
-            try {
-                port = Integer.parseInt(properties.get("port"));
-            } catch (NumberFormatException e) {
-                throw new DdlException("invalid mysql port: " + properties.get("port"));
-            }
-
-            String user = properties.get("user");
-            if (Strings.isNullOrEmpty(user)) {
-                throw new DdlException("mysql user name is missing");
-            }
-
-            String db = properties.get("database");
-            if (Strings.isNullOrEmpty(db)) {
-                throw new DdlException("mysql database is missing");
-            }
-
-            String tbl = properties.get("table");
-            if (Strings.isNullOrEmpty(tbl)) {
-                throw new DdlException("mysql table is missing");
-            }
-
-            String pwd = Strings.nullToEmpty(properties.get("password"));
-
-            MysqlLoadErrorHub.MysqlParam param = new MysqlLoadErrorHub.MysqlParam(host, port, user, pwd, db, tbl);
-            loadErrorHubParam = LoadErrorHub.Param.createMysqlParam(param);
-        } else if (type.equalsIgnoreCase("BROKER")) {
-            String brokerName = properties.get("name");
-            if (Strings.isNullOrEmpty(brokerName)) {
-                throw new DdlException("broker name is missing");
-            }
-            properties.remove("name");
-
-            if (!GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(brokerName)) {
-                throw new DdlException("broker does not exist: " + brokerName);
-            }
-
-            String path = properties.get("path");
-            if (Strings.isNullOrEmpty(path)) {
-                throw new DdlException("broker path is missing");
-            }
-            properties.remove("path");
-
-            // check if broker info is invalid
-            BlobStorage blobStorage = new BlobStorage(brokerName, properties);
-            Status st = blobStorage.checkPathExist(path);
-            if (!st.ok()) {
-                throw new DdlException("failed to visit path: " + path + ", err: " + st.getErrMsg());
-            }
-
-            BrokerLoadErrorHub.BrokerParam param = new BrokerLoadErrorHub.BrokerParam(brokerName, path, properties);
-            loadErrorHubParam = LoadErrorHub.Param.createBrokerParam(param);
-        } else if (type.equalsIgnoreCase("null")) {
-            loadErrorHubParam = LoadErrorHub.Param.createNullParam();
-        }
-
-        GlobalStateMgr.getCurrentState().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
-
-        LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
 
     public static class JobInfo {
@@ -1183,62 +1101,6 @@ public class Load {
         }
     }
 
-    public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
-            return loadLoadJobV1(dis, checksum);
-        } else {
-            return checksum;
-        }
-    }
-
-    public long loadLoadJobV1(DataInputStream dis, long checksum) throws IOException {
-        // load jobs
-        int jobSize = dis.readInt();
-        long newChecksum = checksum ^ jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
-
-        // delete jobs
-        jobSize = dis.readInt();
-        newChecksum ^= jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
-
-        // load error hub info
-        LoadErrorHub.Param param = new LoadErrorHub.Param();
-        param.readFields(dis);
-        setLoadErrorHubInfo(param);
-
-        // 4. load delete jobs
-        int deleteJobSize = dis.readInt();
-        newChecksum ^= deleteJobSize;
-        Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
-
-        LOG.info("finished replay loadJob from image");
-        return newChecksum;
-    }
-
-    // TODO [meta-format-change] deprecated
-    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
-        // 1. save load.dbToLoadJob
-        int jobSize = 0;
-        checksum ^= jobSize;
-        dos.writeInt(jobSize);
-
-        // 2. save delete jobs
-        jobSize = 0;
-        checksum ^= jobSize;
-        dos.writeInt(jobSize);
-
-        // 3. load error hub info
-        LoadErrorHub.Param param = getLoadErrorHubInfo();
-        param.write(dos);
-
-        // 4. save delete load job info
-        int deleteJobSize = 0;
-        checksum ^= deleteJobSize;
-        dos.writeInt(deleteJobSize);
-
-        return checksum;
-    }
     public static class CSVOptions {
         public String columnSeparator = "\t";
         public String rowDelimiter = "\n";

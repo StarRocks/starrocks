@@ -67,9 +67,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -802,20 +800,6 @@ public class ColocateTableIndex implements Writable {
         } finally {
             writeUnlock();
         }
-    }
-
-    public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        GlobalStateMgr.getCurrentState().getColocateTableIndex().readFields(dis);
-        // clean up if dbId or tableId not found, this is actually a bug
-        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
-        constructLakeGroups(GlobalStateMgr.getCurrentState());
-        LOG.info("finished replay colocateTableIndex from image");
-        return checksum;
-    }
-
-    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     public void saveColocateTableIndexV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

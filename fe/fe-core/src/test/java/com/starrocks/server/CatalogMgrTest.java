@@ -25,7 +25,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.MockUp;
@@ -34,11 +33,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -121,26 +116,6 @@ public class CatalogMgrTest {
         Assert.assertThrows(DdlException.class, () -> {
             catalogMgr.createCatalog("test_unsupported", "b", "", config);
         });
-    }
-
-    @Test
-    public void testLoadCatalog() throws IOException, DdlException {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
-
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        catalogMgr.saveCatalogs(out, 0);
-        out.flush();
-        out.close();
-
-        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
-        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        catalogMgr.loadCatalogs(in, 0);
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
     }
 
     @Test

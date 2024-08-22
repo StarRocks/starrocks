@@ -43,7 +43,6 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -393,11 +392,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 tableToStorageVolume.put(tableId, entry.getKey());
             }
         }
-    }
-
-    public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     public void load(DataInput in) throws IOException {

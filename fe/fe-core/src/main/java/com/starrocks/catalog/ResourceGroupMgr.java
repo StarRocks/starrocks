@@ -48,8 +48,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -263,21 +261,6 @@ public class ResourceGroupMgr implements Writable {
                 replayAddResourceGroup(workgroup);
             }
         }
-    }
-
-    public long loadResourceGroups(DataInputStream dis, long checksum) throws IOException {
-        try {
-            readFields(dis);
-            LOG.info("finished replaying ResourceGroups from image");
-        } catch (EOFException e) {
-            LOG.info("no ResourceGroups to replay.");
-        }
-        return checksum;
-    }
-
-    public long saveResourceGroups(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     private void replayAddResourceGroup(ResourceGroup workgroup) {

@@ -52,8 +52,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -758,21 +756,6 @@ public class AnalyzeMgr implements Writable {
 
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(out, s);
-    }
-
-    public long loadAnalyze(DataInputStream dis, long checksum) throws IOException {
-        try {
-            readFields(dis);
-            LOG.info("finished replay analyze job from image");
-        } catch (EOFException e) {
-            LOG.info("none analyze job replay.");
-        }
-        return checksum;
-    }
-
-    public long saveAnalyze(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
