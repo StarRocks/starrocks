@@ -83,4 +83,4 @@ Alternatively, you can run SET CATALOG to switch to the external catalog `hudi_c
 
 - [SHOW CATALOGS](../Catalog/SHOW_CATALOGS.md): Views all catalogs in a StarRocks cluster.
 - [SHOW DATABASES](../Database/SHOW_DATABASES.md): Views all databases in the internal catalog or an external catalog.
-- [SET CATALOG](../data-definition/SET_CATALOG.md): Switches between catalogs.
+- [SET CATALOG](../Catalog/SET_CATALOG.md): Switches between catalogs.

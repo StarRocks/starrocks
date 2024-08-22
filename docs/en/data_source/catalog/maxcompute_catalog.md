@@ -160,19 +160,19 @@ You can use one of the following syntaxes to view the schema of a MaxCompute tab
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+   Then, use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify the active database in the current session:
 
    ```SQL
    USE <db_name>;
    ```
 
-   Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+   Or, you can use [USE](../../sql-reference/sql-statements/Database/USE.md) to directly specify the active database in the destination catalog:
 
    ```SQL
    USE <catalog_name>.<db_name>;

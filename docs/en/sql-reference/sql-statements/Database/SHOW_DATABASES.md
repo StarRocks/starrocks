@@ -64,6 +64,6 @@ SHOW DATABASES FROM hive1;
 
 - [CREATE DATABASE](CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
-- [USE](../data-definition/USE.md)
+- [USE](USE.md)
 - [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [DROP DATABASE](DROP_DATABASE.md)

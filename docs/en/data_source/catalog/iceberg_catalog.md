@@ -956,7 +956,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 You can use one of the following methods to switch to an Iceberg catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -965,7 +965,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to an Iceberg catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to an Iceberg catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>

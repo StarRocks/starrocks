@@ -1,6 +1,0 @@
-position: 30 # float position is supported
-label: 'DDL'
-collapsible: true
-collapsed: true
-link:
-  type: generated-index

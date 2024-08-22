@@ -113,6 +113,6 @@ DESC hive_catalog.hive_db.hive_table;
 
 - [CREATE DATABASE](../Database/CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](../Database/SHOW_CREATE_DATABASE.md)
-- [USE](../data-definition/USE.md)
+- [USE](../Database/USE.md)
 - [SHOW DATABASES](../Database/SHOW_DATABASES.md)
 - [DROP DATABASE](../Database/DROP_DATABASE.md)
