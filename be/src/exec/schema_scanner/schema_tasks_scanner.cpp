@@ -30,6 +30,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
         {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OWNER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaTasksScanner::SchemaTasksScanner()
@@ -62,11 +63,12 @@ DatumArray SchemaTasksScanner::_build_row() {
     Datum create_time = task.__isset.create_time && task.create_time > 0
                                 ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
                                 : kNullDatum;
+    if (!task.__isset.owner) {
+        task.__set_owner("");
+    }
 
-    return {
-            Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
-            Slice(task.definition), expire_time, Slice(task.properties),
-    };
+    return {Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
+            Slice(task.definition), expire_time, Slice(task.properties), Slice(task.owner)};
 }
 
 Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
