@@ -153,8 +153,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.tableExists(dbName, tblName);
+        return hiveMetadata.tableExists(dbName, tblName);
     }
 
     @Override
