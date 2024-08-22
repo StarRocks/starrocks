@@ -137,7 +137,7 @@ public enum ErrorCode {
     ERR_BAD_PARTITION_STATE(5015, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition state is not NORMAL: '%s':'%s'"),
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
-    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
+    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -318,8 +318,6 @@ public enum ErrorCode {
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
-    ERR_ROUTINE_LOAD_PROPERTY_PARTITION_OFFSET_INVALID(5608, new byte[] {'4', '2', '0', '0', '0'},
-            "%s '%s' is invalid. It must be %s"),
 
     /**
      * 5700 - 5799: Partition

@@ -141,7 +141,7 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_AUTO_INGEST: {
-                    VariableMgr.parseBooleanVariable(valueStr);
+                    ParseUtil.parseBooleanValue(valueStr, PROPERTY_AUTO_INGEST);
                     break;
                 }
                 case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {

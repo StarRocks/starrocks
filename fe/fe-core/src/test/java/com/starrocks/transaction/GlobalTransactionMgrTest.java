@@ -50,6 +50,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -996,5 +997,12 @@ public class GlobalTransactionMgrTest {
                 .commitAndPublishTransaction(db, 1001L, Collections.emptyList(), Collections.emptyList(), 10L, null);
         Assert.assertThrows(ErrorReportException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
                 Collections.emptyList(), Collections.emptyList(), 10L));
+    }
+
+    @Test
+    public void testCheckValidTimeoutSecond() {
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid timeout: '1'. Expected values should be between 2 and 3 seconds",
+                () -> GlobalTransactionMgr.checkValidTimeoutSecond(1, 3, 2));
     }
 }
