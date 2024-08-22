@@ -185,7 +185,7 @@ void AgentServer::Impl::init_or_die() {
         max_publish_version_worker_count =
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         int min_publish_version_worker_count =
-                std::max(config::transaction_publish_version_worker_count_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+                std::max(config::transaction_publish_version_thread_pool_num_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", min_publish_version_worker_count,
                                        max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);

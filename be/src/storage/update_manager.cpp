@@ -99,7 +99,7 @@ Status UpdateManager::init() {
     RETURN_IF_ERROR(
             ThreadPoolBuilder("update_apply")
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::transaction_apply_worker_idle_time_ms))
-                    .set_min_threads(config::transaction_apply_worker_count_min)
+                    .set_min_threads(config::transaction_apply_thread_pool_num_min)
                     .set_max_threads(max_thread_cnt)
                     .build(&_apply_thread_pool));
     REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
