@@ -41,12 +41,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.ErrorReportException;
->>>>>>> 308220f27f ([Enhancement] Improve invalid value error message (#48633))
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
