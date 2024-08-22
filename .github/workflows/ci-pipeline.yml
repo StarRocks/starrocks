@@ -746,7 +746,7 @@ jobs:
 
   deploy:
     runs-on: [self-hosted, normal]
-    if: always() && needs.build.result == 'success' && nees.build.outpus.build_nece == 'true'
+    if: always() && needs.build.result == 'success' && needs.build.outpus.build_nece == 'true'
     needs: build
     name: DEPLOY SR
     env:
