@@ -728,6 +728,7 @@ jobs:
 
       - name: Upload the Base Version
         uses: actions/upload-artifact@v4
+        if: steps.check-necessity.outcome == 'success'
         with:
           name: base_version
           path: ./base_version.txt
