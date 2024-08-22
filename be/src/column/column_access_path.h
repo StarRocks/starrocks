@@ -18,9 +18,11 @@
 #include <string>
 #include <vector>
 
+#include "column/column.h"
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -41,15 +43,14 @@ public:
     static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path, RuntimeState* state,
                                                               ObjectPool* pool);
 
-    // for test
-    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
-                                                              const std::string& path, uint32_t index);
-
     Status init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
                 ObjectPool* pool);
 
     // for test
-    Status init(TAccessPathType::type type, const std::string& path, uint32_t index);
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
+                                                              const std::string& path, uint32_t index);
+    static void insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path);
+    // end test
 
     const std::string& path() const { return _path; }
 
@@ -85,6 +86,8 @@ public:
     const std::string to_string() const;
 
     size_t leaf_size() const;
+
+    void get_all_leafs(std::vector<ColumnAccessPath*>* result);
 
 private:
     // path type, to mark the path is KEY/OFFSET/FIELD/ALL/INDEX

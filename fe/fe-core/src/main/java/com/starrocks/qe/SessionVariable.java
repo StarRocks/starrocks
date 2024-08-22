@@ -359,6 +359,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -1027,6 +1028,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
     private boolean cboPruneJsonSubfield = false;
 
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD_DEPTH, flag = VariableMgr.INVISIBLE)
+    private int cboPruneJsonSubfieldDepth = 20;
+
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -1497,6 +1501,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    public int getCboPruneJsonSubfieldDepth() {
+        return cboPruneJsonSubfieldDepth;
+    }
+
+    public void setCboPruneJsonSubfieldDepth(int cboPruneJsonSubfieldDepth) {
+        this.cboPruneJsonSubfieldDepth = cboPruneJsonSubfieldDepth;
+    }
 
     public boolean isCboPruneJsonSubfield() {
         return cboPruneJsonSubfield;
