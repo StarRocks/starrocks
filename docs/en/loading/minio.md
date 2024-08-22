@@ -177,7 +177,7 @@ Query OK, 10000000 rows affected (3.17 sec)
 {'label':'insert_a5da3ff5-9ee4-11ee-90b0-02420a060004', 'status':'VISIBLE', 'txnId':'17'}
 ```
 
-After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md):
 
 ```SQL
 DESCRIBE user_behavior_inferred;

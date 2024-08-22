@@ -117,7 +117,7 @@ SELECT * FROM FILES
 );
 ```
 
-After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md):
 
 ```SQL
 DESCRIBE user_behavior_inferred;

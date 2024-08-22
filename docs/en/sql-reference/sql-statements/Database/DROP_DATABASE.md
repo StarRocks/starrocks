@@ -37,5 +37,5 @@ Take note of the following points:
 - [CREATE DATABASE](CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [DESC](../Utility/DESCRIBE.md)
+- [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [SHOW DATABASES](SHOW_DATABASES.md)

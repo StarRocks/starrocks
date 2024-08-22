@@ -41,7 +41,7 @@ Since v3.3.0, the Duplicate Key table supports specifying the sort key using `OR
 
 <Replicanum />
 
-Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
+Execute [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) to view the table schema.
 
 ```SQL
 MySQL [test]> DESCRIBE user_access;

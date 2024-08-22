@@ -1,6 +1,0 @@
-position: 40 # float position is supported
-label: 'DML'
-collapsible: true
-collapsed: true
-link:
-  type: generated-index

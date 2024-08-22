@@ -49,5 +49,5 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
 - [SHOW DATABASES](SHOW_DATABASES.md)
-- [DESC](../Utility/DESCRIBE.md)
+- [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [DROP DATABASE](DROP_DATABASE.md)

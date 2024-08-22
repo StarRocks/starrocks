@@ -137,7 +137,7 @@ SELECT * FROM FILES
 >
 > Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
 
-After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md):
 
 ```SQL
 DESCRIBE user_behavior_inferred;
