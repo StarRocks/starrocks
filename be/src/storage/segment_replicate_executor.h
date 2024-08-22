@@ -41,10 +41,6 @@ public:
     ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
     ~ReplicateChannel();
 
-    Status sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
-
     Status async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                          std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                          std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
@@ -61,6 +57,8 @@ private:
     Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                           std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
+    std::unique_ptr<MemTracker> _mem_tracker;
+
     const DeltaWriterOptions* _opt;
     const std::string _host;
     const int32_t _port;
@@ -68,7 +66,6 @@ private:
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
     PInternalService_Stub* _stub = nullptr;
-    MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
