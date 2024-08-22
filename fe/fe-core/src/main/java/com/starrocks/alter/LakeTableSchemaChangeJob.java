@@ -133,19 +133,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
-<<<<<<< HEAD
-=======
-    // runtime variable for synchronization between cancel and runPendingJob
-    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
-    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
-    private AtomicBoolean isCancelling = new AtomicBoolean(false);
-
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
     }
 
->>>>>>> f721fd4bec ([BugFix] Fix replaying AlterJob NPE Bug (#50100))
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
