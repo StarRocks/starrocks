@@ -496,10 +496,12 @@ TEST_P(ThreadPoolTestTokenTypes, TestTokenSubmitsProcessedConcurrently) {
     std::shared_ptr<CountDownLatch> b = std::make_shared<CountDownLatch>(kNumTokens + 1);
     for (int i = 0; i < kNumTokens; i++) {
         tokens.emplace_back(_pool->new_token(GetParam()));
-        ASSERT_TRUE(tokens.back()->submit_func([b]() {
-            b->count_down();
-            b->wait();
-        }).ok());
+        ASSERT_TRUE(tokens.back()
+                            ->submit_func([b]() {
+                                b->count_down();
+                                b->wait();
+                            })
+                            .ok());
     }
 
     // This will deadlock if the above tasks weren't all running concurrently.
@@ -521,9 +523,9 @@ TEST_F(ThreadPoolTest, TestTokenSubmitsNonSequential) {
     std::unique_ptr<ThreadPoolToken> t = _pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (int i = 0; i < kNumSubmissions; i++) {
         ASSERT_TRUE(t->submit_func([b]() {
-            b->count_down();
-            b->wait();
-        }).ok());
+                         b->count_down();
+                         b->wait();
+                     }).ok());
     }
 
     // This will deadlock if the above tasks weren't all running concurrently.
