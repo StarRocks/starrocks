@@ -133,6 +133,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
+    // for deserialization
+    public LakeTableSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }

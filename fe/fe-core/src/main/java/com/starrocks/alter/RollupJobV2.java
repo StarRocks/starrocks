@@ -157,6 +157,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // save all create rollup tasks
     private AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
+    // for deserialization
+    public RollupJobV2() {
+        super(JobType.ROLLUP);
+    }
+
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
                        List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, int rollupSchemaHash,

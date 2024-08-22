@@ -82,6 +82,11 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
 
+    // for deserialization
+    public LakeTableAlterMetaJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
