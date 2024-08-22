@@ -2090,6 +2090,11 @@ public class SchemaChangeHandler extends AlterHandler {
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
+            long mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
+            if (mutableBucketNum == olapTable.getMutableBucketNum()) {
+                return;
+            }
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));

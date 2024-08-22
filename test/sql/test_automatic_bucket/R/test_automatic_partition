@@ -492,3 +492,95 @@ delete from t where k = 1;
 select * from t;
 -- result:
 -- !result
+
+-- name: test_mutable_bucket @sequential
+create database ggg;
+-- result:
+[]
+-- !result
+use ggg;
+-- result:
+[]
+-- !result
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1",
+"mutable_bucket_num" = "2"
+);
+-- result:
+[]
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('DAY', k)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"mutable_bucket_num" = "2",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+2
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+[]
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+4
+-- !result
+alter table t set('mutable_bucket_num'='3');
+-- result:
+[]
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('DAY', k)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"mutable_bucket_num" = "3",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+[]
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+7
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-01	1
+-- !result
+alter table t set('mutable_bucket_num'='-1');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: -1.')
+-- !result
+alter table t set('mutable_bucket_num'='a');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+-- !result

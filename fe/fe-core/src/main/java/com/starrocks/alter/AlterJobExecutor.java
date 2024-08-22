@@ -359,6 +359,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.BUCKET_SIZE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.MUTABLE_BUCKET_NUM);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {

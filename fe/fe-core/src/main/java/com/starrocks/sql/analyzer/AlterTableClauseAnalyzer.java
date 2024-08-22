@@ -261,6 +261,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
             PropertyAnalyzer.analyzeBucketSize(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            PropertyAnalyzer.analyzeMutableBucketNum(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
