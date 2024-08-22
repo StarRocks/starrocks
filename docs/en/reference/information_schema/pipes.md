@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 :::note
 
-You can also use [SHOW PIPES](../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) to view the pipes stored in a specified database or in the current database in use. This command is also supported from v3.2 onwards.
+You can also use [SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md) to view the pipes stored in a specified database or in the current database in use. This command is also supported from v3.2 onwards.
 
 :::
 

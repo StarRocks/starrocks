@@ -36,8 +36,8 @@ ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-exampl
 
 ## References
 
-- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
-- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
-- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
-- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [CREATE PIPE](CREATE_PIPE.md)
+- [ALTER PIPE](ALTER_PIPE.md)
+- [DROP PIPE](DROP_PIPE.md)
+- [SHOW PIPES](SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](SUSPEND_or_RESUME_PIPE.md)

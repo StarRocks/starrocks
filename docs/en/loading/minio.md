@@ -626,7 +626,7 @@ Note that Pipe is typically used with:
 - datasets that are in multiple files
 - datasets that grow over time
 
-This example uses only one small file and is only intended to introduce the Pipe functionality. See the [FILES](../sql-reference/sql-functions/table-functions/files.md) and [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md) docs.
+This example uses only one small file and is only intended to introduce the Pipe functionality. See the [FILES](../sql-reference/sql-functions/table-functions/files.md) and [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md) docs.
 
 #### Create a database and a table
 
@@ -691,11 +691,11 @@ This job has four main sections:
 - `INSERT_SQL`: The INSERT INTO SELECT FROM FILES statement that is used to load data from the specified source data file to the destination table.
 - `PROPERTIES`: A set of optional parameters that specify how to execute the pipe. These include `AUTO_INGEST`, `POLL_INTERVAL`, `BATCH_SIZE`, and `BATCH_FILES`. Specify these properties in the `"key" = "value"` format.
 
-For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md).
+For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md).
 
 #### Check load progress
 
-- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md).
+- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md).
 
 ```sql
 SHOW PIPES\G
@@ -716,5 +716,5 @@ DATABASE_NAME: mydatabase
 
 #### Manage Pipe jobs
 
-You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
+You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/loading_unloading/pipe/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/loading_unloading/pipe/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/loading_unloading/pipe/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/loading_unloading/pipe/RETRY_FILE.md).
 -->

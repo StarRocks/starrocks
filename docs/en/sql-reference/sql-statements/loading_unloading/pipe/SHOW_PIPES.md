@@ -75,8 +75,8 @@ SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
 
 ## References
 
-- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
-- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
-- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
-- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
+- [CREATE PIPE](CREATE_PIPE.md)
+- [ALTER PIPE](ALTER_PIPE.md)
+- [DROP PIPE](DROP_PIPE.md)
+- [SUSPEND or RESUME PIPE](SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](RETRY_FILE.md)

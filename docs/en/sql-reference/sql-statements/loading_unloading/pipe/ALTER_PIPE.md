@@ -30,7 +30,7 @@ The name of the pipe.
 
 ### PROPERTIES
 
-The properties whose settings you want to alter for the pipe. Format: `"key" = "value"`. For more information about the properties supported, see [CREATE PIPE](../../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md).
+The properties whose settings you want to alter for the pipe. Format: `"key" = "value"`. For more information about the properties supported, see [CREATE PIPE](CREATE_PIPE.md).
 
 ## Examples
 
@@ -47,8 +47,8 @@ SET
 
 ## References
 
-- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
-- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
-- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
-- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
+- [CREATE PIPE](CREATE_PIPE.md)
+- [DROP PIPE](DROP_PIPE.md)
+- [SHOW PIPES](SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](RETRY_FILE.md)

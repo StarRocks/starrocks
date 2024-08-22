@@ -36,7 +36,7 @@ USE mydatabase;
 ALTER PIPE user_behavior_replica SUSPEND;
 ```
 
-If you use [SHOW PIPES](../../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) to query the pipe, you can see that its state has changed to `SUSPEND`.
+If you use [SHOW PIPES](SHOW_PIPES.md) to query the pipe, you can see that its state has changed to `SUSPEND`.
 
 ### Resume a pipe
 
@@ -47,12 +47,12 @@ USE mydatabase;
 ALTER PIPE user_behavior_replica RESUME;
 ```
 
-If you use [SHOW PIPES](../../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) to query the pipe, you can see that its state has changed to `RUNNING`.
+If you use [SHOW PIPES](SHOW_PIPES.md) to query the pipe, you can see that its state has changed to `RUNNING`.
 
 ## References
 
-- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
-- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
-- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
-- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
+- [CREATE PIPE](CREATE_PIPE.md)
+- [ALTER PIPE](ALTER_PIPE.md)
+- [DROP PIPE](DROP_PIPE.md)
+- [SHOW PIPES](SHOW_PIPES.md)
+- [RETRY FILE](RETRY_FILE.md)

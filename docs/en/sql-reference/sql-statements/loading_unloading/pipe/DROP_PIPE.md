@@ -35,8 +35,8 @@ DROP PIPE user_behavior_replica;
 
 ## References
 
-- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
-- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
-- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
-- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
+- [CREATE PIPE](CREATE_PIPE.md)
+- [ALTER PIPE](ALTER_PIPE.md)
+- [SHOW PIPES](SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](RETRY_FILE.md)

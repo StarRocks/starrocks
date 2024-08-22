@@ -30,13 +30,13 @@ The unique name of the database to which the pipe belongs.
 
 ### pipe_name
 
-The name of the pipe. The pipe name must be unique within the database in which the pipe is created. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+The name of the pipe. The pipe name must be unique within the database in which the pipe is created. For the naming conventions, see [System limits](../../../../reference/System_limit.md).
 
 ### INSERT_SQL
 
 The INSERT INTO SELECT FROM FILES statement that is used to load data from the specified source data file to the destination table.
 
-For more information about the FILES() table function, see [FILES](../../../sql-reference/sql-functions/table-functions/files.md).
+For more information about the FILES() table function, see [FILES](../../../sql-functions/table-functions/files.md).
 
 ### PROPERTIES
 
@@ -75,12 +75,12 @@ SELECT * FROM FILES
 >
 > Substitute your credentials for `AAA` and `BBB` in the above command. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user.
 
-This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../integrations/authenticate_to_aws_resources.md) and [FILES](../../../sql-reference/sql-functions/table-functions/files.md).
+This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../../integrations/authenticate_to_aws_resources.md) and [FILES](../../../sql-functions/table-functions/files.md).
 
 ## References
 
-- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
-- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
-- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
-- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
-- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
+- [ALTER PIPE](ALTER_PIPE.md)
+- [DROP PIPE](DROP_PIPE.md)
+- [SHOW PIPES](SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](RETRY_FILE.md)

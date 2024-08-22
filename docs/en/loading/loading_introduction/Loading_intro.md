@@ -74,7 +74,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** Dozens of GB to hundreds of GB
 
-### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+### [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
 
 **Business scenario:** Batch load or stream data from HDFS or AWS S3.
 
