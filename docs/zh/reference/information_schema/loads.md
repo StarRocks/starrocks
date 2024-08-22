@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # loads
 
-提供导入作业的结果信息。此视图自 StarRocks v3.1 版本起支持。当前仅支持查看 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入作业的结果信息。
+提供导入作业的结果信息。此视图自 StarRocks v3.1 版本起支持。当前仅支持查看 [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入作业的结果信息。
 
 `loads` 提供以下字段：
 

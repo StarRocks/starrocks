@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ## 创建审计日志库表
 
-在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 和 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 和 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 > **注意**
 >

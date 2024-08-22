@@ -16,14 +16,14 @@ displayed_sidebar: "Chinese"
 
 ### 检查异步物化视图工作状态
 
-您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 命令来检查异步物化视图的工作状态。在返回的所有信息中，您可以关注以下字段：
+您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) 命令来检查异步物化视图的工作状态。在返回的所有信息中，您可以关注以下字段：
 
 - `is_active`：物化视图的状态是否为 Active 状态。只有处于 Active 状态的物化视图才能用于查询加速和改写。
 - `last_refresh_state`：最近一次刷新的状态，包括 PENDING（等待中）、RUNNING（运行中）、FAILED（失败）和 SUCCESS（成功）。
 - `last_refresh_error_message`：上次刷新失败的原因（如果物化视图状态不为 Active 状态）。
 - `rows`：物化视图中的数据行数。请注意，这个值可能与物化视图的实际行数不同，因为更新可能有延迟。
 
-有关返回的其他字段的详细信息，请参阅 [SHOW MATERIALIZED VIEWS - 返回](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#返回)。
+有关返回的其他字段的详细信息，请参阅 [SHOW MATERIALIZED VIEWS - 返回](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#返回)。
 
 
 示例：
@@ -341,7 +341,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
+- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
 
   ```SQL
   CANCEL REFRESH MATERIALIZED VIEW mv1;

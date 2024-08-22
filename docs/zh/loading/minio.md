@@ -9,8 +9,8 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 MinIO 导入数据：
 
-- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+- 使用 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 进行异步导入。
 
 两种导入方式各有优势，具体将在下面分章节详细阐述。
 
@@ -57,9 +57,9 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 MinIO 查询数据。
-- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句直接从 MinIO 查询数据。
+- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入数据。
 
 ### 操作示例
 
@@ -261,7 +261,7 @@ PROPERTIES
 );
 ```
 
-通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```SQL
 DESCRIBE user_behavior_declared;
@@ -514,7 +514,7 @@ PROPERTIES
 - `BROKER`：连接数据源的认证信息配置。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看导入进度
 

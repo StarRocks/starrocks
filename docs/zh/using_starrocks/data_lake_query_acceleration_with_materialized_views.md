@@ -101,7 +101,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
   > **说明**
   >
-  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
+  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 
 请注意，如需按照分区刷新，物化视图的分区键必须包含在基表的分区键中。
 

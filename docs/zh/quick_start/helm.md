@@ -601,7 +601,7 @@ helm delete starrocks
 
 默认 [`values.yaml`](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)
 
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受以下 [使用条款](https://www.nyc.gov/home/terms-of-use.page) 和 [隐私政策](https://www.nyc.gov/home/privacy-policy.page) 约束。
 

@@ -70,7 +70,7 @@ WITH BROKER
 
 - `broker_properties`
 
-  用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+  用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [BROKER LOAD](../loading_unloading/BROKER_LOAD.md)。
 
 ## 示例
 

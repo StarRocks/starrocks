@@ -38,9 +38,9 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 HDFS 查询数据。
-- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句直接从 HDFS 查询数据。
+- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入数据。
 
 ### 操作示例
 
@@ -115,7 +115,7 @@ SELECT * FROM FILES
 );
 ```
 
-建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```SQL
 DESCRIBE user_behavior_inferred;
@@ -194,7 +194,7 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
-通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```sql
 DESCRIBE user_behavior_declared;
@@ -385,7 +385,7 @@ PROPERTIES
 - `BROKER`：连接数据源的认证信息配置。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看导入进度
 
@@ -520,11 +520,11 @@ SELECT * FROM FILES
 - `INSERT_SQL`：INSERT INTO SELECT FROM FILES 语句，用于从指定的源数据文件导入数据到目标表。
 - `PROPERTIES`：用于控制 Pipe 执行的一些参数，例如 `AUTO_INGEST`、`POLL_INTERVAL`、`BATCH_SIZE` 和 `BATCH_FILES`，格式为 `"key" = "value"`。
 
-有关详细的语法和参数说明，参见 [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)。
+有关详细的语法和参数说明，参见 [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)。
 
 #### 查看导入进度
 
-- 通过 [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) 查看当前数据库中的导入作业。
+- 通过 [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md) 查看当前数据库中的导入作业。
 
   ```SQL
   SHOW PIPES;
@@ -598,4 +598,4 @@ FINISH_LOAD_TIME: 2023-11-17 16:13:22
 
 #### 管理导入作业
 
-创建 Pipe 导入作业以后，您可以根据需要对这些作业进行修改、暂停或重新启动、删除、查询、以及尝试重新导入等操作。详情参见 [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md)、[SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md)、[DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md)、[SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md)、[RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md)。
+创建 Pipe 导入作业以后，您可以根据需要对这些作业进行修改、暂停或重新启动、删除、查询、以及尝试重新导入等操作。详情参见 [ALTER PIPE](../sql-reference/sql-statements/loading_unloading/pipe/ALTER_PIPE.md)、[SUSPEND or RESUME PIPE](../sql-reference/sql-statements/loading_unloading/pipe/SUSPEND_or_RESUME_PIPE.md)、[DROP PIPE](../sql-reference/sql-statements/loading_unloading/pipe/DROP_PIPE.md)、[SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md)、[RETRY FILE](../sql-reference/sql-statements/loading_unloading/pipe/RETRY_FILE.md)。

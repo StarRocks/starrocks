@@ -764,7 +764,7 @@ SELECT /*+ SET_VAR
   * `auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。
   * `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
 
-  详细信息，请参见[UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#列模式的部分更新自-31)。
+  详细信息，请参见[UPDATE](../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md#列模式的部分更新自-31)。
 * 默认值：auto
 * 引入版本：v3.1
 

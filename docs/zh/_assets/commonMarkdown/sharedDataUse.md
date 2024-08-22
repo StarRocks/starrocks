@@ -89,7 +89,7 @@ StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详�
 
 ### 在 StarRocks 存算分离集群查询
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
 > **说明**
 >

@@ -18,72 +18,72 @@ displayed_sidebar: "Chinese"
 
 ## CREATE
 
-- [ANALYZE TABLE](./data-definition/ANALYZE_TABLE.md)
-- [CREATE ANALYZE](./data-definition/CREATE_ANALYZE.md)
-- [CREATE DATABASE](./data-definition/CREATE_DATABASE.md)
-- [CREATE EXTERNAL CATALOG](./data-definition/CREATE_EXTERNAL_CATALOG.md)
-- [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
-- [CREATE IDEX](./data-definition/CREATE_INDEX.md)
-- [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
-- [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
-- [CREATE RESOURCE](./data-definition/CREATE_RESOURCE.md)
-- [CREATE TABLE](./data-definition/CREATE_TABLE.md)
-- [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
-- [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
-- [CREATE VIEW](./data-definition/CREATE_VIEW.md)
+- [ANALYZE TABLE](cbo_stats/ANALYZE_TABLE.md)
+- [CREATE ANALYZE](cbo_stats/CREATE_ANALYZE.md)
+- [CREATE DATABASE](Database/CREATE_DATABASE.md)
+- [CREATE EXTERNAL CATALOG](Catalog/CREATE_EXTERNAL_CATALOG.md)
+- [CREATE FUNCTION](Function/CREATE_FUNCTION.md)
+- [CREATE IDEX](table_bucket_part_index/CREATE_INDEX.md)
+- [CREATE MATERIALIZED VIEW](materialized_view/CREATE_MATERIALIZED_VIEW.md)
+- [CREATE REPOSITORY](backup_restore/CREATE_REPOSITORY.md)
+- [CREATE RESOURCE](table_bucket_part_index/CREATE_RESOURCE.md)
+- [CREATE TABLE](table_bucket_part_index/CREATE_TABLE.md)
+- [CREATE TABLE AS SELECT](table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
+- [CREATE TABLE LIKE](table_bucket_part_index/CREATE_TABLE_LIKE.md)
+- [CREATE VIEW](View/CREATE_VIEW.md)
 
 ## ALTER
 
-- [ALTER DATABASE](./data-definition/ALTER_DATABASE.md)
-- [ALTER MATERIALIZED VIEW](./data-definition/ALTER_MATERIALIZED_VIEW.md)
-- [ALTER RESOURCE](./data-definition/ALTER_RESOURCE.md)
-- [ALTER TABLE](./data-definition/ALTER_TABLE.md)
-- [ALTER VIEW](./data-definition/ALTER_VIEW.md)
+- [ALTER DATABASE](Database/ALTER_DATABASE.md)
+- [ALTER MATERIALIZED VIEW](materialized_view/ALTER_MATERIALIZED_VIEW.md)
+- [ALTER RESOURCE](table_bucket_part_index/ALTER_RESOURCE.md)
+- [ALTER TABLE](table_bucket_part_index/ALTER_TABLE.md)
+- [ALTER VIEW](View/ALTER_VIEW.md)
 
 ## DROP
 
-- [DROP ANALYZE](./data-definition/DROP_ANALYZE.md)
-- [DROP CATALOG](./data-definition/DROP_CATALOG.md)
-- [DROP DATABASE](./data-definition/DROP_DATABASE.md)
-- [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
-- [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
-- [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
-- [DROP STATS](./data-definition/DROP_STATS.md)
-- [DROP TABLE](./data-definition/DROP_TABLE.md)
-- [DROP VIEW](./data-definition/DROP_VIEW.md)
+- [DROP ANALYZE](cbo_stats/DROP_ANALYZE.md)
+- [DROP CATALOG](Catalog/DROP_CATALOG.md)
+- [DROP DATABASE](Database/DROP_DATABASE.md)
+- [DROP FUNCTION](Function/DROP_FUNCTION.md)
+- [DROP MATERIALIZED VIEW](materialized_view/DROP_MATERIALIZED_VIEW.md)
+- [DROP REPOSITORY](backup_restore/DROP_REPOSITORY.md)
+- [DROP RESOURCE](table_bucket_part_index/DROP_RESOURCE.md)
+- [DROP STATS](cbo_stats/DROP_STATS.md)
+- [DROP TABLE](table_bucket_part_index/DROP_TABLE.md)
+- [DROP VIEW](View/DROP_VIEW.md)
 
 ## REFRESH
 
-- [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
-- [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
+- [REFRESH EXTERNAL TABLE](table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md)
+- [REFRESH MATERIALIZED VIEW](materialized_view/REFRESH_MATERIALIZED_VIEW.md)
 
 ## TRUNCATE TABLE
 
-- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
+- [TRUNCATE TABLE](table_bucket_part_index/TRUNCATE_TABLE.md)
 
 ## BACKUP and RESTORE
 
-- [BACKUP](./data-definition/backup_restore/BACKUP.md)
-- [RECOVER](./data-definition/backup_restore/RECOVER.md)
-- [RESTORE](./data-definition/backup_restore/RESTORE.md)
+- [BACKUP](backup_restore/BACKUP.md)
+- [RECOVER](backup_restore/RECOVER.md)
+- [RESTORE](backup_restore/RESTORE.md)
 
 ## SET
 
-- [SET CATALOG](./data-definition/SET_CATALOG.md)
+- [SET CATALOG](Catalog/SET_CATALOG.md)
 
 ## CANCEL
 
-- [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
-- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
-- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
-- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
+- [CANCEL ALTER TABLE](table_bucket_part_index/CANCEL_ALTER_TABLE.md)
+- [CANCEL BACKUP](backup_restore/CANCEL_BACKUP.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
+- [CANCEL RESTORE](backup_restore/CANCEL_RESTORE.md)
 
 ## KILL
 
-- [KILL ANALYZE](./data-definition/KILL_ANALYZE.md)
+- [KILL ANALYZE](cbo_stats/KILL_ANALYZE.md)
 
 ## Utility commands
 
-- [USE](../sql-statements/data-definition/USE.md)
-- [DESC](../sql-statements/Utility/DESCRIBE.md)
+- [USE](Database/USE.md)
+- [DESC](table_bucket_part_index/DESCRIBE.md)
