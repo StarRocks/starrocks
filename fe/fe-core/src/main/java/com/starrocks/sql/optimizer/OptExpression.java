@@ -64,6 +64,7 @@ public class OptExpression {
 
     // the flag if its parent has required data distribution property for this expression
     private boolean existRequiredDistribution = true;
+
     private OptExpression() {
     }
 
