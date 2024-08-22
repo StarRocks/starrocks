@@ -496,6 +496,7 @@ struct TTaskInfo {
     6: optional i64 expire_time
     7: optional string properties
     8: optional string catalog
+    9: optional string owner
 }
 
 struct TGetTaskInfoResult {
