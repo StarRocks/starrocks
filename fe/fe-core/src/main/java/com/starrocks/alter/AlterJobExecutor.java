@@ -211,7 +211,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         Database db = MetaUtils.getDatabase(context, mvName);
 
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
 
@@ -654,7 +654,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                                           Map<String, String> properties)
             throws DdlException, AnalysisException {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
