@@ -1111,11 +1111,16 @@ public class CreateMaterializedViewTest {
                         "AS SELECT `tbl1`.`a`, `tbl1`.`b`, `tbl1`.`c`, `tbl1`.`d`, CAST(`tbl1`.`d` AS DATE) AS `dt`\n" +
                         "FROM `jdbc0`.`partitioned_db0`.`tbl1`;",
                 starRocksAssert.showCreateTable("show create table mv_cast_date"));
-        starRocksAssert.query("select *, cast(d as date) from jdbc0.partitioned_db0.tbl1")
-                .explainContains("mv_cast_date");
         starRocksAssert.dropMaterializedView("mv_cast_date");
 
         // cast in CTE
+        starRocksAssert.withRefreshedMaterializedView(
+                "create materialized view mv_cast_date " + " partition by (dt)" +
+                        " refresh manual as " +
+                        " with cte1 as (" +
+                        "   select *, cast(d as date) as dt from jdbc0.partitioned_db0.tbl1) \n" +
+                        " select * from cte1");
+        starRocksAssert.dropMaterializedView("mv_cast_date");
 
         // TODO add more test
     }
