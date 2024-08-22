@@ -30,6 +30,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
@@ -672,10 +673,7 @@ public class MaterializedViewAnalyzer {
             }
 
             // convert the input expression if needed
-            if (partitionColumnExpr instanceof CastExpr) {
-                Expr param0 = partitionColumnExpr.getChild(0);
-                partitionColumnExpr = new FunctionCallExpr(FunctionSet.STR2DATE, Lists.newArrayList(param0));
-            }
+            partitionColumnExpr = replaceCastDate(partitionColumnExpr);
 
             // set partition-ref into statement
             if (expressionPartitionDesc.isFunction()) {
@@ -703,9 +701,7 @@ public class MaterializedViewAnalyzer {
                 }
                 statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
-                if (partitionColumnExpr instanceof FunctionCallExpr ||
-                        partitionColumnExpr instanceof SlotRef ||
-                        partitionColumnExpr instanceof CastExpr) {
+                if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
                     // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                     statement.setPartitionRefTableExpr(partitionColumnExpr);
                 } else {
@@ -713,6 +709,25 @@ public class MaterializedViewAnalyzer {
                             expressionPartitionDesc.getPos());
                 }
             }
+        }
+
+        /**
+         * Replace the CAST(dt AS DATE) as str2date(dt, '%Y-%m-%d').
+         * The replacement only affects PARTITION-EXPR but not the real execution plan, the real execution still
+         * uses the CAST(dt AS DATE) expression, so we can use '%Y-%m-%d' as a placeholder.
+         */
+        private Expr replaceCastDate(Expr expr) {
+            if (!(expr instanceof CastExpr)) {
+                return expr;
+            }
+            CastExpr castExpr = expr.cast();
+            if (!castExpr.getType().isDate()) {
+                return castExpr;
+            }
+
+            Expr param0 = expr.getChild(0);
+            Expr param1 = new StringLiteral("%Y-%m-%d");
+            return new FunctionCallExpr(FunctionSet.STR2DATE, Lists.newArrayList(param0, param1));
         }
 
         /**

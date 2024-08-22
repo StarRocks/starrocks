@@ -118,9 +118,8 @@ public class PartitionFunctionChecker {
             return false;
         }
 
-        // str2date(col)
         if (fnExpr.getChildren().size() != 2) {
-            return true;
+            return false;
         }
 
         Expr child0 = fnExpr.getChild(0);

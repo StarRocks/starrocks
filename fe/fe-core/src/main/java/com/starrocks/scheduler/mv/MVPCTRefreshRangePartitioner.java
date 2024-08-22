@@ -163,15 +163,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
             Preconditions.checkState(
                     functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
-            if (functionCallExpr.hasChild(1)) {
-                String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
-                List<Range<PartitionKey>> converted = Lists.newArrayList();
-                for (Range<PartitionKey> range : sourceTablePartitionRange) {
-                    Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
-                    converted.add(varcharPartitionKey);
-                }
-                sourceTablePartitionRange = converted;
+            String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
+            List<Range<PartitionKey>> converted = Lists.newArrayList();
+            for (Range<PartitionKey> range : sourceTablePartitionRange) {
+                Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
+                converted.add(varcharPartitionKey);
             }
+            sourceTablePartitionRange = converted;
         }
         List<Expr> partitionPredicates =
                 MvUtils.convertRange(mvPartitionSlotRef, sourceTablePartitionRange);

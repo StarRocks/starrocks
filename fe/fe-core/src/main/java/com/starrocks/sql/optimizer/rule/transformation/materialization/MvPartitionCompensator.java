@@ -703,9 +703,6 @@ public class MvPartitionCompensator {
     @VisibleForTesting
     public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
         if (from.hasLowerBound() && from.hasUpperBound()) {
-            if (from.lowerEndpoint().getKeys().get(0) instanceof DateLiteral) {
-                return from;
-            }
             StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
             LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
             PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
