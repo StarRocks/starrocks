@@ -2167,9 +2167,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
     private boolean enableConnectorIncrementalScanRanges = false;
 
+<<<<<<< HEAD
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 1000;
 
+=======
+>>>>>>> 17cbf495dc (add session variable)
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
@@ -4177,6 +4180,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorRemoteFileAsyncTaskSize;
     }
 
+<<<<<<< HEAD
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
@@ -4185,14 +4189,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         connectorIncrementalScanRangeSize = v;
     }
 
+=======
+>>>>>>> 17cbf495dc (add session variable)
     public boolean isEnableConnectorIncrementalScanRanges() {
         return enableConnectorIncrementalScanRanges;
     }
 
+<<<<<<< HEAD
     public void setEnableConnectorIncrementalScanRanges(boolean v) {
         enableConnectorIncrementalScanRanges = v;
     }
 
+=======
+>>>>>>> 17cbf495dc (add session variable)
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
