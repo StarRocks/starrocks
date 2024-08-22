@@ -617,7 +617,9 @@ jobs:
         run: |
           labels=`gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json labels -q '.labels[].name'`
           echo "${labels}"
-          [[ "${labels}" =~ sync ]] && echo "IS_SYNC=true" >> $GITHUB_OUTPUT
+          if [[ "${labels}" =~ sync ]]; then
+            echo "IS_SYNC=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
