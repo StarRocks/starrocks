@@ -44,6 +44,7 @@
 #include "common/logging.h"
 #include "datasketches/hll.hpp"
 #include "gutil/macros.h"
+#include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
@@ -179,20 +180,26 @@ private:
 
 class DataSketchesHll {
 public:
+    using alloc_type = STLCountingAllocator<uint8_t>;
+    using hll_sketch_type = datasketches::hll_sketch_alloc<alloc_type>;
+    using hll_union_type = datasketches::hll_union_alloc<alloc_type>;
     // default lg_k value for HLL
     static const datasketches::target_hll_type DEFAULT_HLL_TGT_TYPE = datasketches::HLL_6;
 
     explicit DataSketchesHll(uint8_t log_k, datasketches::target_hll_type tgt_type) : _tgt_type(tgt_type) {
-        this->_sketch_union = std::make_unique<datasketches::hll_union>(log_k);
+        this->_sketch_union = std::make_unique<hll_union_type>(log_k, alloc_type(&_memory_usage));
     }
 
     DataSketchesHll(const DataSketchesHll& other) = delete;
     DataSketchesHll& operator=(const DataSketchesHll& other) = delete;
 
     DataSketchesHll(DataSketchesHll&& other) noexcept
-            : _sketch_union(std::move(other._sketch_union)), _tgt_type(other._tgt_type) {}
+            : _memory_usage(other._memory_usage),
+              _sketch_union(std::move(other._sketch_union)),
+              _tgt_type(other._tgt_type) {}
     DataSketchesHll& operator=(DataSketchesHll&& other) noexcept {
         if (this != &other) {
+            this->_memory_usage = other._memory_usage;
             this->_sketch_union = std::move(other._sketch_union);
             this->_tgt_type = other._tgt_type;
         }
@@ -228,8 +235,7 @@ public:
 
     // Return max size of serialized binary
     size_t max_serialized_size() const;
-    // use max_serialized_size as estimate memory usage
-    int64_t mem_usage() const { return max_serialized_size(); }
+    int64_t mem_usage() const { return _memory_usage; }
 
     // Input slice should have enough capacity for serialize, which
     // can be got through max_serialized_size(). If insufficient buffer
@@ -255,20 +261,22 @@ public:
     void clear() { _sketch_union->reset(); }
 
     // get hll_sketch object which is lazy initialized
-    datasketches::hll_sketch* get_hll_sketch() const {
+    hll_sketch_type* get_hll_sketch() const {
         if (_is_changed) {
-            _sketch = std::make_unique<datasketches::hll_sketch>(_sketch_union->get_result(_tgt_type));
+            _sketch = std::make_unique<hll_sketch_type>(_sketch_union->get_result(_tgt_type));
             _is_changed = false;
         }
         return _sketch.get();
     }
+
     inline void mark_changed() { _is_changed = true; }
 
 private:
-    std::unique_ptr<datasketches::hll_union> _sketch_union = nullptr;
+    int64_t _memory_usage = 0;
+    std::unique_ptr<hll_union_type> _sketch_union = nullptr;
     datasketches::target_hll_type _tgt_type = DEFAULT_HLL_TGT_TYPE;
     // lazy value of union state
-    mutable std::unique_ptr<datasketches::hll_sketch> _sketch = nullptr;
+    mutable std::unique_ptr<hll_sketch_type> _sketch = nullptr;
     mutable bool _is_changed = true;
 };
 

@@ -127,14 +127,26 @@ public:
     T* allocate(size_t n) {
         DCHECK(_counter != nullptr);
         T* result = static_cast<T*>(malloc(n * sizeof(T)));
+        // in ut mode, mem_hook won't take effect and tls_delta_memory will always be 0,
+        // we use logical size for counting,
+        // otherwise, we use the actual size allocated by memory allocator.
+#ifndef BE_TEST
+        *_counter += tls_delta_memory;
+#else
         *_counter += (result != nullptr) ? n * sizeof(T) : 0;
+#endif
+
         return result;
     }
 
     void deallocate(T* ptr, size_t n) {
         DCHECK(_counter != nullptr);
         free(ptr);
+#ifndef BE_TEST
+        *_counter += tls_delta_memory;
+#else
         *_counter -= n * sizeof(T);
+#endif
     }
 
     STLCountingAllocator& operator=(const STLCountingAllocator& rhs) {
