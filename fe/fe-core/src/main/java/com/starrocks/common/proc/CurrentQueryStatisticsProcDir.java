@@ -56,6 +56,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("StartTime")
             .add("feIp")
             .add("QueryId")
+            .add("Sql")
             .add("ConnectionId")
             .add("Database")
             .add("User")

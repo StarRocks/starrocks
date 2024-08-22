@@ -67,6 +67,7 @@ public class QueryStatisticsInfo {
     private long queryStartTime;
     private String feIp;
     private String queryId;
+    private String sql;
     private String connId;
     private String db;
     private String user;
@@ -116,6 +117,10 @@ public class QueryStatisticsInfo {
 
     public String getQueryId() {
         return queryId;
+    }
+
+    public String getSql() {
+        return sql;
     }
 
     public String getConnId() {
@@ -182,6 +187,11 @@ public class QueryStatisticsInfo {
 
     public QueryStatisticsInfo withQueryId(String queryId) {
         this.queryId = queryId;
+        return this;
+    }
+
+    public QueryStatisticsInfo withSql(String sql) {
+        this.sql = sql;
         return this;
     }
 
@@ -295,6 +305,7 @@ public class QueryStatisticsInfo {
         values.add(TimeUtils.longToTimeString(this.getQueryStartTime()));
         values.add(this.getFeIp());
         values.add(this.getQueryId());
+        values.add(this.getSql());
         values.add(this.getConnId());
         values.add(this.getDb());
         values.add(this.getUser());
@@ -376,6 +387,7 @@ public class QueryStatisticsInfo {
                     .withQueryStartTime(item.getQueryStartTime())
                     .withFeIp(FrontendOptions.getLocalHostAddress())
                     .withQueryId(item.getQueryId())
+                    .withSql(item.getSql())
                     .withConnId(item.getConnId())
                     .withDb(item.getDb())
                     .withUser(item.getUser())
