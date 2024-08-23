@@ -80,7 +80,7 @@
     "description": "The label for category Data Lakes in sidebar.docs"
   },
   "sidebar.docs.category.Catalog": {
-    "message": "Catalog",
+    "message": "数据目录",
     "description": "The label for category Catalog in sidebar.docs"
   },
   "sidebar.docs.category.Data cache": {
@@ -172,7 +172,7 @@
     "description": "The label for category Query Profile in sidebar.docs"
   },
   "sidebar.docs.category.Reference": {
-    "message": "Reference",
+    "message": "参考手册",
     "description": "The label for category Reference in sidebar.docs"
   },
   "sidebar.docs.category.Data Types": {
@@ -180,27 +180,27 @@
     "description": "The label for category Data Types in sidebar.docs"
   },
   "sidebar.docs.category.Numeric": {
-    "message": "Numeric",
+    "message": "数值类型",
     "description": "The label for category Numeric in sidebar.docs"
   },
   "sidebar.docs.category.String": {
-    "message": "String",
+    "message": "字符串类型",
     "description": "The label for category String in sidebar.docs"
   },
   "sidebar.docs.category.Date and Time": {
-    "message": "Date and Time",
+    "message": "日期类型",
     "description": "The label for category Date and Time in sidebar.docs"
   },
   "sidebar.docs.category.Semi-structured": {
-    "message": "Semi-structured",
+    "message": "半结构化类型",
     "description": "The label for category Semi-structured in sidebar.docs"
   },
   "sidebar.docs.category.Other": {
-    "message": "Other",
+    "message": "其他类型",
     "description": "The label for category Other in sidebar.docs"
   },
   "sidebar.docs.category.SQL Statements": {
-    "message": "SQL Statements",
+    "message": "SQL 参考",
     "description": "The label for category SQL Statements in sidebar.docs"
   },
   "sidebar.docs.category.SQL Statements.link.generated-index.title": {
@@ -208,31 +208,31 @@
     "description": "The generated-index page title for category SQL Statements in sidebar.docs"
   },
   "sidebar.docs.category.User account management": {
-    "message": "User account management",
+    "message": "用户账户管理",
     "description": "The label for category User account management in sidebar.docs"
   },
   "sidebar.docs.category.Cluster management": {
-    "message": "Cluster management",
+    "message": "集群管理",
     "description": "The label for category Cluster management in sidebar.docs"
   },
   "sidebar.docs.category.Nodes and processes": {
-    "message": "Nodes and processes",
+    "message": "节点和进程",
     "description": "The label for category Nodes and processes in sidebar.docs"
   },
   "sidebar.docs.category.Configuration variables": {
-    "message": "Configuration variables",
+    "message": "系统配置和变量",
     "description": "The label for category Configuration variables in sidebar.docs"
   },
   "sidebar.docs.category.Resource group": {
-    "message": "Resource group",
+    "message": "资源组",
     "description": "The label for category Resource group in sidebar.docs"
   },
   "sidebar.docs.category.Storage volume": {
-    "message": "Storage volume",
+    "message": "存储卷",
     "description": "The label for category Storage volume in sidebar.docs"
   },
   "sidebar.docs.category.Tablet and replica": {
-    "message": "Tablet and replica",
+    "message": "Tablet，Replica 检查修复",
     "description": "The label for category Tablet and replica in sidebar.docs"
   },
   "sidebar.docs.category.File": {
@@ -240,19 +240,19 @@
     "description": "The label for category File in sidebar.docs"
   },
   "sidebar.docs.category.SQL blacklist": {
-    "message": "SQL blacklist",
+    "message": "SQL 黑名单",
     "description": "The label for category SQL blacklist in sidebar.docs"
   },
   "sidebar.docs.category.Plugin": {
-    "message": "Plugin",
+    "message": "插件",
     "description": "The label for category Plugin in sidebar.docs"
   },
   "sidebar.docs.category.Execution plan and profile": {
-    "message": "Execution plan and profile",
+    "message": "执行计划和 Profile",
     "description": "The label for category Execution plan and profile in sidebar.docs"
   },
   "sidebar.docs.category.Loading and unloading": {
-    "message": "Loading and unloading",
+    "message": "导入导出",
     "description": "The label for category Loading and unloading in sidebar.docs"
   },
   "sidebar.docs.category.ETL": {
@@ -268,7 +268,7 @@
     "description": "The label for category routine_load in sidebar.docs"
   },
   "sidebar.docs.category.unloading": {
-    "message": "unloading",
+    "message": "导入导出",
     "description": "The label for category unloading in sidebar.docs"
   },
   "sidebar.docs.category.Database": {
@@ -276,31 +276,31 @@
     "description": "The label for category Database in sidebar.docs"
   },
   "sidebar.docs.category.Resource": {
-    "message": "Resource",
+    "message": "资源组",
     "description": "The label for category Resource in sidebar.docs"
   },
   "sidebar.docs.category.Table, bucket, partition, and index": {
-    "message": "Table, bucket, partition, and index",
+    "message": "表，分区，分桶，索引",
     "description": "The label for category Table, bucket, partition, and index in sidebar.docs"
   },
   "sidebar.docs.category.View": {
-    "message": "View",
+    "message": "视图",
     "description": "The label for category View in sidebar.docs"
   },
   "sidebar.docs.category.Materialized View": {
-    "message": "Materialized View",
+    "message": "物化视图",
     "description": "The label for category Materialized View in sidebar.docs"
   },
   "sidebar.docs.category.Function": {
-    "message": "Function",
+    "message": "函数",
     "description": "The label for category Function in sidebar.docs"
   },
   "sidebar.docs.category.CBO statistics": {
-    "message": "CBO statistics",
+    "message": "CBO 统计信息",
     "description": "The label for category CBO statistics in sidebar.docs"
   },
   "sidebar.docs.category.Backup and restore": {
-    "message": "Backup and restore",
+    "message": "备份与恢复",
     "description": "The label for category Backup and restore in sidebar.docs"
   },
   "sidebar.docs.category.SQL Functions": {
