@@ -90,23 +90,19 @@ public class UserProperty {
             String value = entry.second;
 
             if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                long newMaxConn = checkMaxConn(value);
-                setMaxConn(newMaxConn);
+                checkMaxConn(value);
             } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
                 // we do not check database existence here, because we should
                 // check catalog existence first.
                 newDatabase = value;
             } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                 checkCatalog(value);
-                setCatalog(value);
             } else if (key.startsWith(PROP_SESSION_PREFIX)) {
                 String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
                 if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
                     checkCatalog(value);
-                    setCatalog(value);
                 } else {
                     checkSessionVariable(sessionKey, value);
-                    setSessionVariable(sessionKey, value);
                 }
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
@@ -114,6 +110,31 @@ public class UserProperty {
         }
         if (!newDatabase.equalsIgnoreCase(getDatabase())) {
             checkDatabase(newDatabase);
+        }
+
+        newDatabase = getDatabase();
+        for (Pair<String, String> entry : properties) {
+            String key = entry.first;
+            String value = entry.second;
+
+            if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
+                setMaxConn(Long.parseLong(value));
+            } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
+                // we do not check database existence here, because we should
+                // check catalog existence first.
+                newDatabase = value;
+            } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
+                setCatalog(value);
+            } else if (key.startsWith(PROP_SESSION_PREFIX)) {
+                String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
+                if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
+                    setCatalog(value);
+                } else {
+                    setSessionVariable(sessionKey, value);
+                }
+            }
+        }
+        if (!newDatabase.equalsIgnoreCase(getDatabase())) {
             setDatabase(newDatabase);
         }
     }
