@@ -4,6 +4,42 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.10
+
+Release date: August 23, 2024
+
+### Improvements
+
+- Files() will automatically convert `BYTE_ARRAY` data with a `logical_type` of `JSON` in Parquet files to the JSON type in StarRocks. [#49385](https://github.com/StarRocks/starrocks/pull/49385)
+- Optimized error messages for Files() when Access Key ID and Secret Access Key are missing. [#49090](https://github.com/StarRocks/starrocks/pull/49090)
+- `information_schema.columns` supports the `GENERATION_EXPRESSION` field. [#49734](https://github.com/StarRocks/starrocks/pull/49734)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Downgrading a v3.3 shared-data cluster to v3.2 after setting the Primary Key table property `"persistent_index_type" = "CLOUD_NATIVE"` causes a crash. [#48149](https://github.com/StarRocks/starrocks/pull/48149)
+- Exporting data to CSV files using SELECT INTO OUTFILE may cause data inconsistency. [#48052](https://github.com/StarRocks/starrocks/pull/48052)
+- Queries encounter failures during concurrent query execution. [#48180](https://github.com/StarRocks/starrocks/pull/48180)
+- Queries would hang due to a timeout in the Plan phase without exiting. [#48405](https://github.com/StarRocks/starrocks/pull/48405)
+- After disabling index compression for Primary Key tables in older versions and then upgrading to v3.2.9, accessing `page_off` information causes an array out-of-bounds crash. [#48230](https://github.com/StarRocks/starrocks/pull/48230)
+- BE crash caused by concurrent execution of ADD/DROP COLUMN operations. [#49355](https://github.com/StarRocks/starrocks/pull/49355)
+- Queries against negative `TINYINT` values in ORC format files return `None` on the aarch64 architecture. [#49517](https://github.com/StarRocks/starrocks/pull/49517)
+- If the disk write operation fails, failures of `l0` snapshots for Primary Key Persistent Index may cause data loss. [#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- Partial Update in Column mode for Primary Key tables fails under scenarios with large-volume data updates. [#49054](https://github.com/StarRocks/starrocks/pull/49054)
+- BE crash caused by Fast Schema Evolution when downgrading a v3.3.0 shared-data cluster to v3.2.9. [#42737](https://github.com/StarRocks/starrocks/pull/42737)
+- `partition_linve_nubmer` does not take effect. [#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- The conflict between index persistence and compaction in Primary Key tables could cause clone failures. [#49341](https://github.com/StarRocks/starrocks/pull/49341)
+- Modifications of `partition_line_number` using ALTER TABLE do not take effect. [#49437](https://github.com/StarRocks/starrocks/pull/49437)
+- Rewrite of CTE distinct grouping sets generates an invalid plan. [#48765](https://github.com/StarRocks/starrocks/pull/48765)
+- RPC failures polluted the thread pool. [#49619](https://github.com/StarRocks/starrocks/pull/49619)
+- authentication failure issues when loading files from AWS S3 via PIPE. [#49837](https://github.com/StarRocks/starrocks/pull/49837)
+
+### Behavior Changes
+
+- Added a check for the `meta` directory in the FE startup script. If the directory does not exist, it will be automatically created.  [#48940](https://github.com/StarRocks/starrocks/pull/48940)
+- Added a memory limit parameter `load_process_max_memory_hard_limit_ratio` for data loading. If memory usage exceeds the limit, subsequent loading tasks will fail. [#48495](https://github.com/StarRocks/starrocks/pull/48495)
+
 ## 3.2.9
 
 Release date: July 11, 2024
