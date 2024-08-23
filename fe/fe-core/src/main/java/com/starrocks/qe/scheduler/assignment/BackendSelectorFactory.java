@@ -50,15 +50,21 @@ public class BackendSelectorFactory {
                                          ExecutionFragment execFragment,
                                          WorkerProvider workerProvider,
                                          ConnectContext connectContext,
-                                         Set<Integer> destReplicatedScanIds) {
+                                         Set<Integer> destReplicatedScanIds,
+                                         boolean useIncrementalScanRanges) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
-        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+        int maxScanRangeLength = 0;
+        if (useIncrementalScanRanges && scanNode.isIncrementalScanRangesSupported()) {
+            maxScanRangeLength = sessionVariable.getConnectorRemoteFileAsyncTaskSize();
+        }
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(maxScanRangeLength);
         if (locations == null) {
             return new NoopBackendSelector();
         }
-
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
         if (scanNode instanceof SchemaScanNode) {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);

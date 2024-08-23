@@ -106,7 +106,15 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeSource.getAllOutputs();
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return scanRangeSource.hasMoreOutput();
     }
 
     @Override
@@ -270,6 +278,11 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
+
+    @Override
+    public boolean isIncrementalScanRangesSupported() {
         return true;
     }
 }
