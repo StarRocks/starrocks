@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 public class MVLifecycleManager {
 
     private static final MVName AUDIT_LATEST_TIMESTAMP_MARK = MVName.generateSpecial("AUDIT_LATEST_TIMESTAMP_MARK");
-    private static final MVLifecycleManager INSTANCE = new MVLifecycleManager();
     private Map<MVName, MVLifecycle> nameToMVLifecycles = Maps.newConcurrentMap();
     private Map<String, Double> mvHitRatioMap = Maps.newConcurrentMap();
     private Map<String, List<MVLifecycle>> digestToMVLifecycles = Maps.newHashMap();
@@ -54,10 +53,6 @@ public class MVLifecycleManager {
     @VisibleForTesting
     public MVLifecycleManager() {
         mvPhasePolicySupplier = () -> MVPhasePolicy.newBuilder().setMVHitRatioProvider(this::getMVHitRatio).build();
-    }
-
-    public static MVLifecycleManager getInstance() {
-        return INSTANCE;
     }
 
     @VisibleForTesting

@@ -49,23 +49,27 @@ public class TunespaceIngester {
 
     private static final Logger LOG = LogManager.getLogger(TunespaceIngester.class);
     private final ConnectContext ctx;
+    private final MVLifecycleManager mvLifecycleManager;
     private final QueryAuditSource queryAuditSource;
     private final TuneSpace tuneSpace;
     private final String autoMVDb;
 
-    private TunespaceIngester(ConnectContext ctx, QueryAuditSource queryAuditSource, TuneSpace tuneSpace,
+    private TunespaceIngester(ConnectContext ctx, MVLifecycleManager mvLifecycleManager,
+                              QueryAuditSource queryAuditSource, TuneSpace tuneSpace,
                               String autoMVdb) {
         this.ctx = Objects.requireNonNull(ctx);
+        this.mvLifecycleManager = Objects.requireNonNull(mvLifecycleManager);
         this.queryAuditSource = Objects.requireNonNull(queryAuditSource);
         this.tuneSpace = Objects.requireNonNull(tuneSpace);
         this.autoMVDb = Objects.requireNonNull(autoMVdb);
     }
 
-    public static TunespaceIngester of(ConnectContext ctx, String auditDb, String auditTbl, String tsDb, String tsTbl,
+    public static TunespaceIngester of(ConnectContext ctx, MVLifecycleManager mvLifecycleManager, String auditDb,
+                                       String auditTbl, String tsDb, String tsTbl,
                                        String autoMVDb) {
         QueryAuditSource auditSource = new QueryAuditSource(auditDb, auditTbl);
         TuneSpace ts = TuneSpace.of(tsDb, tsTbl, 1, 1);
-        return new TunespaceIngester(ctx, auditSource, ts, autoMVDb);
+        return new TunespaceIngester(ctx, mvLifecycleManager, auditSource, ts, autoMVDb);
     }
 
     public void prepare() throws Throwable {
@@ -163,7 +167,7 @@ public class TunespaceIngester {
         return Result.wrap(() -> executor.exec(ctx, newMVSchema))
                 .bind(() -> {
                     MVName name = Objects.requireNonNull(MVName.parse(mvName).orElse(null));
-                    MVLifecycleManager.getInstance().commitCradle(name);
+                    mvLifecycleManager.commitCradle(name);
                 })
                 .ifError((ex) -> Log.error("Failed to create MV '{}', schema={}", fqMvName, newMVSchema, ex))
                 .unwrap();
@@ -213,7 +217,7 @@ public class TunespaceIngester {
                     ConcurrentMap<String, Double> mvHitRatioMap = mvhitRatioList.stream()
                             .filter(e -> MVName.parse(e.getMv()).isPresent())
                             .collect(Collectors.toConcurrentMap(MVHitCountEntry::getMv, (e -> (double) e.getCount())));
-                    MVLifecycleManager.getInstance().populateMVHitRatio(mvHitRatioMap);
+                    mvLifecycleManager.populateMVHitRatio(mvHitRatioMap);
                 });
     }
 }

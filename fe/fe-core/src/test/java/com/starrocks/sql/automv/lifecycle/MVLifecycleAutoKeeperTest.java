@@ -101,7 +101,7 @@ public class MVLifecycleAutoKeeperTest {
     private Set<String> createMVs(String catalog, String db, String mvDb, List<Pair<String, String>> queryList)
             throws Throwable {
         AutoMVUtil.mockUpCustomizedQueryExecutor(queryList, catalog, db);
-        MVLifecycleAutoKeeper keeper = new MVLifecycleAutoKeeper(new MVLifecycleManager());
+        MVLifecycleAutoKeeper keeper = new MVLifecycleAutoKeeper();
         keeper.process(getStarRocksAssert().getCtx());
         return collectMVDigests(mvDb);
     }

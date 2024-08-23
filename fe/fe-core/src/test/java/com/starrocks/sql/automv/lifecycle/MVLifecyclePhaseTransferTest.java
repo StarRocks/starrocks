@@ -628,8 +628,8 @@ public class MVLifecyclePhaseTransferTest {
                     .filter(p -> p.first.equals("Q1.1"))
                     .collect(Collectors.toList());
             AutoMVUtil.mockUpCustomizedQueryExecutor(queryList, "default_catalog", "ssb");
-            mvLifecycleManager = new MVLifecycleManager();
-            mvLifecycleAutoKeeper = new MVLifecycleAutoKeeper(mvLifecycleManager);
+            mvLifecycleAutoKeeper = new MVLifecycleAutoKeeper();
+            mvLifecycleManager = mvLifecycleAutoKeeper.getMVLifecycleManager();
         }
 
         public MVLifecycleManager getMVLifecycleManager() {

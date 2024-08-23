@@ -34,16 +34,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Predicate;
 
 public class MVLifecycleAutoKeeper extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(MVLifecycleAutoKeeper.class);
+    private final MVLifecycleManager mvLifecycleManager = new MVLifecycleManager();
 
-    private final MVLifecycleManager mvLifecycleManager;
+    public MVLifecycleAutoKeeper() {
+    }
 
-    public MVLifecycleAutoKeeper(MVLifecycleManager mgr) {
-        mvLifecycleManager = Objects.requireNonNull(mgr);
+    public MVLifecycleManager getMVLifecycleManager() {
+        return mvLifecycleManager;
     }
 
     @Override
@@ -80,7 +81,8 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
         String tsTbl = "automv_ts_tbl__";
         String mvDb = "automv_db";
 
-        TunespaceIngester ingester = TunespaceIngester.of(ctx, auditDb, auditTbl, tsDb, tsTbl, mvDb);
+        TunespaceIngester ingester =
+                TunespaceIngester.of(ctx, mvLifecycleManager, auditDb, auditTbl, tsDb, tsTbl, mvDb);
         ingester.prepare();
         ingester.ingest(mvLifecycleManager);
 

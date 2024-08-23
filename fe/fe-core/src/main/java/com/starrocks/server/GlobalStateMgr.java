@@ -753,7 +753,7 @@ public class GlobalStateMgr {
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
-        this.mvLifeCycleAutoKeeper = new MVLifecycleAutoKeeper(MVLifecycleManager.getInstance());
+        this.mvLifeCycleAutoKeeper = new MVLifecycleAutoKeeper();
 
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1052,9 +1052,9 @@ public class GlobalStateMgr {
     public MVActiveChecker getMvActiveChecker() {
         return mvActiveChecker;
     }
-    
-    public MVLifecycleAutoKeeper getMvLifeCycleManager() {
-        return mvLifeCycleAutoKeeper;
+
+    public MVLifecycleManager getMVLifecycleManager() {
+        return mvLifeCycleAutoKeeper.getMVLifecycleManager();
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1601,7 +1601,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                 .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
-                .put(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, MVLifecycleManager.getInstance()::load)
+                .put(SRMetaBlockIDEPack.MV_LIFECYCLE_MGR, mvLifeCycleAutoKeeper.getMVLifecycleManager()::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1805,7 +1805,7 @@ public class GlobalStateMgr {
                 failoverGroupMgr.save(imageWriter);
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
-                MVLifecycleManager.getInstance().save(imageWriter);
+                mvLifeCycleAutoKeeper.getMVLifecycleManager().save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
