@@ -373,6 +373,7 @@ public class LockManager {
             readerInfo.addProperty("name", owner.getLocker().getThreadName());
             readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
+            readerInfo.addProperty("locker", locker.getLockerStackTrace());
             readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                     locker.getLockerThread(), 0, DEFAULT_STACK_RESERVE_LEVELS));
             ownerArray.add(readerInfo);
