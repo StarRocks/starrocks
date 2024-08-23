@@ -57,6 +57,7 @@ import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -1355,7 +1356,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         int idToPartitionSize = reader.readInt();
         for (int i = 0; i < idToPartitionSize; ++i) {
-            RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
+            RecyclePartitionInfoV2 recycleRangePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
+            if (recycleRangePartitionInfo instanceof IForwardCompatibleObject) {
+                // Ignore the future unknown subtype derived from RecyclePartitionInfoV2
+                LOG.warn("Ignore unknown partition type(partitionId: {}) from the future version!",
+                        recycleRangePartitionInfo.getPartition().getId());
+                continue;
+            }
             idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
         }
 
