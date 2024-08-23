@@ -834,8 +834,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             && diskInfo.getState() == DiskInfo.DiskState.ONLINE
                             && backendReportVersion < currentBackendReportVersion) {
                         LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
-                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
-                        break DB_TRAVERSE;
+                                "latest report version: {}, ignore tablet: {}",
+                                backendId, backendReportVersion, currentBackendReportVersion, tabletId);
+                        continue;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
                                 replica.getPathHash(), tabletId, backendId);
