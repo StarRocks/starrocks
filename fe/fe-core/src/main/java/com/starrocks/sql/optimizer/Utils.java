@@ -374,6 +374,16 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasPrunableJoin(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOp = expression.getOp().cast();
+            JoinOperator joinType = joinOp.getJoinType();
+            return joinType.isInnerJoin() || joinType.isCrossJoin() ||
+                    joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
+        }
+        return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
