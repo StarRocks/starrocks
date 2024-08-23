@@ -308,87 +308,87 @@
     "description": "The label for category SQL Functions in sidebar.docs"
   },
   "sidebar.docs.category.aggregate-functions": {
-    "message": "aggregate-functions",
+    "message": "聚合函数",
     "description": "The label for category aggregate-functions in sidebar.docs"
   },
   "sidebar.docs.category.array-functions": {
-    "message": "array-functions",
+    "message": "Array 函数",
     "description": "The label for category array-functions in sidebar.docs"
   },
   "sidebar.docs.category.binary-functions": {
-    "message": "binary-functions",
+    "message": "Binary 函数",
     "description": "The label for category binary-functions in sidebar.docs"
   },
   "sidebar.docs.category.bit-functions": {
-    "message": "bit-functions",
+    "message": "Bit 函数",
     "description": "The label for category bit-functions in sidebar.docs"
   },
   "sidebar.docs.category.bitmap-functions": {
-    "message": "bitmap-functions",
+    "message": "Bitmap 函数",
     "description": "The label for category bitmap-functions in sidebar.docs"
   },
   "sidebar.docs.category.condition-functions": {
-    "message": "condition-functions",
+    "message": "条件函数",
     "description": "The label for category condition-functions in sidebar.docs"
   },
   "sidebar.docs.category.crytographic-functions": {
-    "message": "crytographic-functions",
+    "message": "加密函数",
     "description": "The label for category crytographic-functions in sidebar.docs"
   },
   "sidebar.docs.category.date-time-functions": {
-    "message": "date-time-functions",
+    "message": "时间日期函数",
     "description": "The label for category date-time-functions in sidebar.docs"
   },
   "sidebar.docs.category.dict-functions": {
-    "message": "dict-functions",
+    "message": "字典函数",
     "description": "The label for category dict-functions in sidebar.docs"
   },
   "sidebar.docs.category.hash-functions": {
-    "message": "hash-functions",
+    "message": "Hash 函数",
     "description": "The label for category hash-functions in sidebar.docs"
   },
   "sidebar.docs.category.json-functions": {
-    "message": "json-functions",
+    "message": "JSON 函数",
     "description": "The label for category json-functions in sidebar.docs"
   },
   "sidebar.docs.category.json-constructor-functions": {
-    "message": "json-constructor-functions",
+    "message": "JSON 构造函数",
     "description": "The label for category json-constructor-functions in sidebar.docs"
   },
   "sidebar.docs.category.json-query-and-processing-functions": {
-    "message": "json-query-and-processing-functions",
+    "message": "JSON 查询和处理函数",
     "description": "The label for category json-query-and-processing-functions in sidebar.docs"
   },
   "sidebar.docs.category.like-predicate-functions": {
-    "message": "like-predicate-functions",
+    "message": "模糊/正则匹配函数",
     "description": "The label for category like-predicate-functions in sidebar.docs"
   },
   "sidebar.docs.category.map-functions": {
-    "message": "map-functions",
+    "message": "Map 函数",
     "description": "The label for category map-functions in sidebar.docs"
   },
   "sidebar.docs.category.math-functions": {
-    "message": "math-functions",
+    "message": "数学函数",
     "description": "The label for category math-functions in sidebar.docs"
   },
   "sidebar.docs.category.percentile-functions": {
-    "message": "percentile-functions",
+    "message": "百分位函数",
     "description": "The label for category percentile-functions in sidebar.docs"
   },
   "sidebar.docs.category.scalar-functions": {
-    "message": "scalar-functions",
+    "message": "标量函数",
     "description": "The label for category scalar-functions in sidebar.docs"
   },
   "sidebar.docs.category.spatial-functions": {
-    "message": "spatial-functions",
+    "message": "地理位置函数",
     "description": "The label for category spatial-functions in sidebar.docs"
   },
   "sidebar.docs.category.string-functions": {
-    "message": "string-functions",
+    "message": "字符串函数",
     "description": "The label for category string-functions in sidebar.docs"
   },
   "sidebar.docs.category.struct-functions": {
-    "message": "struct-functions",
+    "message": "Struct 函数",
     "description": "The label for category struct-functions in sidebar.docs"
   },
   "sidebar.docs.category.table-functions": {
@@ -396,7 +396,7 @@
     "description": "The label for category table-functions in sidebar.docs"
   },
   "sidebar.docs.category.utility-functions": {
-    "message": "utility-functions",
+    "message": "工具函数",
     "description": "The label for category utility-functions in sidebar.docs"
   },
   "sidebar.docs.category.Information Schema": {

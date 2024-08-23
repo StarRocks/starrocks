@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Hive Bitmap UDF
@@ -22,43 +23,43 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
 
 - com.starrocks.hive.udf.UDAFBitmapAgg
 
-  将一列中的多行非 NULL 数值合并成一行 BITMAP 值，等同于 StarRocks 的内置聚合函数 [bitmap_agg](../sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)。
+  将一列中的多行非 NULL 数值合并成一行 BITMAP 值，等同于 StarRocks 的内置聚合函数 [bitmap_agg](bitmap-functions/bitmap_agg.md)。
 
 - com.starrocks.hive.udf.UDAFBitmapUnion
 
-  输入一组 Bitmap 值，求这一组 Bitmap 值的并集，等同于 StarRocks 的内置聚合函数 [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md)。
+  输入一组 Bitmap 值，求这一组 Bitmap 值的并集，等同于 StarRocks 的内置聚合函数 [bitmap_union](bitmap-functions/bitmap_union.md)。
 
 - com.starrocks.hive.udf.UDFBase64ToBitmap
 
-  将 Base64 编码的字符串转化为 Bitmap，等同于 StarRocks 的内置函数 [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)。
+  将 Base64 编码的字符串转化为 Bitmap，等同于 StarRocks 的内置函数 [base64_to_bitmap](bitmap-functions/base64_to_bitmap.md)。
 
 - com.starrocks.hive.udf.UDFBitmapAnd
 
-  计算两个 Bitmap 的交集，等同于 StarRocks 的内置函数 [bitmap_and](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
+  计算两个 Bitmap 的交集，等同于 StarRocks 的内置函数 [bitmap_and](bitmap-functions/bitmap_and.md)。
 
 - com.starrocks.hive.udf.UDFBitmapCount
 
-  统计 Bitmap 中值的个数，等同于 StarRocks 的内置函数 [bitmap_count](../sql-reference/sql-functions/bitmap-functions/bitmap_count.md)。
+  统计 Bitmap 中值的个数，等同于 StarRocks 的内置函数 [bitmap_count](bitmap-functions/bitmap_count.md)。
 
 - com.starrocks.hive.udf.UDFBitmapFromString
 
-  将一个逗号分隔的字符串转化为一个 Bitmap，等同于 StarRocks 的内置函数 [bitmap_from_string](../sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)。
+  将一个逗号分隔的字符串转化为一个 Bitmap，等同于 StarRocks 的内置函数 [bitmap_from_string](bitmap-functions/bitmap_from_string.md)。
 
 - com.starrocks.hive.udf.UDFBitmapOr
 
-  计算两个 Bitmap 的并集，等同于 StarRocks 的内置函数 [bitmap_or](../sql-reference/sql-functions/bitmap-functions/bitmap_or.md)。
+  计算两个 Bitmap 的并集，等同于 StarRocks 的内置函数 [bitmap_or](bitmap-functions/bitmap_or.md)。
 
 - com.starrocks.hive.udf.UDFBitmapToBase64
 
-  将 Bitmap 转换为 Base64 字符串，等同于 StarRocks 的内置函数 [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)。
+  将 Bitmap 转换为 Base64 字符串，等同于 StarRocks 的内置函数 [bitmap_to_base64](bitmap-functions/bitmap_to_base64.md)。
 
 - com.starrocks.hive.udf.UDFBitmapToString
 
-  将 Bitmap 转换为逗号分隔的字符串，等同于 StarRocks 的内置函数 [bitmap_to_string](../sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)。
+  将 Bitmap 转换为逗号分隔的字符串，等同于 StarRocks 的内置函数 [bitmap_to_string](bitmap-functions/bitmap_to_string.md)。
 
 - com.starrocks.hive.udf.UDFBitmapXor
 
-  计算两个 Bitmap 中不重复元素所构成的集合，等同于 StarRocks 的内置函数 [bitmap_xor](../sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)。
+  计算两个 Bitmap 中不重复元素所构成的集合，等同于 StarRocks 的内置函数 [bitmap_xor](bitmap-functions/bitmap_xor.md)。
 
 ## 使用方法
 
@@ -136,7 +137,7 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
 
 4. 通过不同方式导入到 StarRocks。
 
-   - 通过 [files](../sql-reference/sql-functions/table-functions/files.md) 函数导入。
+   - 通过 [files](table-functions/files.md) 函数导入。
 
     ```sql
     mysql> insert into t1 select c1, bitmap_from_binary(c2) from files (
@@ -146,7 +147,7 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
         );
     ```
 
-   - 通过 [Hive Catalog](../data_source/catalog/hive_catalog.md) 导入。
+   - 通过 [Hive Catalog](../../data_source/catalog/hive_catalog.md) 导入。
 
     ```sql
     mysql> insert into t1 select c1, bitmap_from_binary(c2) from hive_catalog_hms.xxx_db.t_bitmap;
@@ -198,7 +199,7 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
     ) select c1, bitmap_to_binary(c2) as c2 from t1;
     ```
 
-   - 通过 [Hive Catalog](../data_source/catalog/hive_catalog.md) 方式导出（binary 格式）。
+   - 通过 [Hive Catalog](../../data_source/catalog/hive_catalog.md) 方式导出（binary 格式）。
 
     ```sql
     mysql> insert into hive_catalog_hms.<hdfs_db>.t_bitmap select c1, bitmap_to_binary(c2) from t1;
