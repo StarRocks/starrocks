@@ -1296,9 +1296,6 @@ public class ExpressionAnalyzer {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
             }
-            if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column", node.getPos());
-            }
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
