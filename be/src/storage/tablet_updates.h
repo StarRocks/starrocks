@@ -255,6 +255,7 @@ public:
     //  - logs
     Status clear_meta();
 
+    // Note: values in column_ids must be valid, unique and increasing, do not support out-of-order column_ids
     // get column values by rssids and rowids, at currently applied version
     // for example:
     // get_column_values with
