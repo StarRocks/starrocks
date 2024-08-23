@@ -97,7 +97,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            ErrorReportException.report(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+            throw ErrorReportException.report(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
         }
 
         PatternMatcher matcher = null;

@@ -73,7 +73,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     private void checkWarehouseState(LocalWarehouse warehouse) {
         if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-            ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouse.getName()));
         }
     }
 
@@ -180,7 +180,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
-            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
