@@ -83,30 +83,4 @@ In versions earlier than v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker
        tar -cf - -C /release . | tar -xvf -
    ```
 
-<<<<<<< HEAD
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
-     docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
-         tar -cf - -C /release . | tar -xvf -
-     ```
-
-   - If you use ARM-based CentOS 7.9:
-
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
-     docker run --rm starrocks/artifacts-centos7:<image_tag> \
-         tar -cf - -C /release . | tar -xvf -
-     ```
-
-   The deployment files include the following directories:
-
-   | **Directory**        | **Description**                                              |
-   | -------------------- | ------------------------------------------------------------ |
-   | **be_artifacts**     | This directory includes the BE or CN deployment directory **be**, StarRocks license file **LICENSE.txt**, and StarRocks notice file **NOTICE.txt**. |
-   | **broker_artifacts** | This directory includes the Broker deployment directory **apache_hdfs_broker**. From StarRocks 2.5 onwards, you do not need to deploy Broker nodes in general scenarios. If you need to deploy Broker nodes in your StarRocks cluster, see [Deploy Broker](../deployment/deploy_broker.md) for detailed instructions. |
-   | **fe_artifacts**     | This directory includes the FE deployment directory **fe**, StarRocks license file **LICENSE.txt**, and StarRocks notice file **NOTICE.txt**. |
-
-3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deployment/deploy_manually.md).
-=======
 3. Dispatch the deployment files to the corresponding instances for [manual deployment](../deployment/deploy_manually.md).
->>>>>>> 09add058d1 ([Doc] Package naming rules (#50124))
