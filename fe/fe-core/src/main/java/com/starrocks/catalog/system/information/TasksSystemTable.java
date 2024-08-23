@@ -56,7 +56,7 @@ public class TasksSystemTable {
                         .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("PROPERTIES", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("OWNER", ScalarType.createVarchar(64))
+                        .column("CREATOR", ScalarType.createVarchar(64))
                         .build(), TSchemaTableType.SCH_TASKS);
     }
 
@@ -99,7 +99,11 @@ public class TasksSystemTable {
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
             info.setProperties(task.getPropertiesString());
-            info.setOwner(task.getCreateUser());
+            if (task.getUserIdentity() != null) {
+                info.setCreator(task.getUserIdentity().toString());
+            } else {
+                info.setCreator(task.getCreateUser());
+            }
             result.add(info);
         }
         return result;
