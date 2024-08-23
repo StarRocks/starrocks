@@ -796,4 +796,17 @@ public class TablePruningTest extends TablePruningTestBase {
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
         Assert.assertTrue(plan, plan.contains("CLONE"));
     }
+
+    @Test
+    public void testBug() throws Exception {
+        String sql = "select\n" +
+                "  cast(101 as int),\n" +
+                "  cast(1 as bigint),\n" +
+                "  dict_merge(`c_city`) as _dict_merge_ \n" +
+                "from customer[_META_]\n";
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("META-SCAN"));
+    }
 }
