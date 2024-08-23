@@ -162,20 +162,20 @@ public class HiveMetadata implements ConnectorMetadata {
                         hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
             }
         } else {
-            if (!stmt.isForceDrop()) {
-                throw new DdlException(String.format("Table location will be cleared." +
-                        " 'Force' must be set when dropping a hive table." +
-                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
+            HiveTable hiveTable = null;
+            try {
+                hiveTable = (HiveTable) getTable(dbName, tableName);
+            } catch (Exception e) {
+                // ignore not found exception
             }
-
-            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
             }
-
-            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
-                throw new StarRocksConnectorException("Only support to drop hive managed table");
+            if (hiveTable.getHiveTableType() == HiveTable.HiveTableType.MANAGED_TABLE && !stmt.isForceDrop()) {
+                throw new DdlException(String.format("Table location will be cleared." +
+                        " 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
 
             hmsOps.dropTable(dbName, tableName);
