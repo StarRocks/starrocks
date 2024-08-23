@@ -102,9 +102,9 @@ public class AnalyzeAggregateTest {
         analyzeFail("select grouping(v1) from t0 group by v1",
                 "cannot use GROUPING functions without [grouping sets|rollup|cube] clause");
 
-        //grouping functions only support column.
+        //The arguments of GROUPING must be expressions referenced by GROUP BY
         analyzeFail("select v1, grouping(v1+1) from t0 group by grouping sets((v1))",
-                "grouping functions only support column.");
+                "The arguments of GROUPING must be expressions referenced by GROUP BY.");
 
         //cannot contain grouping
         analyzeFail("select v1 from t0 inner join t1 on grouping(v1)= v4", "JOIN clause cannot contain grouping");
