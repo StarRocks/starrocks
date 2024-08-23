@@ -234,9 +234,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         error_info_dict = {db: list(cases) for db, cases in all_db_dict.items() if len(cases) > 1}
         tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
 
-    def _replace_uuid_variables(self, sql_list: List) -> List:
+    @staticmethod
+    def _replace_uuid_variables(sql_list: List) -> List:
         ret = list()
-        variable_dict = self.uuid_dict
+        variable_dict = {}
 
         for sql in sql_list:
 

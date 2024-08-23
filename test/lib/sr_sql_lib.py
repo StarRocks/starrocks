@@ -187,8 +187,6 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
-        self.uuid_dict = {}
-
         config_path = os.environ.get("config_path")
         if config_path is None or config_path == "":
             self.read_conf("conf/sr.conf")
