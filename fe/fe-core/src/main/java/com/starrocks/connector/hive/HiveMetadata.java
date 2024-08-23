@@ -162,6 +162,7 @@ public class HiveMetadata implements ConnectorMetadata {
                         hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
             }
         } else {
+<<<<<<< HEAD
             if (!stmt.isForceDrop()) {
                 throw new DdlException(String.format("Table location will be cleared." +
                         " 'Force' must be set when dropping a hive table." +
@@ -169,6 +170,14 @@ public class HiveMetadata implements ConnectorMetadata {
             }
 
             HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+=======
+            HiveTable hiveTable = null;
+            try {
+                hiveTable = (HiveTable) getTable(dbName, tableName);
+            } catch (Exception e) {
+                // ignore not found exception
+            }
+>>>>>>> aeff4a3734 ([BugFix] Drop inexistent table silently (#50150))
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
