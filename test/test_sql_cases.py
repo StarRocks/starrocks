@@ -326,8 +326,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         sql_list = self._init_data(case_info.sql)
 
-        self_print(f"\t → case db: {self.db}")
-        self_print(f"\t → case resource: {self.resource}")
+        self_print(f"\t ▶ case db: {self.db}")
+        self_print(f"\t ▶ case resource: {self.resource}")
 
         log.info(
             """
@@ -461,4 +461,3 @@ Start to run: %s
                 self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
                 if record_mode:
                     self.res_log.append("} " + END_CONCURRENCY_FLAG + "\n")
-
