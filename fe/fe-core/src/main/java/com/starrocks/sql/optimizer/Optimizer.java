@@ -353,6 +353,9 @@ public class Optimizer {
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            if (!Utils.hasPrunableJoin(tree)) {
+                return;
+            }
             // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
             // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
