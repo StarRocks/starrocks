@@ -434,6 +434,13 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk
     original_chunk.swap_chunk(reordered_chunk);
 }
 
+ChunkPtr ChunkHelper::createDummyChunk() {
+    ChunkPtr dummyChunk = std::make_shared<Chunk>();
+    auto col = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    dummyChunk->append_column(std::move(col), 0);
+    return dummyChunk;
+}
+
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
 
 void ChunkAccumulator::set_desired_size(size_t desired_size) {
