@@ -4,79 +4,79 @@
     "description": "The label for version current"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
-    "message": "Introduction to StarRocks",
+    "message": "产品简介",
     "description": "The label for category Introduction to StarRocks in sidebar.docs"
   },
   "sidebar.docs.category.Quick Start": {
-    "message": "Quick Start",
+    "message": "快速开始",
     "description": "The label for category Quick Start in sidebar.docs"
   },
   "sidebar.docs.category.Project Help": {
-    "message": "Project Help",
+    "message": "技术支持",
     "description": "The label for category Project Help in sidebar.docs"
   },
   "sidebar.docs.category.Deployment": {
-    "message": "Deployment",
+    "message": "部署 StarRocks",
     "description": "The label for category Deployment in sidebar.docs"
   },
   "sidebar.docs.category.Preparation": {
-    "message": "Preparation",
+    "message": "前期准备",
     "description": "The label for category Preparation in sidebar.docs"
   },
   "sidebar.docs.category.Shared-nothing deployment": {
-    "message": "Shared-nothing deployment",
+    "message": "存算一体模式部署",
     "description": "The label for category Shared-nothing deployment in sidebar.docs"
   },
   "sidebar.docs.category.Shared-data deployment": {
-    "message": "Shared-data deployment",
+    "message": "存算分离模式部署",
     "description": "The label for category Shared-data deployment in sidebar.docs"
   },
   "sidebar.docs.category.Manage your deployment": {
-    "message": "Manage your deployment",
+    "message": "后期管理",
     "description": "The label for category Manage your deployment in sidebar.docs"
   },
   "sidebar.docs.category.Table Design": {
-    "message": "Table Design",
+    "message": "表设计",
     "description": "The label for category Table Design in sidebar.docs"
   },
   "sidebar.docs.category.Table types": {
-    "message": "Table types",
+    "message": "表类型",
     "description": "The label for category Table types in sidebar.docs"
   },
   "sidebar.docs.category.Data distribution": {
-    "message": "Data distribution",
+    "message": "数据分布",
     "description": "The label for category Data distribution in sidebar.docs"
   },
   "sidebar.docs.category.Indexes": {
-    "message": "Indexes",
+    "message": "索引",
     "description": "The label for category Indexes in sidebar.docs"
   },
   "sidebar.docs.category.Data Loading": {
-    "message": "Data Loading",
+    "message": "导入数据",
     "description": "The label for category Data Loading in sidebar.docs"
   },
   "sidebar.docs.category.Loading overview": {
-    "message": "Loading overview",
+    "message": "导入概览",
     "description": "The label for category Loading overview in sidebar.docs"
   },
   "sidebar.docs.category.Load from Object Storage": {
-    "message": "Load from Object Storage",
+    "message": "从对象存储导入",
     "description": "The label for category Load from Object Storage in sidebar.docs"
   },
   "sidebar.docs.category.Load data from Apache Kafka": {
-    "message": "Load data from Apache Kafka",
+    "message": "从 Apache Kafka® 导入",
     "description": "The label for category Load data from Apache Kafka in sidebar.docs"
   },
   "sidebar.docs.category.Load data from Apache Spark": {
-    "message": "Load data from Apache Spark",
+    "message": "从 Apache Spark™ 导入",
     "description": "The label for category Load data from Apache Spark in sidebar.docs"
   },
   "sidebar.docs.category.Data Unloading": {
-    "message": "Data Unloading",
+    "message": "导出数据",
     "description": "The label for category Data Unloading in sidebar.docs"
   },
   "sidebar.docs.category.Data Lakes": {
-    "message": "Data Lakes",
+    "message": "数据湖",
     "description": "The label for category Data Lakes in sidebar.docs"
   },
   "sidebar.docs.category.Catalog": {
@@ -88,31 +88,31 @@
     "description": "The label for category Data cache in sidebar.docs"
   },
   "sidebar.docs.category.Query Acceleration": {
-    "message": "Query Acceleration",
+    "message": "查询加速",
     "description": "The label for category Query Acceleration in sidebar.docs"
   },
   "sidebar.docs.category.Asynchronous materialized views": {
-    "message": "Asynchronous materialized views",
+    "message": "异步物化视图",
     "description": "The label for category Asynchronous materialized views in sidebar.docs"
   },
   "sidebar.docs.category.Use cases": {
-    "message": "Use cases",
+    "message": "使用场景",
     "description": "The label for category Use cases in sidebar.docs"
   },
   "sidebar.docs.category.Computing the number of distinct values": {
-    "message": "Computing the number of distinct values",
+    "message": "数据去重",
     "description": "The label for category Computing the number of distinct values in sidebar.docs"
   },
   "sidebar.docs.category.Integrations": {
-    "message": "Integrations",
+    "message": "外部系统集成",
     "description": "The label for category Integrations in sidebar.docs"
   },
   "sidebar.docs.category.Cloud Authentication": {
-    "message": "Cloud Authentication",
+    "message": "CSP 认证鉴权",
     "description": "The label for category Cloud Authentication in sidebar.docs"
   },
   "sidebar.docs.category.Streaming Data": {
-    "message": "Streaming Data",
+    "message": "实时导入",
     "description": "The label for category Streaming Data in sidebar.docs"
   },
   "sidebar.docs.category.Apache Kafka": {
@@ -124,47 +124,47 @@
     "description": "The label for category StarRocks Pipe in sidebar.docs"
   },
   "sidebar.docs.category.Batch Loading Data": {
-    "message": "Batch Loading Data",
+    "message": "批量导入",
     "description": "The label for category Batch Loading Data in sidebar.docs"
   },
   "sidebar.docs.category.Loading Tools": {
-    "message": "Loading Tools",
+    "message": "导入工具",
     "description": "The label for category Loading Tools in sidebar.docs"
   },
   "sidebar.docs.category.BI Tools": {
-    "message": "BI Tools",
+    "message": "BI 工具",
     "description": "The label for category BI Tools in sidebar.docs"
   },
   "sidebar.docs.category.IDE Tools": {
-    "message": "IDE Tools",
+    "message": "IDE 工具",
     "description": "The label for category IDE Tools in sidebar.docs"
   },
   "sidebar.docs.category.Administration": {
-    "message": "Administration",
+    "message": "管理手册",
     "description": "The label for category Administration in sidebar.docs"
   },
   "sidebar.docs.category.Configuration": {
-    "message": "Configuration",
+    "message": "配置项",
     "description": "The label for category Configuration in sidebar.docs"
   },
   "sidebar.docs.category.Management": {
-    "message": "Management",
+    "message": "运维集群",
     "description": "The label for category Management in sidebar.docs"
   },
   "sidebar.docs.category.Monitor and Alert": {
-    "message": "Monitor and Alert",
+    "message": "监控报警",
     "description": "The label for category Monitor and Alert in sidebar.docs"
   },
   "sidebar.docs.category.Resource management": {
-    "message": "Resource management",
+    "message": "管理资源",
     "description": "The label for category Resource management in sidebar.docs"
   },
   "sidebar.docs.category.User Privileges and Authentication": {
-    "message": "User Privileges and Authentication",
+    "message": "管理用户权限",
     "description": "The label for category User Privileges and Authentication in sidebar.docs"
   },
   "sidebar.docs.category.Performance Tuning": {
-    "message": "Performance Tuning",
+    "message": "性能调优",
     "description": "The label for category Performance Tuning in sidebar.docs"
   },
   "sidebar.docs.category.Query Profile": {
@@ -412,7 +412,7 @@
     "description": "The label for category HTTP API in sidebar.docs"
   },
   "sidebar.docs.category.FAQ": {
-    "message": "FAQ",
+    "message": "常见问题解答",
     "description": "The label for category FAQ in sidebar.docs"
   },
   "sidebar.docs.category.Data Migration": {
@@ -420,11 +420,11 @@
     "description": "The label for category Data Migration in sidebar.docs"
   },
   "sidebar.docs.category.Benchmarks": {
-    "message": "Benchmarks",
+    "message": "性能测试",
     "description": "The label for category Benchmarks in sidebar.docs"
   },
   "sidebar.docs.category.Developers": {
-    "message": "Developers",
+    "message": "开发指南",
     "description": "The label for category Developers in sidebar.docs"
   },
   "sidebar.docs.category.build-starrocks": {
@@ -450,457 +450,5 @@
   "sidebar.docs.link.DBT": {
     "message": "DBT",
     "description": "The label for link DBT in sidebar.docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-  },
-  "sidebar.Chinese.category.产品简介": {
-    "message": "产品简介",
-    "description": "The label for category 产品简介 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.快速开始": {
-    "message": "快速开始",
-    "description": "The label for category 快速开始 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.技术支持": {
-    "message": "技术支持",
-    "description": "The label for category 技术支持 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.部署 StarRocks": {
-    "message": "部署 StarRocks",
-    "description": "The label for category 部署 StarRocks in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.前期准备": {
-    "message": "前期准备",
-    "description": "The label for category 前期准备 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.存算一体模式部署": {
-    "message": "存算一体模式部署",
-    "description": "The label for category 存算一体模式部署 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.存算分离模式部署": {
-    "message": "存算分离模式部署",
-    "description": "The label for category 存算分离模式部署 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.后期管理": {
-    "message": "后期管理",
-    "description": "The label for category 后期管理 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.表设计": {
-    "message": "表设计",
-    "description": "The label for category 表设计 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.表类型": {
-    "message": "表类型",
-    "description": "The label for category 表类型 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.数据分布": {
-    "message": "数据分布",
-    "description": "The label for category 数据分布 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.索引": {
-    "message": "索引",
-    "description": "The label for category 索引 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导入数据": {
-    "message": "导入数据",
-    "description": "The label for category 导入数据 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导入概览": {
-    "message": "导入概览",
-    "description": "The label for category 导入概览 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.从对象存储导入": {
-    "message": "从对象存储导入",
-    "description": "The label for category 从对象存储导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.从 Apache Kafka® 导入": {
-    "message": "从 Apache Kafka® 导入",
-    "description": "The label for category 从 Apache Kafka® 导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.从 Apache Spark™ 导入": {
-    "message": "从 Apache Spark™ 导入",
-    "description": "The label for category 从 Apache Spark™ 导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导出数据": {
-    "message": "导出数据",
-    "description": "The label for category 导出数据 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.数据湖": {
-    "message": "数据湖",
-    "description": "The label for category 数据湖 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Catalog": {
-    "message": "Catalog",
-    "description": "The label for category Catalog in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Data cache": {
-    "message": "Data cache",
-    "description": "The label for category Data cache in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.查询加速": {
-    "message": "查询加速",
-    "description": "The label for category 查询加速 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.异步物化视图": {
-    "message": "异步物化视图",
-    "description": "The label for category 异步物化视图 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.使用场景": {
-    "message": "使用场景",
-    "description": "The label for category 使用场景 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.数据去重": {
-    "message": "数据去重",
-    "description": "The label for category 数据去重 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.外部系统集成": {
-    "message": "外部系统集成",
-    "description": "The label for category 外部系统集成 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.CSP 认证鉴权": {
-    "message": "CSP 认证鉴权",
-    "description": "The label for category CSP 认证鉴权 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.实时导入": {
-    "message": "实时导入",
-    "description": "The label for category 实时导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Apache Kafka": {
-    "message": "Apache Kafka",
-    "description": "The label for category Apache Kafka in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.StarRocks Pipe": {
-    "message": "StarRocks Pipe",
-    "description": "The label for category StarRocks Pipe in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.批量导入": {
-    "message": "批量导入",
-    "description": "The label for category 批量导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导入工具": {
-    "message": "导入工具",
-    "description": "The label for category 导入工具 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.BI 工具": {
-    "message": "BI 工具",
-    "description": "The label for category BI 工具 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.IDE 工具": {
-    "message": "IDE 工具",
-    "description": "The label for category IDE 工具 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.管理手册": {
-    "message": "管理手册",
-    "description": "The label for category 管理手册 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.配置项": {
-    "message": "配置项",
-    "description": "The label for category 配置项 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.运维集群": {
-    "message": "运维集群",
-    "description": "The label for category 运维集群 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.监控报警": {
-    "message": "监控报警",
-    "description": "The label for category 监控报警 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.管理资源": {
-    "message": "管理资源",
-    "description": "The label for category 管理资源 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.管理用户权限": {
-    "message": "管理用户权限",
-    "description": "The label for category 管理用户权限 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.性能调优": {
-    "message": "性能调优",
-    "description": "The label for category 性能调优 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Query Profile": {
-    "message": "Query Profile",
-    "description": "The label for category Query Profile in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Reference": {
-    "message": "Reference",
-    "description": "The label for category Reference in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Data Types": {
-    "message": "Data Types",
-    "description": "The label for category Data Types in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Numeric": {
-    "message": "Numeric",
-    "description": "The label for category Numeric in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.String": {
-    "message": "String",
-    "description": "The label for category String in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Date and Time": {
-    "message": "Date and Time",
-    "description": "The label for category Date and Time in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Semi-structured": {
-    "message": "Semi-structured",
-    "description": "The label for category Semi-structured in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Other": {
-    "message": "Other",
-    "description": "The label for category Other in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.SQL Statements": {
-    "message": "SQL Statements",
-    "description": "The label for category SQL Statements in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.SQL Statements.link.generated-index.title": {
-    "message": "SQL Statements",
-    "description": "The generated-index page title for category SQL Statements in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.User account management": {
-    "message": "User account management",
-    "description": "The label for category User account management in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Cluster management": {
-    "message": "Cluster management",
-    "description": "The label for category Cluster management in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Nodes and processes": {
-    "message": "Nodes and processes",
-    "description": "The label for category Nodes and processes in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Configuration variables": {
-    "message": "Configuration variables",
-    "description": "The label for category Configuration variables in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Resource group": {
-    "message": "Resource group",
-    "description": "The label for category Resource group in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Storage volume": {
-    "message": "Storage volume",
-    "description": "The label for category Storage volume in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Tablet and replica": {
-    "message": "Tablet and replica",
-    "description": "The label for category Tablet and replica in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.File": {
-    "message": "File",
-    "description": "The label for category File in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.SQL blacklist": {
-    "message": "SQL blacklist",
-    "description": "The label for category SQL blacklist in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Plugin": {
-    "message": "Plugin",
-    "description": "The label for category Plugin in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Execution plan and profile": {
-    "message": "Execution plan and profile",
-    "description": "The label for category Execution plan and profile in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Loading and unloading": {
-    "message": "Loading and unloading",
-    "description": "The label for category Loading and unloading in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.ETL": {
-    "message": "ETL",
-    "description": "The label for category ETL in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.pipe": {
-    "message": "pipe",
-    "description": "The label for category pipe in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.routine_load": {
-    "message": "routine_load",
-    "description": "The label for category routine_load in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.unloading": {
-    "message": "unloading",
-    "description": "The label for category unloading in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Database": {
-    "message": "Database",
-    "description": "The label for category Database in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Resource": {
-    "message": "Resource",
-    "description": "The label for category Resource in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Table, bucket, partition, and index": {
-    "message": "Table, bucket, partition, and index",
-    "description": "The label for category Table, bucket, partition, and index in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.View": {
-    "message": "View",
-    "description": "The label for category View in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Materialized View": {
-    "message": "Materialized View",
-    "description": "The label for category Materialized View in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Function": {
-    "message": "Function",
-    "description": "The label for category Function in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.CBO statistics": {
-    "message": "CBO statistics",
-    "description": "The label for category CBO statistics in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Backup and restore": {
-    "message": "Backup and restore",
-    "description": "The label for category Backup and restore in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.SQL Functions": {
-    "message": "SQL Functions",
-    "description": "The label for category SQL Functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.aggregate-functions": {
-    "message": "aggregate-functions",
-    "description": "The label for category aggregate-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.array-functions": {
-    "message": "array-functions",
-    "description": "The label for category array-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.binary-functions": {
-    "message": "binary-functions",
-    "description": "The label for category binary-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.bit-functions": {
-    "message": "bit-functions",
-    "description": "The label for category bit-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.bitmap-functions": {
-    "message": "bitmap-functions",
-    "description": "The label for category bitmap-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.condition-functions": {
-    "message": "condition-functions",
-    "description": "The label for category condition-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.crytographic-functions": {
-    "message": "crytographic-functions",
-    "description": "The label for category crytographic-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.date-time-functions": {
-    "message": "date-time-functions",
-    "description": "The label for category date-time-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.dict-functions": {
-    "message": "dict-functions",
-    "description": "The label for category dict-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.hash-functions": {
-    "message": "hash-functions",
-    "description": "The label for category hash-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.json-functions": {
-    "message": "json-functions",
-    "description": "The label for category json-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.json-constructor-functions": {
-    "message": "json-constructor-functions",
-    "description": "The label for category json-constructor-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.json-query-and-processing-functions": {
-    "message": "json-query-and-processing-functions",
-    "description": "The label for category json-query-and-processing-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.like-predicate-functions": {
-    "message": "like-predicate-functions",
-    "description": "The label for category like-predicate-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.map-functions": {
-    "message": "map-functions",
-    "description": "The label for category map-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.math-functions": {
-    "message": "math-functions",
-    "description": "The label for category math-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.percentile-functions": {
-    "message": "percentile-functions",
-    "description": "The label for category percentile-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.scalar-functions": {
-    "message": "scalar-functions",
-    "description": "The label for category scalar-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.spatial-functions": {
-    "message": "spatial-functions",
-    "description": "The label for category spatial-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.string-functions": {
-    "message": "string-functions",
-    "description": "The label for category string-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.struct-functions": {
-    "message": "struct-functions",
-    "description": "The label for category struct-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.table-functions": {
-    "message": "table-functions",
-    "description": "The label for category table-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.utility-functions": {
-    "message": "utility-functions",
-    "description": "The label for category utility-functions in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.Information Schema": {
-    "message": "Information Schema",
-    "description": "The label for category Information Schema in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.System Metadatabase": {
-    "message": "System Metadatabase",
-    "description": "The label for category System Metadatabase in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.HTTP API": {
-    "message": "HTTP API",
-    "description": "The label for category HTTP API in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.常见问题解答": {
-    "message": "常见问题解答",
-    "description": "The label for category 常见问题解答 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导入导出": {
-    "message": "导入导出",
-    "description": "The label for category 导入导出 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.导入": {
-    "message": "导入",
-    "description": "The label for category 导入 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.性能测试": {
-    "message": "性能测试",
-    "description": "The label for category 性能测试 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.开发指南": {
-    "message": "开发指南",
-    "description": "The label for category 开发指南 in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.build-starrocks": {
-    "message": "build-starrocks",
-    "description": "The label for category build-starrocks in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.code-style-guides": {
-    "message": "code-style-guides",
-    "description": "The label for category code-style-guides in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.development-environment": {
-    "message": "development-environment",
-    "description": "The label for category development-environment in sidebar Chinese"
-  },
-  "sidebar.Chinese.category.trace-tools": {
-    "message": "trace-tools",
-    "description": "The label for category trace-tools in sidebar Chinese"
-  },
-  "sidebar.Chinese.link.Kettle connector": {
-    "message": "Kettle connector",
-    "description": "The label for link Kettle connector in sidebar Chinese, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
-  },
-  "sidebar.Chinese.link.DBT": {
-    "message": "DBT",
-    "description": "The label for link DBT in sidebar Chinese, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
   }
 }
