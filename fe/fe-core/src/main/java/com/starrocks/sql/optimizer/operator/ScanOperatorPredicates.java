@@ -123,6 +123,7 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+        other.hasPrunedPartition = this.hasPrunedPartition;
 
         return other;
     }
