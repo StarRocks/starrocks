@@ -45,7 +45,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.analysis.Expr;
@@ -3098,8 +3097,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
      */
     @Override
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
-        AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
-        alterJobExecutor.process(stmt, context);
+        new AlterJobExecutorEPack().process(stmt, context);
     }
 
     /**

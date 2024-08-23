@@ -48,7 +48,7 @@ test_revoke_policy	mp1	Column Masking	default_catalog	test_revoke_policy	t0	v1
 -- !result
 alter table t0 modify column v1 set masking policy mp1;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: A masking policy already exists in the current column[v1], and only supports applying a masking policy to a specific column.')
+E: (1064, 'Getting analyzing error. Detail message: A masking policy already exists in the current column[v1], and only supports applying a masking policy to a specific column.')
 -- !result
 alter table t0 add row access policy rp1 on(v1);
 -- result:
@@ -60,7 +60,7 @@ test_revoke_policy	rp1	Row Access	default_catalog	test_revoke_policy	t0	None
 -- !result
 alter table t0 add row access policy rp1 on(v1);
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: The same Policy has already been applied to this table.')
+E: (1064, 'Getting analyzing error. Detail message: The same Policy has already been applied to this table.')
 -- !result
 alter table t0 add row access policy rp2 on(v1);
 -- result:
