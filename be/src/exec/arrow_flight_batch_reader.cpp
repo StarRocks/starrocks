@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/arrow/row_batch.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/service/http_service.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,40 +32,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+#include "runtime/exec_env.h"
+#include "runtime/result_buffer_mgr.h"
 
-#include <memory>
-
-#include "common/status.h"
-#include "exprs/expr.h"
-
-// This file will convert StarRocks RowBatch to/from Arrow's RecordBatch
-// RowBatch is used by StarRocks query engine to exchange data between
-// each execute node.
-
-namespace arrow {
-class DataType;
-class RecordBatch;
-class Schema;
-class Field;
-
-} // namespace arrow
+#include "arrow_flight_batch_reader.h"
 
 namespace starrocks {
 
-class RowDescriptor;
+ArrowFlightBatchReader::ArrowFlightBatchReader(const TUniqueId& query_id)
+: _query_id(std::move(query_id)) {
+    _schema = ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(query_id);
+}
 
-Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
-Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
-                              std::shared_ptr<arrow::Field>* field);
+arrow::Status ArrowFlightBatchReader::ReadNext(std::shared_ptr<arrow::RecordBatch>* out) {
+    *out = nullptr;
+    auto status = ExecEnv::GetInstance()->result_mgr()->fetch_arrow_data(_query_id, out);
+    return arrow::Status::OK();
+}
 
-// Convert StarRocks RowDescriptor to Arrow Schema.
-Status convert_to_arrow_schema(const RowDescriptor& row_desc,
-                               const std::unordered_map<int64_t, std::string>& id_to_col_name,
-                               std::shared_ptr<arrow::Schema>* result,
-                               const std::vector<ExprContext*>& output_expr_ctxs);
+std::shared_ptr<arrow::Schema> ArrowFlightBatchReader::schema() const {
+    return _schema;
+}
 
-Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
-
-Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result);
-} // namespace starrocks
+}

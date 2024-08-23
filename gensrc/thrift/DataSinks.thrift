@@ -67,7 +67,8 @@ enum TResultSinkType {
     VARIABLE,
     HTTP_PROTOCAL,
     METADATA_ICEBERG,
-    CUSTOMIZED
+    CUSTOMIZED,
+    ARROW_FLIGHT_PROTOCAL
 }
 
 enum TResultSinkFormatType {

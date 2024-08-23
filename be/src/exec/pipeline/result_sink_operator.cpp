@@ -15,6 +15,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 
 #include "exprs/expr.h"
+#include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/customized_result_writer.h"
 #include "runtime/http_result_writer.h"
@@ -25,6 +26,8 @@
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
 #include "runtime/variable_result_writer.h"
+
+#include <arrow/type.h>
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
@@ -57,6 +60,9 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         // via ORM(Object-Relation Mapping) mechanism. In the future, all the internal queries should be
         // unified to adopt this result sink type.
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _row_desc);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

@@ -780,6 +780,14 @@ public class Config extends ConfigBase {
     public static int rpc_port = 9020;
 
     /**
+     * Arrow Flight SQL server port
+     */
+    @ConfField
+    public static int arrow_flight_port = 9408;
+
+    @ConfField
+    public static int arrow_flight_be_port = 9419;
+    /**
      * The connection timeout and socket timeout config for thrift server
      * The value for thrift_client_timeout_ms is set to be larger than zero to prevent
      * some hang up problems in java.net.SocketInputStream.socketRead0
