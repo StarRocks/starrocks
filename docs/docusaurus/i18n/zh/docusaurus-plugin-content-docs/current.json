@@ -236,7 +236,7 @@
     "description": "The label for category Tablet and replica in sidebar English"
   },
   "sidebar.English.category.File": {
-    "message": "File",
+    "message": "文件",
     "description": "The label for category File in sidebar English"
   },
   "sidebar.English.category.SQL blacklist": {
