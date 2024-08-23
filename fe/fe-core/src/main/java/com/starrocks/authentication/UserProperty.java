@@ -85,6 +85,7 @@ public class UserProperty {
         }
 
         String newDatabase = getDatabase();
+        String newCatalog = getCatalog();
         for (Pair<String, String> entry : properties) {
             String key = entry.first;
             String value = entry.second;
@@ -97,10 +98,12 @@ public class UserProperty {
                 newDatabase = value;
             } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                 checkCatalog(value);
+                newCatalog = value;
             } else if (key.startsWith(PROP_SESSION_PREFIX)) {
                 String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
                 if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
                     checkCatalog(value);
+                    newCatalog = value;
                 } else {
                     checkSessionVariable(sessionKey, value);
                 }
@@ -109,7 +112,7 @@ public class UserProperty {
             }
         }
         if (!newDatabase.equalsIgnoreCase(getDatabase())) {
-            checkDatabase(newDatabase);
+            checkDatabase(newCatalog, newDatabase);
         }
 
         newDatabase = getDatabase();
@@ -231,16 +234,16 @@ public class UserProperty {
 
     // check whether the database exist
     // we need to reset the database if it checks failed
-    private void checkDatabase(String newDatabase) {
+    private void checkDatabase(String newCatalog, String newDatabase) {
         if (newDatabase.equalsIgnoreCase(DATABASE_DEFAULT_VALUE)) {
             return;
         }
 
         // check whether the database exists
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(getCatalog(), newDatabase);
+        Database db = metadataMgr.getDb(newCatalog, newDatabase);
         if (db == null) {
-            String catalogDbName = getCatalogDbName();
+            String catalogDbName = newCatalog + "." + newDatabase;
             throw new StarRocksConnectorException(catalogDbName + " not exists");
         }
     }
