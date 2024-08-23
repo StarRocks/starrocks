@@ -317,7 +317,7 @@ public class DefaultSharedDataWorkerProviderTest {
                             "[host#12 alive: true, available: false, inBlacklist: true] " +
                             "[host#13 alive: true, available: false, inBlacklist: false] " +
                             "[host#14 alive: false, available: false, inBlacklist: false] " +
-                            "[host#15 alive: true, available: false, inBlacklist: false]",
+                            "[host#15 alive: true, available: false, inBlacklist: false] ",
                     e.getMessage());
         }
     }
