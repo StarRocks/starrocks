@@ -89,6 +89,47 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
 }
 
+// check the last input rowset to determine whether this is partial compaction,
+// if is, modify last intput rowset `segments` info, for example, following
+// `e` and `f` will be removed from last input rowset.
+// before(last rowset input segments): x y a b c d e f
+// segments in compaction: a b c d
+// output segments:                    x y m n e f
+// after (last rowset input segments): a b c d
+void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction,
+                                               RowsetMetadataPB& last_input_rowset) {
+    if (op_compaction.input_rowsets_size() < 1) {
+        return;
+    }
+    if (op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1) != last_input_rowset.id()) {
+        return;
+    }
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0 &&
+        last_input_rowset.segments_size() > 0) {
+        // iterate all segments in last input rowset, find if any of them exists in
+        // compaction output rowset, if is, erase them from last input rowset
+        size_t before = last_input_rowset.segments_size();
+        auto iter = last_input_rowset.mutable_segments()->begin();
+        while (iter != last_input_rowset.mutable_segments()->end()) {
+            auto it = std::find_if(op_compaction.output_rowset().segments().begin(),
+                                   op_compaction.output_rowset().segments().end(),
+                                   [iter](const std::string& segment) { return *iter == segment; });
+            if (it != op_compaction.output_rowset().segments().end()) {
+                iter = last_input_rowset.mutable_segments()->erase(iter);
+            } else {
+                ++iter;
+            }
+        }
+        size_t after = last_input_rowset.segments_size();
+        if (after - before > 0) {
+            LOG(INFO) << "find partial compaction, tablet: " << metadata->id() << ", version: " << metadata->version()
+                      << ", last input rowset id: " << last_input_rowset.id()
+                      << ", uncompacted segment count: " << (before - after);
+        }
+    }
+}
+
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                          uint32_t max_compact_input_rowset_id) {
     // delete input rowsets
