@@ -1,4 +1,4 @@
--- name: test_periodical_task @testings
+-- name: test_periodical_task
 create database test_task_${uuid0};
 use test_task_${uuid0};
 
