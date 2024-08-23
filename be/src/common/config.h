@@ -1271,6 +1271,8 @@ CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(enable_pk_strict_memcheck, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
+// Reduce core file size by not dumping jemalloc retain pages
+CONF_mBool(enable_core_file_size_optimization, "true");
 
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
