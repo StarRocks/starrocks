@@ -337,7 +337,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         // pruned and the retained Scan operator to the pruned Scan operator from missing the
         // referenced ColumnRef originates from the pruned Scan operator.
         for (OptExpression child : root.getInputs()) {
-            if (child.getOp() instanceof LogicalOlapScanOperator) {
+            if (child.getOp() instanceof LogicalScanOperator) {
                 int ordinal = scanNodeOrdinals.size();
                 scanNodeOrdinals.put(child, ordinal);
                 ordinalToScanNodes.add(child);
