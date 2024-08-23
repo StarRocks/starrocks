@@ -1,5 +1,5 @@
 position: 130 # float position is supported
-label: 'Backup and restore'
+label: '备份与恢复'
 collapsible: true
 collapsed: true
 link:

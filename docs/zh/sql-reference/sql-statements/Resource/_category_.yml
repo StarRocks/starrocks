@@ -1,5 +1,5 @@
 position: 70 # float position is supported
-label: 'Resource'
+label: '资源组'
 collapsible: true
 collapsed: true
 link:

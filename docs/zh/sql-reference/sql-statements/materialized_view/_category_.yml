@@ -1,5 +1,5 @@
 position: 100 # float position is supported
-label: 'Materialized View'
+label: '物化视图'
 collapsible: true
 collapsed: true
 link:

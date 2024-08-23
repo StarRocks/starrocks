@@ -1,5 +1,5 @@
 position: 110 # float position is supported
-label: 'Function'
+label: '函数'
 collapsible: true
 collapsed: true
 link:

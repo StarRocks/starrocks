@@ -1,5 +1,5 @@
 position: 30 # float position is supported
-label: 'Date and Time'
+label: '日期类型'
 collapsible: true
 collapsed: true
 link:

@@ -1,5 +1,5 @@
 position: 50 # float position is supported
-label: 'Other'
+label: '其他类型'
 collapsible: true
 collapsed: true
 link:

@@ -1,5 +1,5 @@
 position: 20 # float position is supported
-label: 'String'
+label: '字符串类型'
 collapsible: true
 collapsed: true
 link:

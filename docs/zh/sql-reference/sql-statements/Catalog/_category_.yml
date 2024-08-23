@@ -1,5 +1,5 @@
 position: 50 # float position is supported
-label: 'Catalog'
+label: '数据目录'
 collapsible: true
 collapsed: true
 link:
