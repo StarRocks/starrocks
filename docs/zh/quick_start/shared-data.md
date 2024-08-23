@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_position: 2
 description: "存算分离"
 keywords: ['cunsuan']

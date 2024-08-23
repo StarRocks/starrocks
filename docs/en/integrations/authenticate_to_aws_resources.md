@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_label: AWS
 description: "This topic describes how to authenticate with AWS"
 ---

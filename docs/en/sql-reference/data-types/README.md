@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data type overview

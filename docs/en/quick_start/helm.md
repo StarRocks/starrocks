@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 description: Use Helm to deploy StarRocks
 toc_max_heading_level: 2
 ---

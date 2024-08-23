@@ -1,6 +1,6 @@
 ---
 description: 使用 Helm 部署 StarRocks
-displayed_sidebar: Chinese
+displayed_sidebar: docs
 ---
 
 import Tabs from '@theme/Tabs';

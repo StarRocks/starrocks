@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "本文介绍如何认证 Azure 资源"
 ---

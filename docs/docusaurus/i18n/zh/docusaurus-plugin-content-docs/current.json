@@ -3,453 +3,453 @@
     "message": "current",
     "description": "The label for version current"
   },
-  "sidebar.English.category.Introduction to StarRocks": {
+  "sidebar.docs.category.Introduction to StarRocks": {
     "message": "Introduction to StarRocks",
-    "description": "The label for category Introduction to StarRocks in sidebar English"
+    "description": "The label for category Introduction to StarRocks in sidebar.docs"
   },
-  "sidebar.English.category.Quick Start": {
+  "sidebar.docs.category.Quick Start": {
     "message": "Quick Start",
-    "description": "The label for category Quick Start in sidebar English"
+    "description": "The label for category Quick Start in sidebar.docs"
   },
-  "sidebar.English.category.Project Help": {
+  "sidebar.docs.category.Project Help": {
     "message": "Project Help",
-    "description": "The label for category Project Help in sidebar English"
+    "description": "The label for category Project Help in sidebar.docs"
   },
-  "sidebar.English.category.Deployment": {
+  "sidebar.docs.category.Deployment": {
     "message": "Deployment",
-    "description": "The label for category Deployment in sidebar English"
+    "description": "The label for category Deployment in sidebar.docs"
   },
-  "sidebar.English.category.Preparation": {
+  "sidebar.docs.category.Preparation": {
     "message": "Preparation",
-    "description": "The label for category Preparation in sidebar English"
+    "description": "The label for category Preparation in sidebar.docs"
   },
-  "sidebar.English.category.Shared-nothing deployment": {
+  "sidebar.docs.category.Shared-nothing deployment": {
     "message": "Shared-nothing deployment",
-    "description": "The label for category Shared-nothing deployment in sidebar English"
+    "description": "The label for category Shared-nothing deployment in sidebar.docs"
   },
-  "sidebar.English.category.Shared-data deployment": {
+  "sidebar.docs.category.Shared-data deployment": {
     "message": "Shared-data deployment",
-    "description": "The label for category Shared-data deployment in sidebar English"
+    "description": "The label for category Shared-data deployment in sidebar.docs"
   },
-  "sidebar.English.category.Manage your deployment": {
+  "sidebar.docs.category.Manage your deployment": {
     "message": "Manage your deployment",
-    "description": "The label for category Manage your deployment in sidebar English"
+    "description": "The label for category Manage your deployment in sidebar.docs"
   },
-  "sidebar.English.category.Table Design": {
+  "sidebar.docs.category.Table Design": {
     "message": "Table Design",
-    "description": "The label for category Table Design in sidebar English"
+    "description": "The label for category Table Design in sidebar.docs"
   },
-  "sidebar.English.category.Table types": {
+  "sidebar.docs.category.Table types": {
     "message": "Table types",
-    "description": "The label for category Table types in sidebar English"
+    "description": "The label for category Table types in sidebar.docs"
   },
-  "sidebar.English.category.Data distribution": {
+  "sidebar.docs.category.Data distribution": {
     "message": "Data distribution",
-    "description": "The label for category Data distribution in sidebar English"
+    "description": "The label for category Data distribution in sidebar.docs"
   },
-  "sidebar.English.category.Indexes": {
+  "sidebar.docs.category.Indexes": {
     "message": "Indexes",
-    "description": "The label for category Indexes in sidebar English"
+    "description": "The label for category Indexes in sidebar.docs"
   },
-  "sidebar.English.category.Data Loading": {
+  "sidebar.docs.category.Data Loading": {
     "message": "Data Loading",
-    "description": "The label for category Data Loading in sidebar English"
+    "description": "The label for category Data Loading in sidebar.docs"
   },
-  "sidebar.English.category.Loading overview": {
+  "sidebar.docs.category.Loading overview": {
     "message": "Loading overview",
-    "description": "The label for category Loading overview in sidebar English"
+    "description": "The label for category Loading overview in sidebar.docs"
   },
-  "sidebar.English.category.Load from Object Storage": {
+  "sidebar.docs.category.Load from Object Storage": {
     "message": "Load from Object Storage",
-    "description": "The label for category Load from Object Storage in sidebar English"
+    "description": "The label for category Load from Object Storage in sidebar.docs"
   },
-  "sidebar.English.category.Load data from Apache Kafka": {
+  "sidebar.docs.category.Load data from Apache Kafka": {
     "message": "Load data from Apache Kafka",
-    "description": "The label for category Load data from Apache Kafka in sidebar English"
+    "description": "The label for category Load data from Apache Kafka in sidebar.docs"
   },
-  "sidebar.English.category.Load data from Apache Spark": {
+  "sidebar.docs.category.Load data from Apache Spark": {
     "message": "Load data from Apache Spark",
-    "description": "The label for category Load data from Apache Spark in sidebar English"
+    "description": "The label for category Load data from Apache Spark in sidebar.docs"
   },
-  "sidebar.English.category.Data Unloading": {
+  "sidebar.docs.category.Data Unloading": {
     "message": "Data Unloading",
-    "description": "The label for category Data Unloading in sidebar English"
+    "description": "The label for category Data Unloading in sidebar.docs"
   },
-  "sidebar.English.category.Data Lakes": {
+  "sidebar.docs.category.Data Lakes": {
     "message": "Data Lakes",
-    "description": "The label for category Data Lakes in sidebar English"
+    "description": "The label for category Data Lakes in sidebar.docs"
   },
-  "sidebar.English.category.Catalog": {
+  "sidebar.docs.category.Catalog": {
     "message": "Catalog",
-    "description": "The label for category Catalog in sidebar English"
+    "description": "The label for category Catalog in sidebar.docs"
   },
-  "sidebar.English.category.Data cache": {
+  "sidebar.docs.category.Data cache": {
     "message": "Data cache",
-    "description": "The label for category Data cache in sidebar English"
+    "description": "The label for category Data cache in sidebar.docs"
   },
-  "sidebar.English.category.Query Acceleration": {
+  "sidebar.docs.category.Query Acceleration": {
     "message": "Query Acceleration",
-    "description": "The label for category Query Acceleration in sidebar English"
+    "description": "The label for category Query Acceleration in sidebar.docs"
   },
-  "sidebar.English.category.Asynchronous materialized views": {
+  "sidebar.docs.category.Asynchronous materialized views": {
     "message": "Asynchronous materialized views",
-    "description": "The label for category Asynchronous materialized views in sidebar English"
+    "description": "The label for category Asynchronous materialized views in sidebar.docs"
   },
-  "sidebar.English.category.Use cases": {
+  "sidebar.docs.category.Use cases": {
     "message": "Use cases",
-    "description": "The label for category Use cases in sidebar English"
+    "description": "The label for category Use cases in sidebar.docs"
   },
-  "sidebar.English.category.Computing the number of distinct values": {
+  "sidebar.docs.category.Computing the number of distinct values": {
     "message": "Computing the number of distinct values",
-    "description": "The label for category Computing the number of distinct values in sidebar English"
+    "description": "The label for category Computing the number of distinct values in sidebar.docs"
   },
-  "sidebar.English.category.Integrations": {
+  "sidebar.docs.category.Integrations": {
     "message": "Integrations",
-    "description": "The label for category Integrations in sidebar English"
+    "description": "The label for category Integrations in sidebar.docs"
   },
-  "sidebar.English.category.Cloud Authentication": {
+  "sidebar.docs.category.Cloud Authentication": {
     "message": "Cloud Authentication",
-    "description": "The label for category Cloud Authentication in sidebar English"
+    "description": "The label for category Cloud Authentication in sidebar.docs"
   },
-  "sidebar.English.category.Streaming Data": {
+  "sidebar.docs.category.Streaming Data": {
     "message": "Streaming Data",
-    "description": "The label for category Streaming Data in sidebar English"
+    "description": "The label for category Streaming Data in sidebar.docs"
   },
-  "sidebar.English.category.Apache Kafka": {
+  "sidebar.docs.category.Apache Kafka": {
     "message": "Apache Kafka",
-    "description": "The label for category Apache Kafka in sidebar English"
+    "description": "The label for category Apache Kafka in sidebar.docs"
   },
-  "sidebar.English.category.StarRocks Pipe": {
+  "sidebar.docs.category.StarRocks Pipe": {
     "message": "StarRocks Pipe",
-    "description": "The label for category StarRocks Pipe in sidebar English"
+    "description": "The label for category StarRocks Pipe in sidebar.docs"
   },
-  "sidebar.English.category.Batch Loading Data": {
+  "sidebar.docs.category.Batch Loading Data": {
     "message": "Batch Loading Data",
-    "description": "The label for category Batch Loading Data in sidebar English"
+    "description": "The label for category Batch Loading Data in sidebar.docs"
   },
-  "sidebar.English.category.Loading Tools": {
+  "sidebar.docs.category.Loading Tools": {
     "message": "Loading Tools",
-    "description": "The label for category Loading Tools in sidebar English"
+    "description": "The label for category Loading Tools in sidebar.docs"
   },
-  "sidebar.English.category.BI Tools": {
+  "sidebar.docs.category.BI Tools": {
     "message": "BI Tools",
-    "description": "The label for category BI Tools in sidebar English"
+    "description": "The label for category BI Tools in sidebar.docs"
   },
-  "sidebar.English.category.IDE Tools": {
+  "sidebar.docs.category.IDE Tools": {
     "message": "IDE Tools",
-    "description": "The label for category IDE Tools in sidebar English"
+    "description": "The label for category IDE Tools in sidebar.docs"
   },
-  "sidebar.English.category.Administration": {
+  "sidebar.docs.category.Administration": {
     "message": "Administration",
-    "description": "The label for category Administration in sidebar English"
+    "description": "The label for category Administration in sidebar.docs"
   },
-  "sidebar.English.category.Configuration": {
+  "sidebar.docs.category.Configuration": {
     "message": "Configuration",
-    "description": "The label for category Configuration in sidebar English"
+    "description": "The label for category Configuration in sidebar.docs"
   },
-  "sidebar.English.category.Management": {
+  "sidebar.docs.category.Management": {
     "message": "Management",
-    "description": "The label for category Management in sidebar English"
+    "description": "The label for category Management in sidebar.docs"
   },
-  "sidebar.English.category.Monitor and Alert": {
+  "sidebar.docs.category.Monitor and Alert": {
     "message": "Monitor and Alert",
-    "description": "The label for category Monitor and Alert in sidebar English"
+    "description": "The label for category Monitor and Alert in sidebar.docs"
   },
-  "sidebar.English.category.Resource management": {
+  "sidebar.docs.category.Resource management": {
     "message": "Resource management",
-    "description": "The label for category Resource management in sidebar English"
+    "description": "The label for category Resource management in sidebar.docs"
   },
-  "sidebar.English.category.User Privileges and Authentication": {
+  "sidebar.docs.category.User Privileges and Authentication": {
     "message": "User Privileges and Authentication",
-    "description": "The label for category User Privileges and Authentication in sidebar English"
+    "description": "The label for category User Privileges and Authentication in sidebar.docs"
   },
-  "sidebar.English.category.Performance Tuning": {
+  "sidebar.docs.category.Performance Tuning": {
     "message": "Performance Tuning",
-    "description": "The label for category Performance Tuning in sidebar English"
+    "description": "The label for category Performance Tuning in sidebar.docs"
   },
-  "sidebar.English.category.Query Profile": {
+  "sidebar.docs.category.Query Profile": {
     "message": "Query Profile",
-    "description": "The label for category Query Profile in sidebar English"
+    "description": "The label for category Query Profile in sidebar.docs"
   },
-  "sidebar.English.category.Reference": {
+  "sidebar.docs.category.Reference": {
     "message": "Reference",
-    "description": "The label for category Reference in sidebar English"
+    "description": "The label for category Reference in sidebar.docs"
   },
-  "sidebar.English.category.Data Types": {
+  "sidebar.docs.category.Data Types": {
     "message": "Data Types",
-    "description": "The label for category Data Types in sidebar English"
+    "description": "The label for category Data Types in sidebar.docs"
   },
-  "sidebar.English.category.Numeric": {
+  "sidebar.docs.category.Numeric": {
     "message": "Numeric",
-    "description": "The label for category Numeric in sidebar English"
+    "description": "The label for category Numeric in sidebar.docs"
   },
-  "sidebar.English.category.String": {
+  "sidebar.docs.category.String": {
     "message": "String",
-    "description": "The label for category String in sidebar English"
+    "description": "The label for category String in sidebar.docs"
   },
-  "sidebar.English.category.Date and Time": {
+  "sidebar.docs.category.Date and Time": {
     "message": "Date and Time",
-    "description": "The label for category Date and Time in sidebar English"
+    "description": "The label for category Date and Time in sidebar.docs"
   },
-  "sidebar.English.category.Semi-structured": {
+  "sidebar.docs.category.Semi-structured": {
     "message": "Semi-structured",
-    "description": "The label for category Semi-structured in sidebar English"
+    "description": "The label for category Semi-structured in sidebar.docs"
   },
-  "sidebar.English.category.Other": {
+  "sidebar.docs.category.Other": {
     "message": "Other",
-    "description": "The label for category Other in sidebar English"
+    "description": "The label for category Other in sidebar.docs"
   },
-  "sidebar.English.category.SQL Statements": {
+  "sidebar.docs.category.SQL Statements": {
     "message": "SQL Statements",
-    "description": "The label for category SQL Statements in sidebar English"
+    "description": "The label for category SQL Statements in sidebar.docs"
   },
-  "sidebar.English.category.SQL Statements.link.generated-index.title": {
+  "sidebar.docs.category.SQL Statements.link.generated-index.title": {
     "message": "SQL Statements",
-    "description": "The generated-index page title for category SQL Statements in sidebar English"
+    "description": "The generated-index page title for category SQL Statements in sidebar.docs"
   },
-  "sidebar.English.category.User account management": {
+  "sidebar.docs.category.User account management": {
     "message": "User account management",
-    "description": "The label for category User account management in sidebar English"
+    "description": "The label for category User account management in sidebar.docs"
   },
-  "sidebar.English.category.Cluster management": {
+  "sidebar.docs.category.Cluster management": {
     "message": "Cluster management",
-    "description": "The label for category Cluster management in sidebar English"
+    "description": "The label for category Cluster management in sidebar.docs"
   },
-  "sidebar.English.category.Nodes and processes": {
+  "sidebar.docs.category.Nodes and processes": {
     "message": "Nodes and processes",
-    "description": "The label for category Nodes and processes in sidebar English"
+    "description": "The label for category Nodes and processes in sidebar.docs"
   },
-  "sidebar.English.category.Configuration variables": {
+  "sidebar.docs.category.Configuration variables": {
     "message": "Configuration variables",
-    "description": "The label for category Configuration variables in sidebar English"
+    "description": "The label for category Configuration variables in sidebar.docs"
   },
-  "sidebar.English.category.Resource group": {
+  "sidebar.docs.category.Resource group": {
     "message": "Resource group",
-    "description": "The label for category Resource group in sidebar English"
+    "description": "The label for category Resource group in sidebar.docs"
   },
-  "sidebar.English.category.Storage volume": {
+  "sidebar.docs.category.Storage volume": {
     "message": "Storage volume",
-    "description": "The label for category Storage volume in sidebar English"
+    "description": "The label for category Storage volume in sidebar.docs"
   },
-  "sidebar.English.category.Tablet and replica": {
+  "sidebar.docs.category.Tablet and replica": {
     "message": "Tablet and replica",
-    "description": "The label for category Tablet and replica in sidebar English"
+    "description": "The label for category Tablet and replica in sidebar.docs"
   },
-  "sidebar.English.category.File": {
+  "sidebar.docs.category.File": {
     "message": "文件",
-    "description": "The label for category File in sidebar English"
+    "description": "The label for category File in sidebar.docs"
   },
-  "sidebar.English.category.SQL blacklist": {
+  "sidebar.docs.category.SQL blacklist": {
     "message": "SQL blacklist",
-    "description": "The label for category SQL blacklist in sidebar English"
+    "description": "The label for category SQL blacklist in sidebar.docs"
   },
-  "sidebar.English.category.Plugin": {
+  "sidebar.docs.category.Plugin": {
     "message": "Plugin",
-    "description": "The label for category Plugin in sidebar English"
+    "description": "The label for category Plugin in sidebar.docs"
   },
-  "sidebar.English.category.Execution plan and profile": {
+  "sidebar.docs.category.Execution plan and profile": {
     "message": "Execution plan and profile",
-    "description": "The label for category Execution plan and profile in sidebar English"
+    "description": "The label for category Execution plan and profile in sidebar.docs"
   },
-  "sidebar.English.category.Loading and unloading": {
+  "sidebar.docs.category.Loading and unloading": {
     "message": "Loading and unloading",
-    "description": "The label for category Loading and unloading in sidebar English"
+    "description": "The label for category Loading and unloading in sidebar.docs"
   },
-  "sidebar.English.category.ETL": {
+  "sidebar.docs.category.ETL": {
     "message": "ETL",
-    "description": "The label for category ETL in sidebar English"
+    "description": "The label for category ETL in sidebar.docs"
   },
-  "sidebar.English.category.pipe": {
+  "sidebar.docs.category.pipe": {
     "message": "pipe",
-    "description": "The label for category pipe in sidebar English"
+    "description": "The label for category pipe in sidebar.docs"
   },
-  "sidebar.English.category.routine_load": {
+  "sidebar.docs.category.routine_load": {
     "message": "routine_load",
-    "description": "The label for category routine_load in sidebar English"
+    "description": "The label for category routine_load in sidebar.docs"
   },
-  "sidebar.English.category.unloading": {
+  "sidebar.docs.category.unloading": {
     "message": "unloading",
-    "description": "The label for category unloading in sidebar English"
+    "description": "The label for category unloading in sidebar.docs"
   },
-  "sidebar.English.category.Database": {
+  "sidebar.docs.category.Database": {
     "message": "Database",
-    "description": "The label for category Database in sidebar English"
+    "description": "The label for category Database in sidebar.docs"
   },
-  "sidebar.English.category.Resource": {
+  "sidebar.docs.category.Resource": {
     "message": "Resource",
-    "description": "The label for category Resource in sidebar English"
+    "description": "The label for category Resource in sidebar.docs"
   },
-  "sidebar.English.category.Table, bucket, partition, and index": {
+  "sidebar.docs.category.Table, bucket, partition, and index": {
     "message": "Table, bucket, partition, and index",
-    "description": "The label for category Table, bucket, partition, and index in sidebar English"
+    "description": "The label for category Table, bucket, partition, and index in sidebar.docs"
   },
-  "sidebar.English.category.View": {
+  "sidebar.docs.category.View": {
     "message": "View",
-    "description": "The label for category View in sidebar English"
+    "description": "The label for category View in sidebar.docs"
   },
-  "sidebar.English.category.Materialized View": {
+  "sidebar.docs.category.Materialized View": {
     "message": "Materialized View",
-    "description": "The label for category Materialized View in sidebar English"
+    "description": "The label for category Materialized View in sidebar.docs"
   },
-  "sidebar.English.category.Function": {
+  "sidebar.docs.category.Function": {
     "message": "Function",
-    "description": "The label for category Function in sidebar English"
+    "description": "The label for category Function in sidebar.docs"
   },
-  "sidebar.English.category.CBO statistics": {
+  "sidebar.docs.category.CBO statistics": {
     "message": "CBO statistics",
-    "description": "The label for category CBO statistics in sidebar English"
+    "description": "The label for category CBO statistics in sidebar.docs"
   },
-  "sidebar.English.category.Backup and restore": {
+  "sidebar.docs.category.Backup and restore": {
     "message": "Backup and restore",
-    "description": "The label for category Backup and restore in sidebar English"
+    "description": "The label for category Backup and restore in sidebar.docs"
   },
-  "sidebar.English.category.SQL Functions": {
+  "sidebar.docs.category.SQL Functions": {
     "message": "SQL Functions",
-    "description": "The label for category SQL Functions in sidebar English"
+    "description": "The label for category SQL Functions in sidebar.docs"
   },
-  "sidebar.English.category.aggregate-functions": {
+  "sidebar.docs.category.aggregate-functions": {
     "message": "aggregate-functions",
-    "description": "The label for category aggregate-functions in sidebar English"
+    "description": "The label for category aggregate-functions in sidebar.docs"
   },
-  "sidebar.English.category.array-functions": {
+  "sidebar.docs.category.array-functions": {
     "message": "array-functions",
-    "description": "The label for category array-functions in sidebar English"
+    "description": "The label for category array-functions in sidebar.docs"
   },
-  "sidebar.English.category.binary-functions": {
+  "sidebar.docs.category.binary-functions": {
     "message": "binary-functions",
-    "description": "The label for category binary-functions in sidebar English"
+    "description": "The label for category binary-functions in sidebar.docs"
   },
-  "sidebar.English.category.bit-functions": {
+  "sidebar.docs.category.bit-functions": {
     "message": "bit-functions",
-    "description": "The label for category bit-functions in sidebar English"
+    "description": "The label for category bit-functions in sidebar.docs"
   },
-  "sidebar.English.category.bitmap-functions": {
+  "sidebar.docs.category.bitmap-functions": {
     "message": "bitmap-functions",
-    "description": "The label for category bitmap-functions in sidebar English"
+    "description": "The label for category bitmap-functions in sidebar.docs"
   },
-  "sidebar.English.category.condition-functions": {
+  "sidebar.docs.category.condition-functions": {
     "message": "condition-functions",
-    "description": "The label for category condition-functions in sidebar English"
+    "description": "The label for category condition-functions in sidebar.docs"
   },
-  "sidebar.English.category.crytographic-functions": {
+  "sidebar.docs.category.crytographic-functions": {
     "message": "crytographic-functions",
-    "description": "The label for category crytographic-functions in sidebar English"
+    "description": "The label for category crytographic-functions in sidebar.docs"
   },
-  "sidebar.English.category.date-time-functions": {
+  "sidebar.docs.category.date-time-functions": {
     "message": "date-time-functions",
-    "description": "The label for category date-time-functions in sidebar English"
+    "description": "The label for category date-time-functions in sidebar.docs"
   },
-  "sidebar.English.category.dict-functions": {
+  "sidebar.docs.category.dict-functions": {
     "message": "dict-functions",
-    "description": "The label for category dict-functions in sidebar English"
+    "description": "The label for category dict-functions in sidebar.docs"
   },
-  "sidebar.English.category.hash-functions": {
+  "sidebar.docs.category.hash-functions": {
     "message": "hash-functions",
-    "description": "The label for category hash-functions in sidebar English"
+    "description": "The label for category hash-functions in sidebar.docs"
   },
-  "sidebar.English.category.json-functions": {
+  "sidebar.docs.category.json-functions": {
     "message": "json-functions",
-    "description": "The label for category json-functions in sidebar English"
+    "description": "The label for category json-functions in sidebar.docs"
   },
-  "sidebar.English.category.json-constructor-functions": {
+  "sidebar.docs.category.json-constructor-functions": {
     "message": "json-constructor-functions",
-    "description": "The label for category json-constructor-functions in sidebar English"
+    "description": "The label for category json-constructor-functions in sidebar.docs"
   },
-  "sidebar.English.category.json-query-and-processing-functions": {
+  "sidebar.docs.category.json-query-and-processing-functions": {
     "message": "json-query-and-processing-functions",
-    "description": "The label for category json-query-and-processing-functions in sidebar English"
+    "description": "The label for category json-query-and-processing-functions in sidebar.docs"
   },
-  "sidebar.English.category.like-predicate-functions": {
+  "sidebar.docs.category.like-predicate-functions": {
     "message": "like-predicate-functions",
-    "description": "The label for category like-predicate-functions in sidebar English"
+    "description": "The label for category like-predicate-functions in sidebar.docs"
   },
-  "sidebar.English.category.map-functions": {
+  "sidebar.docs.category.map-functions": {
     "message": "map-functions",
-    "description": "The label for category map-functions in sidebar English"
+    "description": "The label for category map-functions in sidebar.docs"
   },
-  "sidebar.English.category.math-functions": {
+  "sidebar.docs.category.math-functions": {
     "message": "math-functions",
-    "description": "The label for category math-functions in sidebar English"
+    "description": "The label for category math-functions in sidebar.docs"
   },
-  "sidebar.English.category.percentile-functions": {
+  "sidebar.docs.category.percentile-functions": {
     "message": "percentile-functions",
-    "description": "The label for category percentile-functions in sidebar English"
+    "description": "The label for category percentile-functions in sidebar.docs"
   },
-  "sidebar.English.category.scalar-functions": {
+  "sidebar.docs.category.scalar-functions": {
     "message": "scalar-functions",
-    "description": "The label for category scalar-functions in sidebar English"
+    "description": "The label for category scalar-functions in sidebar.docs"
   },
-  "sidebar.English.category.spatial-functions": {
+  "sidebar.docs.category.spatial-functions": {
     "message": "spatial-functions",
-    "description": "The label for category spatial-functions in sidebar English"
+    "description": "The label for category spatial-functions in sidebar.docs"
   },
-  "sidebar.English.category.string-functions": {
+  "sidebar.docs.category.string-functions": {
     "message": "string-functions",
-    "description": "The label for category string-functions in sidebar English"
+    "description": "The label for category string-functions in sidebar.docs"
   },
-  "sidebar.English.category.struct-functions": {
+  "sidebar.docs.category.struct-functions": {
     "message": "struct-functions",
-    "description": "The label for category struct-functions in sidebar English"
+    "description": "The label for category struct-functions in sidebar.docs"
   },
-  "sidebar.English.category.table-functions": {
+  "sidebar.docs.category.table-functions": {
     "message": "table-functions",
-    "description": "The label for category table-functions in sidebar English"
+    "description": "The label for category table-functions in sidebar.docs"
   },
-  "sidebar.English.category.utility-functions": {
+  "sidebar.docs.category.utility-functions": {
     "message": "utility-functions",
-    "description": "The label for category utility-functions in sidebar English"
+    "description": "The label for category utility-functions in sidebar.docs"
   },
-  "sidebar.English.category.Information Schema": {
+  "sidebar.docs.category.Information Schema": {
     "message": "Information Schema",
-    "description": "The label for category Information Schema in sidebar English"
+    "description": "The label for category Information Schema in sidebar.docs"
   },
-  "sidebar.English.category.System Metadatabase": {
+  "sidebar.docs.category.System Metadatabase": {
     "message": "System Metadatabase",
-    "description": "The label for category System Metadatabase in sidebar English"
+    "description": "The label for category System Metadatabase in sidebar.docs"
   },
-  "sidebar.English.category.HTTP API": {
+  "sidebar.docs.category.HTTP API": {
     "message": "HTTP API",
-    "description": "The label for category HTTP API in sidebar English"
+    "description": "The label for category HTTP API in sidebar.docs"
   },
-  "sidebar.English.category.FAQ": {
+  "sidebar.docs.category.FAQ": {
     "message": "FAQ",
-    "description": "The label for category FAQ in sidebar English"
+    "description": "The label for category FAQ in sidebar.docs"
   },
-  "sidebar.English.category.Data Migration": {
+  "sidebar.docs.category.Data Migration": {
     "message": "Data Migration",
-    "description": "The label for category Data Migration in sidebar English"
+    "description": "The label for category Data Migration in sidebar.docs"
   },
-  "sidebar.English.category.Benchmarks": {
+  "sidebar.docs.category.Benchmarks": {
     "message": "Benchmarks",
-    "description": "The label for category Benchmarks in sidebar English"
+    "description": "The label for category Benchmarks in sidebar.docs"
   },
-  "sidebar.English.category.Developers": {
+  "sidebar.docs.category.Developers": {
     "message": "Developers",
-    "description": "The label for category Developers in sidebar English"
+    "description": "The label for category Developers in sidebar.docs"
   },
-  "sidebar.English.category.build-starrocks": {
+  "sidebar.docs.category.build-starrocks": {
     "message": "build-starrocks",
-    "description": "The label for category build-starrocks in sidebar English"
+    "description": "The label for category build-starrocks in sidebar.docs"
   },
-  "sidebar.English.category.code-style-guides": {
+  "sidebar.docs.category.code-style-guides": {
     "message": "code-style-guides",
-    "description": "The label for category code-style-guides in sidebar English"
+    "description": "The label for category code-style-guides in sidebar.docs"
   },
-  "sidebar.English.category.development-environment": {
+  "sidebar.docs.category.development-environment": {
     "message": "development-environment",
-    "description": "The label for category development-environment in sidebar English"
+    "description": "The label for category development-environment in sidebar.docs"
   },
-  "sidebar.English.category.trace-tools": {
+  "sidebar.docs.category.trace-tools": {
     "message": "trace-tools",
-    "description": "The label for category trace-tools in sidebar English"
+    "description": "The label for category trace-tools in sidebar.docs"
   },
-  "sidebar.English.link.Kettle connector": {
+  "sidebar.docs.link.Kettle connector": {
     "message": "Kettle connector",
-    "description": "The label for link Kettle connector in sidebar English, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
+    "description": "The label for link Kettle connector in sidebar.docs, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
   },
-  "sidebar.English.link.DBT": {
+  "sidebar.docs.link.DBT": {
     "message": "DBT",
-    "description": "The label for link DBT in sidebar English, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+    "description": "The label for link DBT in sidebar.docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
   },
   "sidebar.Chinese.category.产品简介": {
     "message": "产品简介",

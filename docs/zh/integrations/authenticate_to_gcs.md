@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: Google Cloud Storage (GCS)
 description: "本文介绍如何认证 GCS 资源"
 ---

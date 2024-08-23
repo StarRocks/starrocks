@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'

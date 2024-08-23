@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "This topic describes how to authenticate with Azure"
 ---

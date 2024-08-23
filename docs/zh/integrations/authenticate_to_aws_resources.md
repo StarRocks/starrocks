@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: AWS
 description: "本文介绍如何认证 AWS 资源"
 ---
