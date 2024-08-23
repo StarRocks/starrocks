@@ -246,18 +246,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         final int pipelineDop = fragment.getPipelineDop();
 
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
-
-        if (useIncrementalScanRanges) {
-            for (ScanNode scanNode : execFragment.getScanNodes()) {
-                if (scanNode.isIncrementalScanRangesSupported()) {
-                    // TODO(yan): put some scan range for ending.
-                    for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
-                        assignment.putAll(computeNode.getId(), scanNode.getId().asInt(), List.of());
-                    }
-                }
-            }
-        }
-
         assignment.forEach((workerId, scanRangesPerWorker) -> {
             // 1. Handle normal scan node firstly
             scanRangesPerWorker.forEach((scanId, scanRangesOfNode) -> {

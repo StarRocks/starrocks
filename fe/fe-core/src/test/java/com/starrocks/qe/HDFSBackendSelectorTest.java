@@ -132,7 +132,8 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -152,7 +153,8 @@ public class HDFSBackendSelectorTest {
                 true
         );
         selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
         try {
             selector.computeScanRangeAssignment();
             Assert.fail();
@@ -198,7 +200,8 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
         selector.computeScanRangeAssignment();
 
         long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
@@ -245,7 +248,8 @@ public class HDFSBackendSelectorTest {
                 true
         );
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
         HashRing hashRing = selector.makeHashRing();
         Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
         ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
@@ -304,7 +308,8 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, true, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        true, false, false);
         selector.computeScanRangeAssignment();
 
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);

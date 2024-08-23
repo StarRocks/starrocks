@@ -280,9 +280,4 @@ public class HdfsScanNode extends ScanNode {
     protected boolean supportTopNRuntimeFilter() {
         return true;
     }
-
-    @Override
-    public boolean isIncrementalScanRangesSupported() {
-        return true;
-    }
 }

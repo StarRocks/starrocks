@@ -57,7 +57,7 @@ public class BackendSelectorFactory {
 
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         int maxScanRangeLength = 0;
-        if (useIncrementalScanRanges && scanNode.isIncrementalScanRangesSupported()) {
+        if (useIncrementalScanRanges) {
             maxScanRangeLength = sessionVariable.getConnectorRemoteFileAsyncTaskSize();
         }
 
@@ -74,7 +74,7 @@ public class BackendSelectorFactory {
                 || scanNode instanceof OdpsScanNode || scanNode instanceof IcebergMetadataScanNode) {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
-                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
+                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges);
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

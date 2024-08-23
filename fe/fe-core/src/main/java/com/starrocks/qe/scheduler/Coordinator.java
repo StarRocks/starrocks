@@ -131,7 +131,8 @@ public abstract class Coordinator {
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
-    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates) throws UserException {
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws UserException {
         return List.of();
     }
 
