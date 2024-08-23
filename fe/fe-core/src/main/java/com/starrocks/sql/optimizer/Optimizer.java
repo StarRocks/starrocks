@@ -200,6 +200,7 @@ public class Optimizer {
         }
         context.setTraceInfo(traceInfo);
 
+<<<<<<< HEAD
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
@@ -207,6 +208,36 @@ public class Optimizer {
                 MvRewritePreprocessor preprocessor =
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
                 preprocessor.prepareMvCandidatesForPlan();
+=======
+    private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            if (!Utils.hasPrunableJoin(tree)) {
+                return;
+            }
+            // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
+            // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            // ReorderJoinRule is a in-memo rule, when it is used outside memo, we must apply
+            // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
+            // projection before ReorderJoinRule's application, after that, we must separate operator's
+            // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+            tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new ReorderJoinRule().rewrite(tree, context);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            // TODO(by satanson): bucket shuffle join interpolation in PK table's update query can adjust layout
+            //  of the data ingested by OlapTableSink and eliminate race introduced by multiple concurrent write
+            //  operations on the same tablets, pruning this bucket shuffle join make update statement performance
+            //  regression, so we can turn on this rule after we put an bucket-shuffle exchange in front of
+            //  OlapTableSink in future, at present we turn off this rule.
+            if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableTablePruneOnUpdate()) {
+                tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
+                deriveLogicalProperty(tree);
+>>>>>>> 19c38a86d5 ([BugFix] Do not apply cardinality-preserving join pruning if there is no prunable joins (#50197))
             }
         }
     }
