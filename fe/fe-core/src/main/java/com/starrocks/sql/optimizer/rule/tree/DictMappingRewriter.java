@@ -225,8 +225,7 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitLikePredicateOperator(LikePredicateOperator operator, RewriterContext context) {
-            operator.setChild(0, operator.getChild(0).accept(this, context));
-            return operator;
+            return rewriteForScalarOperator(operator, context);
         }
 
         @Override
