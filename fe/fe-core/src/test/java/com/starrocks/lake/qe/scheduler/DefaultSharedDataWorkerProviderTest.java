@@ -299,7 +299,26 @@ public class DefaultSharedDataWorkerProviderTest {
         { // test no available worker to select
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of());
-            Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
+
+            Exception e = Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
+            Assert.assertEquals(
+                    "Compute node not found. Check if any compute node is down. nodeId: -1 " +
+                            "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
+                            "[host#2 alive: false, available: false, inBlacklist: false] " +
+                            "[host#3 alive: true, available: false, inBlacklist: false] " +
+                            "[host#4 alive: true, available: false, inBlacklist: true] " +
+                            "[host#5 alive: true, available: false, inBlacklist: false] " +
+                            "[host#6 alive: false, available: false, inBlacklist: false] " +
+                            "[host#7 alive: true, available: false, inBlacklist: false] " +
+                            "[host#8 alive: true, available: false, inBlacklist: true] " +
+                            "[host#9 alive: true, available: false, inBlacklist: false] " +
+                            "[host#10 alive: false, available: false, inBlacklist: false] " +
+                            "[host#11 alive: true, available: false, inBlacklist: false] " +
+                            "[host#12 alive: true, available: false, inBlacklist: true] " +
+                            "[host#13 alive: true, available: false, inBlacklist: false] " +
+                            "[host#14 alive: false, available: false, inBlacklist: false] " +
+                            "[host#15 alive: true, available: false, inBlacklist: false]",
+                    e.getMessage());
         }
     }
 
