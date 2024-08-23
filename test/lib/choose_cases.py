@@ -86,10 +86,10 @@ class ChooseCase(object):
     def __init__(self, case_dir=None, record_mode=False, file_regex=None, case_regex=None):
         """init"""
         super().__init__()
-        self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
+        # self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
 
         # case_dir = sql dir by default
-        self.case_dir = os.path.join(self.sr_lib_obj.root_path, CASE_DIR) if case_dir is None else case_dir
+        self.case_dir = os.path.join(sr_sql_lib.root_path, CASE_DIR) if case_dir is None else case_dir
 
         self.t: List[str] = []
         self.r: List[str] = []
@@ -221,7 +221,7 @@ class ChooseCase(object):
         with open(file, "r") as f:
             f_lines = f.readlines()
 
-        file = os.path.abspath(file)[len(os.path.abspath(self.sr_lib_obj.root_path)):].lstrip("/")
+        file = os.path.abspath(file)[len(os.path.abspath(sr_sql_lib.root_path)):].lstrip("/")
 
         tools.assert_greater(len(f_lines), 0, "case file lines must not be empty: %s" % file)
 
