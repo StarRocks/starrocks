@@ -167,6 +167,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -2007,11 +2008,13 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+        // 1. metadata_enable_recovery_mode = true will skip all kind of failure
         if (Config.metadata_enable_recovery_mode) {
             LOG.warn("skip journal load failure because cluster is in recovery mode");
             return true;
         }
 
+        // 2. metadata_journal_skip_bad_journal_ids will skip the failure of specified journal ids
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
@@ -2025,6 +2028,13 @@ public class GlobalStateMgr {
                         Config.metadata_journal_skip_bad_journal_ids, e);
         }
 
+        // 3. ignore_unknown_subtype = true will skip the subtype not found failure which happens on downgrading
+        if (t.getCause() != null && t.getCause() instanceof SubtypeNotFoundException) {
+            LOG.warn("ignore unknown subtype: {}", (((SubtypeNotFoundException) t.getCause()).getSubtype()));
+            return true;
+        }
+
+        // 4. metadata_journal_ignore_replay_failure = true will skip the failure of ignorable operations.
         short opCode = OperationType.OP_INVALID;
         if (t instanceof JournalException) {
             opCode = ((JournalException) t).getOpCode();

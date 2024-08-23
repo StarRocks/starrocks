@@ -504,15 +504,14 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int serializedCatalogsSize = reader.readInt();
-        for (int i = 0; i < serializedCatalogsSize; ++i) {
-            Catalog catalog = reader.readJson(Catalog.class);
+        reader.readCollection(Catalog.class, catalog -> {
             try {
                 replayCreateCatalog(catalog);
             } catch (Exception e) {
                 LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
-        }
+        });
+
         loadResourceMappingCatalog();
     }
 }
