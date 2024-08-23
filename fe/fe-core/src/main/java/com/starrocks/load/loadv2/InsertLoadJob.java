@@ -308,5 +308,4 @@ public class InsertLoadJob extends LoadJob {
     @Override
     public void replayOnVisible(TransactionState txnState) {
     }
-
 }

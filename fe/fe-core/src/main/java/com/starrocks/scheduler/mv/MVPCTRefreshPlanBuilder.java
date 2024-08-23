@@ -69,7 +69,7 @@ public class MVPCTRefreshPlanBuilder {
         this.mv = mv;
         this.mvContext = mvContext;
         this.mvRefreshPartitioner = mvRefreshPartitioner;
-        this.isEnableInsertStrict = mvContext.getCtx().getSessionVariable().getEnableInsertStrict();
+        this.isEnableInsertStrict = mvContext.getCtx().getSessionVariable().getInsertMaxFilterRatio() > 0;
     }
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,

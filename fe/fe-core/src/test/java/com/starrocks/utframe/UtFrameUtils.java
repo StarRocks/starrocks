@@ -1291,7 +1291,7 @@ public class UtFrameUtils {
         Config.default_mv_partition_refresh_number = -1;
 
         // Enable mv refresh insert strict in test
-        Config.enable_mv_refresh_insert_strict = true;
+        Config.mv_refresh_insert_max_filter_ratio = 0;
 
         // Enable mv rewrite in mv refresh by default
         Config.enable_mv_refresh_query_rewrite = true;

@@ -78,14 +78,13 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
-        // insert properties
-        analyzeProperties(insertStmt, session);
-
-        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        List<Table> tables = new ArrayList<>();
         try {
+            // insert properties
+            analyzeProperties(insertStmt, session);
+
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
+            List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
             tables.stream().map(table -> (HiveTable) table)
                     .forEach(table -> table.useMetadataCache(false));
@@ -258,6 +257,7 @@ public class InsertAnalyzer {
             mentionedColumnSize -= table.getPartitionColumnNames().size();
         }
 
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         if (query.getRelationFields().size() != mentionedColumnSize) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
                     query.getRelationFields().size());
@@ -289,16 +289,21 @@ public class InsertAnalyzer {
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
         Map<String, String> insertProperties = insertStmt.getInsertProperties();
-        try {
-            LoadStmt.checkProperties(insertProperties);
-        } catch (DdlException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+        // use session variable if not set max_filter_ratio property
+        if (!insertProperties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            insertProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                    String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         }
-
         // use session variable if not set strict_mode property
         if (!insertProperties.containsKey(LoadStmt.STRICT_MODE) &&
                 session.getSessionVariable().getEnableInsertStrict()) {
             insertProperties.put(LoadStmt.STRICT_MODE, "true");
+        }
+
+        try {
+            LoadStmt.checkProperties(insertProperties);
+        } catch (DdlException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
         }
 
         // push down some properties to file table function
