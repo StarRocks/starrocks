@@ -121,7 +121,8 @@ public class UserProperty {
             String value = entry.second;
 
             if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                setMaxConn(Long.parseLong(value));
+                long maxConn = checkMaxConn(value);
+                setMaxConn(maxConn);
             } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
                 // we do not check database existence here, because we should
                 // check catalog existence first.
