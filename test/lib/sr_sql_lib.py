@@ -187,6 +187,8 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
+        self.uuid_dict = {}
+
         config_path = os.environ.get("config_path")
         if config_path is None or config_path == "":
             self.read_conf("conf/sr.conf")
@@ -1126,7 +1128,9 @@ class StarrocksSQLApiLib(object):
                     try:
                         check_result = eval(each_statement_new)
                     except Exception as e:
-                        self_print(f"[LOOP] Exception: {each_statement}!", ColorEnum.YELLOW, logout=True)
+                        self_print(f"[LOOP] Exception: {each_statement}, {e}!", ColorEnum.YELLOW, logout=True)
+                        for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
+                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
@@ -1136,6 +1140,9 @@ class StarrocksSQLApiLib(object):
                     else:
                         self_print(f"[LOOP CHECK] FAILURE: {each_statement}, result: {check_result}!",
                                    color=ColorEnum.YELLOW, logout=True)
+                        # print variables in each_statement_new
+                        for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
+                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
