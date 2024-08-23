@@ -144,4 +144,74 @@ public class EsUtilTest {
         assertNotNull(jsonObject);
         assertTrue(jsonObject.has("properties"));
     }
+
+    @Test
+    public void testEs681MappingProperties() {
+        String mapping = "{\n" +
+                "  \"_doc\" : {\n" +
+                "    \"dynamic_templates\" : [ {\n" +
+                "      \"integers\" : {\n" +
+                "        \"mapping\" : {\n" +
+                "          \"type\" : \"integer\"\n" +
+                "        },\n" +
+                "        \"match_mapping_type\" : \"long\"\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"strings\" : {\n" +
+                "        \"mapping\" : {\n" +
+                "          \"fields\" : {\n" +
+                "            \"raw\" : {\n" +
+                "              \"ignore_above\" : 256,\n" +
+                "              \"type\" : \"keyword\"\n" +
+                "            }\n" +
+                "          },\n" +
+                "          \"type\" : \"text\"\n" +
+                "        },\n" +
+                "        \"match_mapping_type\" : \"string\"\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"dataFormat\" : {\n" +
+                "        \"mapping\" : {\n" +
+                "          \"type\" : \"date\"\n" +
+                "        },\n" +
+                "        \"match\" : \"*Date\"\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"timeFormat\" : {\n" +
+                "        \"mapping\" : {\n" +
+                "          \"type\" : \"date\"\n" +
+                "        },\n" +
+                "        \"match\" : \"*Time\"\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"noAnalyzed\" : {\n" +
+                "        \"mapping\" : {\n" +
+                "          \"type\" : \"keyword\"\n" +
+                "        },\n" +
+                "        \"match_mapping_type\" : \"string\"\n" +
+                "      }\n" +
+                "    } ],\n" +
+                "    \"properties\" : {\n" +
+                "      \"my_string\" : {\n" +
+                "        \"type\" : \"text\",\n" +
+                "        \"fields\" : {\n" +
+                "          \"raw\" : {\n" +
+                "            \"ignore_above\" : 256,\n" +
+                "            \"type\" : \"keyword\"\n" +
+                "          }\n" +
+                "        }\n" +
+                "      },\n" +
+                "      \"my_integer\" : {\n" +
+                "        \"type\" : \"integer\"\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        JSONObject json = new JSONObject(mapping);
+
+        JSONObject jsonObject = EsUtil.parsePropertiesRoot(json);
+
+        assertNotNull(jsonObject);
+        assertTrue(jsonObject.has("properties"));
+    }
 }
