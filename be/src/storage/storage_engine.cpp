@@ -1085,6 +1085,8 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
 
     do_manual_compact(false);
 
+    GlobalTabletSchemaMap::Instance()->trash_sweep();
+
     return res;
 }
 

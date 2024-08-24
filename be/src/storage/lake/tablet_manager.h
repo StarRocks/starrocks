@@ -200,7 +200,7 @@ private:
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
 
-    StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
+    StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path, int64_t tablet_id);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);

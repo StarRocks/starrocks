@@ -247,7 +247,7 @@ public:
         *rs_meta_pb = *_rowset_meta_pb;
         const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
 
-        if (!_has_tablet_schema_id) {
+        if (!_has_tablet_schema_id && _rowset_meta_pb->schema_id() != TabletSchema::invalid_id()) {
             if (target_schema != nullptr) {
                 rs_meta_pb->clear_tablet_schema();
                 TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
@@ -268,7 +268,7 @@ public:
         TabletSchemaPB ts_pb;
         tablet_schema_ptr->to_schema_pb(&ts_pb);
         if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb, _rowset_meta_pb->tablet_id()).first;
         } else {
             // Only for compatible, in very old versions, there is no schema id.
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
@@ -305,7 +305,8 @@ private:
         }
 
         if (_rowset_meta_pb->has_schema_id() && _rowset_meta_pb->schema_id() != TabletSchema::invalid_id()) {
-            _schema = GlobalTabletSchemaMap::Instance()->get(_rowset_meta_pb->schema_id());
+            _schema =
+                    GlobalTabletSchemaMap::Instance()->get(_rowset_meta_pb->schema_id(), _rowset_meta_pb->tablet_id());
             if (_schema != nullptr) {
                 _has_tablet_schema_id = true;
             }
@@ -313,7 +314,9 @@ private:
         if (_rowset_meta_pb->has_tablet_schema() && !_has_tablet_schema_id) {
             if (_rowset_meta_pb->tablet_schema().has_id() &&
                 _rowset_meta_pb->tablet_schema().id() != TabletSchema::invalid_id()) {
-                _schema = GlobalTabletSchemaMap::Instance()->emplace(_rowset_meta_pb->tablet_schema()).first;
+                _schema = GlobalTabletSchemaMap::Instance()
+                                  ->emplace(_rowset_meta_pb->tablet_schema(), _rowset_meta_pb->tablet_id())
+                                  .first;
             } else {
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }

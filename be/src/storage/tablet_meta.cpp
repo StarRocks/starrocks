@@ -296,16 +296,15 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
     }
 
     // init _schema
-    if (use_tablet_schema_map && tablet_meta_pb.schema().has_id() &&
-        tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema(), _tablet_id).first;
     } else {
         _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
 
     for (const auto& [id, schema_pb] : tablet_meta_pb.history_schema()) {
-        auto schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+        auto schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb, _tablet_id).first;
         if (schema != nullptr) {
             _history_schema[id] = std::move(schema);
         }
@@ -679,9 +678,10 @@ void TabletMeta::create_inital_updates_meta() {
 
 void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
     TabletSchemaCSPtr new_schema_ptr = nullptr;
+    GlobalTabletSchemaMap::Instance()->erase(schema_pb.id(), _tablet_id);
     if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        new_schema_ptr = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+        new_schema_ptr = GlobalTabletSchemaMap::Instance()->emplace(schema_pb, _tablet_id).first;
     } else {
         new_schema_ptr = std::make_shared<const TabletSchema>(schema_pb);
     }

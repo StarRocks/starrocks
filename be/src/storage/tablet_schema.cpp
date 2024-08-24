@@ -435,11 +435,7 @@ TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* sch
     _init_from_pb(schema_pb);
 }
 
-TabletSchema::~TabletSchema() {
-    if (_schema_map != nullptr) {
-        _schema_map->erase(_id);
-    }
-}
+TabletSchema::~TabletSchema() {}
 
 void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _id = schema.has_id() ? schema.id() : invalid_id();

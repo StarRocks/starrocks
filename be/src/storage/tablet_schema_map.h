@@ -52,24 +52,26 @@ public:
     // Returns a pair consisting of a pointer to the inserted element, or the already-existing element if no insertion
     // happened, and a bool denoting whether the insertion took place (true if insertion happened, false if it did not).
     // [thread-safe]
-    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& schema_pb);
+    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& schema_pb, int64_t tablet_id);
 
-    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPtr& tablet_schema);
+    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPtr& tablet_schema, int64_t tablet_id);
 
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
     // [thread-safe]
-    void erase(SchemaId id);
+    void erase(SchemaId id, int64_t tablet_id);
 
-    TabletSchemaPtr get(SchemaId id);
+    TabletSchemaPtr get(SchemaId id, int64_t tablet_id);
 
     // Checks if there is an element with unique id equivalent to id in the container.
     //
     // Returns true if there is such an element, otherwise false.
-    bool contains(SchemaId id) const;
+    bool contains(SchemaId id, int64_t tablet_id) const;
 
     // NOTE: time complexity of method is high, don't call this method too often.
     // [thread-safe]
     const Stats& stats() const;
+
+    void trash_sweep();
 
 private:
     constexpr static int kShardSize = 16;
@@ -79,22 +81,27 @@ private:
 
     struct Item {
         std::weak_ptr<const TabletSchema> tablet_schema;
+        std::set<int64_t> tablet_ids;
         int64_t mem_usage = 0;
     };
 
+    using SchemaItem = std::list<Item>;
     struct MapShard {
         mutable std::mutex mtx;
-        phmap::flat_hash_map<SchemaId, Item> map;
+        phmap::flat_hash_map<SchemaId, SchemaItem> map;
     };
-    using ShardMapIter = phmap::flat_hash_map<SchemaId, Item>::iterator;
+    using ShardMapIter = phmap::flat_hash_map<SchemaId, SchemaItem>::iterator;
 
-    void _insert(MapShard& shard, SchemaId id, const TabletSchemaPtr& tablet_schema);
-    void _replace(const ShardMapIter& iter, const TabletSchemaPtr& tablet_schema);
+    void _insert(MapShard& shard, SchemaId id, const TabletSchemaPtr& tablet_schema, int64_t tablet_id);
 
     MapShard* get_shard(SchemaId id) { return &_map_shards[id % kShardSize]; }
     const MapShard* get_shard(SchemaId id) const { return &_map_shards[id % kShardSize]; }
 
     MapShard _map_shards[kShardSize];
+
+    int32_t _trash_shard_idx = 0;
+    std::vector<int32_t> _trash_shard_off = std::vector<int32_t>(kShardSize, 0);
+    ;
     Stats _stats;
 };
 

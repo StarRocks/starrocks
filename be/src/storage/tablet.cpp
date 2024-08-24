@@ -1820,7 +1820,7 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         if (tablet_schema->id() == TabletSchema::invalid_id()) {
             _max_version_schema = tablet_schema;
         } else {
-            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema, tablet_id()).first;
         }
         _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
     }

@@ -89,7 +89,8 @@ TabletReader::~TabletReader() {
 
 Status TabletReader::prepare() {
     if (_tablet_schema == nullptr) {
-        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+        _tablet_schema =
+                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema(), _tablet_metadata->id()).first;
     }
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");

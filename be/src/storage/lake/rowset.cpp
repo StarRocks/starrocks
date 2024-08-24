@@ -56,12 +56,13 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
     auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
     if (_tablet_metadata->rowset_to_schema().empty() ||
         _tablet_metadata->rowset_to_schema().find(rowset_id) == _tablet_metadata->rowset_to_schema().end()) {
-        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema(), _tablet_id).first;
     } else {
         auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
         CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
-        _tablet_schema =
-                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+        _tablet_schema = GlobalTabletSchemaMap::Instance()
+                                 ->emplace(_tablet_metadata->historical_schemas().at(schema_id), _tablet_id)
+                                 .first;
     }
 
     // if segments are loaded in parallel, can not perform partial compaction, since

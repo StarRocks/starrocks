@@ -24,7 +24,7 @@
 namespace starrocks::lake {
 
 VersionedTablet::TabletSchemaPtr VersionedTablet::get_schema() const {
-    return GlobalTabletSchemaMap::Instance()->emplace(_metadata->schema()).first;
+    return GlobalTabletSchemaMap::Instance()->emplace(_metadata->schema(), id()).first;
 }
 
 int64_t VersionedTablet::id() const {

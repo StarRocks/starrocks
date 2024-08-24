@@ -212,7 +212,7 @@ TEST_F(TabletSchemaGCTest, test_stale_schema_gc) {
     std::vector<RowsetSharedPtr> input_rowsets;
     _tablet->capture_consistent_rowsets(Version(0, 2), &input_rowsets);
     ASSERT_TRUE(input_rowsets.size() == 2);
-    _tablet->modify_rowsets({rowset3}, input_rowsets, nullptr);
+    _tablet->modify_rowsets_without_lock({rowset3}, input_rowsets, nullptr);
 
     input_rowsets.clear();
     _tablet->capture_consistent_rowsets(Version(0, 2), &input_rowsets);

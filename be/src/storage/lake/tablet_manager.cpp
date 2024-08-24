@@ -544,7 +544,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
         }
     }
 
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema());
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema(), tablet_id);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", tablet_id));
     }
@@ -564,7 +564,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-    auto schema_or = _schema_group.Do(global_cache_key, [&]() { return load_and_parse_schema_file(schema_file_path); });
+    auto schema_or = _schema_group.Do(global_cache_key,
+                                      [&]() { return load_and_parse_schema_file(schema_file_path, tablet_id); });
     //                                ^^^^^^^^^^^^^^^^ Do not use "schema_file_path" as the key for singleflight, as
     // our path is a virtual path rather than a real path (when the same file is accessed by different tablets, the
     // "schema_file_path" here is different), so using "schema_file_path" cannot achieve optimal effect.
@@ -587,9 +588,10 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
 StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
                                                                   const TabletMetadata* metadata) {
     if (metadata->rowset_to_schema().empty() || input_rowset.size() <= 0) {
-        return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+        return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema(), metadata->id()).first;
     }
-    TabletSchemaPtr tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    TabletSchemaPtr tablet_schema =
+            GlobalTabletSchemaMap::Instance()->emplace(metadata->schema(), metadata->id()).first;
     struct Finder {
         uint32_t id;
         bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
@@ -624,7 +626,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 
     if (select_schema_id != tablet_schema->id()) {
         auto schema_it = metadata->historical_schemas().find(select_schema_id);
-        tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(schema_it->second).first;
+        tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(schema_it->second, metadata->id()).first;
     }
 
     return tablet_schema;
@@ -659,7 +661,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
     RETURN_IF_ERROR(file.save(schema_pb));
 
     // Save the schema into the in-memory cache
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb, tablet_id);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError("failed to emplace the schema hash map");
     }
@@ -669,11 +671,11 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
     return Status::OK();
 }
 
-StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::string& path) {
+StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::string& path, int64_t tablet_id) {
     TabletSchemaPB schema_pb;
     ProtobufFile file(path);
     RETURN_IF_ERROR(file.load(&schema_pb));
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb, tablet_id);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError("failed to emplace the schema hash map");
     }
