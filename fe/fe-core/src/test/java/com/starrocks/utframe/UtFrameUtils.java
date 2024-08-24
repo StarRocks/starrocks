@@ -1290,8 +1290,8 @@ public class UtFrameUtils {
         // task run will only refresh 1 partition and will produce wrong result.
         Config.default_mv_partition_refresh_number = -1;
 
-        // Enable mv refresh insert strict in test
-        Config.mv_refresh_insert_max_filter_ratio = 0;
+        // Enable mv refresh fail on filter data in test
+        Config.mv_refresh_fail_on_filter_data = true;
 
         // Enable mv rewrite in mv refresh by default
         Config.enable_mv_refresh_query_rewrite = true;

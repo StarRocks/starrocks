@@ -2232,29 +2232,22 @@ public class StmtExecutor {
             if (loadJob != null && !loadJob.checkDataQuality()) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    RemoteTransactionMgr.abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                    trackingSql,
+                    RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(), externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
-                            coord == null ? Collections.emptyList() : coord.getFailInfos()
-                    );
-                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
-                        targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
-                        targetTable.isBlackHoleTable()) {
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() || targetTable.isIcebergTable() ||
+                        targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
                     // schema table does not need txn
                 } else {
-                    transactionMgr.abortTransaction(
-                            database.getId(),
-                            transactionId,
-                            TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                    trackingSql,
+                    transactionMgr.abortTransaction(database.getId(), transactionId,
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
                             Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 }
                 context.getState().setError(
-                        "Insert has filtered data, txn_id = " + transactionId + ", tracking sql = " + trackingSql);
+                        TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
+                                ", tracking sql = " + trackingSql);
                 insertError = true;
                 return;
             }
