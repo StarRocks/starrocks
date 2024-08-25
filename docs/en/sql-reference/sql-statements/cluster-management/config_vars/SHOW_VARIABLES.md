@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Shows the system variables of StarRocks. For details about system variables, see [System Variables](../../../../reference/System_variable.md).
+Shows the system variables of StarRocks. For details about system variables, see [System Variables](../../../System_variable.md).
 
 :::tip
 

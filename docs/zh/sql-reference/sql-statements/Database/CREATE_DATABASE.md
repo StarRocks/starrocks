@@ -23,7 +23,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 ## 参数说明
 
-`db_name`：数据库名称。有关数据库的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+`db_name`：数据库名称。有关数据库的命名要求，参见[系统限制](../../System_limit.md)。
 
 **PROPERTIES（选填）**
 

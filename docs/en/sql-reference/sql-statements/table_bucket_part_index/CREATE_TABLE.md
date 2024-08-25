@@ -31,7 +31,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 
 :::tip
 
-- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../../reference/System_limit.md).
+- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../System_limit.md).
 - When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../keywords.md) for these reserved keywords.
 
 :::
@@ -255,7 +255,7 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
-- For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
+- For the naming conventions of partitions, see [System limits](../../System_limit.md).
 - Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.

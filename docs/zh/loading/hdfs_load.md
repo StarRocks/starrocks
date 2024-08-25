@@ -265,7 +265,7 @@ SELECT * from user_behavior_declared LIMIT 3;
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -389,13 +389,13 @@ PROPERTIES
 
 #### 查看导入进度
 
-通过 StarRocks Information Schema 库中的 [`loads`](../reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -546,7 +546,7 @@ SELECT * FROM FILES
   1 row in set (0.00 sec)
   ```
 
-- 通过 StarRocks Information Schema 库中的 [`pipes`](../reference/information_schema/pipes.md) 视图查看当前数据库中的导入作业。
+- 通过 StarRocks Information Schema 库中的 [`pipes`](../sql-reference/information_schema/pipes.md) 视图查看当前数据库中的导入作业。
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -570,7 +570,7 @@ SELECT * FROM FILES
 
 #### 查看导入的文件信息
 
-您可以通过 StarRocks Information Schema 库中的 [`pipe_files`](../reference/information_schema/pipe_files.md) 视图查看导入的文件信息。
+您可以通过 StarRocks Information Schema 库中的 [`pipe_files`](../sql-reference/information_schema/pipe_files.md) 视图查看导入的文件信息。
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;

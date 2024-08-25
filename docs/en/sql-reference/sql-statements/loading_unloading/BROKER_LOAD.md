@@ -37,13 +37,13 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ### database_name and label_name
 
-`label_name` specifies the label of the load job. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+`label_name` specifies the label of the load job. For the naming conventions, see [System limits](../../System_limit.md).
 
 `database_name` optionally specifies the name of the database to which the destination table belongs.
 
 Each load job has a label that is unique across the entire database. You can use the label of a load job to view the execution status of the load job and prevent repeatedly loading the same data. When a load job enters the **FINISHED** state, its label cannot be reused. Only the label of a load job that has entered the **CANCELLED** state can be reused. In most cases, the label of a load job is reused to retry that load job and load the same data, thereby implementing Exactly-Once semantics.
 
-For label naming conventions, see [System limits](../../../reference/System_limit.md).
+For label naming conventions, see [System limits](../../System_limit.md).
 
 ### data_desc
 

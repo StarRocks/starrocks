@@ -9,4 +9,3 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 import DocCardList from '@theme/DocCardList';
 
-<DocCardList />

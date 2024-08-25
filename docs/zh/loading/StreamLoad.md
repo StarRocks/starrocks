@@ -387,7 +387,7 @@ PROPERTIES
 
 在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
 
-在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
+在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../sql-reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
 
 ```SQL
 SELECT * FROM information_schema.loads;

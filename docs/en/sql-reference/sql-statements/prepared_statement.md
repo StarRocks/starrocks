@@ -71,7 +71,7 @@ SET @var_name = expr [, ...];
 SET @id1 = 1, @id2 = 2;
 ```
 
-For more information, see [user-defined variables](../../reference/user_defined_variables.md).
+For more information, see [user-defined variables](../user_defined_variables.md).
 
 ### EXECUTE
 

@@ -26,7 +26,7 @@ CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 
 | **参数**    | **必选** | **说明**                                                     |
 | ----------- | -------- | ------------------------------------------------------------ |
-| index_name  | 是       | 索引名称，命名要求参见[系统限制](../../../reference/System_limit.md)。在同一张表中不能创建名称相同的索引。 |
+| index_name  | 是       | 索引名称，命名要求参见[系统限制](../../System_limit.md)。在同一张表中不能创建名称相同的索引。 |
 | table_name  | 是       | 表名。                                                       |
 | column_name | 是       | 创建索引的列名。执行一次该语句只能为某一列创建索引，且同一列只能创建一个索引。 |
 | COMMENT     | 否       | 索引备注。                                                   |

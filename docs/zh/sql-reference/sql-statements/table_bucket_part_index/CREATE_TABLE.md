@@ -33,7 +33,7 @@ CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 :::tip
 
-- 关于建表时对于表名、列名、分区名、索引名的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+- 关于建表时对于表名、列名、分区名、索引名的命名要求，参见[系统限制](../../System_limit.md)。
 
 - 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
 
@@ -299,7 +299,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     使用指定的 key 列和指定的数值范围进行分区。
 
-    - 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+    - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
     - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。

@@ -43,7 +43,7 @@ AS <etl_statement>
 
 ## Usage notes
 
-This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata view [`tasks` in Information Schema](../../../../reference/information_schema/tasks.md).
+This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata view [`tasks` in Information Schema](../../../information_schema/tasks.md).
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -57,7 +57,7 @@ After you run the Task, a TaskRun is generated accordingly. A TaskRun indicates 
 - `FAILED`: The task failed.
 - `SUCCESS`: The task runs successfully.
 
-You can check the state of a TaskRun by querying the metadata view [`task_runs` in Information Schema](../../../../reference/information_schema/task_runs.md).
+You can check the state of a TaskRun by querying the metadata view [`task_runs` in Information Schema](../../../information_schema/task_runs.md).
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;

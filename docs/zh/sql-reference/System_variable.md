@@ -5,7 +5,7 @@ keywords: ['session','variable']
 
 # 系统变量
 
-StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
+StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
 
@@ -148,12 +148,12 @@ SELECT /*+ SET_VAR
 ### activate_all_roles_on_login (global)
 
 * 描述：用于控制是否在用户登录时默认激活所有角色（包括默认角色和授予的角色）。
-  * 开启后，在用户登录时默认激活所有角色，优先级高于通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 设置的角色。
+  * 开启后，在用户登录时默认激活所有角色，优先级高于通过 [SET DEFAULT ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) 设置的角色。
   * 如果不开启，则会默认激活 SET DEFAULT ROLE 中设置的角色。
 * 默认值：false，表示不开启。
 * 引入版本：v3.0
 
-如果要在当前会话中激活一个角色，可以使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md)。
+如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
 ### auto_increment_increment
 
@@ -620,7 +620,7 @@ SELECT /*+ SET_VAR
 
 ### group_concat_max_len
 
-* 描述：[group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 函数返回的字符串的最大长度，单位为字符。
+* 描述：[group_concat](sql-functions/string-functions/group_concat.md) 函数返回的字符串的最大长度，单位为字符。
 * 默认值：1024
 * 最小值：4
 * 类型：Long
@@ -764,7 +764,7 @@ SELECT /*+ SET_VAR
   * `auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。
   * `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
 
-  详细信息，请参见[UPDATE](../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md#列模式的部分更新自-31)。
+  详细信息，请参见[UPDATE](sql-statements/table_bucket_part_index/UPDATE.md#列模式的部分更新自-31)。
 * 默认值：auto
 * 引入版本：v3.1
 

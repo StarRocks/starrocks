@@ -71,7 +71,7 @@ You can configure the following parameters in the configuration file **be.conf**
 
 ### System variable configurations
 
-You can configure the following [system variable](../../reference/System_variable.md):
+You can configure the following [system variable](../../sql-reference/System_variable.md):
 
 - `query_timeout`
 

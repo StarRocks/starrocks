@@ -24,7 +24,7 @@ PROPERTIES ("key"="value", ...)
 
 ## Parameters
 
-- `resource_name`: the name of the resource to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+- `resource_name`: the name of the resource to create. For the naming conventions, see [System limits](../../System_limit.md).
 
 - `PROPERTIES`: specifies the properties of the resource type. The PROPERTIES vary depending on the resource type. See Examples for details.
 

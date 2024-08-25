@@ -23,7 +23,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 ## Parameters
 
-`db_name`: the name of the database to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+`db_name`: the name of the database to create. For the naming conventions, see [System limits](../../System_limit.md).
 
 **PROPERTIES (Optional)**
 

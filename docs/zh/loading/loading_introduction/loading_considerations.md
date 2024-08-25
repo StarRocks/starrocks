@@ -68,7 +68,7 @@ toc_max_heading_level: 4
 
 ### 会话变量
 
-您可以设置如下[会话变量](../../reference/System_variable.md)：
+您可以设置如下[会话变量](../../sql-reference/System_variable.md)：
 
 - `query_timeout`
 

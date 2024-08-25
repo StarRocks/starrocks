@@ -37,7 +37,7 @@ WITH BROKER
 
 ### database_name 和 label_name
 
-`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../../reference/System_limit.md)。
+`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../System_limit.md)。
 
 `database_name` 为可选，指定目标 StarRocks 表所在的数据库。
 

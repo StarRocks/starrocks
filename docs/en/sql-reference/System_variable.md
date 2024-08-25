@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # System variables
 
-StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
+StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
@@ -151,12 +151,12 @@ The variables are described **in alphabetical order**. Variables with the `globa
 ### activate_all_roles_on_login (global)
 
 * **Description**: Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster.
-  * If enabled (`true`), all roles of the user are activated at user login. This takes precedence over the roles set by [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
+  * If enabled (`true`), all roles of the user are activated at user login. This takes precedence over the roles set by [SET DEFAULT ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md).
   * If disabled (`false`), the roles set by SET DEFAULT ROLE are activated.
 * **Default**: false
 * **Introduced in**: v3.0
 
-If you want to activate the roles assigned to you in a session, use the [SET ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
+If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
 ### auto_increment_increment
 
@@ -618,7 +618,7 @@ The commands affected by this variable are as follows:
 
 ### group_concat_max_len
 
-* **Description**: The maximum length of string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function.
+* **Description**: The maximum length of string returned by the [group_concat](sql-functions/string-functions/group_concat.md) function.
 * **Default**: 1024
 * **Min value**: 4
 * **Unit**: Characters
@@ -749,7 +749,7 @@ The number of scan instances determines the number of other execution nodes in t
   * `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
   * `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
-  For more information, see [UPDATE](../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md#partial-updates-in-column-mode-since-v31).
+  For more information, see [UPDATE](sql-statements/table_bucket_part_index/UPDATE.md#partial-updates-in-column-mode-since-v31).
 * **Default**: auto
 * **Introduced in**: v3.1
 

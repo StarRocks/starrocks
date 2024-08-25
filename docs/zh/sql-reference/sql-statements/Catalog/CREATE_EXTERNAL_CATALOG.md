@@ -34,7 +34,7 @@ PROPERTIES ("key"="value", ...)
 
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
-| catalog_name | 是   | External catalog 的名称，命名要求参见[系统限制](../../../reference/System_limit.md)。 |
+| catalog_name | 是   | External catalog 的名称，命名要求参见[系统限制](../../System_limit.md)。 |
 | comment      | 否   | External catalog 的描述。 |
 | PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)。 |
 

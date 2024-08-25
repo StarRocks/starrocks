@@ -24,7 +24,7 @@ PROPERTIES ("key"="value"[, ...])
 
 ### resource_name
 
-资源名称。命名要求参见[系统限制](../../../reference/System_limit.md)。
+资源名称。命名要求参见[系统限制](../../System_limit.md)。
 
 ### PROPERTIES
 

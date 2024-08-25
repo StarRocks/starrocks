@@ -8,4 +8,4 @@ displayed_sidebar: docs
 - [ALTER](../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md)
 - [DROP](../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md)
 - [SHOW](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md)
-- [Information schema](../reference/information_schema/materialized_views.md)
+- [Information schema](../sql-reference/information_schema/materialized_views.md)

@@ -87,7 +87,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
+    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../sql-reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
 
     Multiple bitmap indexes can be created for multiple columns, separated by commas (,).
 

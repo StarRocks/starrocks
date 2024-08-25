@@ -37,7 +37,7 @@ LIKE [database.]<source_table_name>
 
 - `TEMPORARY`: Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
 - `database`: the database.
-- `table_name`: the name of the table you want to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+- `table_name`: the name of the table you want to create. For the naming conventions, see [System limits](../../System_limit.md).
 - `source_table_name`: the name of the source table you want to copy.
 - - `partition_desc`: the partitioning method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc).
 - `distribution_desc`: the bucketing method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc).

@@ -38,7 +38,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过系统变量 [`connector_sink_compression_codec`](../../reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
 
 ## 准备工作
 
@@ -1029,7 +1029,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+| compression_codec | Managed Table 的压缩格式。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
@@ -1071,12 +1071,12 @@ PARTITION BY (par_col1[, par_col2...])
 
 本功能自 3.2 版本起开始支持，彼时只支持写入到 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持写入到 ORC 及 Textfile 格式的 Hive 表。
 
-需要注意的是，写数据到 External Table 的功能默认是关闭的，您需要通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
+需要注意的是，写数据到 External Table 的功能默认是关闭的，您需要通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../sql-reference/System_variable.md) 打开。
 
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
+- 您可以通过会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
 
 :::
 

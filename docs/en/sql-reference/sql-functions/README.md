@@ -9,5 +9,4 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 import DocCardList from '@theme/DocCardList';
 
-<DocCardList />
 

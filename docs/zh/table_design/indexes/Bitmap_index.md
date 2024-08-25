@@ -88,7 +88,7 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-   本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../../reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
+   本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../../sql-reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
 
    并且，支持为多个列创建 Bitmap 索引，并且多个 Bitmap 索引定义之间用英文逗号（,）隔开。
 
