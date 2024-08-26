@@ -34,12 +34,22 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
+#include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
 namespace vpack = arangodb::velocypack;
 class ColumnReader;
+
+#ifndef NDEBUG
+template <typename K, typename V>
+using FlatJsonHashMap = std::unordered_map<K, V>;
+#else
+template <typename K, typename V>
+using FlatJsonHashMap = phmap::flat_hash_map<K, V>;
+#endif
 
 class JsonFlatPath {
 public:
@@ -53,7 +63,7 @@ public:
     LogicalType type = LogicalType::TYPE_JSON;
     bool remain = false;
     OP op = OP_INCLUDE; // merge flat json use, to mark the path is need
-    std::unordered_map<std::string, std::unique_ptr<JsonFlatPath>> children;
+    FlatJsonHashMap<std::string_view, std::unique_ptr<JsonFlatPath>> children;
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
@@ -61,10 +71,11 @@ public:
     ~JsonFlatPath() = default;
 
     // return the leaf node
-    static JsonFlatPath* normalize_from_path(const std::string& path, JsonFlatPath* root);
+    // @info: string_view is not safe memory use, must be careful plz
+    static JsonFlatPath* normalize_from_path(const std::string_view& path, JsonFlatPath* root);
 
     // set new root, other path will set to exclude, the node must include the root path
-    static void set_root(const std::string& new_root_path, JsonFlatPath* node);
+    static void set_root(const std::string_view& new_root_path, JsonFlatPath* node);
 
     static std::string debug_flat_json(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                        bool has_remain) {
@@ -84,7 +95,7 @@ public:
     }
 
 private:
-    static std::pair<std::string, std::string> _split_path(const std::string& path);
+    static std::pair<std::string_view, std::string_view> _split_path(const std::string_view& path);
 };
 
 // to deriver json flanttern path
@@ -115,17 +126,15 @@ private:
 
     void _derived_on_flat_json(const std::vector<const Column*>& json_datas);
 
-    void _visit_json_paths(vpack::Slice value, JsonFlatPath* root, size_t mark_row);
+    void _visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row);
 
 private:
     struct JsonFlatDesc {
         // json compatible type
-        uint8_t type = 255; // JSON_NULL_TYPE_BITS
+        uint8_t type = 31; // JSON_NULL_TYPE_BITS
         // column path hit count, some json may be null or none, so hit use to record the actual value
         // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
         uint64_t hits = 0;
-        // how many rows need to be cast to a compatible type
-        uint16_t casts = 0;
 
         // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
         uint64_t max = 0;
@@ -141,7 +150,7 @@ private:
 
     double _json_sparsity_factory = config::json_flat_sparsity_factor;
     size_t _total_rows;
-    std::unordered_map<JsonFlatPath*, JsonFlatDesc> _derived_maps;
+    FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;
 };
 

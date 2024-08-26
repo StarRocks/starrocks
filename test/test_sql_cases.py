@@ -21,6 +21,7 @@ test_sql_cases
 @Time : 2022/10/28 13:41
 @Author : Brook.Ye
 """
+import copy
 import json
 import os
 import re
@@ -73,6 +74,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     """
 
     _multiprocess_can_split_ = True
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(TestSQLCases, cls).__new__(cls, *args, **kwargs)
+        return cls._instance
 
     def __init__(self, *args, **kwargs):
         """
@@ -97,6 +104,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         default_configs = [
             "'enable_mv_refresh_insert_strict' = 'true'",
             "'enable_mv_refresh_query_rewrite' = 'true'",
+            # enlarge task run concurrency to speed up mv's refresh and find more potential bugs
+            "'task_runs_concurrency' = '16'",
         ]
 
         for config in default_configs:
@@ -198,6 +207,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         all_db_dict = dict()
         for case in case_list:
             sql_list = self._replace_uuid_variables(case.sql)
+
             for sql in sql_list:
                 if isinstance(sql, str):
                     db_name = self._get_db_name(sql)
@@ -227,7 +237,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     @staticmethod
     def _replace_uuid_variables(sql_list: List) -> List:
         ret = list()
-        variable_dict = dict()
+        variable_dict = {}
+
         for sql in sql_list:
 
             if isinstance(sql, str):
@@ -262,17 +273,19 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
                 ret.append(sql)
             elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
+                _sql = copy.deepcopy(sql)
                 tmp_stat = []
-                for each_sql in sql["stat"]:
+                for each_sql in _sql["stat"]:
                     for each_var in variable_dict:
                         each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
                     tmp_stat.append(each_sql)
-                sql["stat"] = tmp_stat
-                ret.append(sql)
+                _sql["stat"] = tmp_stat
+                ret.append(_sql)
             elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                _sql = copy.deepcopy(sql)
                 tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
 
-                for each_thread in sql["thread"]:
+                for each_thread in _sql["thread"]:
                     tmp_cmd = []
                     for each_cmd in each_thread["cmd"]:
                         for each_var in variable_dict:
@@ -280,7 +293,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         tmp_cmd.append(each_cmd)
                     each_thread["cmd"] = tmp_cmd
 
-                ret.append(sql)
+                ret.append(_sql)
 
         return ret
 
@@ -326,8 +339,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         sql_list = self._init_data(case_info.sql)
 
-        self_print(f"\t ▶ case db: {self.db}")
-        self_print(f"\t ▶ case resource: {self.resource}")
+        self_print(f"\t → case db: {self.db}")
+        self_print(f"\t → case resource: {self.resource}")
 
         log.info(
             """
@@ -461,3 +474,4 @@ Start to run: %s
                 self_print(f"[CONCURRENCY] SUCCESS!", color=ColorEnum.CYAN, logout=True)
                 if record_mode:
                     self.res_log.append("} " + END_CONCURRENCY_FLAG + "\n")
+

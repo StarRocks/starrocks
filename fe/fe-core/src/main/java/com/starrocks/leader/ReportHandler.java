@@ -152,8 +152,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
             count += taskMap.size();
         }
-        return ImmutableMap.of("PendingTask", count,
-                                "ReportQueue", (long) reportQueue.size());
+        return ImmutableMap.of("PendingTask", count, "ReportQueue", (long) reportQueue.size());
     }
 
     public enum ReportType {
@@ -887,8 +886,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             && diskInfo.getState() == DiskInfo.DiskState.ONLINE
                             && backendReportVersion < currentBackendReportVersion) {
                         LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
-                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
-                        break DB_TRAVERSE;
+                                "latest report version: {}, ignore tablet: {}",
+                                backendId, backendReportVersion, currentBackendReportVersion, tabletId);
+                        continue;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
                                 replica.getPathHash(), tabletId, backendId);
@@ -1164,7 +1164,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null || physicalPartition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
@@ -1188,14 +1188,14 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             if (maxRowsetCreationTime < 0 || System.currentTimeMillis() - maxRowsetCreationTime * 1000 <=
                     Config.primary_key_disk_schedule_time * 1000) {
                 LOG.warn("primary key tablet {} can not be migrated, " +
-                        "because the creation time of the latest row set is less than {} seconds than the current time",
+                                "because the creation time of the latest row set is less than {} seconds than the current time",
                         tablet.getId(), Config.primary_key_disk_schedule_time);
                 return false;
             }
 
             return true;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         }
     }
 
@@ -1233,16 +1233,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
-                OlapTable table;
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
-                    table = (OlapTable) db.getTable(tabletMeta.getTableId());
-                    if (table == null) {
-                        continue;
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                if (table == null) {
+                    continue;
                 }
 
                 if (!migratableTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
@@ -1399,13 +1392,15 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
+
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
                     Partition partition = olapTable.getPartition(partitionId);
                     if (partition == null) {
                         continue;
@@ -1415,7 +1410,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1458,19 +1453,21 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
+
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
                     boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
                     if (beEnablePersistentIndex != feEnablePersistentIndex) {
                         tabletToEnablePersistentIndex.add(new Pair<>(tabletId, feEnablePersistentIndex));
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1511,19 +1508,20 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
+
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
                     int fePrimaryIndexCacheExpireSec = olapTable.primaryIndexCacheExpireSec();
                     if (bePrimaryIndexCacheExpireSec != fePrimaryIndexCacheExpireSec) {
                         tabletToPrimaryCacheExpireSec.add(new Pair<>(tabletId, fePrimaryIndexCacheExpireSec));
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1570,13 +1568,15 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
+
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
                     if (olapTable.getMaxColUniqueId() <= Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
                         continue;
                     }
@@ -1598,7 +1598,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         tableToDb.put(tableId, dbId);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
             }
         }
@@ -1615,18 +1615,19 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             if (db == null) {
                 continue;
             }
+
+            OlapTable olapTable = (OlapTable) db.getTable(tableId);
+            if (olapTable == null) {
+                continue;
+            }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                if (olapTable == null) {
-                    continue;
-                }
                 MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                 if (indexMeta == null) {
                     continue;
                 }
-                
+
                 // already has one update scheam task, ignore to prevent send too many task
                 if (indexMeta.hasUpdateSchemaTask(backendId)) {
                     continue;
@@ -1645,16 +1646,15 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
                 }
                 TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
-                                            indexMeta.getShortKeyColumnCount());
+                        indexMeta.getShortKeyColumnCount());
 
                 UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                            indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
-                            columnParam);
+                        indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                        columnParam);
                 updateSchemaBatchTask.addTask(task);
                 indexMeta.addUpdateSchemaBackend(backendId);
-
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
         }
         // send agent batch task
@@ -1686,16 +1686,15 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
 
                 boolean needToCheck = false;
                 OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    if (olapTable == null) {
-                        continue;
-                    }
-
                     BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
                     // backward compatible
                     if (binlogConfig == null) {
@@ -1715,7 +1714,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                 beBinlogConfigVersion, feBinlogConfigVersion);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
                 }
 
                 if (needToCheck) {
@@ -1769,14 +1768,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (db == null) {
             throw new MetaNotFoundException("db[" + dbId + "] does not exist");
         }
+        OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+        if (olapTable == null) {
+            throw new MetaNotFoundException("table[" + tableId + "] does not exist");
+        }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
-            if (olapTable == null) {
-                throw new MetaNotFoundException("table[" + tableId + "] does not exist");
-            }
-
             if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId) == null) {
                 throw new MetaNotFoundException("partition[" + partitionId + "] does not exist");
             }
@@ -1890,7 +1888,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         "replica is enough[" + tablet.getImmutableReplicas().size() + "-" + replicationNum + "]");
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 

@@ -596,14 +596,6 @@ under the License.
                 </exclusions>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
-            <dependency>
-                <groupId>org.apache.parquet</groupId>
-                <artifactId>parquet-column</artifactId>
-                <version>${parquet.version}</version>
-                <scope>provided</scope>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
             <dependency>
                 <groupId>org.apache.parquet</groupId>

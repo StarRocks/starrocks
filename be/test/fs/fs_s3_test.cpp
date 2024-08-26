@@ -561,7 +561,7 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     test_properties[AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR] = "true";
     TCloudConfiguration tCloudConfiguration;
     tCloudConfiguration.__set_cloud_type(TCloudType::AWS);
-    tCloudConfiguration.__set_cloud_properties_v2(test_properties);
+    tCloudConfiguration.__set_cloud_properties(test_properties);
     auto cloud_config = CloudConfigurationFactory::create_aws(tCloudConfiguration);
 
     config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;

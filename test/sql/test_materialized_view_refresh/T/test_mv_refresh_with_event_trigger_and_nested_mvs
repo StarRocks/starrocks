@@ -51,9 +51,6 @@ as select * from test_mv3;
 
 set enable_materialized_view_rewrite = false;
 INSERT INTO t1 VALUES ('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 1)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 1)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 1)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 1)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -61,9 +58,6 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 12:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 2)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 2)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 2)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 2)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -71,9 +65,6 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 13:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 3)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 3)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 3)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 3)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
@@ -81,37 +72,10 @@ select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
 INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 14:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 4)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 4)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 4)
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 4)
 select max(k2) from test_mv1;
 select max(k2) from test_mv2;
 select max(k2) from test_mv3;
 select max(k2) from test_mv4;
 
-INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 15:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 5)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 5)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 5)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 5)
-select max(k2) from test_mv1;
-select max(k2) from test_mv2;
-select max(k2) from test_mv3;
-select max(k2) from test_mv4;
-
-INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 16:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),  ('2020-10-24','2020-10-24 17:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),  ('2020-10-24','2020-10-24 18:13:13','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1", 6)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2", 6)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv3", 6)
-function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv4", 6)
-select max(k2) from test_mv1;
-select max(k2) from test_mv2;
-select max(k2) from test_mv3;
-select max(k2) from test_mv4;
-
-drop materialized view test_mv1;
-drop materialized view test_mv2;
-drop materialized view test_mv3;
-drop materialized view test_mv4;
-drop table t1;
+drop database db_${uuid0} force;

@@ -39,7 +39,7 @@ public:
     Status open() override;
     void close() override;
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    Status release_block(const BlockPtr& block) override;
+    Status release_block(BlockPtr block) override;
 
 private:
     StatusOr<FileBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,

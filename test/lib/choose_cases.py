@@ -86,7 +86,7 @@ class ChooseCase(object):
     def __init__(self, case_dir=None, record_mode=False, file_regex=None, case_regex=None):
         """init"""
         super().__init__()
-        self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
+        # self.sr_lib_obj = sr_sql_lib.StarrocksSQLApiLib()
 
         # case_dir = sql dir by default
         self.case_dir = os.path.join(sr_sql_lib.root_path, CASE_DIR) if case_dir is None else case_dir
@@ -405,6 +405,8 @@ class ChooseCase(object):
                 })
                 tmp_res.append(None)
                 line_id += 1
+                tmp_loop_stat.clear()
+                tmp_loop_prop = {}
 
             elif line_content.startswith(CONCURRENCY_FLAG):
                 # thread info list
@@ -523,6 +525,9 @@ def choose_cases(record_mode=False):
     sr_sql_lib.self_print(run_info, color=ColorEnum.GREEN, bold=False, logout=True)
 
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
+
+    # log info: case list
+    sr_sql_lib.self_print("case num: %s" % len(cases.case_list))
 
     for case in cases.case_list:
         log.info("%s:%s" % (case.file, case.name))

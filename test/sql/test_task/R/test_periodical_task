@@ -19,14 +19,12 @@ select TASK_NAME, `SCHEDULE`, DEFINITION from information_schema.tasks where `DA
 -- result:
 t1	PERIODICAL START(2024-01-01T00:00) EVERY(10 SECONDS)	insert into t1 select * from t1;
 -- !result
-select sleep(15);
--- result:
-1
--- !result
-select count(*) > 0 from information_schema.task_runs where `DATABASE` = 'test_task_${uuid0}' and task_name='t1';
--- result:
-1
--- !result
+LOOP {
+  PROPERTY: {"timeout": 15, "interval": 3, "desc": "make sure the task got refreshed"}
+  result=select count(*) from information_schema.task_runs where `DATABASE` = 'test_task_${uuid0}' and task_name='t1';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+
 drop task t1;
 -- result:
 -- !result

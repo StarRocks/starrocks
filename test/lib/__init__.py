@@ -89,4 +89,3 @@ def to_json(ori_str):
         json_res = json.loads(ori_str)
 
     return json_res
-
