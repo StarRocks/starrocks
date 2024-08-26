@@ -849,7 +849,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testLike() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS like 'k' AND S_ADDRESS like S_COMMENT";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "DictDecode(12: S_ADDRESS, [<place-holder> = 'k'])");
+        assertContains(plan, "DictExpr(12: S_ADDRESS,[<place-holder> = 'k'])");
     }
 
     @Test
@@ -1929,22 +1929,4 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "if(DictExpr(10: S_ADDRESS,[<place-holder> = '']), '', " +
                 "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
     }
-
-<<<<<<< HEAD
-=======
-    @Test
-    public void testTempPartition() throws Exception {
-        FeConstants.unitTestView = false;
-        try {
-            String sql = "ALTER TABLE lineitem_partition ADD TEMPORARY PARTITION px VALUES [('1998-01-01'), ('1999-01-01'));";
-            starRocksAssert.alterTable(sql);
-            sql = "select distinct L_COMMENT from lineitem_partition TEMPORARY PARTITION(px)";
-            String plan = getFragmentPlan(sql);
-            assertNotContains(plan, "dict_col");
-        } finally {
-            FeConstants.unitTestView = true;
-        }
-    }
-
->>>>>>> b5637d8900 ([BugFix] Fix like predicate dict rewrite error (#50174))
 }
