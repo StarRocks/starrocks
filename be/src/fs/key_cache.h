@@ -91,6 +91,9 @@ public:
 
     StatusOr<FileEncryptionPair> create_encryption_meta_pair_using_current_kek();
 
+    // create a FileEncryptionPair, with single plain key in key hierarchy, only used for tests
+    StatusOr<FileEncryptionPair> create_plain_random_encryption_meta_pair();
+
     StatusOr<FileEncryptionInfo> unwrap_encryption_meta(const std::string& encryption_meta);
 
     Status refresh_keys_from_fe();
