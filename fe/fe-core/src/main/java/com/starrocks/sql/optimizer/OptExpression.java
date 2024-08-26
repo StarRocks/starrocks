@@ -62,6 +62,9 @@ public class OptExpression {
 
     private Boolean isShortCircuit = false;
 
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
+
     private OptExpression() {
     }
 
@@ -244,6 +247,14 @@ public class OptExpression {
 
     public String debugString(int limitLine) {
         return debugString("", "", limitLine);
+    }
+
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
     }
 
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
