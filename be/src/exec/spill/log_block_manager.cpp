@@ -259,7 +259,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
     return res;
 }
 
-Status LogBlockManager::release_block(const BlockPtr& block) {
+Status LogBlockManager::release_block(BlockPtr block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();

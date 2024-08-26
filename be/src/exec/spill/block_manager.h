@@ -124,6 +124,6 @@ public:
     // acquire a block from BlockManager, return error if BlockManager can't allocate one.
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     // return Block to BlockManager
-    virtual Status release_block(const BlockPtr& block) = 0;
+    virtual Status release_block(BlockPtr block) = 0;
 };
 } // namespace starrocks::spill

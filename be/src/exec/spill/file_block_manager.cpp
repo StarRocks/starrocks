@@ -212,7 +212,7 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     return res;
 }
 
-Status FileBlockManager::release_block(const BlockPtr& block) {
+Status FileBlockManager::release_block(BlockPtr block) {
     auto file_block = down_cast<FileBlock*>(block.get());
     auto container = file_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();

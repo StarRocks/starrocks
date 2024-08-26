@@ -30,7 +30,7 @@ public:
     Status open() override;
     void close() override;
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    Status release_block(const BlockPtr& block) override;
+    Status release_block(BlockPtr block) override;
 
 private:
     std::unique_ptr<BlockManager> _local_block_manager;
