@@ -3253,7 +3253,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
-- Description: Whether to enable the compaction task is based on Flat Json data when compaction Json data.
+- Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
 
 ##### enable_lazy_dynamic_flat_json
@@ -3262,7 +3262,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
-- Description: Whether to enable lazy dynamic flatten json when doesn't found flatten json schema in read process. 
+- Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
 - Introduced in: v3.3.3
 
 ### Shared-data
@@ -4598,50 +4598,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description:
 - Introduced in: -
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_column_max
-
-- Default: 100
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_compaction_flat_json
-
-- Default: True
-- Type: Boolean
-- Unit:
-- Is mutable: Yes
-- Description: 
-- Introduced in: 
--->
-
-<!--
-##### enable_lazy_dynamic_flat_json
-
-- Default: True
-- Type: Boolean
-- Unit:
-- Is mutable: Yes
-- Description: 
-- Introduced in:
 -->
 
 <!--
