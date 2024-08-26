@@ -249,7 +249,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {

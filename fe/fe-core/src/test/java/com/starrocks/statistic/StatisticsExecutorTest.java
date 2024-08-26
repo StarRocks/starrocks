@@ -137,14 +137,14 @@ public class StatisticsExecutorTest extends PlanTestBase {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assert.assertEquals(
-                        "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                        "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
-                                "cast(min(cast(min as string)) as string) FROM external_column_statistics " +
+                                "cast(min(cast(min as string)) as string), max(update_time) FROM external_column_statistics " +
                                 "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
                                 "and column_name in (\"c2\") GROUP BY table_uuid, column_name UNION ALL " +
-                                "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
-                                "cast(min(cast(min as bigint)) as string) " +
+                                "cast(min(cast(min as bigint)) as string), max(update_time) " +
                                 "FROM external_column_statistics WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
                                 " and column_name in (\"c1\") GROUP BY table_uuid, column_name", sql);
                 return Lists.newArrayList();

@@ -72,8 +72,8 @@ public class AnalyzeMgrTest {
             {
                 cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
                 result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5, ""),
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50, "")
                 );
                 minTimes = 1;
             }
@@ -87,8 +87,8 @@ public class AnalyzeMgrTest {
             {
                 cachedStatisticStorage.getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
                 result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5, ""),
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50, "")
                 );
                 minTimes = 1;
             }
