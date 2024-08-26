@@ -165,6 +165,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
+        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            (void)thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                           config::transaction_publish_version_thread_pool_num_min));
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
@@ -191,6 +196,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
             (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() {
+            int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
         });
         _config_callback.emplace("get_pindex_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
