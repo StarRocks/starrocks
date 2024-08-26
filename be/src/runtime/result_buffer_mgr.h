@@ -38,6 +38,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <arrow/record_batch.h>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"

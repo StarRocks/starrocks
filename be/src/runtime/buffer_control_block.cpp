@@ -34,6 +34,7 @@
 
 #include "runtime/buffer_control_block.h"
 
+#include <arrow/record_batch.h>
 #include <utility>
 
 #include "gen_cpp/InternalService_types.h"
@@ -133,6 +134,18 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     return Status::OK();
 }
 
+Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
+    _process_arrow_batch_without_lock(result);
+    _data_arriaval.notify_one();
+
+    return Status::OK();
+}
+
 StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TFetchDataResult* result) {
     uint8_t* buf = nullptr;
     uint32_t len = 0;
@@ -159,6 +172,10 @@ void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRe
         ctx->on_data(ser_res.get(), _packet_num);
         _packet_num++;
     }
+}
+
+void BufferControlBlock::_process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result) {
+    _arrow_batch_queue.push_back(std::move(result));
 }
 
 Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results) {
@@ -291,6 +308,36 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     }
     // no ready data, push ctx to waiting list
     _waiting_rpc.push_back(ctx);
+}
+
+Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (!_status.ok()) {
+        return _status;
+    }
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
+        _data_arriaval.wait(l);
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    if (!_arrow_batch_queue.empty()) {
+        *result = std::move(_arrow_batch_queue.front());
+        _arrow_batch_queue.pop_front();
+        return Status::OK();
+    }
+
+    if (_is_close) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("Internal error, BufferControlBlock::get_arrow_batch");
 }
 
 Status BufferControlBlock::close(Status exec_status) {

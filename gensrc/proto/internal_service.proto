@@ -640,7 +640,7 @@ message PProcessDictionaryCacheResult {
 };
 
 message PFetchArrowSchemaRequest {
-    required PUniqueId finst_id = 1;
+    optional PUniqueId finst_id = 1;
 };
 
 message PFetchArrowSchemaResult {

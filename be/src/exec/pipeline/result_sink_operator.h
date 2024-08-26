@@ -88,6 +88,7 @@ private:
     bool _is_finished = false;
 
     FragmentContext* const _fragment_ctx;
+    const RowDescriptor& _row_desc;
 };
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
