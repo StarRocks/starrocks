@@ -40,7 +40,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -128,6 +127,10 @@ public class CreateMaterializedViewTest {
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
 
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        Config.default_mv_refresh_immediate = true;
+
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -138,10 +141,6 @@ public class CreateMaterializedViewTest {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
-
-        // set default config for async mvs
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-        Config.default_mv_refresh_immediate = true;
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
