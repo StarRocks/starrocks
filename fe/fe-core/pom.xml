@@ -42,8 +42,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
         <awsv2.version>2.17.257</awsv2.version>
-        <paimon.version>0.9-20240531-9615fc-SNAPSHOT</paimon.version>
-        <paimon.ali.dlf.version>0.9-ali-2-SNAPSHOT</paimon.ali.dlf.version>
+        <paimon.ali.dlf.version>0.9.0-20240807-68f2a6-4</paimon.ali.dlf.version>
         <python>python</python>
     </properties>
 
