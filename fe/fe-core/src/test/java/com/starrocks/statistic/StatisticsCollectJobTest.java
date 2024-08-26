@@ -584,7 +584,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
 
@@ -706,7 +706,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -729,7 +729,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100000000));
+                        100000000, ""));
             }
         };
 
@@ -814,7 +814,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
         new MockUp<DefaultTraits>() {
@@ -851,7 +851,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100000000));
+                        100000000, ""));
             }
         };
 
