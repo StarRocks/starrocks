@@ -34,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -246,6 +247,12 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         final int pipelineDop = fragment.getPipelineDop();
 
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
         assignment.forEach((workerId, scanRangesPerWorker) -> {
             // 1. Handle normal scan node firstly
             scanRangesPerWorker.forEach((scanId, scanRangesOfNode) -> {
@@ -256,18 +263,15 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
                 List<List<TScanRangeParams>> scanRangesPerInstance =
                         ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
-                int fragmentInstanceIndex = 0;
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
                     FragmentInstance instance = null;
-                    if (useIncrementalScanRanges && !execFragment.getInstances().isEmpty()) {
-                        instance = execFragment.getInstances().get(fragmentInstanceIndex);
-                        fragmentInstanceIndex += 1;
+                    if (useIncrementalScanRanges && !fragmentInstanceMap.isEmpty()) {
+                        instance = fragmentInstanceMap.get(workerId);
                     } else {
                         instance =
                                 new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                        execFragment.addInstance(instance);
                     }
-                    execFragment.addInstance(instance);
-
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                         fragment.disablePhysicalPropertyOptimize();

@@ -783,6 +783,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
+    public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -2130,6 +2131,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
     private boolean enableConnectorIncrementalScanRanges = false;
+
+    @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
+    private int connectorIncrementalScanRangeSize = 1000;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -4118,8 +4122,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorRemoteFileAsyncTaskSize;
     }
 
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
     public boolean isEnableConnectorIncrementalScanRanges() {
         return enableConnectorIncrementalScanRanges;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
     }
 
     // Serialize to thrift object

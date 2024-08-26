@@ -58,7 +58,7 @@ public class BackendSelectorFactory {
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         int maxScanRangeLength = 0;
         if (useIncrementalScanRanges) {
-            maxScanRangeLength = sessionVariable.getConnectorRemoteFileAsyncTaskSize();
+            maxScanRangeLength = sessionVariable.getConnectorIncrementalScanRangeNumber();
         }
 
         List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(maxScanRangeLength);

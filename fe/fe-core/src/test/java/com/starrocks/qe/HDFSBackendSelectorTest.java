@@ -318,4 +318,63 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
     }
+
+    @Test
+    public void testHdfsScanNodeIncrementalScanRanges() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 1;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, true);
+        selector.computeScanRangeAssignment();
+        Assert.assertEquals(assignment.size(), 3);
+        int scanRanges = 0;
+        for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
+            Assert.assertEquals(scanNodes.size(), 1);
+            List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
+            Assert.assertTrue(scanRangeParams.size() >= 1);
+            TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
+            Assert.assertTrue(last.isSetPlaceholder());
+            Assert.assertTrue(last.isSetHas_more());
+            Assert.assertTrue(last.isPlaceholder());
+            Assert.assertTrue(last.has_more == false);
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isPlaceholder()) {
+                    scanRanges += 1;
+                }
+            }
+        }
+        Assert.assertEquals(scanRanges, scanRangeNumber);
+    }
 }
