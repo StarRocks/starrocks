@@ -327,3 +327,28 @@ explain select 1;
 [REGEX].*PARTITION: UNPARTITIONED.*
 -- !result
 ```
+
+
+### 6. SPECIFY THE CLUSTER MODE TO RUN
+By default, the cases will run in both cloud&native mode. If you expect to run it only in a certain mode, you can specify it by the case tag.  
+Usage: Add the `@native`(shared_nothing deployment) or `@cloud`(shared_data deployment) tag in case name lines.
+```sql
+-- name: ${case name} @cloud
+...
+-- name: ${case name} @native
+...
+```
+
+### 7. EXECUTE QUERIES ON OTHER SQL ENGINES
+All sqls are executed by the StarRocks cluster by default. Besides, you can also execute queries on other SQL engines. As of now, we support hive, spark, and trino.
+
+Usage:
+```sql
+SELECT 1, 2; -- executed by StarRocks
+
+trino: SELECT 1, 2; -- executed by trino
+
+spark: SELECT 1, 2; -- executed by spark
+
+hive: SELECT 1, 2; -- executed by hive
+```
