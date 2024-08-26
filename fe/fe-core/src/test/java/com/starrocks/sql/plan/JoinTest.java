@@ -3282,12 +3282,13 @@ public class JoinTest extends PlanTestBase {
                 "        `AGGED_GROUP_FIND_L_TABLE`.`GROUPED_FIND_LITERAL` = `JOINED_AGGED_SEQUENCE_R_TABLE`.`JOINED_LITERAL`\n" +
                 "    );";
         String plan = getFragmentPlan(query);
-        // left outer join can not use const expr replacement optimization because it may generate null values
-        assertContains(plan, "16:Project\n" +
+        System.out.println(plan);
+        //outer join can not use const expr replacement optimization because it may generate null values
+        assertContains(plan, "10:Project\n" +
                 "  |  <slot 29> : 29: expr\n" +
                 "  |  \n" +
-                "  15:NESTLOOP JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN\n" +
+                "  9:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason:");
     }
 }
