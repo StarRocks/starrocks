@@ -204,7 +204,7 @@ struct FilterZoneMapWithMinMaxOp {
 
 bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter,
                                                       const Column* min_column, const Column* max_column) {
-    return type_dispatch_zone_map_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
+    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
@@ -870,7 +870,7 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
     *min_max_predicate = nullptr;
     if (filter == nullptr || filter->has_null()) return;
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
-    auto res = type_dispatch_zone_map_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
+    auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;
 }
 

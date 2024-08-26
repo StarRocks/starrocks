@@ -197,31 +197,8 @@ Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args...
     }
 }
 
-template <class Ret, class Functor, class... Args>
-Ret type_dispatch_zone_map_predicate(LogicalType ltype, bool assert, Functor fun, Args... args) {
-    switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
-    default:
-        if (assert) {
-            CHECK(false) << "Unknown type: " << ltype;
-            __builtin_unreachable();
-        } else {
-            return Ret{};
-        }
-    }
-}
-
 template <class Functor, class Ret, class... Args>
 auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
-    switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
-    default:
-        return default_value;
-    }
-}
-
-template <class Functor, class Ret, class... Args>
-auto type_dispatch_zone_map_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
