@@ -39,6 +39,7 @@
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_pool.h"
 #include "runtime/string_value.h"
 #include "simd/multi_version.h"
 #include "util/coding.h"
@@ -629,7 +630,7 @@ void DataSketchesHll::update(uint64_t hash_value) {
 
 void DataSketchesHll::merge(const DataSketchesHll& other) {
     if (UNLIKELY(_sketch_union == nullptr)) {
-        _sketch_union = std::make_unique<datasketches::hll_union>(other.get_lg_config_k());
+        _sketch_union = std::make_unique<hll_union_type>(other.get_lg_config_k(), alloc_type(&_memory_usage));
     }
     auto o_sketch = other.get_hll_sketch();
     _sketch_union->update(*o_sketch);
@@ -671,9 +672,9 @@ bool DataSketchesHll::deserialize(const Slice& slice) {
     }
 
     try {
-        auto sketch = std::make_unique<datasketches::hll_sketch>(
-                datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size));
-        _sketch_union = std::make_unique<datasketches::hll_union>(sketch->get_lg_config_k());
+        auto sketch = std::make_unique<hll_sketch_type>(
+                hll_sketch_type::deserialize((uint8_t*)slice.data, slice.size, alloc_type(&_memory_usage)));
+        _sketch_union = std::make_unique<hll_union_type>(sketch->get_lg_config_k(), alloc_type(&_memory_usage));
         _sketch_union->update(*sketch);
         this->mark_changed();
     } catch (std::logic_error& e) {
@@ -695,8 +696,8 @@ std::string DataSketchesHll::to_string() const {
     if (_sketch_union == nullptr) {
         return "";
     }
-
-    return get_hll_sketch()->to_string();
+    datasketches::string<alloc_type> str = get_hll_sketch()->to_string();
+    return std::string(str.begin(), str.end());
 }
 
 } // namespace starrocks

@@ -40,8 +40,15 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         if (this->data(state).hll_sketch != nullptr) {
+            ctx->add_mem_usage(-this->data(state).hll_sketch->mem_usage());
             this->data(state).hll_sketch->clear();
         }
+    }
+
+    void update_state(FunctionContext* ctx, AggDataPtr state, uint64_t value) const {
+        int64_t prev_memory = this->data(state).hll_sketch->mem_usage();
+        this->data(state).hll_sketch->update(value);
+        ctx->add_mem_usage(this->data(state).hll_sketch->mem_usage() - prev_memory);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -59,7 +66,7 @@ public:
             const auto& v = column->get_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
-        this->data(state).hll_sketch->update(value);
+        update_state(ctx, state, value);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -75,7 +82,7 @@ public:
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
-                    this->data(state).hll_sketch->update(value);
+                    update_state(ctx, state, value);
                 }
             }
         } else {
@@ -85,7 +92,7 @@ public:
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
-                    this->data(state).hll_sketch->update(value);
+                    update_state(ctx, state, value);
                 }
             }
         }
@@ -99,7 +106,9 @@ public:
             this->data(state).hll_sketch =
                     std::make_unique<DataSketchesHll>(hll.get_lg_config_k(), hll.get_target_type());
         }
+        int64_t prev_memory = this->data(state).hll_sketch->mem_usage();
         this->data(state).hll_sketch->merge(hll);
+        ctx->add_mem_usage(this->data(state).hll_sketch->mem_usage() - prev_memory);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
