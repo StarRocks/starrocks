@@ -981,6 +981,10 @@ under the License.
                     <artifactId>elasticsearch</artifactId>
                     <groupId>org.elasticsearch</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>org.codehaus.jackson</artifactId>
+                    <groupId>jackson-mapper-asl</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
 
