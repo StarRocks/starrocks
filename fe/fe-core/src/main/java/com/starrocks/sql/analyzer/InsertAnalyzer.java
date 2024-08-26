@@ -288,20 +288,20 @@ public class InsertAnalyzer {
     }
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
-        Map<String, String> insertProperties = insertStmt.getInsertProperties();
+        Map<String, String> properties = insertStmt.getProperties();
         // use session variable if not set max_filter_ratio property
-        if (!insertProperties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
-            insertProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+        if (!properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                     String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         }
         // use session variable if not set strict_mode property
-        if (!insertProperties.containsKey(LoadStmt.STRICT_MODE) &&
+        if (!properties.containsKey(LoadStmt.STRICT_MODE) &&
                 session.getSessionVariable().getEnableInsertStrict()) {
-            insertProperties.put(LoadStmt.STRICT_MODE, "true");
+            properties.put(LoadStmt.STRICT_MODE, "true");
         }
 
         try {
-            LoadStmt.checkProperties(insertProperties);
+            LoadStmt.checkProperties(properties);
         } catch (DdlException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
         }
@@ -311,10 +311,10 @@ public class InsertAnalyzer {
         if (queryStatement != null) {
             List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
             for (FileTableFunctionRelation relation : relations) {
-                Map<String, String> properties = relation.getProperties();
+                Map<String, String> tableFunctionProperties = relation.getProperties();
                 for (String property : PUSH_DOWN_PROPERTIES_SET) {
-                    if (insertProperties.containsKey(property)) {
-                        properties.put(property, insertProperties.get(property));
+                    if (properties.containsKey(property)) {
+                        tableFunctionProperties.put(property, properties.get(property));
                     }
                 }
             }
