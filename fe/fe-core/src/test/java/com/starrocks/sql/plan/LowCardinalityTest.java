@@ -837,6 +837,13 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testLike() throws Exception {
+        String sql = "select count(*) from supplier where S_ADDRESS like 'k' AND S_ADDRESS like S_COMMENT";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "DictExpr(12: S_ADDRESS,[<place-holder> = 'k'])");
+    }
+
+    @Test
     public void testScanPredicate() throws Exception {
         String sql;
         String plan;
