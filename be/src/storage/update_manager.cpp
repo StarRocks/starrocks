@@ -96,7 +96,12 @@ Status UpdateManager::init() {
     if (config::transaction_apply_worker_count > 0) {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("update_apply")
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::transaction_apply_worker_idle_time_ms))
+                    .set_min_threads(config::transaction_apply_thread_pool_num_min)
+                    .set_max_threads(max_thread_cnt)
+                    .build(&_apply_thread_pool));
     REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
 
     int max_get_thread_cnt =

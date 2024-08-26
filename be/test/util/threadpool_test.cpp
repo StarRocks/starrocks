@@ -43,7 +43,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
-#include "util/barrier.h"
+#include "testutil/assert.h"
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
@@ -282,7 +282,7 @@ TEST_F(ThreadPoolTest, TestIncMaxThreadPool) {
     _pool->wait();
     ASSERT_EQ(0, _pool->_active_threads);
     // inc max threads to 6
-    _pool->update_max_threads(6);
+    EXPECT_OK(_pool->update_max_threads(6));
     CountDownLatch latch2(1);
     ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
     ASSERT_EQ(4, _pool->num_threads());
@@ -306,6 +306,55 @@ TEST_F(ThreadPoolTest, TestIncMaxThreadPool) {
 
     _pool->shutdown();
     ASSERT_EQ(0, _pool->num_threads());
+}
+
+TEST_F(ThreadPoolTest, TestIncMinThreadPool) {
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(0)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+    // There is 0 thread to start with.
+    ASSERT_EQ(0, _pool->num_threads());
+
+    CountDownLatch latch(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(2, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(3, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+
+    // Finish all work
+    latch.count_down();
+    _pool->wait();
+    ASSERT_EQ(0, _pool->_active_threads);
+    //To wait for the thread to exit
+    sleep(3);
+    ASSERT_EQ(0, _pool->num_threads());
+
+    // inc min threads to 2
+    Status s = _pool->update_min_threads(2);
+    ASSERT_TRUE(s.ok());
+    CountDownLatch latch2(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(2, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(3, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+
+    // Finish all work
+    latch2.count_down();
+    _pool->wait();
+    ASSERT_EQ(0, _pool->_active_threads);
+    //To wait for the thread to exit
+    sleep(3);
+    ASSERT_EQ(2, _pool->num_threads());
 }
 
 TEST_F(ThreadPoolTest, TestMaxQueueSize) {
@@ -445,13 +494,19 @@ TEST_P(ThreadPoolTestTokenTypes, TestTokenSubmitsProcessedConcurrently) {
     SCOPED_CLEANUP({
         alarm(0); // Disable alarm on test exit.
     });
-    std::shared_ptr<Barrier> b = std::make_shared<Barrier>(kNumTokens + 1);
+    std::shared_ptr<CountDownLatch> b = std::make_shared<CountDownLatch>(kNumTokens + 1);
     for (int i = 0; i < kNumTokens; i++) {
         tokens.emplace_back(_pool->new_token(GetParam()));
-        ASSERT_TRUE(tokens.back()->submit_func([b]() { b->wait(); }).ok());
+        ASSERT_TRUE(tokens.back()
+                            ->submit_func([b]() {
+                                b->count_down();
+                                b->wait();
+                            })
+                            .ok());
     }
 
     // This will deadlock if the above tasks weren't all running concurrently.
+    b->count_down();
     b->wait();
 }
 
@@ -465,13 +520,17 @@ TEST_F(ThreadPoolTest, TestTokenSubmitsNonSequential) {
     SCOPED_CLEANUP({
         alarm(0); // Disable alarm on test exit.
     });
-    shared_ptr<Barrier> b = std::make_shared<Barrier>(kNumSubmissions + 1);
+    shared_ptr<CountDownLatch> b = std::make_shared<CountDownLatch>(kNumSubmissions + 1);
     std::unique_ptr<ThreadPoolToken> t = _pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (int i = 0; i < kNumSubmissions; i++) {
-        ASSERT_TRUE(t->submit_func([b]() { b->wait(); }).ok());
+        ASSERT_TRUE(t->submit_func([b]() {
+                         b->count_down();
+                         b->wait();
+                     }).ok());
     }
 
     // This will deadlock if the above tasks weren't all running concurrently.
+    b->count_down();
     b->wait();
 }
 
