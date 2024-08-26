@@ -10,12 +10,9 @@ fuzzywuzzy
 python-Levenshtein
 PyGithub
 mysql-connector
-<<<<<<< HEAD
-=======
 trino
 pure-sasl
 thrift
 thrift-sasl
 PyHive
 timeout_decorator
->>>>>>> caf94f3b83 ([Tool] SQL-Tester add timeout limit for single case (#48792))

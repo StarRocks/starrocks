@@ -177,8 +177,6 @@ Start to run: %s
                 uncheck = True
                 sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
 
-<<<<<<< HEAD
-=======
             if sql.startswith(sr_sql_lib.TRINO_FLAG):
                 sql = sql[len(sr_sql_lib.TRINO_FLAG):]
                 # analyse var set
@@ -230,7 +228,6 @@ Start to run: %s
                 # pretreatment actual res
                 actual_res, actual_res_log = self.pretreatment_res(actual_res)
 
->>>>>>> caf94f3b83 ([Tool] SQL-Tester add timeout limit for single case (#48792))
             # execute command in files
             if sql.startswith(sr_sql_lib.SHELL_FLAG):
                 sql = sql[len(sr_sql_lib.SHELL_FLAG):]
