@@ -2424,6 +2424,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             "RuleBaseOptimize",
                             "CostBaseOptimize",
                             "PhysicalRewrite",
+                            "DynamicRewrite",
                             "PlanValidate",
                             "InputDependenciesChecker",
                             "TypeChecker",
