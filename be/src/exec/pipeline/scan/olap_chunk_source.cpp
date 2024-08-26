@@ -653,7 +653,7 @@ void OlapChunkSource::_update_counter() {
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
 
-    if (_reader->stats().flat_json_hits.size() > 0) {
+    if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
