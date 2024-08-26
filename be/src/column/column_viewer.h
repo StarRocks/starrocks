@@ -41,8 +41,6 @@ class ColumnViewer {
 public:
     static auto constexpr TYPE = Type;
     explicit ColumnViewer(const ColumnPtr& column);
-    ColumnViewer() = delete;
-    DISALLOW_COPY_AND_MOVE(ColumnViewer);
 
     const RunTimeCppType<Type> value(const size_t idx) const { return (*_data)[idx & _not_const_mask]; }
 

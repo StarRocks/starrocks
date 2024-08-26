@@ -268,6 +268,13 @@ public:
         }
     }
 
+    Container& get_slice_data() {
+        if (!_slices_cache) {
+            _build_slices();
+        }
+        return _slices;
+    }
+
     Container& get_data() {
         if (!_slices_cache) {
             _build_slices();
@@ -275,6 +282,13 @@ public:
         return _slices;
     }
     const Container& get_data() const {
+        if (!_slices_cache) {
+            _build_slices();
+        }
+        return _slices;
+    }
+
+    const Container& get_slice_data() const {
         if (!_slices_cache) {
             _build_slices();
         }
