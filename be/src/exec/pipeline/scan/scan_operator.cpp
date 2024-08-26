@@ -178,6 +178,10 @@ bool ScanOperator::has_output() const {
         }
     }
 
+    if (_morsel_queue->has_more()) {
+        return true;
+    }
+
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {

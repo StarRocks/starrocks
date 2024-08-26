@@ -68,12 +68,22 @@ size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
 
+Status SharedMorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+    RETURN_IF_ERROR(_queue->append_morsels(std::move(morsels)));
+    _queue->set_has_more(has_more);
+    return Status::OK();
+}
+
 size_t IndividualMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {
         total += queue->num_original_morsels();
     }
     return total;
+}
+
+Status MorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+    return Status::NotSupported("append_morsels not supported");
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -94,6 +104,21 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
             _queue_per_driver_seq.emplace_back(std::move(it->second));
         }
     }
+}
+
+Status IndividualMorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+    size_t size = _queue_per_driver_seq.size();
+    std::vector<Morsels> dist(size);
+    int idx = 0;
+    for (MorselPtr& p : morsels) {
+        dist[idx].emplace_back(std::move(p));
+        idx = (idx + 1) % size;
+    }
+    for (int i = 0; i < size; i++) {
+        RETURN_IF_ERROR(_queue_per_driver_seq[i]->append_morsels(std::move(dist[i])));
+        _queue_per_driver_seq[i]->set_has_more(has_more);
+    }
+    return Status::OK();
 }
 
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -142,6 +167,10 @@ std::vector<TInternalScanRange*> MorselQueue::prepare_olap_scan_ranges() const {
 
 void MorselQueue::unget(MorselPtr&& morsel) {
     _unget_morsel = std::move(morsel);
+}
+
+Status MorselQueue::append_morsels(Morsels&& morsels) {
+    return Status::NotSupported("append_morsels not supported");
 }
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
@@ -877,12 +906,13 @@ void DynamicMorselQueue::unget(MorselPtr&& morsel) {
     _queue.emplace_front(std::move(morsel));
 }
 
-void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
+Status DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     std::lock_guard<std::mutex> _l(_mutex);
     _size += morsels.size();
     // add split morsels to front of this queue.
     // so this new morsels share same owner_id with recently processed morsel.
     _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

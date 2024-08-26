@@ -600,7 +600,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     return io_tasks;
 }
 
-void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
@@ -613,7 +613,7 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
             }
         }
     }
-    _morsel_queue->append_morsels(std::move(morsels));
+    RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -877,7 +877,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                 split_morsels.emplace_back(std::move(m));
             }
 
-            scan_op->append_morsels(std::move(split_morsels));
+            RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
         }
     }
     return Status::EndOfFile("");

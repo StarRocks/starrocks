@@ -874,7 +874,11 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         if (morsel_queue_factory == nullptr) {
             continue;
         }
-        // morsel_queue_factory->append_scan_ranges(scan_ranges);
+
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        RETURN_IF_ERROR(morsel_queue_factory->append_morsels(std::move(morsels), has_more_morsel));
     }
     return Status::OK();
 }

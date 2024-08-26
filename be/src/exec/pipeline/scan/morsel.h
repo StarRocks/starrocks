@@ -247,6 +247,8 @@ public:
 
     virtual bool is_shared() const = 0;
     virtual bool could_local_shuffle() const = 0;
+
+    virtual Status append_morsels(Morsels&& morsels, bool has_more);
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -260,6 +262,8 @@ public:
 
     bool is_shared() const override { return true; }
     bool could_local_shuffle() const override { return true; }
+
+    Status append_morsels(Morsels&& morsels, bool has_more) override;
 
 private:
     MorselQueuePtr _queue;
@@ -283,6 +287,8 @@ public:
 
     bool is_shared() const override { return false; }
     bool could_local_shuffle() const override { return _could_local_shuffle; }
+
+    Status append_morsels(Morsels&& morsels, bool has_more) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -346,12 +352,13 @@ public:
     virtual void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
-    virtual void append_morsels(Morsels&& morsels) {}
+    virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
     bool has_more() const { return _has_more; }
+    void set_has_more(bool v) { _has_more = v; }
 
 protected:
-    bool _has_more = false;
+    std::atomic<bool> _has_more = false;
     Morsels _morsels;
     size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
@@ -402,7 +409,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
-    void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsels(std::move(morsels)); }
+    Status append_morsels(Morsels&& morsels) override { return _morsel_queue->append_morsels(std::move(morsels)); }
     Type type() const override { return BUCKET_SEQUENCE; }
 
 private:
@@ -564,7 +571,7 @@ private:
 class DynamicMorselQueue final : public MorselQueue {
 public:
     explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
-        append_morsels(std::move(morsels));
+        (void)append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
         _degree_of_parallelism = _num_morsels;
         _has_more = has_more;
@@ -575,7 +582,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "dynamic_morsel_queue"; }
-    void append_morsels(Morsels&& morsels) override;
+    Status append_morsels(Morsels&& morsels) override;
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
