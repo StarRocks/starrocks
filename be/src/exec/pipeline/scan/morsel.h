@@ -151,10 +151,10 @@ public:
         }
     }
 
-    ~ScanMorsel() override = default;
-
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
+
+    ~ScanMorsel() override = default;
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
 
@@ -180,6 +180,9 @@ public:
 
     bool is_ticket_checker_entered() const { return _ticket_checker_entered; }
     void set_ticket_checker_entered(bool v) { _ticket_checker_entered = v; }
+
+    static void build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
+                                   bool accept_empty_scan_ranges, pipeline::Morsels* morsels, bool* has_more_morsel);
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
@@ -265,7 +268,8 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle,
+                                 bool has_more);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -344,8 +348,10 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual void append_morsels(Morsels&& morsels) {}
     virtual Type type() const = 0;
+    bool has_more() const { return _has_more; }
 
 protected:
+    bool _has_more = false;
     Morsels _morsels;
     size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
@@ -356,7 +362,9 @@ protected:
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
+    explicit FixedMorselQueue(Morsels&& morsels, bool has_more) : MorselQueue(std::move(morsels)), _pop_index(0) {
+        _has_more = has_more;
+    }
     ~FixedMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
@@ -555,10 +563,11 @@ private:
 
 class DynamicMorselQueue final : public MorselQueue {
 public:
-    explicit DynamicMorselQueue(Morsels&& morsels) {
+    explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
         append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
         _degree_of_parallelism = _num_morsels;
+        _has_more = has_more;
     }
 
     ~DynamicMorselQueue() override = default;
@@ -584,7 +593,7 @@ private:
     size_t _degree_of_parallelism;
 };
 
-MorselQueuePtr create_empty_morsel_queue();
+MorselQueuePtr create_empty_morsel_queue(bool has_more);
 
 } // namespace pipeline
 } // namespace starrocks

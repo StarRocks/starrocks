@@ -35,6 +35,26 @@ namespace starrocks::pipeline {
 
 const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 
+void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
+                                    bool accept_empty_scan_ranges, pipeline::Morsels* ptr_morsels,
+                                    bool* has_more_morsel) {
+    pipeline::Morsels& morsels = *ptr_morsels;
+    *has_more_morsel = false;
+    for (const auto& scan_range : scan_ranges) {
+        if (scan_range.__isset.placeholder) {
+            if (scan_range.__isset.has_more) {
+                *has_more_morsel = scan_range.has_more;
+            }
+            continue;
+        }
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+    }
+
+    if (morsels.empty() && !accept_empty_scan_ranges) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
+    }
+}
+
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
 }
@@ -57,10 +77,10 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                           bool could_local_shuffle)
+                                                           bool could_local_shuffle, bool has_more)
         : _could_local_shuffle(could_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
-        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
+        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue(has_more));
         return;
     }
 
@@ -69,7 +89,7 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     for (int i = 0; i <= max_dop; ++i) {
         auto it = queue_per_driver_seq.find(i);
         if (it == queue_per_driver_seq.end()) {
-            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue(has_more));
         } else {
             _queue_per_driver_seq.emplace_back(std::move(it->second));
         }
@@ -80,7 +100,7 @@ BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int,
                                                                    bool could_local_shuffle)
         : _could_local_shuffle(could_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
-        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
+        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue(false));
         return;
     }
 
@@ -89,7 +109,7 @@ BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int,
     for (int i = 0; i <= max_dop; ++i) {
         auto it = queue_per_driver_seq.find(i);
         if (it == queue_per_driver_seq.end()) {
-            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue(false));
         } else {
             _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
         }
@@ -834,8 +854,8 @@ bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
 }
 
-MorselQueuePtr create_empty_morsel_queue() {
-    return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
+MorselQueuePtr create_empty_morsel_queue(bool has_more) {
+    return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{}, has_more);
 }
 
 StatusOr<MorselPtr> DynamicMorselQueue::try_get() {
