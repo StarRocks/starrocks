@@ -180,12 +180,12 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     }
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_zone_map_predicate<JoinRuntimeFilter*>(
+        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
                 top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), is_close_interval);
         _runtime_filter.emplace_back(rf);
     } else {
-        type_dispatch_zone_map_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
+        type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
                                                 detail::SortRuntimeFilterUpdater(), _runtime_filter.back(),
                                                 top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
     }
