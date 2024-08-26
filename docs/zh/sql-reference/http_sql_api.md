@@ -28,7 +28,7 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 | ------------------------ | :----------------------------------------------------------- |
 |  fe_ip                   | FE 节点 IP。                                                  |
 |  fe_http_port            | FE 节点 HTTP Port。                                           |
-|  catalog_name            | 数据目录名称。3.2.0 版本仅支持查询 StarRocks 内部表，即 `<catalog_name>` 仅支持为 `default_catalog`。从 3.2.1 版本开始，支持查询[外部 Catalog](../../data_source/catalog/catalog_overview.md) 下的表。|
+|  catalog_name            | 数据目录名称。3.2.0 版本仅支持查询 StarRocks 内部表，即 `<catalog_name>` 仅支持为 `default_catalog`。从 3.2.1 版本开始，支持查询[外部 Catalog](../data_source/catalog/catalog_overview.md) 下的表。|
 |  database_name           | 数据库名称。如果未指定数据库名称，那么在 SQL query 语句中出现的表名前面需要加上 database 名，比如 `database_name.table_name`。 |
 
 - 指定 catalog，跨 database 查询。SQL 语句中出现的表前面需要加上 database 名。

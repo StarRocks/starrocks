@@ -28,7 +28,7 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 | ------------------------ | :----------------------------------------------------------- |
 |  fe_ip                   | FE node IP address.                                                  |
 |  fe_http_port            | FE HTTP port.                                           |
-|  catalog_name            | The catalog name. In v3.2.0, you can use this API to query only StarRocks internal tables, which means `<catalog_name>` can only be set to `default_catalog`. Since v3.2.1, you can use this API to query tables in [external catalogs](../../data_source/catalog/catalog_overview.md). |
+|  catalog_name            | The catalog name. In v3.2.0, you can use this API to query only StarRocks internal tables, which means `<catalog_name>` can only be set to `default_catalog`. Since v3.2.1, you can use this API to query tables in [external catalogs](../data_source/catalog/catalog_overview.md). |
 |  database_name           | The database name. If no database name is specified in the request line and a table name is used in the SQL query, you must prefix the table name with its database name, for example, `database_name.table_name`. |
 
 - Query data across databases in a specified catalog. If a table is used in the SQL query, you must prefix the table name with its database name.
@@ -60,7 +60,7 @@ Basic authentication is used, that is, enter the username and password for `cred
 | Field                    | Description                                                  |
 | ------------------------ | :----------------------------------------------------------- |
 | query                    | The SQL query, in STRING format. Only SELECT, SHOW, EXPLAIN, and KILL statements are supported. You can run only one SQL query for an HTTP request. |
-| sessionVariables         | The [session variable](../System_variable.md) you want to set for the query, in JSON format. This field is optional. Default is empty. The session variable you set takes effect for the same connection and becomes ineffective when the connection is closed. |
+| sessionVariables         | The [session variable](./System_variable.md) you want to set for the query, in JSON format. This field is optional. Default is empty. The session variable you set takes effect for the same connection and becomes ineffective when the connection is closed. |
 
 ### Request header
 
