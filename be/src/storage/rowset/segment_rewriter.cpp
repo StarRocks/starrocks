@@ -6,6 +6,7 @@
 #include "column/column.h"
 #include "column/schema.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/types_fwd.h"
@@ -21,18 +22,25 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
-Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path,
-                                const std::shared_ptr<const TabletSchema>& tschema, std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
-                                const FooterPointerPB& partial_rowset_footer) {
+Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
+                                               const std::shared_ptr<const TabletSchema>& tschema,
+                                               std::vector<uint32_t>& column_ids,
+                                               std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
+                                               const FooterPointerPB& partial_rowset_footer) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
-        return fs::copy_file(src_path, dest_path->path, kBufferSize);
+        return fs::copy_file(src.path, dest->path, kBufferSize);
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
+    RandomAccessFileOptions ropts;
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
-    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(src_path));
+    if (!src.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(src.encryption_meta));
+        wopts.encryption_info = ropts.encryption_info;
+        dest->encryption_meta = src.encryption_meta;
+    }
+    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(ropts, src));
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
     SegmentFooterPB footer;
     RETURN_IF_ERROR(Segment::parse_segment_footer(rfile.get(), &footer, nullptr, &partial_rowset_footer));
@@ -47,6 +55,8 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
             raw::stl_string_resize_uninitialized(&read_buffer, remaining);
         }
 
+        // TODO(cbl): data is decrypted from rfile, then copy to wfile re-encrypted,
+        // possible optimization opportunity to eliminate some decryption/encryption
         RETURN_IF_ERROR(rfile->read_at_fully(offset, read_buffer.data(), read_buffer.size()));
         RETURN_IF_ERROR(wfile->append(read_buffer));
 
@@ -70,17 +80,18 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     TEST_ERROR_POINT("SegmentRewriter::rewrite1");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    dest_path->size = segment_file_size;
+    dest->size = segment_file_size;
     return Status::OK();
 }
 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path,
-                                const TabletSchemaCSPtr& tschema,
-                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns) {
+Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
+                                               const TabletSchemaCSPtr& tschema,
+                                               AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+                                               std::vector<uint32_t>& column_ids,
+                                               std::vector<std::unique_ptr<Column>>* columns) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -167,16 +178,16 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
-                                starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                const std::vector<ColumnId>& unmodified_column_ids,
-                                std::vector<std::unique_ptr<Column>>* unmodified_column_data,
-                                const starrocks::TxnLogPB_OpWrite& op_write, const starrocks::lake::Tablet* tablet) {
+Status SegmentRewriter::rewrite_auto_increment_lake(
+        const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
+        starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+        const std::vector<uint32_t>& unmodified_column_ids,
+        std::vector<std::unique_ptr<Column>>* unmodified_column_data, const starrocks::lake::Tablet* tablet) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
 
     ColumnId auto_increment_column_id = 0;
     for (const auto& col : tschema->columns()) {
@@ -199,13 +210,11 @@ Status SegmentRewriter::rewrite(FileInfo* dest_path, const TabletSchemaCSPtr& ts
 
     size_t footer_sine_hint = 16 * 1024;
     auto tablet_mgr = tablet->tablet_mgr();
-    auto segment_path = tablet->segment_location(op_write.rowset().segments(segment_id));
-    auto segment_info = FileInfo{.path = segment_path};
     // not fill data and meta cache
     auto fill_cache = false;
     LakeIOOptions lake_io_opts{fill_cache, -1};
-    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_info, segment_id, &footer_sine_hint, lake_io_opts,
-                                                            fill_cache, tschema));
+    ASSIGN_OR_RETURN(auto segment,
+                     tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
 
     auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
@@ -227,7 +236,11 @@ Status SegmentRewriter::rewrite(FileInfo* dest_path, const TabletSchemaCSPtr& ts
     itr->close();
 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
+    if (!src.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(wopts.encryption_info, KeyCache::instance().unwrap_encryption_meta(src.encryption_meta));
+        dest->encryption_meta = src.encryption_meta;
+    }
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
     auto schema = tschema->schema();
     auto chunk = ChunkHelper::new_chunk(*schema, num_rows);
@@ -259,15 +272,17 @@ Status SegmentRewriter::rewrite(FileInfo* dest_path, const TabletSchemaCSPtr& ts
     TEST_ERROR_POINT("SegmentRewriter::rewrite3");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    dest_path->size = segment_file_size;
+    dest->size = segment_file_size;
     return Status::OK();
 }
 
-Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaCSPtr& tschema,
-                                std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
-                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
+Status SegmentRewriter::rewrite(const std::string& src_path, const FileEncryptionInfo& einfo,
+                                const TabletSchemaCSPtr& tschema, std::vector<uint32_t>& column_ids,
+                                std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
+                                const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(src_path));
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(src_path));
+    ASSIGN_OR_RETURN(auto read_file,
+                     fs->new_random_access_file(RandomAccessFileOptions{.encryption_info = einfo}, src_path));
 
     SegmentFooterPB footer;
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, &partial_rowset_footer));
@@ -275,7 +290,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaC
     int64_t trunc_len = partial_rowset_footer.position() + partial_rowset_footer.size();
     RETURN_IF_ERROR(FileSystemUtil::resize_file(src_path, trunc_len));
 
-    WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST};
+    WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST, .encryption_info = einfo};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(fopts, src_path));
 
     SegmentWriterOptions opts;

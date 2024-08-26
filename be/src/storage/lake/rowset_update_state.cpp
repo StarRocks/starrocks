@@ -467,6 +467,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const auto& dest_path = params.op_write.rewrite_segments(segment_id);
     DCHECK(src_path != dest_path);
 
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
+    if (segment_encryption_metas_size > 0) {
+        if (segment_id >= segment_encryption_metas_size) {
+            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
+                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
+                                     segment_encryption_metas_size);
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
+        }
+        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    }
+
     bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -474,11 +487,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
+                    src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                     unmodified_column_ids,
                     has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                    params.op_write, params.tablet));
+                    params.tablet));
         } else {
             skip_because_file_exist = true;
         }
@@ -490,8 +503,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         // if rewrite fail, let segment gc to clean dest segment file
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    params.tablet->segment_location(src_path), &file_info, params.tablet_schema, unmodified_column_ids,
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                    src, &file_info, params.tablet_schema, unmodified_column_ids,
                     _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
         } else {
             skip_because_file_exist = true;
