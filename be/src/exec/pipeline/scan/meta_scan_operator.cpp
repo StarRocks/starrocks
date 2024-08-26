@@ -61,7 +61,8 @@ Status MetaScanOperator::do_prepare(RuntimeState* state) {
 void MetaScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr MetaScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    return std::make_shared<MetaChunkSource>(this, _runtime_profile.get(), std::move(morsel), _ctx);
+    return std::make_shared<MetaChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
+                                             _ctx);
 }
 
 } // namespace starrocks::pipeline

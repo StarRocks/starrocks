@@ -50,6 +50,8 @@ public:
 
     virtual bool has_more() = 0;
 
+    bool is_open() { return _is_open; }
+
 protected:
     RuntimeState* _runtime_state{nullptr};
 

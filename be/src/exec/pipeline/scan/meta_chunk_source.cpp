@@ -32,7 +32,6 @@ Status MetaChunkSource::prepare(RuntimeState* state) {
     DCHECK(scan_morsel != nullptr);
     auto scan_range = scan_morsel->get_olap_scan_range();
     _scanner = _scan_ctx->get_scanner(scan_range->tablet_id);
-    RETURN_IF_ERROR(_scanner->open(state));
     return Status::OK();
 }
 
@@ -41,6 +40,9 @@ void MetaChunkSource::close(RuntimeState* state) {
 }
 
 Status MetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    if (!_scanner->is_open()) {
+        RETURN_IF_ERROR(_scanner->open(state));
+    }
     if (!_scanner->has_more()) {
         return Status::EndOfFile("end of file");
     }

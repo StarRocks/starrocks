@@ -58,6 +58,7 @@ struct SegmentMetaCollecterParams {
     std::vector<bool> read_page;
     std::vector<LogicalType> field_type;
     bool use_page_cache;
+    bool only_has_count_agg = true;
     TabletSchemaCSPtr tablet_schema;
     int32_t low_cardinality_threshold;
 };

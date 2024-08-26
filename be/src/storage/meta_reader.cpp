@@ -179,7 +179,10 @@ Status SegmentMetaCollecter::open() {
     if (UNLIKELY(_params == nullptr)) {
         return Status::InternalError("SegmentMetaCollecter::init() has not been called");
     }
-    RETURN_IF_ERROR(_init_return_column_iterators());
+    if (!_params->only_has_count_agg) {
+        RETURN_IF_ERROR(_init_return_column_iterators());
+    }
+
     return Status::OK();
 }
 

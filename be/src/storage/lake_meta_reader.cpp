@@ -87,6 +87,9 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
+        if (collect_field != "count") {
+            _collect_context.seg_collecter_params.only_has_count_agg = false;
+        }
         _has_count_agg |= (collect_field == "count");
     }
     _collect_context.seg_collecter_params.tablet_schema = tablet_schema;
