@@ -402,6 +402,9 @@ public class InsertOverwriteJobRunner {
             for (String name : sourcePartitionNames) {
                 LOG.info("source partition name: {}", name);
             }
+            for (long partitionId : job.getTmpPartitionIds()) {
+                LOG.info("tmp partition ID: {}", partitionId);
+            }
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -412,6 +415,9 @@ public class InsertOverwriteJobRunner {
                     sourceTablets.addAll(index.getTablets());
                 }
             });
+            for (String name : tmpPartitionNames) {
+                LOG.info("tmp partition name: {}", name);
+            }
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
