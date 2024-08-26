@@ -1427,7 +1427,12 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
+<<<<<<< HEAD
             if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
+=======
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
+>>>>>>> 0a6f502c5f ([BugFix] Fix select empty result of stream load from frontend follower (#50225))
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
