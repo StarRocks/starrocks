@@ -46,7 +46,12 @@ CompactionTaskCallback::~CompactionTaskCallback() = default;
 
 CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
                                                CompactResponse* response, ::google::protobuf::Closure* done)
-        : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
+        : _scheduler(scheduler),
+          _mtx(),
+          _request(request),
+          _response(response),
+          _done(done),
+          _last_check_time(INT64_MAX) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
     _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();
@@ -75,7 +80,10 @@ Status CompactionTaskCallback::has_error() const {
         }
     }
     if (allow_partial_success()) {
-        if (_status.is_aborted()) { // manual cancel or background worker shutdown
+        if (_status.is_aborted()) {
+            // manual cancel
+            // FE validation failed
+            // background worker shutdown
             return _status;
         } else {
             return Status::OK();
@@ -170,6 +178,8 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         // DO NOT touch `context` from here!
         is_checker = false;
     }
+    // initialize last check time, compact request is received right after FE sends it, so consider it valid now
+    cb->set_last_check_time(time(nullptr));
     _task_queues.put_by_txn_id(request->txn_id(), contexts_vec);
     // DO NOT touch `contexts_vec` from here!
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
@@ -280,7 +290,8 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
     }
 
     int64_t now = time(nullptr);
-    if (now > context->last_check_time && (now - context->last_check_time) >= check_interval_seconds) {
+    int64_t last_check_time = context->callback->last_check_time();
+    if (now > last_check_time && (now - last_check_time) >= check_interval_seconds) {
         // ask FE whether this compaction transaction is still valid
 #ifndef BE_TEST
         TNetworkAddress master_addr = get_master_address();
@@ -315,7 +326,7 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
         }
 #endif
         // update check time, if check rpc failed, wait next round
-        context->last_check_time = now;
+        context->callback->set_last_check_time(now);
     }
     return Status::OK();
 }
@@ -328,9 +339,6 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
     context->start_time.store(start_time, std::memory_order_relaxed);
     context->runs.fetch_add(1, std::memory_order_relaxed);
-    if (context->is_checker) {
-        context->last_check_time = start_time;
-    }
 
     auto status = Status::OK();
     auto task_or = _tablet_mgr->compact(context.get());
@@ -360,7 +368,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
-        // re-schedule the compaction task
+        // reset start time and re-schedule the compaction task
+        context->start_time.store(0, std::memory_order_relaxed);
         _task_queues.put_by_txn_id(context->txn_id, context);
     } else {
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
