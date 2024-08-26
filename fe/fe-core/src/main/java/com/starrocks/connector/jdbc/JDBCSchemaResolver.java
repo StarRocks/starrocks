@@ -89,9 +89,14 @@ public abstract class JDBCSchemaResolver {
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            String comment = "";
+            if (columnSet.getString("REMARKS") != null) {
+                comment = columnSet.getString("REMARKS");
+            }
+
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
-                    columnSet.getString("IS_NULLABLE").equals("YES"),
-                    columnSet.getString("REMARKS")));
+                    columnSet.getString("IS_NULLABLE").equals("YES"), comment));
         }
         return fullSchema;
     }
