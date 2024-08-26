@@ -262,8 +262,8 @@ public:
             _agg_func->destroy(_func_ctx, _state);
             std::free(_state);
         }
-        if (_ctx != nullptr) {
-            delete _ctx;
+        if (_func_ctx != nullptr) {
+            delete _func_ctx;
         }
     }
 
