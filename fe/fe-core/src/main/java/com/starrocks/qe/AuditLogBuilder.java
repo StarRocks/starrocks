@@ -102,6 +102,11 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
+                
+                // fields related to user variables are not written into audit log by default
+                if (af.value().equals("UserVariables")) {
+                    continue;
+                }
 
                 // Ignore -1 by default, ignore 0 if annotated with ignore_zero
                 Object value = f.get(event);
