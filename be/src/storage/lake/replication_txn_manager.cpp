@@ -25,6 +25,7 @@
 #include "agent/task_signatures_manager.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/split.h"
@@ -155,6 +156,10 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
     }
+    if (!request.encryption_meta.empty()) {
+        RETURN_IF_ERROR_WITH_WARN(KeyCache::instance().refresh_keys(request.encryption_meta),
+                                  "refresh keys using encryption_meta in TReplicateSnapshotRequest failed");
+    }
 
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
 
@@ -237,7 +242,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                                                         const TSnapshotInfo& src_snapshot_info,
                                                         const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
-    std::unordered_map<std::string, std::string> filename_map;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
     const TabletSchemaPB* source_schema_pb = nullptr;
 
     if (!is_primary_key(*tablet_metadata)) { // None-pk table
@@ -346,8 +351,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             return nullptr;
         }
 
-        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second);
-        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second.first);
+        WritableFileOptions opts{.sync_on_close = true,
+                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                 .encryption_info = iter->second.second};
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
 
         files_to_delete.push_back(std::move(segment_location));
@@ -390,9 +397,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     return Status::OK();
 }
 
-Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                                                  TxnLogPB::OpWrite* op_write,
-                                                  std::unordered_map<std::string, std::string>* filename_map) {
+Status ReplicationTxnManager::convert_rowset_meta(
+        const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map) {
     if (rowset_meta.is_column_mode_partial_update()) {
         return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
     }
@@ -416,7 +423,14 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
         rowset_metadata->add_segments(new_segment_filename);
-        auto pair = filename_map->emplace(std::move(old_segment_filename), std::move(new_segment_filename));
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            rowset_metadata->add_segment_encryption_metas(pair.encryption_meta);
+            encryption_info = std::move(pair.info);
+        }
+        auto pair = filename_map->emplace(std::move(old_segment_filename),
+                                          std::pair(std::move(new_segment_filename), std::move(encryption_info)));
         if (!pair.second) {
             return Status::Corruption("Duplicated segment file: " + pair.first->first);
         }
@@ -434,7 +448,14 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         std::string new_del_filename = gen_del_filename(transaction_id);
 
         op_write->add_dels(new_del_filename);
-        auto pair = filename_map->emplace(std::move(old_del_filename), std::move(new_del_filename));
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            op_write->add_del_encryption_metas(pair.encryption_meta);
+            encryption_info = std::move(pair.info);
+        }
+        auto pair = filename_map->emplace(std::move(old_del_filename),
+                                          std::pair(std::move(new_del_filename), std::move(encryption_info)));
         if (!pair.second) {
             return Status::Corruption("Duplicated del file: " + pair.first->first);
         }
